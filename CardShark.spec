@@ -5,7 +5,7 @@ a = Analysis(
     ['cardshark.py'],
     pathex=[],
     binaries=[],
-    datas=[('logo.png', '.'), ('cardshark.ico', '.'), ('exiftool.exe', '.'), ('.ExifTool_config', '.'), ('icon_edit.png', '.'), ('icon_delete.png', '.')],
+    datas=[('logo.png', '.'), ('cardshark.ico', '.'), ('exiftool.exe', '.'), ('.ExifTool_config', '.'), ('icon_edit.png', '.'), ('icon_up.png', '.'), ('icon_up.down', '.'), ('icon_delete.png', '.')],
     hiddenimports=['PIL._tkinter_finder'],
     hookspath=[],
     hooksconfig={},

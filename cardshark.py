@@ -645,6 +645,19 @@ class CardShark:
         url_entry = ttk.Entry(entry_frame, width=50)
         url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        # Create right-click menu
+        menu = tk.Menu(dialog, tearoff=0)
+        menu.add_command(label="Paste", command=lambda: (
+            url_entry.event_generate('<<Paste>>'),
+            dialog.after(50, validate_url_field)  # Validate after paste
+        ))
+
+        def show_menu(event):
+            menu.post(event.x_root, event.y_root)
+
+        # Bind right-click to show menu
+        url_entry.bind('<Button-3>', show_menu)
+
         # Status label for validation feedback
         status_label = ttk.Label(container, text="")
         status_label.pack(fill=tk.X, pady=5)
@@ -701,12 +714,6 @@ class CardShark:
         url_entry.bind('<KeyRelease>', lambda e: validate_url_field())
         url_entry.bind('<FocusOut>', lambda e: validate_url_field())
         url_entry.bind('<Control-v>', lambda e: dialog.after(50, validate_url_field))
-
-        # Handle paste via right-click menu
-        def handle_paste(event=None):
-            dialog.after(50, validate_url_field)
-        
-        url_entry.bind('<Button-3>', handle_paste)
     
     def setup_ui_handlers(self):
         """Set up all UI handlers with themed buttons."""
