@@ -1,0 +1,8 @@
+build/
+dist/
+logs/
+cards/
+__pycache__/
+v2_schema.json
+temp/
+worldInfo.md

@@ -1,0 +1,19 @@
+# Custom tags for character card metadata
+%Image::ExifTool::UserDefined = (
+    'Image::ExifTool::PNG::TextualData' => {
+        Chara => {
+            Writable => 'string',
+            Protected => 0,
+            WriteGroup => 'PNG-tEXt'
+        }
+    },
+    'Image::ExifTool::Exif::Main' => {
+        0x9286 => {
+            Name => 'UserComment',
+            Writable => 'string',
+            Protected => 0
+        }
+    }
+);
+
+1; # Required by Perl
