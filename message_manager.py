@@ -484,6 +484,17 @@ class MessageManager:
                 widget.frame.destroy()
             self.message_widgets.clear()
             
+            # Check if json_data is a dict before proceeding
+            if not isinstance(json_data, dict):
+                self.logger.log_step("Invalid JSON data format, creating empty structure")
+                json_data = {
+                    'spec': 'chara_card_v2',
+                    'data': {
+                        'first_mes': '',
+                        'alternate_greetings': []
+                    }
+                }
+            
             if json_data.get('spec') == 'chara_card_v2':
                 char_data = json_data.get('data', {})
                 self.logger.log_step("Character data:", char_data)

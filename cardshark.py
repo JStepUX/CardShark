@@ -261,15 +261,39 @@ class CardShark:
         try:
             self.logger.start_operation("Clear Application State")
             
+            # Create empty V2 structure
+            empty_v2 = {
+                "spec": "chara_card_v2",
+                "spec_version": "2.0",
+                "data": {
+                    "name": "",
+                    "display_name": "",
+                    "description": "",
+                    "personality": "",
+                    "first_mes": "",
+                    "mes_example": "",
+                    "scenario": "",
+                    "creator_notes": "",
+                    "tags": [],
+                    "imported_images": [],
+                    "character_book": {
+                        "entries": [],
+                        "name": "",
+                        "description": "",
+                        "scan_depth": 100,
+                        "token_budget": 2048,
+                        "recursive_scanning": False,
+                        "extensions": {}
+                    }
+                }
+            }
+            
             # Clear text widgets
             self.json_text.delete(1.0, tk.END)
             self.base_prompt_text.delete(1.0, tk.END)
-            # self.first_message_text.delete(1.0, tk.END)
-            # self.custom_dialogue_text.delete(1.0, tk.END)
             
-            # Clear managers
+            # Clear managers with empty V2 structure
             if hasattr(self, 'lore_manager'):
-                # Clear all lore entries using widget manager
                 if hasattr(self.lore_manager, 'widget_manager'):
                     self.lore_manager.widget_manager.refresh_entries([])
 
@@ -278,19 +302,14 @@ class CardShark:
                 self.personality_manager.scenario_text.delete(1.0, tk.END)
 
             if hasattr(self, 'message_manager'):
-                self.message_manager.refresh_messages([])
+                self.message_manager.refresh_messages(empty_v2)
 
             # Clear basic info fields
             if hasattr(self, 'basic_manager'):
-                # Clear character name and display name
                 self.basic_manager.char_name_entry.delete(0, tk.END)
                 self.basic_manager.display_name_entry.delete(0, tk.END)
-                # Clear tags and images text areas
                 self.basic_manager.tags_text.delete('1.0', tk.END)
                 self.basic_manager.images_text.delete('1.0', tk.END)
-                
-            if hasattr(self, 'message_manager'):
-                self.message_manager.refresh_messages({'spec': 'chara_card_v2', 'data': {}})
             
             # Reset lore count
             self.lore_count_var.set("Total: 0")
@@ -320,6 +339,10 @@ class CardShark:
             
             # Clear status
             self.status_var.set("")
+            
+            # Put empty V2 structure in JSON text
+            formatted_json = json.dumps(empty_v2, indent=4, ensure_ascii=False)
+            self.json_text.insert(1.0, formatted_json)
             
             self.logger.log_step("Application state cleared successfully")
             self.logger.end_operation()

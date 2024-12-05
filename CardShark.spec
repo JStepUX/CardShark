@@ -1,11 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 
+# Get the directory containing ExifTool and its dependencies
+exiftool_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Collect all ExifTool-related files
+exiftool_files = []
+for file in os.listdir(exiftool_dir):
+    if file.startswith('perl5') or file == 'exiftool.exe' or file == '.ExifTool_config':
+        exiftool_files.append((os.path.join(exiftool_dir, file), '.'))
 
 a = Analysis(
     ['cardshark.py'],
     pathex=[],
-    binaries=[],
-    datas=[('logo.png', '.'), ('cardshark.ico', '.'), ('exiftool.exe', '.'), ('.ExifTool_config', '.'), ('icon_edit.png', '.'), ('icon_up.png', '.'), ('icon_up.down', '.'), ('icon_delete.png', '.')],
+    binaries=exiftool_files,  # Include ExifTool files as binaries
+    datas=[
+        ('logo.png', '.'), 
+        ('cardshark.ico', '.'),
+        ('icon_edit.png', '.'),
+        ('icon_delete.png', '.'),
+        ('icon_up.png', '.'),
+        ('icon_down.png', '.')
+    ],
     hiddenimports=['PIL._tkinter_finder'],
     hookspath=[],
     hooksconfig={},
