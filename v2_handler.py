@@ -13,9 +13,9 @@ class V2CardHandler:
         }
 
     def create_empty_v2_card(self):
-        """Create an empty V2 card structure with correct field ordering."""
+        """Create an empty V2 card structure with complete field mapping and correct ordering."""
         return {
-            "data": {
+            "data": {  
                 "name": "",
                 "description": "",
                 "personality": "",
@@ -31,6 +31,7 @@ class V2CardHandler:
                 "creator": "",
                 "character_version": "main",
                 "extensions": {
+                    "fav": None,
                     "chub": {
                         "expressions": None,
                         "alt_expressions": {},
@@ -41,10 +42,12 @@ class V2CardHandler:
                         "preset": None,
                         "extensions": []
                     },
+                    "world": None,
                     "depth_prompt": {
-                        "depth": 0,
-                        "prompt": ""
-                    }
+                        "prompt": "",
+                        "depth": 0
+                    },
+                    "talkativeness": None
                 }
             },
             "character_book": {
@@ -56,12 +59,12 @@ class V2CardHandler:
                 "extensions": {},
                 "entries": []
             },
-            "spec": "chara_card_v2",
-            "spec_version": "2.0"
+            "spec": "chara_card_v2",  # Moved to end
+            "spec_version": "2.0"     # Moved to end
         }
 
     def create_empty_character_book_entry(self, insertion_order=0):
-        """Create an empty character book entry with all fields."""
+        """Create an empty character book entry with complete field mapping."""
         return {
             "name": "",
             "keys": [],

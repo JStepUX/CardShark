@@ -74,7 +74,7 @@ class NotebookNav:
         self.frames = {
             'basic_info': ttk_boot.Frame(self.app.content_frame),
             'personality_scenario': ttk_boot.Frame(self.app.content_frame),  # Added personality/scenario frame
-            'settings': ttk_boot.Frame(self.app.content_frame),
+            #'settings': ttk_boot.Frame(self.app.content_frame),
             'messages': ttk_boot.Frame(self.app.content_frame),
             'prompt': ttk_boot.Frame(self.app.content_frame),
             'worldbook': ttk_boot.Frame(self.app.content_frame),
@@ -85,7 +85,7 @@ class NotebookNav:
         self.tab_frames = {
             'basic_info': ttk.Frame(self.notebook),
             'personality_scenario': ttk.Frame(self.notebook),  # Added personality/scenario frame
-            'settings': ttk.Frame(self.notebook),
+            #'settings': ttk.Frame(self.notebook),
             'messages': ttk.Frame(self.notebook),
             'prompt': ttk.Frame(self.notebook),
             'worldbook': ttk.Frame(self.notebook),
@@ -100,7 +100,7 @@ class NotebookNav:
         tab_data = [
             ('basic_info', "Basic Info"),
             ('personality_scenario', "Personality / Scenario"),  # Added personality/scenario tab
-            ('settings', "Character Settings"),
+            #('settings', "Character Settings"),
             ('messages', "First / Alt Greetings"),
             ('prompt', "Base Prompt"),
             ('worldbook', "Worldbook Settings"),

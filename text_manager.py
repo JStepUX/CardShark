@@ -8,6 +8,7 @@ class StyledText:
     def __init__(self, parent, **kwargs):
         self.text_widget = tk.Text(parent, **kwargs)
         self.setup_default_tags()
+        self.setup_paste_bindings()  # Add paste bindings setup
         self.text_widget.bind('<KeyRelease>', self.update_styles)
         self.text_widget.bind('<<Paste>>', self.handle_paste)
         
@@ -34,6 +35,45 @@ class StyledText:
             spacing1=2,                     # Add slight padding above
             spacing3=2,                     # Add slight padding below
             font=('Consolas', 14))          # Monospace font for code
+
+    def setup_paste_bindings(self):
+        """Set up paste functionality for both keyboard and mouse."""
+        # Create right-click menu
+        self.context_menu = tk.Menu(self.text_widget, tearoff=0)
+        self.context_menu.add_command(label="Paste", command=self.paste_from_clipboard)
+        self.context_menu.add_command(label="Cut", command=lambda: self.text_widget.event_generate('<<Cut>>'))
+        self.context_menu.add_command(label="Copy", command=lambda: self.text_widget.event_generate('<<Copy>>'))
+        
+        # Bind right-click to show menu
+        self.text_widget.bind('<Button-3>', self.show_context_menu)
+
+    def show_context_menu(self, event):
+        """Show the context menu at mouse position."""
+        try:
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.context_menu.grab_release()
+
+    def paste_from_clipboard(self):
+        """Handle paste operation from clipboard."""
+        try:
+            # Get clipboard content
+            clipboard_content = self.text_widget.clipboard_get()
+            
+            # Insert at current cursor position or selection
+            try:
+                # Delete selection if there is one
+                self.text_widget.delete('sel.first', 'sel.last')
+            except tk.TclError:
+                pass  # No selection, that's fine
+            
+            # Insert clipboard content
+            self.text_widget.insert('insert', clipboard_content)
+            
+            # Update styles after paste
+            self.update_styles()
+        except tk.TclError:
+            pass  # Clipboard empty or invalid
     
     def update_styles(self, event=None):
         """Update text styles based on patterns."""
@@ -42,24 +82,6 @@ class StyledText:
         
         # Remove all existing tags
         for tag_name in ['quoted', 'emphasized', 'variable', 'code']:  # Added 'code' to cleanup
-            self.text_widget.tag_remove(tag_name, '1.0', 'end')
-        
-        # Apply tags based on patterns
-        for pattern, tag_name in self.patterns.values():
-            for match in re.finditer(pattern, content):
-                start, end = match.span()
-                # Convert string indices to tk text indices
-                start_idx = self.text_widget.index(f"1.0 + {start} chars")
-                end_idx = self.text_widget.index(f"1.0 + {end} chars")
-                self.text_widget.tag_add(tag_name, start_idx, end_idx)
-    
-    def update_styles(self, event=None):
-        """Update text styles based on patterns."""
-        # Get all text content
-        content = self.text_widget.get('1.0', 'end-1c')
-        
-        # Remove all existing tags
-        for tag_name in ['quoted', 'emphasized', 'variable']:
             self.text_widget.tag_remove(tag_name, '1.0', 'end')
         
         # Apply tags based on patterns

@@ -6,6 +6,7 @@ from tkinter import font as tk_font
 from datetime import datetime, timezone
 import random
 import string
+from tkinter import messagebox
 from PIL import Image, ImageTk
 from PIL import PngImagePlugin
 import re
