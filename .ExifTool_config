@@ -1,19 +1,22 @@
-# Custom tags for character card metadata
+# ExifTool Configuration File
 %Image::ExifTool::UserDefined = (
     'Image::ExifTool::PNG::TextualData' => {
+        # Define Chara field for PNG metadata
         Chara => {
-            Writable => 'string',
-            Protected => 0,
-            WriteGroup => 'PNG-tEXt'
-        }
+            Writable => 'string',  # Allow writing to this field
+            Protected => 0,        # Allow updates
+            WriteGroup => 'PNG-tEXt',
+            SubDirectory => {
+                TagTable => 'Image::ExifTool::XMP::Main',
+            },
+        },
     },
-    'Image::ExifTool::Exif::Main' => {
-        0x9286 => {
-            Name => 'UserComment',
-            Writable => 'string',
-            Protected => 0
-        }
-    }
 );
 
-1; # Required by Perl
+# Enable binary data writing
+$Image::ExifTool::BINARY_GROUP = 1;
+
+# Set default character encoding
+$Image::ExifTool::charset = 'UTF8';
+
+1;  # Required by Perl

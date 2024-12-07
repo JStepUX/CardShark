@@ -73,23 +73,23 @@ class NotebookNav:
         # Content frames in the content area
         self.frames = {
             'basic_info': ttk_boot.Frame(self.app.content_frame),
-            'personality_scenario': ttk_boot.Frame(self.app.content_frame),  # Added personality/scenario frame
-            #'settings': ttk_boot.Frame(self.app.content_frame),
-            'messages': ttk_boot.Frame(self.app.content_frame),
             'prompt': ttk_boot.Frame(self.app.content_frame),
+            'personality_scenario': ttk_boot.Frame(self.app.content_frame),  # Added personality/scenario frame
+            'messages': ttk_boot.Frame(self.app.content_frame),
             'worldbook': ttk_boot.Frame(self.app.content_frame),
-            'lore': ttk_boot.Frame(self.app.content_frame)
+            'lore': ttk_boot.Frame(self.app.content_frame),
+            'json_output': ttk_boot.Frame(self.app.content_frame)
         }
         
         # Placeholder frames for notebook
         self.tab_frames = {
             'basic_info': ttk.Frame(self.notebook),
-            'personality_scenario': ttk.Frame(self.notebook),  # Added personality/scenario frame
-            #'settings': ttk.Frame(self.notebook),
-            'messages': ttk.Frame(self.notebook),
             'prompt': ttk.Frame(self.notebook),
+            'personality_scenario': ttk.Frame(self.notebook),  
+            'messages': ttk.Frame(self.notebook),
             'worldbook': ttk.Frame(self.notebook),
-            'lore': ttk.Frame(self.notebook)
+            'lore': ttk.Frame(self.notebook),
+            'json_output': ttk.Frame(self.notebook)
         }
         
         # Keep track of current visible frame
@@ -99,12 +99,12 @@ class NotebookNav:
         """Add tabs with proper text and tags."""
         tab_data = [
             ('basic_info', "Basic Info"),
-            ('personality_scenario', "Personality / Scenario"),  # Added personality/scenario tab
-            #('settings', "Character Settings"),
-            ('messages', "First / Alt Greetings"),
             ('prompt', "Base Prompt"),
+            ('personality_scenario', "Personality / Scenario"),  
+            ('messages', "First / Alt Greetings"),
             ('worldbook', "Worldbook Settings"),
-            ('lore', "Lore Manager")
+            ('lore', "Lore Manager"),
+            ('json_output', "Final JSON")
         ]
         
         for tag, text in tab_data:
@@ -117,7 +117,6 @@ class NotebookNav:
         if not current_tab:
             return
             
-        # Get the frame widget for the selected tab
         tab_frame = self.notebook.nametowidget(current_tab)
         if not hasattr(tab_frame, '_content_tag'):
             return
@@ -132,13 +131,15 @@ class NotebookNav:
         if content_tag in self.frames:
             self.frames[content_tag].pack(fill=tk.BOTH, expand=True)
             self.current_frame = self.frames[content_tag]
-        
-        # Refresh lore content if needed
-        if content_tag == 'lore' and hasattr(self.app, 'lore_manager'):
-            try:
-                self.app.lore_manager.refresh_lore_table()
-            except Exception as e:
-                print(f"Error refreshing lore table: {str(e)}")
+            
+            # Refresh content if needed
+            if content_tag == 'json_output':
+                self.app.json_handler.refresh_viewer()
+            elif content_tag == 'lore' and hasattr(self.app, 'lore_manager'):
+                try:
+                    self.app.lore_manager.refresh_lore_table()
+                except Exception as e:
+                    print(f"Error refreshing lore table: {str(e)}")
 
     def setup_lore_buttons(self):
         """Set up the lore management buttons."""

@@ -21,7 +21,7 @@ from ttkbootstrap.dialogs import Messagebox
 
 # Local imports
 from log_manager import LogManager
-from json_handler import JsonHandler
+from json_handler import *
 from lore_manager import LoreManager
 from png_handler import PngHandler
 from constants import *
@@ -156,7 +156,7 @@ class CardShark:
         # After both managers are created:
         self.lore_manager.register_tree_view(self.lore_tree_manager)
 
-        # Now create JSON handler with all necessary references
+        # After json_handler creation but before png_handler:
         self.json_handler = JsonHandler(
             self.json_text,
             self.base_prompt_text, 
@@ -164,8 +164,12 @@ class CardShark:
             self.logger,
             self  # Pass self (the CardShark instance) as the app reference
         )
-        
-        # Create PNG handler after both json_handler and lore_manager exist
+
+        # Add this line to create the JSON viewer
+        json_frame = self.nav_handler.frames['json_output']
+        self.json_handler.create_viewer(json_frame)
+
+        # Then continue with png_handler as before
         self.png_handler = PngHandler(
             self.json_text,
             self.json_handler,
@@ -497,7 +501,6 @@ class CardShark:
 
     def create_content_widgets(self):
         """Create all content widgets in their respective frames"""
-            
         # Base Prompt frame content
         prompt_frame = self.nav_handler.frames['prompt']
         self.base_prompt_text = text_manager.create_text_widget(

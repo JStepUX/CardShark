@@ -103,14 +103,28 @@ class PngHandler:
             exiftool_pl = os.path.join(base_path, 'exiftool_files', 'exiftool.pl')
             perl_exe = os.path.join(base_path, 'exiftool_files', 'perl.exe')
             config_path = os.path.join(base_path, '.ExifTool_config')
-            
-            self.logger.log_step(f"ExifTool paths:")
-            self.logger.log_step(f"  Perl lib: {perl_lib}")
-            self.logger.log_step(f"  Perl exe: {perl_exe}")
-            self.logger.log_step(f"  ExifTool.pl: {exiftool_pl}")
-            self.logger.log_step(f"  Config: {config_path}")
-            
+
+            # Log all critical paths for ExifTool
+            self.logger.log_step("ExifTool paths:")
+            self.logger.log_step(f"  Perl library path: {perl_lib}")
+            self.logger.log_step(f"  Perl executable: {perl_exe}")
+            self.logger.log_step(f"  ExifTool script: {exiftool_pl}")
+            self.logger.log_step(f"  Config file path: {config_path}")
+
+            # Ensure all required files exist
+            missing_files = []
+            for path in [perl_lib, perl_exe, exiftool_pl, config_path]:
+                if not os.path.exists(path):
+                    missing_files.append(path)
+
+            if missing_files:
+                error_message = f"Missing required files for ExifTool: {', '.join(missing_files)}"
+                self.logger.log_step(error_message)
+                raise FileNotFoundError(error_message)
+
+            # Return paths if all validations pass
             return perl_lib, perl_exe, exiftool_pl, config_path
+
             
         except Exception as e:
             self.logger.log_step(f"Error getting ExifTool paths: {str(e)}")
@@ -129,12 +143,18 @@ class PngHandler:
             return
                 
         try:
-            # Get ExifTool paths - Updated to get perl_exe
+            # Get ExifTool paths
             perl_lib, perl_exe, exiftool_pl, config_path = self.get_exiftool_paths()
             
-            # Set up environment for Perl
+            # Set up environment for Perl with multiple lib paths
             env = os.environ.copy()
-            env['PERL5LIB'] = perl_lib
+            env['PERL5LIB'] = os.pathsep.join([
+                perl_lib,
+                os.path.join(os.path.dirname(perl_exe), 'lib'),
+                os.path.dirname(exiftool_pl)
+            ])
+            
+            self.logger.log_step(f"PERL5LIB set to: {env['PERL5LIB']}")
 
             # Ensure all edits are captured in the main JSON
             self.json_handler.update_main_json()
@@ -143,45 +163,37 @@ class PngHandler:
             json_str = self.json_text.get("1.0", "end-1c").strip()
             json_data = json.loads(json_str)
             
-            # Reorder the JSON data to match v2.json structure
-            ordered_data = {}
-            if isinstance(json_data, dict):
-                # First add 'data' if it exists
-                if 'data' in json_data:
-                    ordered_data['data'] = json_data['data']
-                
-                # Then add 'character_book' if it exists
-                if 'character_book' in json_data:
-                    ordered_data['character_book'] = json_data['character_book']
-                
-                # Finally add spec fields
-                if 'spec' in json_data:
-                    ordered_data['spec'] = json_data['spec']
-                if 'spec_version' in json_data:
-                    ordered_data['spec_version'] = json_data['spec_version']
+            # Minify JSON
+            minified_json = json.dumps(json_data, separators=(',', ':'), ensure_ascii=False)
             
-            # Minify JSON while preserving order
-            minified_json = json.dumps(ordered_data, separators=(',', ':'), ensure_ascii=False)
-            
+            # Create temp directory if needed
+            temp_dir = os.path.join(os.path.dirname(perl_exe), 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
+
+            # Create temp file for metadata
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=temp_dir, suffix='.txt') as f:
+                temp_file = f.name
+                char_data_b64 = base64.b64encode(minified_json.encode('utf-8')).decode('utf-8')
+                f.write(char_data_b64)
+                self.logger.log_step(f"Created temp metadata file: {temp_file}")
+
             # Get save filepath
             original_name = os.path.basename(self.current_file)
             base_name, ext = os.path.splitext(original_name)
             suggested_name = f"{base_name}_edit{ext}"
 
-            # Determine the best initial directory
+            # Determine initial directory
             if self.current_file and not self.current_file.startswith(tempfile.gettempdir()):
                 initial_dir = os.path.dirname(self.current_file)
             else:
-                # Try common user directories in order of preference
                 possible_dirs = [
                     os.path.expanduser("~/Downloads"),
-                    os.path.dirname(os.path.abspath(__file__)),  # CardShark directory
+                    os.path.dirname(os.path.abspath(__file__)),
                     os.path.expanduser("~/Desktop")
                 ]
-                initial_dir = next((d for d in possible_dirs if os.path.exists(d)), None)
-                if not initial_dir:
-                    initial_dir = os.path.expanduser("~")  # Fallback to home directory
-            
+                initial_dir = next((d for d in possible_dirs if os.path.exists(d)), 
+                                os.path.expanduser("~"))
+
             new_file_path = filedialog.asksaveasfilename(
                 defaultextension=".png",
                 filetypes=[("PNG files", "*.png")],
@@ -194,23 +206,13 @@ class PngHandler:
                 self.logger.end_operation()
                 return
 
-            # Create temp directory if needed
-            temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
-            os.makedirs(temp_dir, exist_ok=True)
-
-            # Create temp file for metadata
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=temp_dir, suffix='.txt') as f:
-                temp_file = f.name
-                char_data_b64 = base64.b64encode(minified_json.encode('utf-8')).decode('utf-8')
-                f.write(char_data_b64)
-
             # Make exact copy of original file
             import shutil
             shutil.copy2(self.current_file, new_file_path)
-                    
-            # Modified ExifTool command to use perl_exe directly
+            
+            # Build ExifTool command
             cmd = [
-                perl_exe,  # Updated to use full perl.exe path
+                perl_exe,
                 exiftool_pl,
                 '-config', config_path,
                 '-n',
@@ -223,8 +225,11 @@ class PngHandler:
             result = subprocess.run(cmd, capture_output=True, text=True, env=env)
             self.logger.log_step("ExifTool stdout:", result.stdout)
             self.logger.log_step("ExifTool stderr:", result.stderr)
+
+            if result.returncode != 0:
+                raise Exception(f"ExifTool failed: {result.stderr}")
             
-            # Clean up the "_original" file if it exists
+            # Clean up the "_original" file
             original_file = new_file_path + "_original"
             if os.path.exists(original_file):
                 try:
