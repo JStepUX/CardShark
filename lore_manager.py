@@ -1,12 +1,13 @@
 import os
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, filedialog
 from datetime import datetime, timezone
 import json
 import csv
 from constants import *
 import ttkbootstrap as ttk_boot
 from text_manager import text_manager
+from json_handler import JsonUpdateMixin
 
 class LoreEntryWidget:
     # Class variables for icon cache
@@ -141,16 +142,6 @@ class LoreEntryWidget:
         )
         self.order_entry.pack(side=tk.LEFT, padx=(0, 5))
 
-        # Settings button
-        settings_btn = ttk_boot.Button(
-            control_frame,
-            image=LoreEntryWidget._icon_cache['settings'],
-            bootstyle="secondary-outline",
-            command=self.show_settings,
-            width=3
-        )
-        settings_btn.pack(side=tk.LEFT, padx=(0, 5))
-        
         # Store index and create delete button with index reference
         self.index = index
         if on_delete:
@@ -163,58 +154,6 @@ class LoreEntryWidget:
             )
             delete_btn.pack(side=tk.LEFT)
 
-        # Value section
-        value_frame = ttk_boot.Frame(inner_frame, style='dark.TFrame')
-        value_frame.pack(fill=tk.BOTH, padx=5, pady=(0, 5))
-
-        value_label = ttk_boot.Label(
-            value_frame,
-            text="Value",
-            width=8,
-            style='dark.TLabel',
-            font=FONTS['DEFAULT']
-        )
-        value_label.pack(side=tk.LEFT)
-        
-        # Content text area
-        text_frame = ttk_boot.Frame(value_frame)
-        text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        self.content_text = text_manager.create_text_widget(
-            text_frame,
-            height=4,
-            bg=COLORS['BACKGROUND'],
-            fg=COLORS['FOREGROUND'],
-            insertbackground=COLORS['FOREGROUND']
-        )
-        self.content_text.insert('1.0', entry_data.get('content', ''))
-        self.content_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        # Scrollbar
-        scrollbar = ttk_boot.Scrollbar(
-            text_frame,
-            bootstyle="secondary-round",
-            command=self.content_text.yview
-        )
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.content_text.config(yscrollcommand=scrollbar.set)
-
-    def update_index(self, new_index):
-        """Update the widget's index and order display."""
-        self.index = new_index
-        self.order_var.set(str(new_index + 1))
-
-    def show_settings(self):
-        """Show settings dialog for this entry."""
-        pass  # Placeholder for settings functionality
-        
-    def get_data(self):
-        """Get the current data from this entry widget."""
-        return {
-            'keys': [k.strip() for k in self.key_var.get().split(',') if k.strip()],
-            'content': self.content_text.get('1.0', 'end-1c')
-        }
-        
         # Value frame and label
         value_frame = ttk_boot.Frame(inner_frame, style='dark.TFrame')
         value_frame.pack(fill=tk.BOTH, padx=5, pady=(0, 5))
@@ -223,7 +162,7 @@ class LoreEntryWidget:
             value_frame,
             text="Value",
             width=8,
-            style='dark.TLabel',  # Remove bootstyle and use custom style
+            style='dark.TLabel',
             font=FONTS['DEFAULT']
         )
         value_label.pack(side=tk.LEFT)
@@ -250,9 +189,11 @@ class LoreEntryWidget:
         )
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.content_text.config(yscrollcommand=scrollbar.set)
-        
-        # Store the index for reference
-        self.index = index
+
+    def update_index(self, new_index):
+        """Update the widget's index and order display."""
+        self.index = new_index
+        self.order_var.set(str(new_index + 1))
 
     def show_settings(self):
         """Show settings dialog for this entry."""
@@ -264,21 +205,36 @@ class LoreEntryWidget:
             'keys': [k.strip() for k in self.key_var.get().split(',') if k.strip()],
             'content': self.content_text.get('1.0', 'end-1c')
         }
+    
+    def bind_real_time_updates(self, widget_manager):
+        """Bind widgets to update JSON in real-time."""
+        def update_callback(event=None):
+            widget_manager.bind_json_update(self.content_text, field_type='lore')
+            widget_manager.bind_json_update(self.key_entry, field_type='lore')
+        
+        # Bind to both content and key widgets
+        self.content_text.bind('<KeyRelease>', update_callback)
+        self.content_text.bind('<FocusOut>', update_callback)
+        self.key_entry.bind('<KeyRelease>', update_callback)
+        self.key_entry.bind('<FocusOut>', update_callback)
 
-class LoreManagerWidgets:
-    def __init__(self, parent_frame, json_text, status_var, logger, count_var):
+class LoreManagerWidgets(JsonUpdateMixin):
+    def __init__(self, parent_frame, json_text, status_var, logger, json_handler):
+        """Initialize LoreManagerWidgets."""
         self.parent_frame = parent_frame
         self.json_text = json_text
         self.status_var = status_var
         self.logger = logger
-        self.count_var = count_var
+        self.json_handler = json_handler  # Required for JsonUpdateMixin
+        
+        # Initialize count variable
+        self.count_var = tk.StringVar(value="Total: 0")
         
         # Initialize the IconManager in LoreEntryWidget
         LoreEntryWidget._logger = logger
         LoreEntryWidget._init_icons()
 
-        
-        # Create a frame that will expand to full width
+        # Create main container with image preview width
         self.main_frame = ttk_boot.Frame(self.parent_frame)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
@@ -287,21 +243,20 @@ class LoreManagerWidgets:
             self.main_frame,
             bg=COLORS['PANEL_BACKGROUND'],
             highlightthickness=0,
-            takefocus=0,  # Prevent focus stealing
+            takefocus=0
         )
         
         self.scrollbar = ttk_boot.Scrollbar(
             self.main_frame,
-            bootstyle="rounded",  # Make it visible with rounded style
+            bootstyle="rounded",
             command=self.canvas.yview
         )
         
-        # Create frame for entries that will expand to canvas width
+        # Create frame for entries
         self.scrollable_frame = ttk_boot.Frame(self.canvas, style='dark.TFrame')
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
+        
+        # List to keep track of entry widgets
+        self.entry_widgets = []
         
         # Add mousewheel bindings
         def _on_mousewheel(event):
@@ -338,9 +293,6 @@ class LoreManagerWidgets:
         # Connect scrollbar to canvas
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         
-        # List to keep track of entry widgets
-        self.entry_widgets = []
-        
         # Configure style for card-like appearance
         style = ttk.Style()
         style.configure(
@@ -366,9 +318,15 @@ class LoreManagerWidgets:
                 on_delete=self.delete_entry
             )
             self.entry_widgets.append(entry_widget)
+            
+            # Bind real-time updates
+            entry_widget.bind_real_time_updates(self)
         
         # Update count
-        self.count_var.set(f"Total: {len(entries_data)}")
+        self.count_var.set(f"Total: {len(self.entry_widgets)}")
+        
+        # Update scroll region
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         
     def get_all_entries(self):
         """Get data from all entry widgets."""
@@ -408,6 +366,9 @@ class LoreManagerWidgets:
             on_delete=self.delete_entry
         )
         self.entry_widgets.append(entry_widget)
+        
+        # Bind real-time updates
+        entry_widget.bind_real_time_updates(self)
         
         # Update count
         self.count_var.set(f"Total: {len(self.entry_widgets)}")
@@ -500,15 +461,16 @@ class LoreManagerWidgets:
             self.logger.log_step(f"Error updating JSON: {str(e)}")
             raise
 
-class LoreManager:
-    def __init__(self, json_text, parent_frame, status_var, logger, count_var):
+class LoreManager(JsonUpdateMixin):
+    def __init__(self, json_text, parent_frame, status_var, logger, json_handler):  # Added json_handler
         """Initialize LoreManager with required UI elements and logger."""
         self.json_text = json_text
         self.status_var = status_var
         self.logger = logger
+        self.json_handler = json_handler  # Required for JsonUpdateMixin
         self.last_deleted_items = None
         self.last_deleted_json = None
-        self.count_var = count_var
+        self.count_var = tk.StringVar(value="Total: 0")
 
         # Create button frame at the top
         button_frame = ttk_boot.Frame(parent_frame)
@@ -538,7 +500,7 @@ class LoreManager:
             bootstyle="info"
         ).pack(side=tk.RIGHT, padx=5)
 
-        # Initialize widget manager after buttons
+        # Initialize widget manager with json_handler
         content_frame = ttk_boot.Frame(parent_frame)
         content_frame.pack(fill=tk.BOTH, expand=True)
         
@@ -547,7 +509,7 @@ class LoreManager:
             json_text,
             status_var,
             logger,
-            count_var
+            json_handler  # Pass json_handler to widgets
         )
 
     # Add at the top of the LoreManager class:
@@ -798,14 +760,13 @@ class LoreManager:
                 if skipped_count > 0:
                     message += f" ({MESSAGES['ROWS_SKIPPED']} {skipped_count})"
                 self.status_var.set(message)
-                messagebox.showinfo("Import Complete", message)
-                
+                MessageDialog.info(message, "Import Complete")
             else:
-                messagebox.showwarning("Import Failed", MESSAGES['NO_VALID_ITEMS'])
+                MessageDialog.warning(MESSAGES['NO_VALID_ITEMS'], "Import Failed")
                 
         except Exception as e:
             self.logger.log_step(f"Error importing TSV: {str(e)}")
-            messagebox.showerror("Import Error", f"{MESSAGES['IMPORT_ERROR']}: {str(e)}")
+            MessageDialog.error(f"{MESSAGES['IMPORT_ERROR']}: {str(e)}")
     
     def add_lore_item(self):
         """Add a new lore item."""
@@ -879,7 +840,7 @@ class LoreManager:
 
             except Exception as e:
                 self.logger.log_step(f"Error adding lore item: {str(e)}")
-                messagebox.showerror("Error", f"Failed to add lore item: {str(e)}")
+                MessageDialog.error(f"Failed to add lore item: {str(e)}")
 
         ttk.Button(
             dialog,
@@ -893,12 +854,12 @@ class LoreManager:
         """Edit selected lore item."""
         selected = self.lore_tree.selection()
         if not selected:
-            messagebox.showwarning("Warning", "Please select a lore item to edit")
+            MessageDialog.warning("Please select a lore item to edit", "Warning")
             return
 
         values = self.lore_tree.item(selected[0])['values']
         if not values or len(values) < 2:
-            messagebox.showerror("Error", "Invalid item selected")
+            MessageDialog.error("Invalid item selected", "Error")
             return
 
         current_key = values[0]
@@ -950,7 +911,7 @@ class LoreManager:
 
             except Exception as e:
                 self.logger.log_step(f"Error updating lore item: {str(e)}")
-                messagebox.showerror("Error", f"Failed to update lore item: {str(e)}")
+                MessageDialog.error(f"Failed to update lore item: {str(e)}")
 
         ttk.Button(
             dialog,
@@ -964,13 +925,13 @@ class LoreManager:
         """Delete selected lore items with undo capability."""
         selected = self.lore_tree.selection()
         if not selected:
-            messagebox.showwarning("Warning", "Please select at least one lore item to delete")
+            MessageDialog.warning("Please select a lore item to edit", "Warning")
             return
 
         item_count = len(selected)
         confirm_message = f"Are you sure you want to delete {item_count} item{'s' if item_count > 1 else ''}?"
         
-        if messagebox.askyesno("Confirm Delete", confirm_message):
+        if MessageDialog.ask_yes_no(confirm_message, "Confirm Delete"):
             try:
                 # Store current state for undo
                 json_str = self.json_text.get(1.0, "end-1c").strip()
@@ -1026,4 +987,4 @@ class LoreManager:
 
             except Exception as e:
                 self.logger.log_step(f"Error deleting lore items: {str(e)}")
-                messagebox.showerror("Error", f"Failed to delete lore items: {str(e)}")
+                MessageDialog.error(f"Failed to delete lore items: {str(e)}")

@@ -1,28 +1,29 @@
 import os
 import ssl
 import urllib.request
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import tkinter as tk
 from tkinter import ttk
 from constants import *
 from text_manager import text_manager
+from json_handler import JsonUpdateMixin
 
-class BasicManager:
-    def __init__(self, parent_frame, text_config, logger):
+class BasicManager(JsonUpdateMixin):
+    def __init__(self, parent_frame, json_handler, logger):
         """Initialize Basic Manager with required UI elements and logger."""
         self.parent_frame = parent_frame
-        self.text_config = text_config
-        self.logger = logger
+        self.json_handler = json_handler  # Required for JsonUpdateMixin
+        self.logger = logger             # Required for JsonUpdateMixin
         
         # Configure styles
         self.style = ttk.Style()
         self.style.configure(
             'Basic.TLabel',
-            font=FONTS['DEFAULT']  # Using our 14px font
+            font=FONTS['DEFAULT']
         )
         self.style.configure(
             'Basic.TEntry',
-            font=FONTS['DEFAULT']  # Using our 14px font
+            font=FONTS['DEFAULT']
         )
         
         # Create container for fields
@@ -30,6 +31,14 @@ class BasicManager:
         self.fields_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         self.create_fields()
+        
+        # Bind all fields for real-time JSON updates
+        self.bind_multiple([
+            self.char_name_entry,
+            self.display_name_entry,
+            self.tags_text,
+            self.images_text
+        ], field_type='basic_info')  # Explicitly specify field_type
         
     def create_fields(self):
         """Create all basic info fields."""
@@ -156,14 +165,14 @@ class BasicManager:
             # Get URLs from text widget
             urls_text = self.images_text.get('1.0', 'end-1c')
             if not urls_text.strip():
-                messagebox.showwarning("No Images", "No image URLs found to download.")
+                MessageDialog.warning( "No image URLs found to download.", "No Images")
                 return
                 
             # Get list of URLs
             urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
             
             if not urls:
-                messagebox.showwarning("No Images", "No valid image URLs found.")
+                MessageDialog.warning("No valid image URLs found.", "No Images")
                 return
                 
             # Ask user for destination directory
@@ -258,19 +267,16 @@ class BasicManager:
             
             # Show completion message
             if failed_urls:
-                messagebox.showwarning(
-                    "Download Complete",
-                    f"Downloaded {success_count} images.\n{len(failed_urls)} downloads failed."
+                MessageDialog.warning(
+                    f"Downloaded {success_count} images.\n{len(failed_urls)} downloads failed.",
+                    "Download Complete"
                 )
             else:
-                messagebox.showinfo(
-                    "Download Complete",
-                    f"Successfully downloaded {success_count} images."
-                )
+                MessageDialog.info("Successfully downloaded images!", "Import Complete")
                 
         except Exception as e:
             self.logger.log_step(f"Error in batch download: {str(e)}")
-            messagebox.showerror("Error", f"Download failed: {str(e)}")
+            MessageDialog.error(f"Download failed: {str(e)}", "Error")
 
     def get_ssl_context(self):
         """Get SSL context similar to url_handler."""

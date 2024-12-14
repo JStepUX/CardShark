@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import re
 from typing import Optional, Dict, Any
-from constants import COLORS, FONTS, TEXT_CONFIG
+from constants import *
 
 class StyledText:
     def __init__(self, parent, **kwargs):

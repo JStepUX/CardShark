@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 import json
 import ttkbootstrap as ttk_boot
 from constants import *
@@ -173,9 +173,9 @@ class LoreTreeManager:
             
         # Confirm deletion
         count = len(selected)
-        if not messagebox.askyesno(
-            "Confirm Delete",
-            f"Are you sure you want to delete {count} item{'s' if count > 1 else ''}?"
+        if not MessageDialog.ask_yes_no(
+            f"Are you sure you want to delete {count} item{'s' if count > 1 else ''}?",
+            "Confirm Delete"
         ):
             return
             

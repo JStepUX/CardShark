@@ -176,3 +176,33 @@ WIDGET_SIZES = {
     'JSON_HEIGHT': 40,
     'DEBUG_HEIGHT': 3,
 }
+
+from ttkbootstrap.dialogs import Messagebox
+
+class MessageDialog:
+    """Wrapper for ttkbootstrap message dialogs to provide consistent styling."""
+    
+    @staticmethod
+    def error(message, title="Error"):
+        """Show error dialog."""
+        return Messagebox.show_error(message, title)
+    
+    @staticmethod
+    def info(message, title="Information"):
+        """Show info dialog."""
+        return Messagebox.show_info(message, title)
+    
+    @staticmethod
+    def warning(message, title="Warning"):
+        """Show warning dialog."""
+        return Messagebox.show_warning(message, title)
+    
+    @staticmethod
+    def ask_yes_no(message, title="Question"):
+        """Show yes/no dialog."""
+        return Messagebox.show_question(message, title) == "Yes"
+
+    @staticmethod
+    def ask_ok_cancel(message, title="Confirm"):
+        """Show OK/Cancel dialog."""
+        return Messagebox.show_question(message, title, buttons=["OK", "Cancel"]) == "OK"

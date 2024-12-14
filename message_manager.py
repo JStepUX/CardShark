@@ -9,6 +9,7 @@ from PIL import Image, ImageTk
 import urllib.request
 import ssl
 from io import BytesIO
+from json_handler import JsonUpdateMixin
 
 class MessageEntryWidget:
     # Class variables for icon cache
@@ -207,7 +208,15 @@ class MessageEntryWidget:
         self.current_image = None
         self.load_placeholder()
         
-        print(f"Widget {index} initialized - Frame visible: {self.frame.winfo_viewable()}")
+    def bind_real_time_updates(self, message_manager):
+        """Bind widgets to update JSON in real-time."""
+        def update_callback(event=None):
+            message_manager.bind_json_update(self.message_text, field_type='messages')
+        
+        # Bind to both the text widget and first message toggle
+        self.message_text.bind('<KeyRelease>', update_callback)
+        self.message_text.bind('<FocusOut>', update_callback)
+        self.first_var.trace_add('write', lambda *args: update_callback())
 
     def load_placeholder(self):
         """Load and display the placeholder logo."""
@@ -361,13 +370,13 @@ class MessageEntryWidget:
         self.message_text.configure(height=new_height)
 
 
-class MessageManager:
-    def __init__(self, parent_frame, json_text, status_var, logger):
-        """Initialize Message Manager with required UI elements and logger."""
+class MessageManager(JsonUpdateMixin):
+    def __init__(self, parent_frame, json_text, status_var, logger, json_handler):  # Added json_handler
         self.parent_frame = parent_frame
         self.json_text = json_text
         self.status_var = status_var
         self.logger = logger
+        self.json_handler = json_handler  # Required for JsonUpdateMixin
         
         # Initialize MessageEntryWidget's logger and icons
         MessageEntryWidget._logger = logger
@@ -525,7 +534,7 @@ class MessageManager:
     def add_message_widget(self, message_text, index, is_first):
         """Add a new message widget to the interface."""
         widget = MessageEntryWidget(
-            self.scrollable_frame,  # Make sure this is the correct parent
+            self.scrollable_frame,
             message_text,
             index,
             is_first,
@@ -533,9 +542,12 @@ class MessageManager:
             self.move_message_up,
             self.move_message_down,
             self.set_as_first_message,
-            total_widgets=len(self.message_widgets) + 1  # Add 1 for new widget
+            total_widgets=len(self.message_widgets) + 1
         )
         self.message_widgets.append(widget)
+        
+        # Add real-time update bindings
+        widget.bind_real_time_updates(self)
     
     def add_message(self):
         """Add a new empty message."""

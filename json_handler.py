@@ -1,9 +1,58 @@
 import json
 import tkinter as tk
 import ttkbootstrap as ttk
-from tkinter import messagebox
 from datetime import datetime, timezone
 from text_manager import text_manager
+from constants import *
+
+__all__ = ['JsonHandler', 'JsonViewer', 'JsonUpdateMixin']
+
+#####################################
+# JSON Update Mixin for Managers
+#####################################
+
+class JsonUpdateMixin:
+    """Mixin class to provide real-time JSON update functionality to managers."""
+    def bind_json_update(self, widget, field_type=None):
+        """Bind real-time JSON updates to a widget."""
+        if not hasattr(self, 'json_handler'):
+            raise AttributeError("Manager must have json_handler attribute to use JsonUpdateMixin")
+            
+        if not hasattr(self, 'logger'):
+            raise AttributeError("Manager must have logger attribute to use JsonUpdateMixin")
+            
+        # If no field_type specified, use the class name without "Manager"
+        if field_type is None:
+            field_type = self.__class__.__name__.replace('Manager', '').lower()
+        
+        def update_handler(event=None):
+            try:
+                # Get current field data using manager's get_field_data method
+                if hasattr(self, 'get_field_data'):
+                    current_data = self.get_field_data()
+                    self.json_handler.update_field_data(field_type, current_data)
+            except Exception as e:
+                self.logger.log_step(f"Error in real-time JSON update for {field_type}: {str(e)}")
+        
+        # Check if widget is our custom StyledText
+        if hasattr(widget, 'text_widget'):
+            # For StyledText, bind to internal text widget
+            widget.text_widget.bind('<KeyRelease>', update_handler)
+            widget.text_widget.bind('<FocusOut>', update_handler)
+        else:
+            # For native widgets, check type and bind appropriately
+            widget_type = widget.winfo_class()
+            if widget_type in ('Text', 'TText'):
+                widget.bind('<KeyRelease>', update_handler)
+                widget.bind('<FocusOut>', update_handler)
+            elif widget_type in ('Entry', 'TEntry'):
+                widget.bind('<KeyRelease>', update_handler)
+                widget.bind('<FocusOut>', update_handler)
+
+    def bind_multiple(self, widgets, field_type=None):
+        """Convenience method to bind multiple widgets at once."""
+        for widget in widgets:
+            self.bind_json_update(widget, field_type)
 
 class JsonHandler:
     def __init__(self, main_json_text, base_prompt_text, status_var, logger, app):
@@ -15,6 +64,71 @@ class JsonHandler:
         self.app = app  # Store reference to main app
         self.png_handler = None
         self.viewer = None  # Will hold JsonViewer instance
+    
+    def create_empty_v2_structure(self):
+        """Create and return an empty V2 card structure."""
+        return {
+            "spec": "chara_card_v2",
+            "spec_version": "2.0",
+            "data": {
+                "name": "",
+                "display_name": "",
+                "description": "",
+                "personality": "",
+                "first_mes": "",
+                "mes_example": "",
+                "scenario": "",
+                "creator_notes": "Modified by CardShark",
+                "tags": [],
+                "imported_images": [],
+                "character_book": {
+                    "entries": [],
+                    "name": "",
+                    "description": "",
+                    "scan_depth": 100,
+                    "token_budget": 2048,
+                    "recursive_scanning": False,
+                    "extensions": {}
+                }
+            }
+        }
+
+    def format_json(self, data):
+        """Format JSON data with consistent formatting."""
+        return json.dumps(data, indent=4, ensure_ascii=False)
+
+    def clear_json_state(self):
+        """Clear JSON state and return empty V2 structure."""
+        try:
+            # Create empty structure
+            empty_structure = self.create_empty_v2_structure()
+            
+            # Format and update JSON text
+            formatted_json = self.format_json(empty_structure)
+            self.json_text.delete('1.0', tk.END)
+            self.json_text.insert('1.0', formatted_json)
+            
+            # Update viewer if it exists
+            self.refresh_viewer()
+            
+            # Log the action
+            self.logger.log_step("JSON state cleared successfully")
+            
+            return empty_structure
+        except Exception as e:
+            self.logger.log_step(f"Error clearing JSON state: {str(e)}")
+            raise
+
+    def set_json_content(self, data):
+        """Set JSON content with proper formatting."""
+        try:
+            formatted_json = self.format_json(data)
+            self.json_text.delete('1.0', tk.END)
+            self.json_text.insert('1.0', formatted_json)
+            self.refresh_viewer()
+        except Exception as e:
+            self.logger.log_step(f"Error setting JSON content: {str(e)}")
+            raise
     
     def create_viewer(self, parent_frame):
         """Create a JSON viewer instance."""
@@ -112,7 +226,7 @@ class JsonHandler:
         except Exception as e:
             self.logger.log_step(f"Error updating JSON: {str(e)}")
             self.status_var.set(f"Error updating JSON: {str(e)}")
-            messagebox.showerror("Error", f"Failed to update JSON: {str(e)}")
+            MessageDialog.error(f"Failed to update JSON: {str(e)}", "Error")
             return False
         
 class JsonViewer:

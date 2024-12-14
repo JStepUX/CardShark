@@ -1,38 +1,27 @@
 import os
-import base64
-import json
-import tkinter as tk
-from tkinter import font as tk_font
-from datetime import datetime, timezone
-import random
-import string
-from tkinter import messagebox
-from PIL import Image, ImageTk
-from PIL import PngImagePlugin
-import re
 import sys
 import ctypes
+import tkinter as tk
+from datetime import datetime
 from ctypes import windll
-
-# Replace ttk with ttkbootstrap
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Messagebox
 
-# Local imports
-from log_manager import LogManager
-from json_handler import *
-from lore_manager import LoreManager
-from png_handler import PngHandler
-from constants import *
-from url_handler import UrlHandler
-from image_preview import ImagePreview
-from nav_handler import NotebookNav
+# Local imports in alphabetical order
 from basic_manager import BasicManager
-from personality_manager import PersonalityManager
-from text_manager import text_manager
-from message_manager import MessageManager
+from constants import *
+from image_preview import ImagePreview
+from json_handler import JsonHandler
+from log_manager import LogManager
+from lore_manager import LoreManager
 from loretree_manager import LoreTreeManager
+from message_manager import MessageManager
+from nav_handler import NotebookNav
+from personality_manager import PersonalityManager
+from png_handler import PngHandler
+from text_manager import text_manager
+from url_handler import UrlHandler
 
 def set_window_dark_title_bar(window):
     """Set window title bar to dark theme on Windows."""
@@ -121,55 +110,60 @@ class CardShark:
         # Initialize text widgets in their respective frames
         self.create_content_widgets()
         
-        # First create LoreManager since other handlers might need it
-        self.lore_manager = LoreManager(
+        # 1. First create JsonHandler since most managers need it
+        self.json_handler = JsonHandler(
             self.json_text,
-            self.nav_handler.frames['lore'],  # Use the frame from nav_handler
+            self.base_prompt_text,
             self.status_var,
             self.logger,
-            self.lore_count_var
+            self
         )
-        
-        # Initialize message manager
+
+        # 2. Create JSON viewer
+        json_frame = self.nav_handler.frames['json_output']
+        self.json_handler.create_viewer(json_frame)
+
+        # 3. Now create managers that depend on json_handler
+        self.basic_manager = BasicManager(
+            self.nav_handler.frames['basic_info'],
+            self.json_handler,  # Changed from text_config
+            self.logger
+        )
+
+        self.personality_manager = PersonalityManager(
+            self.nav_handler.frames['personality_scenario'],
+            self.json_handler,  # Changed from text_config
+            self.logger
+        )
+
         self.message_manager = MessageManager(
             self.nav_handler.frames['messages'],
             self.json_text,
             self.status_var,
-            self.logger
+            self.logger,
+            self.json_handler  # Added json_handler
         )
 
-        # Initialize PersonalityManager after nav_handler but before json_handler
-        self.personality_manager = PersonalityManager(
-            self.nav_handler.frames['personality_scenario'],
-            self.text_config,
-            self.logger
+        self.lore_manager = LoreManager(
+            self.json_text,
+            self.nav_handler.frames['lore'],
+            self.status_var,
+            self.logger,
+            self.json_handler  # Added json_handler
         )
-        
-        # Initialize LoreTreeManager after LoreManager
+
+        # 4. Initialize LoreTreeManager after LoreManager
         self.lore_tree_manager = LoreTreeManager(
-            self.nav_handler.frames['worldbook'],  # Make sure this matches the nav handler frame key
+            self.nav_handler.frames['worldbook'],
             self.lore_manager,
             self.status_var,
             self.logger
         )
-        
-        # After both managers are created:
+
+        # 5. Register tree view with lore manager
         self.lore_manager.register_tree_view(self.lore_tree_manager)
 
-        # After json_handler creation but before png_handler:
-        self.json_handler = JsonHandler(
-            self.json_text,
-            self.base_prompt_text, 
-            self.status_var,
-            self.logger,
-            self  # Pass self (the CardShark instance) as the app reference
-        )
-
-        # Add this line to create the JSON viewer
-        json_frame = self.nav_handler.frames['json_output']
-        self.json_handler.create_viewer(json_frame)
-
-        # Then continue with png_handler as before
+        # 6. Create handlers that need json_handler and other managers
         self.png_handler = PngHandler(
             self.json_text,
             self.json_handler,
@@ -178,16 +172,6 @@ class CardShark:
             self.logger
         )
 
-        self.basic_manager = BasicManager(
-            self.nav_handler.frames['basic_info'],
-            self.text_config,
-            self.logger
-        )
-        
-        # Set PNG handler reference in JsonHandler
-        self.json_handler.set_png_handler(self.png_handler)
-        
-        # Initialize URL handler
         self.url_handler = UrlHandler(
             self.json_handler,
             self.json_text,
@@ -195,20 +179,19 @@ class CardShark:
             self.status_var,
             self.logger
         )
-        
-        # Set up callbacks and handlers
+
+        # 7. Set up final connections
+        self.json_handler.set_png_handler(self.png_handler)
         self.setup_button_commands()
         self.png_handler.set_image_loaded_callback(self.image_preview.update_image_preview)
         self.png_handler.show_folder_button = self.show_folder_button
-        
-        # Set up undo and folder functionality
+
+        # 8. Setup remaining functionality
         self.setup_undo_functionality()
         self.png_handler.set_status_frame(self.status_frame, self.folder_button)
-        
-        # Setup lore buttons now that lore_manager exists
         self.nav_handler.setup_lore_buttons()
-        
-        # Hide debug frame by default
+
+        # 9. Hide debug frame
         self.debug_frame_visible = False
         self.debug_frame.pack_forget()
 
@@ -217,7 +200,7 @@ class CardShark:
         self.btn_frame = ttk.Frame(parent)
         self.btn_frame.pack(fill=tk.X, pady=5)
         
-        # Create buttons without commands
+        # Create buttons without commands (removed Update Main JSON button)
         self.load_button = ttk.Button(
             self.btn_frame,
             text=BUTTON_TEXT['LOAD'],
@@ -239,13 +222,6 @@ class CardShark:
         )
         self.save_button.pack(side=tk.LEFT, padx=5)
 
-        self.update_button = ttk.Button(
-            self.btn_frame,
-            text=BUTTON_TEXT['UPDATE'],
-            bootstyle="dark"
-        )
-        self.update_button.pack(side=tk.LEFT, padx=5)
-
         self.clear_button = ttk.Button(
             self.btn_frame,
             text=BUTTON_TEXT['CLEAR'],
@@ -258,7 +234,6 @@ class CardShark:
         self.load_button.config(command=self.png_handler.load_png)
         self.import_url_button.config(command=self.show_url_import_dialog)
         self.save_button.config(command=self.png_handler.save_png)
-        self.update_button.config(command=self.json_handler.update_main_json)
         self.clear_button.config(command=self.clear_application_state)
     
     def clear_application_state(self):
@@ -266,35 +241,10 @@ class CardShark:
         try:
             self.logger.start_operation("Clear Application State")
             
-            # Create empty V2 structure
-            empty_v2 = {
-                "spec": "chara_card_v2",
-                "spec_version": "2.0",
-                "data": {
-                    "name": "",
-                    "display_name": "",
-                    "description": "",
-                    "personality": "",
-                    "first_mes": "",
-                    "mes_example": "",
-                    "scenario": "",
-                    "creator_notes": "",
-                    "tags": [],
-                    "imported_images": [],
-                    "character_book": {
-                        "entries": [],
-                        "name": "",
-                        "description": "",
-                        "scan_depth": 100,
-                        "token_budget": 2048,
-                        "recursive_scanning": False,
-                        "extensions": {}
-                    }
-                }
-            }
+            # Use JsonHandler to create empty structure and clear state
+            empty_v2 = self.json_handler.clear_json_state()
             
             # Clear text widgets
-            self.json_text.delete(1.0, tk.END)
             self.base_prompt_text.delete(1.0, tk.END)
             
             # Clear managers with empty V2 structure
@@ -330,11 +280,9 @@ class CardShark:
             if hasattr(self, 'url_handler'):
                 self.url_handler.cleanup()
             
-            # Hide the folder button if visible
+            # Hide buttons
             if hasattr(self, 'hide_folder_button'):
                 self.hide_folder_button()
-            
-            # Hide the undo button if visible
             if hasattr(self, 'hide_undo_button'):
                 self.hide_undo_button()
             
@@ -344,10 +292,6 @@ class CardShark:
             
             # Clear status
             self.status_var.set("")
-            
-            # Put empty V2 structure in JSON text
-            formatted_json = json.dumps(empty_v2, indent=4, ensure_ascii=False)
-            self.json_text.insert(1.0, formatted_json)
             
             self.logger.log_step("Application state cleared successfully")
             self.logger.end_operation()
@@ -404,9 +348,6 @@ class CardShark:
         # Create an inner frame for the tree with padding
         nav_inner_frame = ttk.Frame(nav_panel)
         nav_inner_frame.pack(fill=tk.BOTH, expand=True, padx=20)  # Add horizontal padding here
-        
-        # Create navigation tree directly in nav_inner_frame
-        self.create_navigation_tree(nav_inner_frame)
         
         # Create content panel - will expand to fill remaining space
         self.content_frame = ttk.Frame(content_container)
@@ -516,36 +457,6 @@ class CardShark:
             height=WIDGET_SIZES['JSON_HEIGHT']
         )
 
-    def setup_navigation_items(self):
-        """Set up the navigation tree structure."""
-        # Clear existing items
-        for item in self.nav_tree.get_children():
-            self.nav_tree.delete(item)
-            
-        # Add main categories with padding tag
-        character_profile = self.nav_tree.insert('', 'end', text='Character Profile', 
-                                            open=True, tags=['padded'])
-        self.nav_tree.insert(character_profile, 'end', text='Basic Info', 
-                            tags=['basic_info', 'padded'])
-        self.nav_tree.insert(character_profile, 'end', text='Personality / Scenario', 
-                            tags=['personality', 'padded'])
-        self.nav_tree.insert(character_profile, 'end', text='Settings', 
-                            tags=['settings', 'padded'])
-        
-        interaction = self.nav_tree.insert('', 'end', text='Interaction', 
-                                        open=True, tags=['padded'])
-        self.nav_tree.insert(interaction, 'end', text='First Message / Alt Greetings', 
-                            tags=['messages', 'padded'])
-        self.nav_tree.insert(interaction, 'end', text='Base Prompt', 
-                            tags=['prompt', 'padded'])
-        
-        lore = self.nav_tree.insert('', 'end', text='Lore Management', 
-                                open=True, tags=['padded'])
-        self.nav_tree.insert(lore, 'end', text='Worldbook Settings', 
-                            tags=['worldbook', 'padded'])
-        self.nav_tree.insert(lore, 'end', text='Lore Manager', 
-                            tags=['lore', 'padded'])
-
     def create_toolbar_buttons(self):
         """Create all toolbar buttons"""
         # Load button
@@ -587,20 +498,6 @@ class CardShark:
             command=self.clear_application_state,
             bootstyle="danger-outline"
         ).pack(side=tk.LEFT, padx=5)
-
-    def on_nav_select(self, event):
-        """Handle navigation tree selection"""
-        selected_item = self.nav_tree.selection()
-        if not selected_item:
-            return
-            
-        item = selected_item[0]
-        tags = self.nav_tree.item(item)['tags']
-        if not tags:
-            return
-            
-        panel_tag = tags[0]
-        self.show_content_panel(panel_tag)
 
     def extend_png_handler(self):
         """Extend the PNG handler to update the image preview."""
@@ -720,7 +617,7 @@ class CardShark:
             cleaned_url, error = self.url_handler.clean_backyard_url(url)
             
             if error:
-                messagebox.showerror("Invalid URL", error)
+                Messagebox.showerror("Invalid URL", error)
                 return
 
             try:
@@ -729,7 +626,7 @@ class CardShark:
                     self.image_preview.update_image_preview(image_path)
                     dialog.destroy()
             except Exception as e:
-                messagebox.showerror(
+                Messagebox.showerror(
                     "Import Error",
                     f"Failed to import character: {str(e)}"
                 )

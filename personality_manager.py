@@ -3,12 +3,13 @@ from tkinter import ttk
 import ttkbootstrap as ttk_boot
 from constants import *
 from text_manager import text_manager
+from json_handler import JsonUpdateMixin
 
-class PersonalityManager:
-    def __init__(self, parent_frame, text_config, logger):
+class PersonalityManager(JsonUpdateMixin):
+    def __init__(self, parent_frame, json_handler, logger):  # Changed parameters
         """Initialize Personality Manager with required UI elements and logger."""
         self.parent_frame = parent_frame
-        self.text_config = text_config
+        self.json_handler = json_handler  # New line
         self.logger = logger
         
         # Create container for fields
@@ -46,6 +47,11 @@ class PersonalityManager:
             height=8,
         )
         self.scenario_text.pack(fill=tk.BOTH, expand=True)
+
+        self.bind_multiple([
+            self.personality_text,
+            self.scenario_text
+        ], field_type='personality')
 
     def update_fields(self, json_data):
         """Update fields from JSON data."""

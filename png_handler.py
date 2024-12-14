@@ -4,7 +4,8 @@ import json
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
+from constants import *
 
 class PngHandler:
     def __init__(self, json_text, json_handler, lore_manager, status_var, logger):
@@ -75,7 +76,7 @@ class PngHandler:
         except Exception as e:
             self.logger.log_step(f"Error loading PNG: {str(e)}")
             self.status_var.set(f"Error: {str(e)}")
-            messagebox.showerror("Error", f"Failed to read PNG metadata: {str(e)}")
+            MessageDialog.error(f"Failed to read PNG metadata: {str(e)}", "Error")
 
         self.logger.end_operation()
 
@@ -140,10 +141,10 @@ class PngHandler:
         except json.JSONDecodeError as e:
             self.logger.log_step(f"JSON decode error: {str(e)}")
             self.status_var.set("Error: Invalid JSON format")
-            messagebox.showerror("Error", "The JSON data is not properly formatted")
+            MessageDialog.error("The JSON data is not properly formatted", "Error")
         except Exception as e:
             self.logger.log_step(f"Save error: {str(e)}")
             self.status_var.set(f"Error: {str(e)}")
-            messagebox.showerror("Error", f"Failed to save metadata: {str(e)}")
+            MessageDialog.error(f"Failed to save metadata: {str(e)}", "Error")
         finally:
             self.logger.end_operation()
