@@ -195,22 +195,44 @@ class V2CardHandler:
             # Log all available fields
             self.logger.log_step("Available image info fields:", list(image.info.keys()))
             
-            # First try V2 format (chara field) as it's simpler
-            chara_field = next((k for k in image.info.keys() if k.lower() == 'chara'), None)
-            if chara_field:
-                self.logger.log_step(f"Found chara field")
-                chara_data = image.info[chara_field]
-                data = self.read_chara_field(chara_data)
-                if data:
-                    return data
+            # First try V2 format (chara field) 
+            chara_data = image.info.get('chara')
+            if chara_data:
+                self.logger.log_step("Found chara field")
+                try:
+                    # Handle if it's bytes
+                    if isinstance(chara_data, bytes):
+                        chara_data = chara_data.decode('utf-8')
+                    
+                    # Clean up ASCII prefix if present
+                    if chara_data.startswith('ASCII\x00\x00\x00'):
+                        chara_data = chara_data[8:]
+                    elif chara_data.startswith('ASCII'):
+                        chara_data = chara_data[5:]
+                    
+                    chara_data = chara_data.strip('\x00')
+                    
+                    # Decode base64 if it looks like base64
+                    if chara_data.startswith('eyJ'):
+                        decoded = base64.b64decode(chara_data).decode('utf-8')
+                        data = json.loads(decoded)
+                        
+                        if data.get('spec') == 'chara_card_v2':
+                            self.logger.log_step("Found V2 format in chara field")
+                            return data
+                        elif 'character' in data:
+                            self.logger.log_step("Found V1 format in chara field, converting to V2")
+                            return self.convert_v1_to_v2(data)
+                except Exception as e:
+                    self.logger.log_step(f"Error processing chara field: {str(e)}")
 
-            # Try UserComment
+            # Try UserComment if chara field failed
             if hasattr(image, '_getexif'):
                 self.logger.log_step("Looking for UserComment in EXIF")
                 exif = image._getexif()
                 if exif and 0x9286 in exif:  # 0x9286 is UserComment tag
                     user_comment = exif[0x9286]
-                    self.logger.log_step(f"Found UserComment data")
+                    self.logger.log_step("Found UserComment data")
                     
                     # Handle bytes or string
                     if isinstance(user_comment, bytes):
@@ -226,37 +248,20 @@ class V2CardHandler:
                         user_comment = user_comment[5:]
                     
                     user_comment = user_comment.strip('\x00')
-                    self.logger.log_step(f"Cleaned UserComment starts with: {user_comment[:50]}")
                     
-                    # If it starts with eyJ it's likely base64
                     if user_comment.startswith('eyJ'):
                         try:
                             decoded = base64.b64decode(user_comment).decode('utf-8')
                             data = json.loads(decoded)
                             
-                            # Check if it's already V2 format
                             if data.get('spec') == 'chara_card_v2':
                                 self.logger.log_step("Found V2 format in UserComment")
                                 return data
-                            # If not V2, check if it's V1 format
                             elif 'character' in data:
                                 self.logger.log_step("Found V1 format in UserComment, converting to V2")
-                                converted_data = self.convert_v1_to_v2(data)
-                                # Only create empty character book if no lore entries exist
-                                if not converted_data.get('character_book', {}).get('entries'):
-                                    self.logger.log_step("Creating empty character book structure")
-                                    converted_data['character_book'] = {
-                                        'name': '',
-                                        'description': '',
-                                        'scan_depth': 2,
-                                        'token_budget': 512,
-                                        'recursive_scanning': False,
-                                        'extensions': {},
-                                        'entries': []
-                                    }
-                                return converted_data
+                                return self.convert_v1_to_v2(data)
                         except Exception as e:
-                            self.logger.log_step(f"Error decoding base64 data: {str(e)}")
+                            self.logger.log_step(f"Error decoding UserComment data: {str(e)}")
 
             self.logger.log_step("No valid character data found")
             return None

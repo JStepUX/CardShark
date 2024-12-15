@@ -20,6 +20,9 @@ class PngHandler:
         self.last_saved_directory = None
         self.status_frame = None
         self.folder_button = None
+        # Initialize the V2CardHandler
+        from v2_handler import V2CardHandler  # Import here to avoid circular imports
+        self.v2_handler = V2CardHandler(logger)
 
     def set_status_frame(self, status_frame, folder_button):
         """Set reference to status frame and folder button."""
@@ -31,53 +34,54 @@ class PngHandler:
         self.image_loaded_callback = callback
 
     def load_png(self):
-        """Load and process a PNG file using PIL."""
+        """Load and process a PNG file."""
         self.logger.start_operation("Load PNG")
         file_path = filedialog.askopenfilename(filetypes=[("PNG files", "*.png")])
-        
         if not file_path:
             self.logger.log_step("Operation cancelled")
             self.logger.end_operation()
             return
-
+                
         try:
             self.current_file = file_path
             self.logger.log_step(f"Loading file: {file_path}")
-
+                
             with Image.open(file_path) as image:
-                # Try to get character data from 'chara' text chunk
-                chara_data = image.text.get('chara')
-                if chara_data:
-                    # Decode base64 data
-                    json_bytes = base64.b64decode(chara_data)
-                    json_str = json_bytes.decode('utf-8')
-                    metadata = json.loads(json_str)
-
-                    self.logger.log_step("Character data loaded", metadata)
-
-                    # Update JSON display
-                    formatted_json = json.dumps(metadata, indent=4, ensure_ascii=False)
-                    self.json_text.delete(1.0, "end-1c")
-                    self.json_text.insert(1.0, formatted_json)
-
-                    # Update specific fields and lore table
-                    self.json_handler.update_specific_fields(metadata)
-                    self.lore_manager.update_lore_table(metadata)
-
-                    self.status_var.set("Character data loaded successfully")
-                else:
-                    self.logger.log_step("No character data found")
-                    self.status_var.set("No character data found in PNG")
-
+                self.original_metadata = dict(image.info)
+                self.original_mode = image.mode
+                self.logger.log_step("Image properties", {
+                    "Mode": self.original_mode,
+                    "Size": image.size,
+                    "Format": image.format
+                })
+                    
+                # Use V2Handler to read the character data
+                metadata = self.v2_handler.read_character_data(image)
+                    
+            if metadata:
+                self.logger.log_step("Character data loaded", metadata)
+                    
+                # Update main JSON display
+                formatted_json = json.dumps(metadata, indent=4, ensure_ascii=False)
+                self.json_text.delete(1.0, "end-1c")
+                self.json_text.insert(1.0, formatted_json)
+                    
+                # Use the proven update path from url_handler
+                self.json_handler.update_specific_fields(metadata)
+                self.status_var.set("Character data loaded successfully")
+            else:
+                self.logger.log_step("No valid character data found")
+                self.status_var.set("No valid character data found in PNG")
+                
             # Call the image loaded callback if set
             if self.image_loaded_callback:
                 self.image_loaded_callback(file_path)
-
+                    
         except Exception as e:
             self.logger.log_step(f"Error loading PNG: {str(e)}")
             self.status_var.set(f"Error: {str(e)}")
-            MessageDialog.error(f"Failed to read PNG metadata: {str(e)}", "Error")
-
+            Messagebox.show_error(f"Failed to read PNG metadata: {str(e)}", "Error")
+                
         self.logger.end_operation()
 
     def save_png(self):
