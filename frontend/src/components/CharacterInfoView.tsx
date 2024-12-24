@@ -8,7 +8,7 @@ const CharacterInfoView: React.FC = () => {
 
   const handleFieldChange = (field: string, value: string | string[]): void => {
     if (!characterData) return;
-    
+
     const newData = {
       ...characterData,
       data: {
@@ -29,7 +29,7 @@ const CharacterInfoView: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium mb-2">Name</label>
-              <input 
+              <input
                 type="text"
                 className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2"
                 placeholder="Character name"
@@ -39,53 +39,54 @@ const CharacterInfoView: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Description</label>
-              <textarea
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-64 resize-y"
-                placeholder="Detailed character description"
+              <HighlightedTextArea
+                className="bg-stone-950 border border-slate-700 rounded-lg h-64"
+                placeholder="Character description"
                 value={localData?.data?.description || ''}
-                onChange={(e) => handleFieldChange('description', e.target.value)}
+                onChange={(value) => handleFieldChange('description', value)}
               />
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Scenario</label>
-              <textarea
+              <HighlightedTextArea
                 className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-y"
                 placeholder="Current situation or context"
                 value={localData?.data?.scenario || ''}
-                onChange={(e) => handleFieldChange('scenario', e.target.value)}
+                onChange={(value) => handleFieldChange('scenario', value)}
               />
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Personality</label>
-              <textarea
+              <HighlightedTextArea
                 className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-none"
                 placeholder="Key personality traits"
                 value={localData?.data?.personality || ''}
-                onChange={(e) => handleFieldChange('personality', e.target.value)}
+                onChange={(value) => handleFieldChange('personality', value)}
               />
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Example Dialogue</label>
-              <textarea
+              <HighlightedTextArea
                 className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-64 resize-y overflow-auto"
                 placeholder="Examples of character dialogue and interactions"
                 value={localData?.data?.mes_example || ''}
-                onChange={(e) => handleFieldChange('mes_example', e.target.value)}
+                onChange={(value) => handleFieldChange('mes_example', value)}
               />
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">System Prompt</label>
-              <HighlightedTextArea
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-64 resize-y overflow-auto"
-                placeholder="AI instructions"
-                value={localData?.data?.system_prompt || ''}
-                onChange={(value) => handleFieldChange('system_prompt', value)}
-                style={{ position: 'relative' }}
-              />
+              <div className="relative w-full">
+                <HighlightedTextArea
+                  className="w-full h-64 bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 resize-y overflow-auto font-mono text-base leading-relaxed"
+                  placeholder="AI instructions"
+                  value={localData?.data?.system_prompt || ''}
+                  onChange={(value) => handleFieldChange('system_prompt', value)}
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Tags</label>
-              <input 
+              <input
                 type="text"
                 className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2"
                 placeholder="Character tags"

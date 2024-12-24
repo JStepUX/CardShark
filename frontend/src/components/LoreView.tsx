@@ -1,13 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { LoreItem, LoreCard } from './LoreComponents';
-import { Plus, BookOpen, ImagePlus, Table2, FileJson } from 'lucide-react';
+import { Plus, BookOpen, ImagePlus, Table2, } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
 
 const LoreView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedItems, setSelectedItems] = useState<number[]>([]);
 
   // Log the full character data to debug
   console.log("LoreView - Full character data:", characterData);
@@ -40,10 +39,10 @@ const LoreView: React.FC = () => {
   const filteredItems = useMemo(() => {
     console.log("Filtering items from:", loreItems);
     if (!searchTerm) return loreItems;
-    
+
     const term = searchTerm.toLowerCase();
     return loreItems.filter((item: { keys: any[]; content: string; }) => {
-      const keyMatch = item.keys.some(key => 
+      const keyMatch = item.keys.some(key =>
         key.toLowerCase().includes(term)
       );
       const contentMatch = item.content.toLowerCase().includes(term);
@@ -118,7 +117,7 @@ const LoreView: React.FC = () => {
   const handleUpdateItem = (id: number, updates: Partial<LoreItem>) => {
     if (!characterData) return;
 
-    const updatedEntries = loreItems.map((item: { id: number; }) => 
+    const updatedEntries = loreItems.map((item: { id: number; }) =>
       item.id === id ? { ...item, ...updates } : item
     );
 
@@ -140,7 +139,7 @@ const LoreView: React.FC = () => {
   // Handle TSV import
   const handleImportTsv = () => {
     if (!characterData) return;
-    
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.tsv';
@@ -149,10 +148,10 @@ const LoreView: React.FC = () => {
       if (file) {
         const text = await file.text();
         const lines = text.split('\n').filter(line => line.trim());
-        
+
         // Get current highest order
         const currentMaxOrder = Math.max(-1, ...loreItems.map((item: { insertion_order: any; }) => item.insertion_order));
-        
+
         const newItems = lines
           .map((line, index) => {
             const [key, value] = line.split('\t');
@@ -200,22 +199,22 @@ const LoreView: React.FC = () => {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file || !characterData) return;
-  
+
       try {
         const formData = new FormData();
         formData.append('file', file);
-  
+
         const response = await fetch('/api/extract-lore', {
           method: 'POST',
           body: formData,
         });
-  
+
         if (!response.ok) {
           throw new Error('Failed to extract lore');
         }
-  
+
         const data = await response.json();
-        
+
         if (data.success && data.loreItems) {
           // Ensure we have character_book structure
           const currentCharacterBook = characterData.data?.character_book || {
@@ -227,13 +226,13 @@ const LoreView: React.FC = () => {
             recursive_scanning: false,
             extensions: {}
           };
-  
+
           // Get current entries or empty array
           const currentEntries = currentCharacterBook.entries || [];
-          
+
           // Get current highest order
           const currentMaxOrder = Math.max(-1, ...currentEntries.map((item: { insertion_order: any; }) => item.insertion_order));
-          
+
           // Process new items
           const newItems = data.loreItems.map((item: any, index: number) => ({
             ...item,
@@ -241,7 +240,7 @@ const LoreView: React.FC = () => {
             insertion_order: currentMaxOrder + index + 1,
             enabled: true // Ensure new items are enabled by default
           }));
-  
+
           // Create updated character data with proper structure
           const updatedData = {
             ...characterData,
@@ -253,13 +252,13 @@ const LoreView: React.FC = () => {
               }
             }
           };
-  
+
           console.log("Merging lore items:", {
             current: currentEntries.length,
             new: newItems.length,
             total: updatedData.data.character_book.entries.length
           });
-  
+
           setCharacterData(updatedData);
         }
       } catch (error) {
@@ -276,7 +275,7 @@ const LoreView: React.FC = () => {
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold">Lore Manager ({loreItems.length} items)</h2>
           <div className="flex items-center gap-2">
-            <DropdownMenu 
+            <DropdownMenu
               icon={BookOpen}
               items={[
                 { icon: ImagePlus, label: "Import from PNG", onClick: handleImportPngLore },
@@ -324,7 +323,7 @@ const LoreView: React.FC = () => {
 
           {filteredItems.length === 0 && (
             <div className="text-center py-12 text-gray-400">
-              {searchTerm 
+              {searchTerm
                 ? 'No items match your search'
                 : 'No lore items yet. Click "Add Item" to create one.'}
             </div>

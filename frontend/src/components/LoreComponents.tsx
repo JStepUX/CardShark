@@ -24,21 +24,17 @@ interface LoreCardProps {
 }
 
 export const LoreCard: React.FC<LoreCardProps> = ({ item, onDelete, onUpdate }) => {
-  // Convert keys array to comma-separated string for editing
-  const keyString = item.keys.join(', ');
+  // Simple string-array conversion
+  const keyString = item.keys.join(',');
 
   const handleKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newKeys = e.target.value.split(',').map(k => k.trim()).filter(k => k);
+    // Just split on commas, nothing fancy
+    const newKeys = e.target.value.split(',');
     onUpdate(item.id, { keys: newKeys });
-  };
-
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onUpdate(item.id, { content: e.target.value });
   };
 
   return (
     <div className="bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg">
-      {/* Order and Key section */}
       <div className="flex items-center gap-4 mb-4">
         <div className="w-16">
           <label className="block text-sm text-gray-400 mb-1">Order</label>
@@ -51,7 +47,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({ item, onDelete, onUpdate }) 
         </div>
         
         <div className="flex-1 relative">
-          <label className="block text-sm text-gray-400 mb-1">Keys</label>
+          <label className="block text-sm text-gray-400 mb-1">Key(s)</label>
           <div className="flex items-center">
             <input
               type="text"
@@ -71,12 +67,12 @@ export const LoreCard: React.FC<LoreCardProps> = ({ item, onDelete, onUpdate }) 
         </div>
       </div>
 
-      {/* Content section */}
+      {/* Content section unchanged */}
       <div>
         <label className="block text-sm text-gray-400 mb-1">Content</label>
         <textarea
           value={item.content}
-          onChange={handleContentChange}
+          onChange={(e) => onUpdate(item.id, { content: e.target.value })}
           rows={4}
           className="w-full bg-zinc-950 text-white rounded px-3 py-2 resize-y"
           placeholder="Enter lore content"

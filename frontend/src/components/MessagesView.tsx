@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
+import HighlightedTextArea from './HighlightedTextArea';
 
 // Types
 interface Message {
@@ -20,7 +21,15 @@ const MessageCard: React.FC<{
     <div className="bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
-                    
+          {/* Order display */}
+          <div className="w-16">
+            <span className="text-sm text-gray-400">Order</span>
+            <div className="bg-zinc-950 text-white rounded px-2 py-1 text-center">
+              {message.order + 1}
+            </div>
+          </div>
+          
+          {/* First message toggle */}
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -32,9 +41,11 @@ const MessageCard: React.FC<{
           </label>
         </div>
 
+        {/* Delete button */}
         <button
           onClick={() => onDelete(message.id)}
           className="p-2 text-gray-400 hover:text-red-400 transition-colors"
+          title="Delete message"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -51,15 +62,18 @@ const MessageCard: React.FC<{
         </button>
       </div>
 
-      <textarea
+      {/* Message content with highlighting */}
+      <HighlightedTextArea
         value={message.content}
-        onChange={(e) => onUpdate(message.id, { content: e.target.value })}
+        onChange={(value) => onUpdate(message.id, { content: value })}
         className="w-full bg-zinc-950 text-white rounded px-3 py-2 min-h-[100px] h-96 resize-y"
         placeholder="Enter message content..."
       />
     </div>
   );
 });
+
+MessageCard.displayName = 'MessageCard';
 
 const MessagesView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
