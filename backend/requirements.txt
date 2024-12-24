@@ -1,0 +1,6 @@
+pillow>=10.0.0                # For PNG handling
+fastapi>=0.104.1             # Web server
+uvicorn>=0.24.0             # Run the server
+python-multipart>=0.0.6      # File uploads
+pyinstaller>=6.0.0           # Create executable
+pydantic>=2.4.2             # Data validation
