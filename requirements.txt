@@ -1,4 +1,0 @@
-pillow>=10.0.0
-ttkbootstrap>=1.10.1
-pyinstaller>=6.0.0
-certifi>=2023.7.22

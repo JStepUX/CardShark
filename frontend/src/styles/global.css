@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+  input, textarea {
+    @apply bg-input border-border;
+  }
+  button {
+    @apply transition-colors;
+  }
+}
