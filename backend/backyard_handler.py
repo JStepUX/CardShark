@@ -31,49 +31,10 @@ class BackyardHandler:
             # Extract the JSON string
             try:
                 next_data = json.loads(trpc_match.group(1))
-                self.logger.log_step("Successfully parsed __NEXT_DATA__")
+                queries = next_data.get('props', {}).get('pageProps', {}).get('trpcState', {}).get('json', {}).get('queries', [])
                 
-                # Navigate to character data through the props structure
-                # Log the structure we're working with
-                self.logger.log_step("Data structure:")
-                self.logger.log_step(f"Keys at root: {list(next_data.keys())}")
-                self.logger.log_step(f"Props keys: {list(next_data.get('props', {}).keys())}")
-                self.logger.log_step(f"PageProps keys: {list(next_data.get('props', {}).get('pageProps', {}).keys())}")
-
-                char_data = next_data.get('props', {}).get('pageProps', {})
-                
-                # Try different known Backyard data paths
-                if 'trpcState' in char_data:
-                    # TRPC path
-                    trpc_state = char_data['trpcState']
-                    self.logger.log_step(f"TrpcState keys: {list(trpc_state.keys())}")
-                    
-                    # Check the json key first
-                    if 'json' in trpc_state:
-                        json_data = trpc_state['json']
-                        self.logger.log_step(f"JSON data keys: {list(json_data.keys())}")
-                        
-                        # Look for queries in the json data
-                        queries = json_data.get('queries', [])
-                        if queries and len(queries) > 0:
-                            self.logger.log_step(f"Found {len(queries)} queries")
-                            # Log the first query structure
-                            self.logger.log_step(f"First query keys: {list(queries[0].keys())}")
-                            
-                            character = queries[0].get('state', {}).get('data', {}).get('character', {})
-                            if character:
-                                self.logger.log_step("Found character through json.queries path")
-                                self.logger.log_step(f"Character keys: {list(character.keys())}")
-                            else:
-                                raise ValueError("No character data in query")
-                        else:
-                            raise ValueError("No queries found in json data")
-                    else:
-                        raise ValueError("No json data found in trpcState")
-                else:
-                    self.logger.log_step("Available paths in pageProps:")
-                    self.logger.log_step(json.dumps(char_data, indent=2)[:500] + "...")
-                    raise ValueError("Could not find character data in any known path")
+                if not queries:
+                    raise ValueError("No queries found in data")
 
                 character = queries[0].get('state', {}).get('data', {}).get('character', {})
                 if not character:
@@ -85,12 +46,13 @@ class BackyardHandler:
                 # Get preview image URL
                 preview_url = None
                 if character.get('Images'):
-                    preview_url = next(
-                        (img.get('imageUrl') 
-                         for img in character['Images'] 
-                         if img.get('imageUrl')),
-                        None
-                    )
+                    # Get first available image URL
+                    for img in character['Images']:
+                        if isinstance(img, dict) and 'imageUrl' in img:
+                            preview_url = img['imageUrl']
+                            break
+                    if preview_url:
+                        self.logger.log_step(f"Found preview image: {preview_url}")
 
                 return v2_data, preview_url
 
@@ -102,32 +64,65 @@ class BackyardHandler:
             self.logger.log_error(f"Import failed: {str(e)}")
             raise
 
+    def _convert_text_fields(self, text: str) -> str:
+        """Convert only specific character variables, preserving other content."""
+        if not text or not isinstance(text, str):
+            return text
+            
+        # Exact string replacements only
+        replacements = [
+            ("{character}", "{{char}}"),
+            ("{CHARACTER}", "{{char}}"),
+            ("{Character}", "{{char}}"),
+            ("{user}", "{{user}}"),
+            ("{USER}", "{{user}}"),
+            ("{User}", "{{user}}")
+        ]
+        
+        result = text
+        for old, new in replacements:
+            if old in result:
+                result = result.replace(old, new)
+                self.logger.log_step(f"Converting variable: {old} → {new}")
+                
+        return result
+
     def _convert_to_v2(self, char_data: Dict) -> Dict:
         """Convert Backyard.ai format to V2 character card."""
         try:
-            self.logger.log_step("Starting format conversion")
-            
+            # Process only specific message/prompt fields
+            text_fields = [
+                'firstMessage',
+                'customDialogue',
+                'basePrompt', 
+                'aiPersona',
+                'scenario'
+            ]
+
+            # Convert known text fields
+            converted_data = {}
+            for field in text_fields:
+                if field in char_data:
+                    converted_data[field] = self._convert_text_fields(char_data[field])
+                    
+            # Create V2 structure
             v2_data = {
                 "spec": "chara_card_v2",
                 "spec_version": "2.0",
                 "data": {
                     "name": char_data.get('aiName', ''),
-                    "description": char_data.get('basePrompt', ''),
-                    "personality": char_data.get('aiPersona', ''),
-                    "first_mes": char_data.get('firstMessage', ''),
-                    "mes_example": char_data.get('customDialogue', ''),
-                    "scenario": char_data.get('scenario', ''),
+                    "description": converted_data.get('basePrompt', ''),
+                    "personality": converted_data.get('aiPersona', ''),
+                    "first_mes": converted_data.get('firstMessage', ''),
+                    "mes_example": converted_data.get('customDialogue', ''),
+                    "scenario": converted_data.get('scenario', ''),
                     "creator_notes": char_data.get('authorNotes', ''),
                     "system_prompt": "",
                     "post_history_instructions": "",
                     "alternate_greetings": [],
-                    "tags": [tag.get('name') for tag in char_data.get('Tags', []) if isinstance(tag, dict) and 'name' in tag],
+                    "tags": [tag.get('name') for tag in char_data.get('Tags', [])],
                     "creator": char_data.get('Author', {}).get('username', ''),
                     "character_version": "1.0",
-                    "imported_images": [
-                        img.get('imageUrl') for img in char_data.get('Images', [])
-                        if isinstance(img, dict) and img.get('imageUrl')
-                    ],
                     "character_book": {
                         "entries": [],
                         "name": "",
@@ -140,31 +135,38 @@ class BackyardHandler:
                 }
             }
 
-            # Convert lorebook items if present
-            lorebook = char_data.get('Lorebook', {})
-            if isinstance(lorebook, dict) and lorebook.get('LorebookItems'):
+            # Convert lorebook entries
+            if 'Lorebook' in char_data and 'LorebookItems' in char_data['Lorebook']:
                 entries = []
-                for idx, item in enumerate(lorebook['LorebookItems']):
-                    if not isinstance(item, dict):
-                        continue
-                        
-                    entry = {
-                        'keys': [k.strip() for k in item.get('key', '').split(',') if k.strip()],
-                        'content': item.get('value', ''),
-                        'enabled': True,
-                        'insertion_order': idx,
-                        'case_sensitive': False,
-                        'priority': 10,
-                        'id': idx,
-                        'comment': '',
-                        'selective': False,
-                        'constant': False,
-                        'position': 'after_char'
-                    }
-                    entries.append(entry)
+                for idx, item in enumerate(char_data['Lorebook']['LorebookItems']):
+                    if isinstance(item, dict):
+                        entry = {
+                            'keys': [k.strip() for k in item.get('key', '').split(',')],
+                            'content': self._convert_text_fields(item.get('value', '')),
+                            'enabled': True,
+                            'insertion_order': idx,
+                            'case_sensitive': False,
+                            'priority': 10,
+                            'id': idx,
+                            'comment': '',
+                            'selective': False,
+                            'constant': False,
+                            'position': 'after_char'
+                        }
+                        entries.append(entry)
                 
                 v2_data['data']['character_book']['entries'] = entries
-                self.logger.log_step(f"Converted {len(entries)} lore entries")
+
+            # Get all image URLs
+            if char_data.get('Images'):
+                image_urls = [
+                    img['imageUrl'] 
+                    for img in char_data['Images'] 
+                    if isinstance(img, dict) and 'imageUrl' in img
+                ]
+                if image_urls:
+                    v2_data['data']['imported_images'] = image_urls
+                    self.logger.log_step(f"Added {len(image_urls)} image URLs")
 
             return v2_data
 

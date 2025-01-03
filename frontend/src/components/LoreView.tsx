@@ -4,6 +4,12 @@ import { LoreItem, LoreCard } from './LoreComponents';
 import { Plus, BookOpen, ImagePlus, Table2, FileJson } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
 
+// Helper function to convert legacy character format
+const convertTextFields = (text: string): string => {
+  if (!text) return text;
+  return text.replace(/{character}/g, "{{char}}");
+};
+
 const LoreView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
   const [searchTerm, setSearchTerm] = useState('');
@@ -171,7 +177,7 @@ const LoreView: React.FC = () => {
         
         const newItems = entries.map((item: any, index: number) => ({
           keys: Array.isArray(item.keys) ? item.keys : item.key || [],
-          content: item.content || '',
+          content: convertTextFields(item.content || ''),
           enabled: item.enabled !== false,
           insertion_order: currentMaxOrder + index + 1,
           case_sensitive: item.case_sensitive || false,
@@ -215,7 +221,7 @@ const LoreView: React.FC = () => {
 
             return {
               keys: [key.trim()],
-              content: value.trim(),
+              content: convertTextFields(value.trim()),
               enabled: true,
               insertion_order: currentMaxOrder + index + 1,
               case_sensitive: false,

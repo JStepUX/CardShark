@@ -3,6 +3,7 @@ from typing import Dict, Optional, Union, BinaryIO
 from io import BytesIO
 import base64
 import json
+import re
 
 class PngMetadataHandler:
     """Handles reading and writing character card metadata in PNG files."""
@@ -101,109 +102,110 @@ class PngMetadataHandler:
         
         return has_backyard_fields
 
+    def _convert_text_fields(self, text: str) -> str:
+        """Convert only specific character variables, preserving other content."""
+        if not text or not isinstance(text, str):
+            return text
+            
+        # Exact string replacements only
+        replacements = [
+            ("{character}", "{{char}}"),
+            ("{CHARACTER}", "{{char}}"),
+            ("{Character}", "{{char}}"),
+            ("{user}", "{{user}}"),
+            ("{USER}", "{{user}}"),
+            ("{User}", "{{user}}")
+        ]
+        
+        result = text
+        for old, new in replacements:
+            if old in result:
+                result = result.replace(old, new)
+                self.logger.log_step(f"Converting variable: {old} → {new}")
+                
+        return result
+
+    def _convert_dict_fields(self, data: Dict) -> Dict:
+        """Recursively convert all string fields in a dictionary."""
+        if not isinstance(data, dict):
+            return data
+            
+        result = {}
+        for key, value in data.items():
+            if isinstance(value, str):
+                result[key] = self._convert_text_fields(value)
+            elif isinstance(value, list):
+                result[key] = [
+                    self._convert_text_fields(item) if isinstance(item, str)
+                    else self._convert_dict_fields(item) if isinstance(item, dict)
+                    else item
+                    for item in value
+                ]
+            elif isinstance(value, dict):
+                result[key] = self._convert_dict_fields(value)
+            else:
+                result[key] = value
+        return result
+
     def _convert_backyard_to_v2(self, data: Dict) -> Dict:
         """Convert Backyard.ai format to V2."""
         try:
-            self.logger.log_step("Starting Backyard format conversion")
-            self.logger.log_step(f"Input data keys: {list(data.keys())}")
+            self.logger.log_step("Starting format conversion")
             
             v2_data = self._create_empty_card()
-            
-            # Extract character data if nested
             char_data = data.get('character', data)
             
-            # Log the character data structure
-            self.logger.log_step("Character data structure:")
-            self.logger.log_step(json.dumps({
-                "top_level_keys": list(data.keys()),
-                "character_keys": list(char_data.keys()) if isinstance(char_data, dict) else "not a dict",
-                "lorebook_test": char_data.get('Lorebook') if isinstance(char_data, dict) else None,
-                "alternate_lorebook_test": char_data.get('lorebook') if isinstance(char_data, dict) else None
-            }, indent=2))
+            # Define fields that should have variable conversion
+            text_fields = [
+                'description',
+                'personality', 
+                'first_mes',
+                'mes_example',
+                'scenario',
+                'system_prompt',
+                'post_history_instructions'
+            ]
             
-            # Map basic fields
+            # Map and convert fields
+            for field in text_fields:
+                if field in char_data:
+                    v2_data['data'][field] = self._convert_text_fields(char_data[field])
+            
+            # Add non-converted fields
             v2_data['data'].update({
-                "name": char_data.get('aiName', ''),
-                "description": char_data.get('basePrompt', ''),
-                "personality": char_data.get('aiPersona', ''),
-                "first_mes": char_data.get('firstMessage', ''),
-                "mes_example": char_data.get('customDialogue', ''),
-                "scenario": char_data.get('scenario', ''),
-                "creator_notes": char_data.get('authorNotes', ''),
-                "tags": [tag.get('name') for tag in char_data.get('Tags', []) if 'name' in tag],
-                "creator": char_data.get('Author', {}).get('username', '') or char_data.get('creator', ''),
-                "character_version": "1.0",
-                "system_prompt": "",
-                "post_history_instructions": "",
-                "alternate_greetings": []
+                "name": char_data.get('name', ''),
+                "creator_notes": char_data.get('creator_notes', ''),
+                "tags": char_data.get('tags', []),
+                "creator": char_data.get('creator', ''),
+                "character_version": char_data.get('character_version', '1.0'),
+                "alternate_greetings": [
+                    self._convert_text_fields(greeting)
+                    for greeting in char_data.get('alternate_greetings', [])
+                ]
             })
 
-            # Check for lore items
-            self.logger.log_step("Checking for lore items...")
-            
-            # First check for direct loreItems array
-            lore_items = char_data.get('loreItems', [])
-            if lore_items:
-                self.logger.log_step(f"Found {len(lore_items)} lore items")
-                self.logger.log_step(f"Sample lore item: {json.dumps(lore_items[0] if lore_items else {})}")
-                
-                entries = []
-                for idx, item in enumerate(lore_items):
-                    entry = {
-                        'keys': [k.strip() for k in item.get('key', '').split(',') if k.strip()],
-                        'content': item.get('content', ''),  # Note: might be 'content' instead of 'value'
-                        'enabled': True,
-                        'insertion_order': idx,
-                        'case_sensitive': False,
-                        'priority': 10,
-                        'id': idx,
-                        'comment': '',
-                        'selective': False,
-                        'constant': False,
-                        'position': 'after_char'
-                    }
-                    entries.append(entry)
-                    
-                v2_data['data']['character_book']['entries'] = entries
-                self.logger.log_step(f"Processed {len(entries)} lore entries")
-            lorebook = char_data.get('Lorebook', {})
-            self.logger.log_step(f"Lorebook data: {lorebook}")
-            
-            if lorebook and isinstance(lorebook, dict):
-                lore_items = lorebook.get('LorebookItems', [])
-                self.logger.log_step(f"Found {len(lore_items)} lore items")
-                
-                entries = []
-                for idx, item in enumerate(lore_items):
-                    self.logger.log_step(f"Processing lore item {idx}: {item}")
-                    entry = {
-                        'keys': [k.strip() for k in item.get('key', '').split(',') if k.strip()],
-                        'content': item.get('value', ''),
-                        'enabled': True,
-                        'insertion_order': idx,
-                        'case_sensitive': False,
-                        'priority': 10,
-                        'id': idx,
-                        'comment': '',
-                        'selective': False,
-                        'constant': False,
-                        'position': 'after_char'
-                    }
-                    entries.append(entry)
-                    self.logger.log_step(f"Converted to entry: {entry}")
-                
-                v2_data['data']['character_book']['entries'] = entries
-                self.logger.log_step(f"Added {len(entries)} entries to character book")
+            # Convert lore book entries
+            if 'character_book' in char_data:
+                book = char_data['character_book']
+                if isinstance(book, dict) and 'entries' in book:
+                    entries = []
+                    for idx, item in enumerate(book['entries']):
+                        entry = {
+                            'keys': item.get('keys', []),
+                            'content': self._convert_text_fields(item.get('content', '')),
+                            'enabled': item.get('enabled', True),
+                            'insertion_order': idx,
+                            'case_sensitive': item.get('case_sensitive', False),
+                            'priority': item.get('priority', 10),
+                            'id': item.get('id', idx),
+                            'comment': item.get('comment', ''),
+                            'selective': item.get('selective', False),
+                            'constant': item.get('constant', False),
+                            'position': item.get('position', 'after_char')
+                        }
+                        entries.append(entry)
+                    v2_data['data']['character_book']['entries'] = entries
 
-            self.logger.log_step("Completed conversion to V2 format")
-            
-            # Log the final character book structure
-            if v2_data['data']['character_book']['entries']:
-                self.logger.log_step("Final character book structure:")
-                self.logger.log_step(json.dumps(v2_data['data']['character_book'], indent=2))
-            else:
-                self.logger.log_step("No lore entries found in final conversion")
-                
             return v2_data
 
         except Exception as e:
