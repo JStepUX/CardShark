@@ -9,6 +9,7 @@ import CharacterInfoView from './CharacterInfoView';
 import JsonViewer from './JsonViewer';
 import logo from '../assets/cardshark_justfin.png';
 import { BackyardImportDialog } from './BackyardImportDialog';
+import { AboutDialog } from './AboutDialog';
 
 type View = 'info' | 'lore' | 'json' | 'messages';
 
@@ -27,6 +28,7 @@ const Layout: React.FC = () => {
   } = useCharacter();
   const [backendStatus, setBackendStatus] = useState<'running' | 'disconnected'>('disconnected');
   const [showBackyardDialog, setShowBackyardDialog] = useState(false);
+  const [showAboutDialog, setShowAboutDialog] = useState(false);
 
   // Handle file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -274,9 +276,15 @@ const Layout: React.FC = () => {
           </div>
         </div>
         {/* Add status indicator at bottom */}
-        <div className="p-4 text-xs text-gray-500">
-          Backend: {backendStatus === 'running' ? 'Connected' : 'Disconnected'}
-        </div>
+        <div className="p-4 text-xs text-gray-500 flex justify-between items-center">
+        <div>Backend: {backendStatus === 'running' ? 'Connected' : 'Disconnected'}</div>
+        <button 
+          onClick={() => setShowAboutDialog(true)}
+          className="text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          About
+        </button>
+      </div>
       </div>
 
       {/* Main Content - Column 2 */}
@@ -300,6 +308,10 @@ const Layout: React.FC = () => {
         isOpen={showBackyardDialog}
         onClose={() => setShowBackyardDialog(false)}
         onImport={handleBackyardImport}
+      />
+      <AboutDialog 
+        isOpen={showAboutDialog}
+        onClose={() => setShowAboutDialog(false)}
       />
     </div>
   );
