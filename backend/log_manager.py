@@ -79,53 +79,28 @@ class LogManager:
         except Exception as e:
             print(f"Error writing to log: {e}")
 
-    def log_json_comparison(self, title, before, after):
-        """Log a before/after comparison of JSON data."""
-        try:
-            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            separator = "-" * 40
-            
-            message = f"\n{separator}\n"
-            message += f"[{timestamp}] JSON Comparison: {title}\n"
-            message += f"{separator}\n\n"
-            message += "BEFORE:\n"
-            message += json.dumps(before, indent=2, ensure_ascii=False)
-            message += "\n\nAFTER:\n"
-            message += json.dumps(after, indent=2, ensure_ascii=False)
-            message += f"\n\n{separator}\n"
-            
-            # Write to file
-            with open(self.log_filename, 'a', encoding='utf-8') as f:
-                f.write(message)
-            
-            # Print summary to console
-            print(f"[{timestamp}] Logged JSON comparison: {title}")
-            
-        except Exception as e:
-            print(f"Error logging JSON comparison: {e}")
+    def log_warning(self, message):
+        """Log a warning message."""
+        self.log_step(f"WARNING: {message}")
 
-    def log_error(self, message, error):
-        """Log an error with stack trace."""
+    def log_error(self, message, error=None):
+        """Log an error with optional exception details."""
         try:
             timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             separator = "!" * 40
             
             error_message = f"\n{separator}\n"
             error_message += f"[{timestamp}] ERROR: {message}\n"
-            error_message += f"Exception: {str(error)}\n"
+            if error:
+                error_message += f"Exception: {str(error)}\n"
             error_message += f"{separator}\n"
             
             # Write to file
             with open(self.log_filename, 'a', encoding='utf-8') as f:
                 f.write(error_message)
             
-            # Print to console in red if possible
-            try:
-                # ANSI escape code for red text
-                print(f"\033[91m{error_message}\033[0m")
-            except:
-                # Fallback if ANSI codes not supported
-                print(error_message)
+            # Print to console
+            print(error_message)
                 
         except Exception as e:
             print(f"Error logging error: {e}")

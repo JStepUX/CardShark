@@ -35,18 +35,19 @@ const LoreView: React.FC = () => {
     return [];
   }, [characterData]);
 
-  // Filter items based on search term
   const filteredItems = useMemo(() => {
-    console.log("Filtering items from:", loreItems);
     if (!searchTerm) return loreItems;
-
-    const term = searchTerm.toLowerCase();
-    return loreItems.filter((item: { keys: any[]; content: string; }) => {
-      const keyMatch = item.keys.some(key =>
-        key.toLowerCase().includes(term)
-      );
-      const contentMatch = item.content.toLowerCase().includes(term);
-      return keyMatch || contentMatch;
+    
+    const term = searchTerm.toLowerCase().trim();
+    
+    return loreItems.filter((item: { keys: any[] }) => {
+      // Split the comma-separated key string and clean up each word
+      const individualWords = item.keys
+        .flatMap(key => key.split(','))  // Split on commas
+        .map(word => word.toLowerCase().trim())  // Clean up each word
+        .filter(word => word.length > 0);  // Remove empty strings
+        
+      return individualWords.some(word => word === term);
     });
   }, [loreItems, searchTerm]);
 
