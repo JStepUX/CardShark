@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 
 // Type definitions
 export interface LoreItem {
@@ -21,15 +21,26 @@ interface LoreCardProps {
   item: LoreItem;
   onDelete: (id: number) => void;
   onUpdate: (id: number, updatedItem: Partial<LoreItem>) => void;
+  onMoveUp: (id: number) => void;
+  onMoveDown: (id: number) => void;
+  isFirst: boolean;
+  isLast: boolean;
 }
 
-export const LoreCard: React.FC<LoreCardProps> = ({ item, onDelete, onUpdate }) => {
+export const LoreCard: React.FC<LoreCardProps> = ({ 
+  item, 
+  onDelete, 
+  onUpdate,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast 
+}) => {
   // Simple string-array conversion
   const keyString = item.keys.join(',');
 
   const handleKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Just split on commas, nothing fancy
-    const newKeys = e.target.value.split(',');
+    const newKeys = e.target.value.split(',').map(k => k.trim()).filter(k => k);
     onUpdate(item.id, { keys: newKeys });
   };
 
@@ -56,18 +67,44 @@ export const LoreCard: React.FC<LoreCardProps> = ({ item, onDelete, onUpdate }) 
               className="flex-1 bg-zinc-950 text-white rounded px-3 py-1"
               placeholder="Enter comma-separated keywords"
             />
-            <button 
-              onClick={() => onDelete(item.id)}
-              className="ml-2 p-2 text-gray-400 hover:text-red-400 transition-colors"
-              title="Delete lore item"
-            >
-              <Trash2 size={18} />
-            </button>
+            <div className="flex items-center ml-2 space-x-1">
+              <button
+                onClick={() => onMoveUp(item.id)}
+                disabled={isFirst}
+                className={`p-1 rounded ${
+                  isFirst 
+                    ? 'text-gray-600 cursor-not-allowed' 
+                    : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'
+                }`}
+                title="Move up"
+              >
+                <ChevronUp size={18} />
+              </button>
+              <button
+                onClick={() => onMoveDown(item.id)}
+                disabled={isLast}
+                className={`p-1 rounded ${
+                  isLast 
+                    ? 'text-gray-600 cursor-not-allowed' 
+                    : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'
+                }`}
+                title="Move down"
+              >
+                <ChevronDown size={18} />
+              </button>
+              <button 
+                onClick={() => onDelete(item.id)}
+                className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded"
+                title="Delete lore item"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Content section unchanged */}
+      {/* Content section */}
       <div>
         <label className="block text-sm text-gray-400 mb-1">Content</label>
         <textarea
@@ -82,7 +119,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({ item, onDelete, onUpdate }) 
   );
 };
 
-// SearchBar component for filtering lore items
+// SearchBar component unchanged
 interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
@@ -103,7 +140,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Search key and value"
+          placeholder="Search keys and content"
           className="w-full bg-gray-950 text-white rounded-lg pl-10 pr-4 py-2"
         />
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
