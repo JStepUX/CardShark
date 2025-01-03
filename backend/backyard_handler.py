@@ -1,6 +1,6 @@
 import re
 import json
-import requests
+import requests # type: ignore
 from typing import Tuple, Dict, Optional
 
 class BackyardHandler:

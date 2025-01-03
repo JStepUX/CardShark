@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { LoreItem, LoreCard } from './LoreComponents';
-import { Plus, BookOpen, ImagePlus, Table2 } from 'lucide-react';
+import { Plus, BookOpen, ImagePlus, Table2, FileJson } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
 
 const LoreView: React.FC = () => {
@@ -147,6 +147,52 @@ const LoreView: React.FC = () => {
     updateCharacterBookEntries(updatedEntries);
   };
 
+  // Handle JSON import
+  const handleImportJson = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file || !characterData) return;
+
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        
+        // Use originalData.entries if available, otherwise try entries directly
+        const entries = data.originalData?.entries || data.entries;
+        
+        if (!entries) {
+          throw new Error('No valid entries found in JSON file');
+        }
+
+        const currentMaxOrder = Math.max(-1, ...loreItems.map((item: { insertion_order: any; }) => item.insertion_order));
+        
+        const newItems = entries.map((item: any, index: number) => ({
+          keys: Array.isArray(item.keys) ? item.keys : item.key || [],
+          content: item.content || '',
+          enabled: item.enabled !== false,
+          insertion_order: currentMaxOrder + index + 1,
+          case_sensitive: item.case_sensitive || false,
+          priority: item.priority || 10,
+          id: Date.now() + index,
+          comment: item.comment || '',
+          name: item.name || '',
+          selective: item.selective || false,
+          constant: item.constant || false,
+          position: item.position || 'after_char'
+        }));
+
+        const updatedEntries = [...loreItems, ...newItems];
+        updateCharacterBookEntries(updatedEntries);
+      } catch (error) {
+        console.error('Error importing JSON:', error);
+      }
+    };
+    input.click();
+  };
+
   // Handle TSV import
   const handleImportTsv = () => {
     if (!characterData) return;
@@ -246,6 +292,7 @@ const LoreView: React.FC = () => {
               items={[
                 { icon: ImagePlus, label: "Import from PNG", onClick: handleImportPng },
                 { icon: Table2, label: "Import from TSV", onClick: handleImportTsv },
+                { icon: FileJson, label: "Import from JSON", onClick: handleImportJson },
               ]}
               buttonClassName="p-2 hover:bg-gray-700 rounded-lg transition-colors"
             />
