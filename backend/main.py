@@ -1,18 +1,18 @@
 import sys
 import os
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Response, Request
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Response, Request # type: ignore
+from fastapi.responses import FileResponse, JSONResponse # type: ignore
+from fastapi.staticfiles import StaticFiles # type: ignore
+from fastapi.middleware.cors import CORSMiddleware # type: ignore
+import uvicorn # type: ignore
 import json
 import base64
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 import tempfile
 from tempfile import NamedTemporaryFile
-import requests
+import requests # type: ignore
 import re
 import traceback
 
@@ -63,7 +63,6 @@ async def health_check():
 async def upload_png(file: UploadFile = File(...)):
     """Handle PNG upload with enhanced debugging"""
     try:
-        # Read file content
         content = await file.read()
         
         # Run debug analysis first
@@ -79,16 +78,26 @@ async def upload_png(file: UploadFile = File(...)):
             logger.log_error(f"Debug found error: {debug_info['error']}")
             return {"success": False, "error": debug_info['error']}
             
-        # If debug shows we have valid data, proceed with normal handler
+        handler = PngMetadataHandler(logger)
+        
         if debug_info['decoded_data']:
-            handler = PngMetadataHandler(logger)
+            # Existing card with metadata
             metadata = handler.read_metadata(content)
-            return {"success": True, "metadata": metadata, "debug_info": debug_info}
-        else:
             return {
-                "success": False, 
-                "error": "No valid character data found",
-                "debug_info": debug_info
+                "success": True, 
+                "metadata": metadata,
+                "debug_info": debug_info,
+                "is_new": False
+            }
+        else:
+            # New card - create empty V2 structure
+            metadata = handler._create_empty_card()
+            logger.log_step("Created new empty character card")
+            return {
+                "success": True,
+                "metadata": metadata,
+                "debug_info": debug_info,
+                "is_new": True
             }
             
     except Exception as e:
@@ -205,7 +214,7 @@ async def import_backyard(request: Request):
 
 if __name__ == "__main__":
     frontend_path = get_frontend_path()
-    if frontend_path.exists():
+    if (frontend_path.exists()):
         # Serve everything at "/", including index.html automatically
         app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="static")
         logger.log_step(f"Mounted frontend files from {frontend_path}")
@@ -213,5 +222,5 @@ if __name__ == "__main__":
         logger.log_warning(f"Frontend static files not found at {frontend_path}")
         raise FileNotFoundError(f"Frontend directory not found: {frontend_path}")
 
-    import uvicorn
+    import uvicorn # type: ignore
     uvicorn.run(app, host="127.0.0.1", port=9696)

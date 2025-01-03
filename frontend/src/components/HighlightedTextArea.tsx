@@ -13,7 +13,7 @@ const HighlightedTextArea = ({
   onChange,
   className = '',
   placeholder = '',
-  minHeight = '100px'
+  minHeight = '120px'
 }: HighlightedTextAreaProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);

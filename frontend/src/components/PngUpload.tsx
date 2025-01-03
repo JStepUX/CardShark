@@ -29,9 +29,6 @@ const PngUpload: React.FC = () => {
     try {
       setIsLoading(true);
       setFilename(file.name);
-      setStatus('Uploading...');
-      setCharacterData(null);
-      setCurrentFile(file);
       
       const formData = new FormData();
       formData.append('file', file);
@@ -44,12 +41,11 @@ const PngUpload: React.FC = () => {
       const data = await response.json();
       
       if (response.ok) {
-        if (data.success && data.metadata) {
-          setCharacterData(data.metadata);
-          setStatus('Character data found and loaded');
+        setCharacterData(data.metadata);
+        if (data.is_new) {
+          setStatus('Created new character from image');
         } else {
-          setShowNewCharacterDialog(true);
-          setStatus('Create new character from this image?');
+          setStatus('Loaded existing character data');
         }
       } else {
         throw new Error(data.message || 'Upload failed');

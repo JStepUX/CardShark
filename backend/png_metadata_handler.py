@@ -153,59 +153,65 @@ class PngMetadataHandler:
             self.logger.log_step("Starting format conversion")
             
             v2_data = self._create_empty_card()
+            # Get character data from either nested or direct structure
             char_data = data.get('character', data)
             
-            # Define fields that should have variable conversion
-            text_fields = [
-                'description',
-                'personality', 
-                'first_mes',
-                'mes_example',
-                'scenario',
-                'system_prompt',
-                'post_history_instructions'
-            ]
-            
-            # Map and convert fields
-            for field in text_fields:
-                if field in char_data:
-                    v2_data['data'][field] = self._convert_text_fields(char_data[field])
-            
-            # Add non-converted fields
-            v2_data['data'].update({
-                "name": char_data.get('name', ''),
-                "creator_notes": char_data.get('creator_notes', ''),
-                "tags": char_data.get('tags', []),
-                "creator": char_data.get('creator', ''),
-                "character_version": char_data.get('character_version', '1.0'),
-                "alternate_greetings": [
-                    self._convert_text_fields(greeting)
-                    for greeting in char_data.get('alternate_greetings', [])
+            # Map Backyard fields to V2 format
+            field_mapping = {
+                'aiName': 'name',
+                'basePrompt': 'description',
+                'aiPersona': 'personality',
+                'firstMessage': 'first_mes',
+                'customDialogue': 'mes_example', 
+                'scenario': 'scenario',
+                'authorNotes': 'creator_notes'
+            }
+
+            # Copy mapped fields with conversion
+            for by_field, v2_field in field_mapping.items():
+                if by_field in char_data:
+                    v2_data['data'][v2_field] = self._convert_text_fields(char_data[by_field])
+
+            # Handle special fields
+            if char_data.get('Tags'):
+                v2_data['data']['tags'] = [
+                    tag.get('name') for tag in char_data['Tags'] 
+                    if isinstance(tag, dict) and 'name' in tag
                 ]
+
+            if char_data.get('Author'):
+                v2_data['data']['creator'] = char_data['Author'].get('username', '')
+
+            # Add default values for missing fields
+            v2_data['data'].update({
+                'system_prompt': char_data.get('system_prompt', ''),
+                'post_history_instructions': char_data.get('post_history_instructions', ''),
+                'alternate_greetings': [],
+                'character_version': '1.0'
             })
 
-            # Convert lore book entries
-            if 'character_book' in char_data:
-                book = char_data['character_book']
-                if isinstance(book, dict) and 'entries' in book:
-                    entries = []
-                    for idx, item in enumerate(book['entries']):
+            # Handle lorebook if present
+            if char_data.get('Lorebook') and char_data['Lorebook'].get('LorebookItems'):
+                entries = []
+                for idx, item in enumerate(char_data['Lorebook']['LorebookItems']):
+                    if isinstance(item, dict):
                         entry = {
-                            'keys': item.get('keys', []),
-                            'content': self._convert_text_fields(item.get('content', '')),
-                            'enabled': item.get('enabled', True),
+                            'keys': [k.strip() for k in item.get('key', '').split(',') if k.strip()],
+                            'content': self._convert_text_fields(item.get('value', '')),
+                            'enabled': True,
                             'insertion_order': idx,
-                            'case_sensitive': item.get('case_sensitive', False),
-                            'priority': item.get('priority', 10),
-                            'id': item.get('id', idx),
-                            'comment': item.get('comment', ''),
-                            'selective': item.get('selective', False),
-                            'constant': item.get('constant', False),
-                            'position': item.get('position', 'after_char')
+                            'case_sensitive': False,
+                            'priority': 10,
+                            'id': idx,
+                            'comment': '',
+                            'selective': False,
+                            'constant': False,
+                            'position': 'after_char'
                         }
                         entries.append(entry)
-                    v2_data['data']['character_book']['entries'] = entries
+                v2_data['data']['character_book']['entries'] = entries
 
+            self.logger.log_step(f"Converted character data: {json.dumps(v2_data['data'], indent=2)[:200]}...")
             return v2_data
 
         except Exception as e:

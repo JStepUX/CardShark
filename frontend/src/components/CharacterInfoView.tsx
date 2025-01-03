@@ -66,7 +66,7 @@ const CharacterInfoView: React.FC = () => {
               <label className="block text-sm font-medium mb-2">Name</label>
               <input
                 type="text"
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2"
                 placeholder="Character name"
                 value={getFieldValue('name')}
                 onChange={(e) => handleFieldChange('name', e.target.value)}
@@ -77,7 +77,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Description</label>
               <HighlightedTextArea
-                className="bg-stone-950 border border-slate-700 rounded-lg h-64"
+                className="bg-slate-800 border border-slate-700 rounded-lg h-64"
                 placeholder="Character description"
                 value={getFieldValue('description')}
                 onChange={(value) => handleFieldChange('description', value)}
@@ -88,7 +88,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Scenario</label>
               <HighlightedTextArea
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-y"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-y"
                 placeholder="Current situation or context"
                 value={getFieldValue('scenario')}
                 onChange={(value) => handleFieldChange('scenario', value)}
@@ -99,7 +99,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Personality</label>
               <HighlightedTextArea
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-y"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-y"
                 placeholder="Key personality traits"
                 value={getFieldValue('personality')}
                 onChange={(value) => handleFieldChange('personality', value)}
@@ -110,7 +110,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Example Dialogue</label>
               <HighlightedTextArea
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-64 resize-y overflow-auto"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 h-64 resize-y overflow-auto"
                 placeholder="Examples of character dialogue and interactions"
                 value={getFieldValue('mes_example')}
                 onChange={(value) => handleFieldChange('mes_example', value)}
@@ -122,7 +122,7 @@ const CharacterInfoView: React.FC = () => {
               <label className="block text-sm font-medium mb-2">System Prompt</label>
               <div className="relative w-full">
                 <HighlightedTextArea
-                  className="w-full h-64 bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 resize-y overflow-auto font-mono text-base leading-relaxed"
+                  className="w-full h-64 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 resize-y overflow-auto font-mono text-base leading-relaxed"
                   placeholder="AI instructions"
                   value={getFieldValue('system_prompt')}
                   onChange={(value) => handleFieldChange('system_prompt', value)}
@@ -135,7 +135,7 @@ const CharacterInfoView: React.FC = () => {
               <label className="block text-sm font-medium mb-2">Tags</label>
               <input
                 type="text"
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2"
                 placeholder="Character tags (comma-separated)"
                 value={characterData?.data?.tags?.join(', ') || ''}
                 onChange={(e) => handleFieldChange('tags', e.target.value.split(',').map(tag => tag.trim()))}
@@ -146,7 +146,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Imported Images</label>
               <textarea
-                className="w-full bg-stone-950 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-none"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-none"
                 value={characterData?.data?.imported_images?.join('\n') || ''}
                 onChange={(e) => handleFieldChange('imported_images', e.target.value.split('\n').map(url => url.trim()))}
                 placeholder="One image URL per line"
