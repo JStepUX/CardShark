@@ -10,6 +10,7 @@ import JsonViewer from './JsonViewer';
 import logo from '../assets/cardshark_justfin.png';
 import { BackyardImportDialog } from './BackyardImportDialog';
 import { AboutDialog } from './AboutDialog';
+import TokenCounter from './TokenCounter';
 
 type View = 'info' | 'lore' | 'json' | 'messages';
 
@@ -263,9 +264,10 @@ const Layout: React.FC = () => {
 
           {/* Image Preview Area */}
           <div className="mt-auto flex flex-col h-[64vh]">
-            <div className="flex-1 min-h-0"> {/* prevents overflow */}
+            <div className="flex-1 min-h-0">
               <ImagePreview imageUrl={imageUrl} />
             </div>
+            <TokenCounter characterData={characterData} />
             <button
               onClick={handleSave}
               className="w-full mt-4 py-2 px-4 bg-orange-700 hover:bg-orange-500 text-white rounded-lg transition-colors"

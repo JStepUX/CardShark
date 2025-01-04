@@ -35,13 +35,21 @@ const LoreView: React.FC = () => {
   const filteredItems = useMemo(() => {
     if (!searchTerm) return loreItems;
 
-    const term = searchTerm.toLowerCase();
+    const searchWords = searchTerm.toLowerCase().trim().split(/\s+/);
+    
     return loreItems.filter((item: LoreItem) => {
-      const keyMatch = item.keys.some(key =>
-        key.toLowerCase().includes(term)
+      // Split all keys and flatten into searchable terms
+      const keyTerms = item.keys
+        .join(',')  // Join all keys
+        .toLowerCase()
+        .split(',')  // Split on commas
+        .map(k => k.trim())
+        .filter(k => k.length > 0);  // Remove empty entries
+        
+      // Match if any search word is found in any key term
+      return searchWords.some(word => 
+        keyTerms.some(term => term.includes(word))
       );
-      const contentMatch = item.content.toLowerCase().includes(term);
-      return keyMatch || contentMatch;
     });
   }, [loreItems, searchTerm]);
 
@@ -316,7 +324,7 @@ const LoreView: React.FC = () => {
         <div className="flex gap-4 items-center">
           <input
             type="text"
-            placeholder="Search items..."
+            placeholder="Search keys..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 px-4 py-2 bg-stone-950 rounded-lg border-slate-700"

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 
 // Type definitions
@@ -36,12 +36,14 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   isFirst,
   isLast 
 }) => {
-  // Simple string-array conversion
-  const keyString = item.keys.join(',');
+  const [rawInput, setRawInput] = useState(item.keys.join(', '));
 
-  const handleKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newKeys = e.target.value.split(',').map(k => k.trim()).filter(k => k);
-    onUpdate(item.id, { keys: newKeys });
+  const handleBlur = () => {
+    const keys = rawInput
+      .split(',')
+      .map(k => k.trim())
+      .filter(k => k.length > 0);
+    onUpdate(item.id, { keys });
   };
 
   return (
@@ -62,8 +64,9 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           <div className="flex items-center">
             <input
               type="text"
-              value={keyString}
-              onChange={handleKeyChange}
+              value={rawInput}
+              onChange={(e) => setRawInput(e.target.value)}
+              onBlur={handleBlur}
               className="flex-1 bg-zinc-950 text-white rounded px-3 py-1"
               placeholder="Enter comma-separated keywords"
             />
