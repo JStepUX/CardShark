@@ -159,8 +159,8 @@ class PngMetadataHandler:
             # Map Backyard fields to V2 format
             field_mapping = {
                 'aiName': 'name',
-                'basePrompt': 'description',
-                'aiPersona': 'personality',
+                'basePrompt': 'system_prompt',
+                'aiPersona': 'description',
                 'firstMessage': 'first_mes',
                 'customDialogue': 'mes_example', 
                 'scenario': 'scenario',

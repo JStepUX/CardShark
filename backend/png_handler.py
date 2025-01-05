@@ -1,10 +1,8 @@
 import base64
 import json
 from PIL import Image, PngImagePlugin
-from v2_handler import V2CardHandler
 import io
 from errors import CardSharkError, ErrorType
-from json_handler import V2JsonHandler
 import os
 
 class PngHandler:
@@ -12,8 +10,7 @@ class PngHandler:
         """Initialize PNG Handler with logger only."""
         self.logger = logger
         self.current_file = None
-        self.v2_handler = V2CardHandler(logger)
-        self.json_handler = V2JsonHandler(logger)
+
 
     def load_card(self, file_path):
         """Load and process a PNG file, returning metadata if found."""
