@@ -18,7 +18,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   icon: Icon,
   items,
   buttonClassName = "w-10 h-10 bg-orange-700 rounded-full flex items-center justify-center hover:bg-orange-500 transition-colors",
-  menuClassName = "absolute right-0 mt-2 w-48 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 z-10"
+  menuClassName = "absolute right-0 mt-2 w-56 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 z-10"
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
