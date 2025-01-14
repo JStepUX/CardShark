@@ -1,5 +1,5 @@
 from PIL import Image, PngImagePlugin
-from typing import Dict, Optional, Union, BinaryIO
+from typing import Dict, Optional, Union, BinaryIO, List
 from io import BytesIO
 import base64
 import json
@@ -21,45 +21,39 @@ class PngMetadataHandler:
             metadata = None
             raw_data = None
             
-            # Try chara field first
+            # Debug: Log available info
+            self.logger.log_step(f"Available info keys: {list(image.info.keys())}")
+            
+            # Try chara field first (V2 format)
             if 'chara' in image.info:
                 raw_data = image.info['chara']
                 self.logger.log_step("Found metadata in 'chara' field")
                 
-            # Try UserComment in EXIF
+            # Try UserComment in EXIF second
             if not raw_data and 'exif' in image.info:
                 exif = image._getexif()
-                if exif and 0x9286 in exif:  # 0x9286 is UserComment tag
+                if exif and 0x9286 in exif:  # UserComment tag
                     raw_data = exif[0x9286]
                     self.logger.log_step("Found metadata in EXIF UserComment")
-            
+
             if raw_data:
-                self.logger.log_step(f"Raw data starts with: {str(raw_data)[:30]}")
+                self.logger.log_step(f"Raw data starts with: {str(raw_data)[:100]}")
                 metadata = self._decode_metadata(raw_data)
                 
+                if metadata:
+                    self.logger.log_step(f"Decoded data structure: {json.dumps(metadata, indent=2)[:200]}...")
+
             if not metadata:
-                self.logger.log_step("No character data found")
+                self.logger.log_step("No character data found - creating empty V2 card")
                 return self._create_empty_card()
                 
-            # Handle different formats
-            if metadata.get('spec') == 'chara_card_v2':
-                return metadata
-            elif self._is_backyard_format(metadata):
-                self.logger.log_step("Found Backyard format")
-                converted = self._convert_backyard_to_v2(metadata)
-                self.logger.log_step("Conversion result structure:")
-                self.logger.log_step(json.dumps(converted, indent=2)[:200] + "...")
-                return converted
-            else:
-                self.logger.log_step("Unknown format")
-                return self._create_empty_card()
-                
+            return metadata
+
         except Exception as e:
             self.logger.log_error(f"Failed to read metadata: {str(e)}")
             raise
 
     def _decode_metadata(self, encoded_data: str) -> Dict:
-        """Decode base64 metadata from PNG."""
         try:
             self.logger.log_step(f"Decoding metadata of length: {len(encoded_data)}")
             
@@ -81,7 +75,59 @@ class PngMetadataHandler:
             try:
                 decoded = base64.b64decode(encoded_data).decode('utf-8')
                 self.logger.log_step("Successfully decoded base64 data")
-                return json.loads(decoded)
+                data = json.loads(decoded)
+                
+                if 'character' in data:
+                    char_data = data['character']
+                    self.logger.log_step(f"Processing character data: {len(char_data)}")
+                    
+                    # Process lore items directly from char_data
+                    entries = []
+                    if 'loreItems' in char_data:
+                        self.logger.log_step(f"Found lore items in char_data: {len(char_data['loreItems'])}")
+                        for idx, item in enumerate(char_data['loreItems']):
+                            self.logger.log_step(f"Processing lore item: {item['key']}")
+                            entries.append({
+                                "keys": [item['key']],
+                                "content": item['value'],
+                                "enabled": True,
+                                "insertion_order": idx,
+                                "case_sensitive": False,
+                                "priority": 0
+                            })
+                    
+                    v2_card = {
+                        "spec": "chara_card_v2",
+                        "spec_version": "2.0",
+                        "data": {
+                            "name": char_data.get('aiName', ''),
+                            "description": char_data.get('aiPersona', ''),
+                            "personality": "",
+                            "first_mes": char_data.get('firstMessage', ''),
+                            "mes_example": char_data.get('customDialogue', ''),
+                            "scenario": char_data.get('scenario', ''),
+                            "creator_notes": "",
+                            "system_prompt": char_data.get('basePrompt', ''),
+                            "post_history_instructions": "",
+                            "alternate_greetings": [],
+                            "tags": [],
+                            "creator": "",
+                            "character_version": "1.0",
+                            "character_book": {
+                                "entries": entries,
+                                "name": "Imported Lore", 
+                                "description": "Imported from Backyard.ai format",
+                                "scan_depth": 100,
+                                "token_budget": 2048,
+                                "recursive_scanning": False,
+                                "extensions": {}
+                            }
+                        }
+                    }
+                    return v2_card
+                
+                return data
+
             except Exception as inner_e:
                 self.logger.log_error(f"Base64 decode failed: {str(inner_e)}")
                 raise ValueError("Invalid base64 metadata format")
@@ -272,3 +318,76 @@ class PngMetadataHandler:
         except Exception as e:
             self.logger.log_error(f"Failed to write metadata: {str(e)}")
             raise
+
+    def _decode_backyard_metadata(self, raw_data: Union[str, bytes]) -> Dict:
+        """Decode Backyard.ai metadata format."""
+        try:
+            # Handle ASCII prefix
+            if isinstance(raw_data, bytes) and raw_data.startswith(b'ASCII\x00\x00\x00'):
+                raw_data = raw_data[8:]
+            
+            # Convert bytes to string
+            if isinstance(raw_data, bytes):
+                raw_data = raw_data.decode('utf-8')
+            
+            # Parse JSON
+            data = json.loads(raw_data)
+            
+            if 'character' in data:
+                char_data = data['character']
+                if 'basePrompt' in char_data:
+                    base_prompt = json.loads(char_data['basePrompt'])
+                    # Extract character details
+                    for key in base_prompt:
+                        if key.endswith('_details'):
+                            details = base_prompt[key]['template']
+                            return {
+                                'name': details.get('name', ''),
+                                'description': details.get('appearance', {}).get('body_type', ''),
+                                'personality': self._format_personality(details.get('personality', {})),
+                                'first_mes': char_data.get('firstMessage', ''),
+                                'scenario': base_prompt.get('scenario', ''),
+                                'mes_example': '',
+                                'creator_notes': '',
+                                'system_prompt': json.dumps(base_prompt.get('guidelines', {})),
+                                'post_history_instructions': '',
+                                'alternate_greetings': [],
+                                'tags': [],
+                                'creator': '',
+                                'character_version': '1.0',
+                                'character_book': {
+                                    'entries': self._convert_lore_items(data.get('loreItems', [])),
+                                    'name': '',
+                                    'description': '',
+                                    'scan_depth': 100,
+                                    'token_budget': 2048,
+                                    'recursive_scanning': False,
+                                    'extensions': {}
+                                }
+                            }
+            return {}
+        except Exception as e:
+            self.logger.log_error(f"Failed to decode Backyard metadata: {str(e)}")
+            return {}
+
+    def _format_personality(self, personality_data: Dict) -> str:
+        """Format personality data into string."""
+        traits = []
+        for key in ['defining_characteristics', 'flaws', 'quirks']:
+            if key in personality_data:
+                traits.extend(personality_data[key])
+        return '\n'.join(f"- {trait}" for trait in traits)
+
+    def _convert_lore_items(self, lore_items: List[Dict]) -> List[Dict]:
+        """Convert Backyard lore items to character book entries."""
+        entries = []
+        for item in lore_items:
+            entries.append({
+                'keys': [item.get('key', '')],
+                'content': item.get('value', ''),
+                'enabled': True,
+                'insertion_order': 0,
+                'case_sensitive': False,
+                'priority': 0
+            })
+        return entries
