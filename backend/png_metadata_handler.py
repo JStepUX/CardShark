@@ -14,41 +14,44 @@ class PngMetadataHandler:
     def read_metadata(self, file_data: Union[bytes, BinaryIO]) -> Dict:
         """Read character metadata from a PNG file."""
         try:
-            # Open image from bytes or file-like object
-            image = Image.open(BytesIO(file_data) if isinstance(file_data, bytes) else file_data)
+            # Convert input to BytesIO
+            bio = BytesIO(file_data if isinstance(file_data, bytes) else file_data.read())
+            self.logger.log_step("Converted input to BytesIO")
             
-            # Check for character data
-            metadata = None
-            raw_data = None
+            # Reset file pointer and open image
+            bio.seek(0)
+            image = Image.open(bio)
+            image.load()
             
-            # Debug: Log available info
+            # Force text chunk loading by accessing text attribute
+            # This is required because Pillow lazy-loads text chunks
+            if hasattr(image, 'text'):
+                _ = image.text  # Trigger lazy loading
+                
+            self.logger.log_step("Opened PNG file")
+            
+            # Log image info
             self.logger.log_step(f"Available info keys: {list(image.info.keys())}")
             
-            # Try chara field first (V2 format)
-            if 'chara' in image.info:
-                raw_data = image.info['chara']
-                self.logger.log_step("Found metadata in 'chara' field")
+            # Check for metadata
+            metadata = None
+            
+            # Try Chara field first (case-insensitive)
+            chara_key = next((k for k in image.info.keys() if k.lower() == 'chara'), None)
+            if chara_key:
+                self.logger.log_step(f"Found {chara_key} field")
+                try:
+                    metadata = self._decode_metadata(image.info[chara_key])
+                except Exception as e:
+                    self.logger.log_error(f"Failed to decode {chara_key}: {str(e)}")
+                    
+            # Return metadata or empty card
+            if metadata:
+                return metadata
                 
-            # Try UserComment in EXIF second
-            if not raw_data and 'exif' in image.info:
-                exif = image._getexif()
-                if exif and 0x9286 in exif:  # UserComment tag
-                    raw_data = exif[0x9286]
-                    self.logger.log_step("Found metadata in EXIF UserComment")
-
-            if raw_data:
-                self.logger.log_step(f"Raw data starts with: {str(raw_data)[:100]}")
-                metadata = self._decode_metadata(raw_data)
+            self.logger.log_step("No valid metadata found - creating empty card")
+            return self._create_empty_card()
                 
-                if metadata:
-                    self.logger.log_step(f"Decoded data structure: {json.dumps(metadata, indent=2)[:200]}...")
-
-            if not metadata:
-                self.logger.log_step("No character data found - creating empty V2 card")
-                return self._create_empty_card()
-                
-            return metadata
-
         except Exception as e:
             self.logger.log_error(f"Failed to read metadata: {str(e)}")
             raise
@@ -76,6 +79,27 @@ class PngMetadataHandler:
                 decoded = base64.b64decode(encoded_data).decode('utf-8')
                 self.logger.log_step("Successfully decoded base64 data")
                 data = json.loads(decoded)
+                
+                # Handle SillyTavern format with duplicated data
+                if 'spec' in data and data['spec'] == 'chara_card_v2':
+                    card_data = {}
+                    
+                    # Merge fields from both root and data key
+                    if 'data' in data:
+                        card_data.update(data['data'])
+                    
+                    # Root level fields override data fields
+                    root_fields = ['name', 'description', 'personality', 'scenario', 
+                                'first_mes', 'mes_example', 'tags']
+                    for field in root_fields:
+                        if field in data:
+                            card_data[field] = data[field]
+                    
+                    return {
+                        "spec": "chara_card_v2",
+                        "spec_version": "2.0",
+                        "data": card_data
+                    }
                 
                 if 'character' in data:
                     char_data = data['character']
