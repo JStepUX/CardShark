@@ -2,7 +2,7 @@ import os
 from fastapi import HTTPException # type: ignore
 from pathlib import Path
 
-@app.get("/api/silly-characters")
+@app.get("/api/silly-characters") # type: ignore
 async def get_silly_characters():
     """Scan the SillyTavern characters directory for PNG files."""
     try:
