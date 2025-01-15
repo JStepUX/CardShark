@@ -15,6 +15,7 @@ from tempfile import NamedTemporaryFile
 import requests # type: ignore
 import re
 import traceback
+from fastapi.responses import FileResponse, JSONResponse # type: ignore
 
 # Local imports
 from backend.log_manager import LogManager  # Change to relative import
@@ -54,6 +55,68 @@ except Exception as e:
     raise
 
 # API Endpoints
+
+@app.get("/api/character-image/{filename}")
+async def get_character_image(filename: str):
+    """Serve character PNG files."""
+    try:
+        user_home = str(Path.home())
+        characters_path = Path(user_home) / "SillyTavern-Launcher" / "SillyTavern" / "data" / "default-user" / "characters"
+        file_path = characters_path / filename
+        
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+            
+        return FileResponse(file_path)
+        
+    except Exception as e:
+        logger.log_error(f"Error serving character image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/silly-characters")
+async def get_silly_characters():
+    """Scan the SillyTavern characters directory for PNG files."""
+    try:
+        # Get current user's home directory
+        user_home = str(Path.home())
+        
+        # Construct path to SillyTavern characters directory
+        characters_path = Path(user_home) / "SillyTavern-Launcher" / "SillyTavern" / "data" / "default-user" / "characters"
+        
+        # Check if directory exists
+        if not characters_path.exists():
+            return {
+                "exists": False,
+                "message": "SillyTavern characters directory not found",
+                "files": []
+            }
+            
+        # List all PNG files
+        png_files = []
+        for file in characters_path.glob("*.png"):
+            png_files.append({
+                "name": file.stem,  # Filename without extension
+                "path": str(file),  # Full path
+                "size": file.stat().st_size,
+                "modified": file.stat().st_mtime
+            })
+            
+        # Sort alphabetically by name
+        png_files.sort(key=lambda x: x["name"].lower())
+        
+        return {
+            "exists": True,
+            "message": "Successfully scanned directory",
+            "files": png_files
+        }
+        
+    except Exception as e:
+        logger.log_error(f"Error scanning characters directory: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to scan characters directory: {str(e)}"
+        )
+
 @app.get("/api/health")
 async def health_check():
     """Simple health check endpoint."""

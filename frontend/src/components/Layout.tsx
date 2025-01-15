@@ -11,8 +11,9 @@ import logo from '../assets/cardshark_justfin.png';
 import { BackyardImportDialog } from './BackyardImportDialog';
 import { AboutDialog } from './AboutDialog';
 import TokenCounter from './TokenCounter';
+import CharacterGallery from './CharacterGallery';
 
-type View = 'info' | 'lore' | 'json' | 'messages';
+type View = 'info' | 'lore' | 'json' | 'messages' | 'gallery';
 
 const Layout: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('info');
@@ -90,6 +91,9 @@ const Layout: React.FC = () => {
 
       case 'messages':
         return <MessagesView />;
+        
+      case 'gallery':
+        return <CharacterGallery />;
       
       case 'info':
       default:
@@ -261,6 +265,16 @@ const Layout: React.FC = () => {
               JSON View
             </button>
           </nav>
+          
+          <button 
+            className={`w-full text-left px-4 py-2 rounded-lg transition-colors
+              ${currentView === 'gallery' 
+                ? 'bg-slate-700 text-white' 
+                : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
+            onClick={() => setCurrentView('gallery')}
+          >
+            Whacky Brewskis
+          </button>
 
           {/* Image Preview Area */}
           <div className="mt-auto flex flex-col h-[64vh]">
