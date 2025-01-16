@@ -273,7 +273,7 @@ const Layout: React.FC = () => {
                 : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
             onClick={() => setCurrentView('gallery')}
           >
-            Whacky Brewskis
+            Character Folder
           </button>
 
           {/* Image Preview Area */}

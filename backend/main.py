@@ -23,6 +23,7 @@ from backend.png_metadata_handler import PngMetadataHandler
 from backend.errors import CardSharkError
 from backend.backyard_handler import BackyardHandler
 from backend.png_debug_handler import PngDebugHandler # type: ignore
+from backend.settings_manager import SettingsManager
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -42,27 +43,154 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize logger first since other components need it
+# Initialize managers and handlers
 logger = LogManager()
-
-# Initialize handlers with proper error handling
-try:
-    png_handler = PngMetadataHandler(logger)
-    backyard_handler = BackyardHandler(logger)  # New handler
-    logger.log_step("Initialized handlers")
-except Exception as e:
-    logger.log_error(f"Failed to initialize handlers: {str(e)}")
-    raise
+settings_manager = SettingsManager(logger)
+png_handler = PngMetadataHandler(logger)
+backyard_handler = BackyardHandler(logger)
 
 # API Endpoints
 
-@app.get("/api/character-image/{filename}")
-async def get_character_image(filename: str):
-    """Serve character PNG files."""
+@app.post("/api/validate-directory")
+async def validate_directory(request: Request):
+    """Validate if a directory exists and contains PNG files."""
     try:
-        user_home = str(Path.home())
-        characters_path = Path(user_home) / "SillyTavern-Launcher" / "SillyTavern" / "data" / "default-user" / "characters"
-        file_path = characters_path / filename
+        data = await request.json()
+        directory = data.get('directory')
+        
+        if not directory:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "No directory provided"
+                }
+            )
+            
+        # Convert to Path and resolve
+        dir_path = Path(directory).resolve()
+        
+        # Check if directory exists
+        if not dir_path.exists():
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Directory does not exist"
+                }
+            )
+            
+        if not dir_path.is_dir():
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Path is not a directory"
+                }
+            )
+            
+        # Check for PNG files
+        png_files = list(dir_path.glob("*.png"))
+        if not png_files:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "No PNG files found in directory"
+                }
+            )
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"Found {len(png_files)} PNG files",
+                "directory": str(dir_path)
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error validating directory: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.get("/api/settings")
+async def get_settings():
+    """Get all settings."""
+    try:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "settings": settings_manager.settings
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error getting settings: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.post("/api/settings")
+async def update_setting(request: Request):
+    """Update a single setting."""
+    try:
+        data = await request.json()
+        key = data.get('key')
+        value = data.get('value')
+        
+        if not key:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "No setting key provided"
+                }
+            )
+            
+        # Update the setting
+        if settings_manager.update_setting(key, value):
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "message": f"Updated setting: {key}"
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": f"Failed to update setting: {key}"
+                }
+            )
+            
+    except Exception as e:
+        logger.log_error(f"Error updating setting: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+
+@app.get("/api/character-image/{path:path}")
+async def get_character_image(path: str):
+    """Serve character PNG files from any directory."""
+    try:
+        file_path = Path(path)
         
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Image not found")
@@ -73,30 +201,38 @@ async def get_character_image(filename: str):
         logger.log_error(f"Error serving character image: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/silly-characters")
-async def get_silly_characters():
-    """Scan the SillyTavern characters directory for PNG files."""
+@app.get("/api/characters")
+async def get_characters(directory: str):
+    """List character files in the specified directory."""
     try:
-        # Get current user's home directory
-        user_home = str(Path.home())
+        # Convert to absolute path if relative
+        directory_path = Path(directory).resolve()
         
-        # Construct path to SillyTavern characters directory
-        characters_path = Path(user_home) / "SillyTavern-Launcher" / "SillyTavern" / "data" / "default-user" / "characters"
+        logger.log_step(f"Scanning directory: {directory_path}")
         
-        # Check if directory exists
-        if not characters_path.exists():
+        if not directory_path.exists():
+            logger.log_step(f"Directory not found: {directory_path}")
             return {
                 "exists": False,
-                "message": "SillyTavern characters directory not found",
+                "message": "Directory not found",
+                "files": []
+            }
+            
+        if not directory_path.is_dir():
+            logger.log_step(f"Not a directory: {directory_path}")
+            return {
+                "exists": False,
+                "message": "Not a directory",
                 "files": []
             }
             
         # List all PNG files
         png_files = []
-        for file in characters_path.glob("*.png"):
+        for file in directory_path.glob("*.png"):
+            logger.log_step(f"Found PNG: {file.name}")
             png_files.append({
-                "name": file.stem,  # Filename without extension
-                "path": str(file),  # Full path
+                "name": file.stem,
+                "path": str(file),
                 "size": file.stat().st_size,
                 "modified": file.stat().st_mtime
             })
@@ -104,17 +240,20 @@ async def get_silly_characters():
         # Sort alphabetically by name
         png_files.sort(key=lambda x: x["name"].lower())
         
+        logger.log_step(f"Found {len(png_files)} PNG files")
+        
         return {
             "exists": True,
             "message": "Successfully scanned directory",
+            "directory": str(directory_path),
             "files": png_files
         }
         
     except Exception as e:
-        logger.log_error(f"Error scanning characters directory: {str(e)}")
+        logger.log_error(f"Error scanning directory: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to scan characters directory: {str(e)}"
+            detail=f"Failed to scan directory: {str(e)}"
         )
 
 @app.get("/api/health")
@@ -124,45 +263,14 @@ async def health_check():
 
 @app.post("/api/upload-png")
 async def upload_png(file: UploadFile = File(...)):
-    """Handle PNG upload with enhanced debugging"""
+    """Handle PNG upload with metadata extraction."""
     try:
         content = await file.read()
-        
-        # Run debug analysis first
-        debug_handler = PngDebugHandler(logger)
-        debug_info = debug_handler.debug_png_metadata(content)
-        
-        # Log debug information
-        logger.log_step("PNG Debug Information:")
-        logger.log_step(f"Has chara field: {debug_info['has_chara']}")
-        logger.log_step(f"Has userComment field: {debug_info['has_userComment']}")
-        
-        if debug_info['error']:
-            logger.log_error(f"Debug found error: {debug_info['error']}")
-            return {"success": False, "error": debug_info['error']}
-            
-        handler = PngMetadataHandler(logger)
-        
-        if debug_info['decoded_data']:
-            # Existing card with metadata
-            metadata = handler.read_metadata(content)
-            return {
-                "success": True, 
-                "metadata": metadata,
-                "debug_info": debug_info,
-                "is_new": False
-            }
-        else:
-            # New card - create empty V2 structure
-            metadata = handler._create_empty_card()
-            logger.log_step("Created new empty character card")
-            return {
-                "success": True,
-                "metadata": metadata,
-                "debug_info": debug_info,
-                "is_new": True
-            }
-            
+        metadata = png_handler.read_metadata(content)
+        return {
+            "success": True,
+            "metadata": metadata,
+        }
     except Exception as e:
         logger.log_error(f"Upload failed: {str(e)}")
         return {"success": False, "error": str(e)}
@@ -173,76 +281,11 @@ async def save_png(file: UploadFile = File(...), metadata: str = Form(...)):
     try:
         content = await file.read()
         metadata_dict = json.loads(metadata)
-        handler = PngMetadataHandler(logger)
-        new_content = handler.write_metadata(content, metadata_dict)
+        new_content = png_handler.write_metadata(content, metadata_dict)
         return Response(content=new_content, media_type="image/png")
     except Exception as e:
         logger.log_error(f"Save failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/extract-lore")
-async def extract_lore(file: UploadFile = File(...)):
-    """Extract lore items from a PNG character card."""
-    temp_file = None
-    try:
-        logger.log_step("Processing lore extraction request")
-        
-        # Create temp file
-        temp_file = NamedTemporaryFile(delete=False, suffix='.png')
-        contents = await file.read()
-        temp_file.write(contents)
-        temp_file.flush()
-        
-        logger.log_step(f"Created temp file: {temp_file.name}")
-        
-        # Load character data
-        metadata = png_handler.read_metadata(temp_file.name)
-        
-        if not metadata:
-            logger.log_step("No character data found in PNG")
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": "No character data found in PNG"}
-            )
-        
-        # Extract lore items
-        lore_items = []
-        
-        # Try both V2 format paths for character book
-        if metadata.get('spec') == 'chara_card_v2':
-            # First try data/character_book path
-            entries = metadata.get('data', {}).get('character_book', {}).get('entries', [])
-            
-            # If no entries found, try direct character_book path
-            if not entries:
-                entries = metadata.get('character_book', {}).get('entries', [])
-            
-            lore_items = entries
-            
-        logger.log_step(f"Extracted {len(lore_items)} lore items")
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "loreItems": lore_items
-            }
-        )
-        
-    except Exception as e:
-        logger.log_step(f"Error extracting lore: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "message": str(e)}
-        )
-    finally:
-        if temp_file:
-            try:
-                os.unlink(temp_file.name)
-                logger.log_step("Cleaned up temp file")
-            except Exception as e:
-                logger.log_step(f"Error cleaning temp file: {str(e)}")
-                pass
 
 @app.post("/api/import-backyard")
 async def import_backyard(request: Request):
@@ -257,8 +300,7 @@ async def import_backyard(request: Request):
                 content={"success": False, "message": "No URL provided"}
             )
         
-        handler = BackyardHandler(logger)
-        metadata, preview_url = handler.import_character(url)
+        metadata, preview_url = backyard_handler.import_character(url)
         
         return JSONResponse(
             status_code=200,
@@ -270,6 +312,42 @@ async def import_backyard(request: Request):
         )
     except Exception as e:
         logger.log_error(f"Import failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": str(e)}
+        )
+
+@app.post("/api/extract-lore")
+async def extract_lore(file: UploadFile = File(...)):
+    """Extract lore items from a PNG character card."""
+    try:
+        content = await file.read()
+        metadata = png_handler.read_metadata(content)
+        
+        if not metadata:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "No character data found in PNG"}
+            )
+        
+        # Extract lore items from V2 format
+        lore_items = []
+        if metadata.get('spec') == 'chara_card_v2':
+            if 'data' in metadata and 'character_book' in metadata['data']:
+                lore_items = metadata['data']['character_book'].get('entries', [])
+            elif 'character_book' in metadata:
+                lore_items = metadata['character_book'].get('entries', [])
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "loreItems": lore_items
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error extracting lore: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": str(e)}
