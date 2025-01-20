@@ -253,7 +253,7 @@ const Layout: React.FC = () => {
                   : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
               onClick={() => setCurrentView('messages')}
             >
-              Messages
+              First Messages
             </button>
             <button 
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
