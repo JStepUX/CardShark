@@ -72,15 +72,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Settings"
+      showCloseButton={false}
       buttons={[
+        {
+            label: 'Cancel',
+            onClick: onClose,
+        },
+
         {
           label: isSaving ? 'Saving...' : 'Save',
           onClick: handleSaveSettings,
           variant: 'primary'
-        },
-        {
-          label: 'Cancel',
-          onClick: onClose,
         }
       ]}
     >
