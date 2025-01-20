@@ -16,7 +16,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
   const [characters, setCharacters] = useState<CharacterFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [displayedCount, setDisplayedCount] = useState(20);
+  const [displayedCount, setDisplayedCount] = useState(25);
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const { setCharacterData, setImageUrl, setIsLoading: setAppLoading } = useCharacter();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,7 +68,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
     try {
       setIsLoading(true);
       setError(null);
-      setDisplayedCount(20); // Reset display count for new directory
+      setDisplayedCount(24); // Reset display count for new directory
 
       const response = await fetch(`/api/characters?directory=${encodeURIComponent(directory)}`);
       if (!response.ok) throw new Error('Failed to load characters');
@@ -126,12 +126,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 bg-stone-900 border-b border-stone-800">
+      <div className="p-4 bg-slate-900 border-b border-stone-800">
         <h2 className="text-lg font-semibold">
           Character Gallery {characters.length ? `(${characters.length})` : ''}
         </h2>
         {currentDirectory && (
-          <div className="mt-2 text-sm text-gray-400 truncate">
+          <div className="mt-2 text-sm text-slate-500 truncate">
             Directory: {currentDirectory}
           </div>
         )}
