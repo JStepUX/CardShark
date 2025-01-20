@@ -159,7 +159,7 @@ const CharacterGallery: React.FC = () => {
           </div>
         ) : (
           <div className="p-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {characters.slice(0, displayedCount).map((character) => (
                 <div 
                   key={character.path}
@@ -170,7 +170,7 @@ const CharacterGallery: React.FC = () => {
                     <img
                       src={`/api/character-image/${encodeURIComponent(character.path)}`}
                       alt={character.name}
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-cover object-center transform group-hover:scale-105 transition-transform"
                       loading="lazy"
                     />
                   </div>
