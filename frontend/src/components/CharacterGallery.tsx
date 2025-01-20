@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import DirectoryPicker from './DirectoryPicker';
 
 interface CharacterFile {
   name: string;
@@ -9,7 +8,11 @@ interface CharacterFile {
   modified: number;
 }
 
-const CharacterGallery: React.FC = () => {
+interface CharacterGalleryProps {
+  settingsChangeCount?: number;
+}
+
+const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount = 0 }) => {
   const [characters, setCharacters] = useState<CharacterFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +31,7 @@ const CharacterGallery: React.FC = () => {
         const data = await response.json();
         if (data.success && data.settings.character_directory) {
           setCurrentDirectory(data.settings.character_directory);
-          handleDirectoryChange(data.settings.character_directory);
+          loadFromDirectory(data.settings.character_directory);
         }
       } catch (err) {
         console.error('Failed to load settings:', err);
@@ -36,7 +39,7 @@ const CharacterGallery: React.FC = () => {
     };
     
     loadSettings();
-  }, []);
+  }, [settingsChangeCount]);
 
   const loadMore = useCallback(() => {
     if (displayedCount < characters.length) {
@@ -61,7 +64,7 @@ const CharacterGallery: React.FC = () => {
     }
   }, [loadMore, displayedCount, characters.length]);
 
-  const handleDirectoryChange = async (directory: string) => {
+  const loadFromDirectory = async (directory: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -124,15 +127,9 @@ const CharacterGallery: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 bg-stone-900 border-b border-stone-800">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">
-            Character Gallery {characters.length ? `(${characters.length})` : ''}
-          </h2>
-          <DirectoryPicker 
-            currentDirectory={currentDirectory}
-            onDirectoryChange={handleDirectoryChange}
-          />
-        </div>
+        <h2 className="text-lg font-semibold">
+          Character Gallery {characters.length ? `(${characters.length})` : ''}
+        </h2>
         {currentDirectory && (
           <div className="mt-2 text-sm text-gray-400 truncate">
             Directory: {currentDirectory}
@@ -155,7 +152,7 @@ const CharacterGallery: React.FC = () => {
           </div>
         ) : characters.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
-            No characters found. Select a directory containing character cards.
+            No characters found. Set your character directory in Settings.
           </div>
         ) : (
           <div className="p-4">

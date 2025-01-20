@@ -141,29 +141,47 @@ async def get_settings():
         )
 
 @app.post("/api/settings")
-async def update_setting(request: Request):
-    """Update a single setting."""
+async def update_settings(request: Request):
+    """Update settings."""
     try:
         data = await request.json()
-        key = data.get('key')
-        value = data.get('value')
+        logger.log_step(f"Received settings update request: {data}")
         
-        if not key:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "No setting key provided"
-                }
-            )
+        # Handle character_directory setting specifically
+        if 'character_directory' in data:
+            directory = data['character_directory']
+            logger.log_step(f"Validating directory: {directory}")
             
-        # Update the setting
-        if settings_manager.update_setting(key, value):
+            # Log directory status
+            exists = os.path.exists(directory)
+            logger.log_step(f"Directory exists: {exists}")
+            
+            if directory and not exists:
+                logger.log_step("Directory validation failed")
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "message": f"Directory does not exist: {directory}"
+                    }
+                )
+            logger.log_step("Directory validation passed")
+        
+        # Log before updating settings
+        logger.log_step("Attempting to update settings...")
+        success = all(
+            settings_manager.update_setting(key, value)
+            for key, value in data.items()
+        )
+        
+        logger.log_step(f"Settings update success: {success}")
+        
+        if success:
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
-                    "message": f"Updated setting: {key}"
+                    "message": "Settings updated successfully"
                 }
             )
         else:
@@ -171,12 +189,12 @@ async def update_setting(request: Request):
                 status_code=500,
                 content={
                     "success": False,
-                    "message": f"Failed to update setting: {key}"
+                    "message": "Failed to update one or more settings"
                 }
             )
             
     except Exception as e:
-        logger.log_error(f"Error updating setting: {str(e)}")
+        logger.log_error(f"Error updating settings: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={

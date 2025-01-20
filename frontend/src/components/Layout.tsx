@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Upload, Link } from 'lucide-react';
+import { Upload, Link, Settings } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
 import ImagePreview from './ImagePreview';
 import { useCharacter } from '../contexts/CharacterContext';
@@ -12,25 +12,29 @@ import { BackyardImportDialog } from './BackyardImportDialog';
 import { AboutDialog } from './AboutDialog';
 import TokenCounter from './TokenCounter';
 import CharacterGallery from './CharacterGallery';
+import SettingsModal from './SettingsModal';
 
 type View = 'gallery' | 'info' | 'lore' | 'json' | 'messages';
 
 const Layout: React.FC = () => {
-  const [currentView, setCurrentView] = useState<View>('gallery');
+  // Existing state
+  const [currentView, setCurrentView] = useState<View>('gallery'); // Changed back to gallery
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const {
-    characterData,
-    setCharacterData,
-    imageUrl,
-    setImageUrl,
-    isLoading,
-    setIsLoading,
-    error,
-    setError
-  } = useCharacter();
-  const [backendStatus, setBackendStatus] = useState<'running' | 'disconnected'>('disconnected');
   const [showBackyardDialog, setShowBackyardDialog] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsChangeCount, setSettingsChangeCount] = useState(0);
+  const [backendStatus, setBackendStatus] = useState<'running' | 'disconnected'>('disconnected');
+  const {
+  characterData,
+  setCharacterData,
+  imageUrl,
+  setImageUrl,
+  isLoading,
+  setIsLoading,
+  error,
+  setError
+} = useCharacter();
 
   // Handle file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,7 +97,7 @@ const Layout: React.FC = () => {
         return <MessagesView />;
         
       case 'gallery':
-        return <CharacterGallery />;
+        return <CharacterGallery settingsChangeCount={settingsChangeCount} />;
       
       case 'info':
       default:
@@ -217,13 +221,22 @@ const Layout: React.FC = () => {
               <img src={logo} alt="CardShark Logo" className="w-5 h-6" />
               <span className="text-orange-500 text-xl">CardShark</span>
             </div>
-            <DropdownMenu 
-              icon={Upload}
-              items={[
-                { icon: Upload, label: "Load PNG", onClick: handleUploadClick },
-                { icon: Link, label: "Import by URL", onClick: handleUrlImport }
-              ]}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                title="Settings"
+              >
+                <Settings size={20} />
+              </button>
+              <DropdownMenu 
+                icon={Upload}
+                items={[
+                  { icon: Upload, label: "Load PNG", onClick: handleUploadClick },
+                  { icon: Link, label: "Import by URL", onClick: handleUrlImport }
+                ]}
+              />
+            </div>
           </div>
 
           {/* Navigation */}
@@ -253,7 +266,7 @@ const Layout: React.FC = () => {
                   : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
               onClick={() => setCurrentView('messages')}
             >
-              First Messages
+              First Message(s)
             </button>
             <button 
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
@@ -327,6 +340,11 @@ const Layout: React.FC = () => {
       <AboutDialog 
         isOpen={showAboutDialog}
         onClose={() => setShowAboutDialog(false)}
+      />
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        onSettingsChange={() => setSettingsChangeCount(prev => prev + 1)}
       />
     </div>
   );
