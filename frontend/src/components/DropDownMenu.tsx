@@ -12,13 +12,18 @@ interface DropdownMenuProps {
   items: MenuItem[];
   buttonClassName?: string;
   menuClassName?: string;
+  /**
+   * Optional text to display next to the icon.
+   */
+  label?: string;  // <-- New prop for button label
 }
 
 const DropdownMenu: React.FC<DropdownMenuProps> = ({
   icon: Icon,
   items,
   buttonClassName = "w-10 h-10 bg-orange-700 rounded-full flex items-center justify-center hover:bg-orange-500 transition-colors",
-  menuClassName = "absolute right-0 mt-2 w-56 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 z-10"
+  menuClassName = "absolute right-0 mt-2 w-56 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 z-10",
+  label // <-- label prop
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -46,9 +51,14 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className={buttonClassName}
+        className={`flex items-center ${buttonClassName}`}
       >
         <Icon className="w-5 h-5 text-white" />
+        {label && (
+          <span className="ml-2 text-white">
+            {label}
+          </span>
+        )}
       </button>
 
       {isOpen && (

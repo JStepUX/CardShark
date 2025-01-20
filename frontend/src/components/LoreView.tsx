@@ -299,10 +299,13 @@ const LoreView: React.FC = () => {
     <div className="h-full flex flex-col">
       <div className="p-8 pb-4 flex flex-col gap-4">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold">Lore Manager ({loreItems.length} items)</h2>
+          <h2 className="text-lg font-semibold">
+            Lore Manager ({loreItems.length} items)
+          </h2>
           <div className="flex items-center gap-2">
             <DropdownMenu
               icon={BookOpen}
+              label="Import Lore"  // <-- Add text label here
               items={[
                 { icon: ImagePlus, label: "Import from PNG", onClick: handleImportPng },
                 { icon: Table2, label: "Import from TSV", onClick: handleImportTsv },
@@ -320,6 +323,7 @@ const LoreView: React.FC = () => {
             </button>
           </div>
         </div>
+    
 
         <div className="flex gap-4 items-center">
           <input
