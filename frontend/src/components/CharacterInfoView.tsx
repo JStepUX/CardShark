@@ -53,6 +53,41 @@ const CharacterInfoView: React.FC = () => {
     return characterData?.data?.[field]?.toString() || '';
   };
 
+  // Download handler function
+  async function handleDownloadImages() {
+    if (!characterData?.data?.imported_images?.length) return;
+
+    try {
+      for (const url of characterData.data.imported_images) {
+        if (!url.trim()) continue;
+        
+        try {
+          const response = await fetch(url);
+          if (!response.ok) continue;
+          
+          const blob = await response.blob();
+          const filename = url.split('/').pop() || 'image.png';
+          
+          // Create temporary download link
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+          
+        } catch (err) {
+          console.error(`Failed to download image: ${url}`, err);
+        }
+      }
+      
+      alert('Images downloaded successfully!');
+    } catch (err) {
+      alert('Failed to download images. Please try again.');
+    }
+  }
+
   return (
     <>
       <div className="p-8 pb-4">
@@ -151,6 +186,17 @@ const CharacterInfoView: React.FC = () => {
                 onChange={(e) => handleFieldChange('imported_images', e.target.value.split('\n').map(url => url.trim()))}
                 placeholder="One image URL per line"
               />
+              {characterData?.data?.imported_images?.length > 0 && (
+                <button
+                  onClick={handleDownloadImages}
+                  className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Imported Images
+                </button>
+              )}
             </div>
 
             <div className="h-8" /> {/* Bottom spacing */}

@@ -13,10 +13,10 @@ import { AboutDialog } from './AboutDialog';
 import TokenCounter from './TokenCounter';
 import CharacterGallery from './CharacterGallery';
 
-type View = 'info' | 'lore' | 'json' | 'messages' | 'gallery';
+type View = 'gallery' | 'info' | 'lore' | 'json' | 'messages';
 
 const Layout: React.FC = () => {
-  const [currentView, setCurrentView] = useState<View>('info');
+  const [currentView, setCurrentView] = useState<View>('gallery');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     characterData,
@@ -228,6 +228,15 @@ const Layout: React.FC = () => {
 
           {/* Navigation */}
           <nav className="space-y-2 mb-8">
+          <button 
+            className={`w-full text-left px-4 py-2 rounded-lg transition-colors
+              ${currentView === 'gallery' 
+                ? 'bg-slate-700 text-white' 
+                : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
+            onClick={() => setCurrentView('gallery')}
+          >
+            Character Folder (Optional)
+          </button>
             <button 
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
                 ${currentView === 'info' 
@@ -266,16 +275,6 @@ const Layout: React.FC = () => {
             </button>
           </nav>
           
-          <button 
-            className={`w-full text-left px-4 py-2 rounded-lg transition-colors
-              ${currentView === 'gallery' 
-                ? 'bg-slate-700 text-white' 
-                : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
-            onClick={() => setCurrentView('gallery')}
-          >
-            Character Folder
-          </button>
-
           {/* Image Preview Area */}
           <div className="mt-auto flex flex-col h-[64vh]">
             <div className="flex-1 min-h-0">
