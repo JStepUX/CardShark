@@ -106,39 +106,63 @@ const Layout: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!characterData || !imageUrl) return;
+    if (!characterData || !imageUrl) {
+      console.log('No character data or image URL available');
+      return;
+    }
     
     try {
       setIsLoading(true);
       setError(null);
+      console.log('Starting save process...');
+      
+      // Get current settings
+      const settingsResponse = await fetch('/api/settings');
+      const settingsData = await settingsResponse.json();
+      console.log('Loaded settings:', settingsData);
+      const settings = settingsData.settings;
       
       const response = await fetch(imageUrl);
       const blob = await response.blob();
+      console.log('Created blob from imageUrl');
       const file = new File([blob], 'character.png', { type: 'image/png' });
       
       const formData = new FormData();
       formData.append('file', file);
       formData.append('metadata', JSON.stringify(characterData));
       
+      // Add settings to formData if saving to directory
+      if (settings.save_to_character_directory && settings.character_directory) {
+        console.log('Saving to directory:', settings.character_directory);
+        formData.append('save_directory', settings.character_directory);
+      }
+      
+      console.log('Sending save request...');
       const saveResponse = await fetch('/api/save-png', {
         method: 'POST',
         body: formData
       });
       
       if (!saveResponse.ok) {
-        throw new Error('Failed to save PNG');
+        throw new Error(`Failed to save PNG: ${saveResponse.status} ${saveResponse.statusText}`);
       }
       
       const savedBlob = await saveResponse.blob();
       const newImageUrl = URL.createObjectURL(savedBlob);
       setImageUrl(newImageUrl);
       
-      const link = document.createElement('a');
-      link.href = newImageUrl;
-      link.download = `${characterData?.data?.name || 'character'}.png`;
-      link.click();
+      // Only trigger download if not saving to directory
+      if (!settings.save_to_character_directory || !settings.character_directory) {
+        console.log('Triggering download...');
+        const link = document.createElement('a');
+        link.href = newImageUrl;
+        link.download = `${characterData?.data?.name || 'character'}.png`;
+        link.click();
+      }
+      console.log('Save completed successfully');
       
     } catch (error) {
+      console.error('Save failed:', error);
       setError(error instanceof Error ? error.message : 'Failed to save character');
     } finally {
       setIsLoading(false);

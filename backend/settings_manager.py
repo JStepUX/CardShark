@@ -23,9 +23,10 @@ class SettingsManager:
         """Load settings from file, creating default if doesn't exist."""
         default_settings = {
             "character_directory": "",
+            "save_to_character_directory": False,  # Add new default setting
             "last_export_directory": "",
             "theme": "dark",
-            "version": "1.0"
+            "version": "0.6"
         }
         
         try:

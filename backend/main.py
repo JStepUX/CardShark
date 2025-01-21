@@ -147,13 +147,20 @@ async def update_settings(request: Request):
         data = await request.json()
         logger.log_step(f"Received settings update request: {data}")
         
+        # Validate incoming settings
+        valid_settings = ["character_directory", "save_to_character_directory", 
+                         "last_export_directory", "theme"]
+        
+        # Filter out any unexpected settings
+        filtered_data = {k: v for k, v in data.items() if k in valid_settings}
+        
         # Handle character_directory setting specifically
-        if 'character_directory' in data:
-            directory = data['character_directory']
+        if 'character_directory' in filtered_data:
+            directory = filtered_data['character_directory']
             logger.log_step(f"Validating directory: {directory}")
             
             # Log directory status
-            exists = os.path.exists(directory)
+            exists = os.path.exists(directory) if directory else True  # Allow empty string
             logger.log_step(f"Directory exists: {exists}")
             
             if directory and not exists:
@@ -165,13 +172,18 @@ async def update_settings(request: Request):
                         "message": f"Directory does not exist: {directory}"
                     }
                 )
+            
+            # If directory is invalid, also disable save_to_directory setting
+            if not directory:
+                filtered_data['save_to_character_directory'] = False
+                
             logger.log_step("Directory validation passed")
         
-        # Log before updating settings
+        # Update all validated settings
         logger.log_step("Attempting to update settings...")
         success = all(
             settings_manager.update_setting(key, value)
-            for key, value in data.items()
+            for key, value in filtered_data.items()
         )
         
         logger.log_step(f"Settings update success: {success}")
@@ -181,7 +193,8 @@ async def update_settings(request: Request):
                 status_code=200,
                 content={
                     "success": True,
-                    "message": "Settings updated successfully"
+                    "message": "Settings updated successfully",
+                    "settings": settings_manager.settings  # Return updated settings
                 }
             )
         else:
@@ -294,15 +307,47 @@ async def upload_png(file: UploadFile = File(...)):
         return {"success": False, "error": str(e)}
 
 @app.post("/api/save-png")
-async def save_png(file: UploadFile = File(...), metadata: str = Form(...)):
+async def save_png(
+    file: UploadFile = File(...), 
+    metadata: str = Form(...),
+    save_directory: str = Form(None)
+):
     """Save PNG with metadata."""
     try:
+        logger.log_step("Starting save_png operation")
+        logger.log_step(f"Save directory provided: {save_directory}")
+        
         content = await file.read()
+        logger.log_step(f"Read file content: {len(content)} bytes")
+        
         metadata_dict = json.loads(metadata)
+        logger.log_step("Successfully parsed metadata JSON")
+        
         new_content = png_handler.write_metadata(content, metadata_dict)
+        logger.log_step(f"Generated new PNG content: {len(new_content)} bytes")
+        
+        # If save_directory is provided, save the file there
+        if save_directory:
+            logger.log_step(f"Attempting to save to directory: {save_directory}")
+            # Get character name or use default
+            char_name = metadata_dict.get('data', {}).get('name', 'character')
+            # Clean filename
+            clean_name = re.sub(r'[<>:"/\\|?*]', '_', char_name)
+            save_path = Path(save_directory) / f"{clean_name}.png"
+            
+            logger.log_step(f"Saving to path: {save_path}")
+            # Write file
+            with open(save_path, 'wb') as f:
+                f.write(new_content)
+            logger.log_step("Successfully wrote file to directory")
+            
+        # Return the content regardless of save location
+        logger.log_step("Returning PNG content to client")
         return Response(content=new_content, media_type="image/png")
+        
     except Exception as e:
         logger.log_error(f"Save failed: {str(e)}")
+        logger.log_error(traceback.format_exc())  # Add full traceback
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/import-backyard")

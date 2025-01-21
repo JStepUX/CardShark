@@ -5,7 +5,7 @@ import DirectoryPicker from './DirectoryPicker';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSettingsChange?: () => void;  // Add callback prop
+  onSettingsChange?: () => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
@@ -14,6 +14,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onSettingsChange 
 }) => {
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
+  const [saveToDirectory, setSaveToDirectory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,8 +26,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         if (!response.ok) throw new Error('Failed to load settings');
         
         const data = await response.json();
-        if (data.success && data.settings.character_directory) {
-          setCurrentDirectory(data.settings.character_directory);
+        if (data.success && data.settings) {
+          setCurrentDirectory(data.settings.character_directory || null);
+          setSaveToDirectory(data.settings.save_to_character_directory || false);
         }
       } catch (err) {
         console.error('Failed to load settings:', err);
@@ -49,6 +51,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         },
         body: JSON.stringify({
           character_directory: currentDirectory,
+          save_to_character_directory: saveToDirectory
         }),
       });
 
@@ -57,7 +60,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         throw new Error(data.message || 'Failed to save settings');
       }
 
-      onSettingsChange?.();  // Notify parent of settings change
+      onSettingsChange?.();
       onClose();
     } catch (err) {
       console.error('Failed to save settings:', err);
@@ -98,10 +101,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             />
           </div>
           {currentDirectory && (
-            <div className="mt-2">
+            <div className="space-y-2">
               <p className="text-sm text-gray-400 break-all">
                 Current: {currentDirectory}
               </p>
+              <label className="flex items-center gap-2 pt-8">
+                <input
+                  type="checkbox"
+                  checked={saveToDirectory}
+                  onChange={(e) => setSaveToDirectory(e.target.checked)}
+                  disabled={!currentDirectory}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                />
+                <span className="text-sm text-gray-300">
+                  Save PNGs here (Default is Downloads)
+                </span>
+              </label>
             </div>
           )}
           {error && (
