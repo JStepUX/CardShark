@@ -106,35 +106,44 @@ const Layout: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!characterData || !imageUrl) {
-      console.log('No character data or image URL available');
-      return;
-    }
+    if (!characterData || !imageUrl) return;
     
     try {
       setIsLoading(true);
       setError(null);
-      console.log('Starting save process...');
       
-      // Get current settings
+      // Get and log settings
       const settingsResponse = await fetch('/api/settings');
       const settingsData = await settingsResponse.json();
-      console.log('Loaded settings:', settingsData);
+      console.log('=== Save Process Started ===');
+      console.log('Settings Response:', settingsData);
+      console.log('Directory:', settingsData.settings?.character_directory);
+      console.log('Save to Directory Flag:', Boolean(settingsData.settings?.save_to_character_directory));
+      console.log('Full Settings:', settingsData.settings);
+      
       const settings = settingsData.settings;
       
       const response = await fetch(imageUrl);
       const blob = await response.blob();
-      console.log('Created blob from imageUrl');
       const file = new File([blob], 'character.png', { type: 'image/png' });
       
       const formData = new FormData();
       formData.append('file', file);
       formData.append('metadata', JSON.stringify(characterData));
       
-      // Add settings to formData if saving to directory
-      if (settings.save_to_character_directory && settings.character_directory) {
-        console.log('Saving to directory:', settings.character_directory);
+      const usingSaveDirectory = Boolean(settings.save_to_character_directory) && settings.character_directory;
+      
+      // Add save directory if enabled and log what we're doing
+      if (usingSaveDirectory) {
+        console.log('=== Directory Save Attempt ===');
+        console.log('Directory:', settings.character_directory);
+        console.log('Save to Directory Flag:', Boolean(settings.save_to_character_directory));
+        
         formData.append('save_directory', settings.character_directory);
+      } else {
+        console.log('=== Browser Save Attempt ===');
+        console.log('Save to directory enabled:', Boolean(settings.save_to_character_directory));
+        console.log('Has directory:', Boolean(settings.character_directory));
       }
       
       console.log('Sending save request...');
@@ -144,22 +153,23 @@ const Layout: React.FC = () => {
       });
       
       if (!saveResponse.ok) {
-        throw new Error(`Failed to save PNG: ${saveResponse.status} ${saveResponse.statusText}`);
+        const errorText = await saveResponse.text();
+        throw new Error(`Failed to save PNG: ${saveResponse.status} ${saveResponse.statusText} - ${errorText}`);
       }
       
       const savedBlob = await saveResponse.blob();
       const newImageUrl = URL.createObjectURL(savedBlob);
       setImageUrl(newImageUrl);
       
-      // Only trigger download if not saving to directory
-      if (!settings.save_to_character_directory || !settings.character_directory) {
-        console.log('Triggering download...');
+      // Only trigger browser download if not saving to directory
+      if (!usingSaveDirectory) {
         const link = document.createElement('a');
         link.href = newImageUrl;
         link.download = `${characterData?.data?.name || 'character'}.png`;
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
       }
-      console.log('Save completed successfully');
       
     } catch (error) {
       console.error('Save failed:', error);

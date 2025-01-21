@@ -16,6 +16,7 @@ import requests # type: ignore
 import re
 import traceback
 from fastapi.responses import FileResponse, JSONResponse # type: ignore
+from typing import Optional
 
 # Local imports
 from backend.log_manager import LogManager  # Change to relative import
@@ -306,48 +307,75 @@ async def upload_png(file: UploadFile = File(...)):
         logger.log_error(f"Upload failed: {str(e)}")
         return {"success": False, "error": str(e)}
 
+from typing import Optional
+import os
+
 @app.post("/api/save-png")
 async def save_png(
     file: UploadFile = File(...), 
     metadata: str = Form(...),
-    save_directory: str = Form(None)
+    save_directory: Optional[str] = Form(default=None)
 ):
     """Save PNG with metadata."""
     try:
-        logger.log_step("Starting save_png operation")
-        logger.log_step(f"Save directory provided: {save_directory}")
+        # Log all incoming form data
+        logger.log_step("=== Save PNG Request ===")
+        logger.log_step(f"Save directory provided: {save_directory!r}")
         
         content = await file.read()
-        logger.log_step(f"Read file content: {len(content)} bytes")
+        logger.log_step(f"File content size: {len(content)} bytes")
         
         metadata_dict = json.loads(metadata)
-        logger.log_step("Successfully parsed metadata JSON")
+        char_name = metadata_dict.get('data', {}).get('name', 'character')
+        logger.log_step(f"Character name: {char_name}")
         
         new_content = png_handler.write_metadata(content, metadata_dict)
-        logger.log_step(f"Generated new PNG content: {len(new_content)} bytes")
         
         # If save_directory is provided, save the file there
         if save_directory:
-            logger.log_step(f"Attempting to save to directory: {save_directory}")
-            # Get character name or use default
-            char_name = metadata_dict.get('data', {}).get('name', 'character')
-            # Clean filename
-            clean_name = re.sub(r'[<>:"/\\|?*]', '_', char_name)
-            save_path = Path(save_directory) / f"{clean_name}.png"
-            
-            logger.log_step(f"Saving to path: {save_path}")
-            # Write file
-            with open(save_path, 'wb') as f:
-                f.write(new_content)
-            logger.log_step("Successfully wrote file to directory")
-            
-        # Return the content regardless of save location
+            try:
+                logger.log_step("Attempting directory save...")
+                
+                # Verify directory exists first
+                save_dir_path = Path(save_directory)
+                if not save_dir_path.exists():
+                    logger.log_error(f"Directory does not exist: {save_directory}")
+                    raise ValueError(f"Directory does not exist: {save_directory}")
+                
+                # Clean filename
+                clean_name = re.sub(r'[<>:"/\\|?*]', '_', char_name)
+                save_path = save_dir_path / f"{clean_name}.png"
+                logger.log_step(f"Full save path: {save_path}")
+                
+                # Write file with explicit error capture
+                try:
+                    with open(save_path, 'wb') as f:
+                        f.write(new_content)
+                    
+                    # Verify file was written
+                    if save_path.exists():
+                        logger.log_step(f"Successfully wrote file: {save_path}")
+                        logger.log_step(f"File size: {save_path.stat().st_size} bytes")
+                    else:
+                        logger.log_error(f"File was not created: {save_path}")
+                        
+                except IOError as io_error:
+                    logger.log_error(f"IO Error writing file: {str(io_error)}")
+                    raise
+                    
+            except Exception as dir_error:
+                logger.log_error(f"Directory save failed: {str(dir_error)}")
+                logger.log_error(traceback.format_exc())
+        else:
+            logger.log_step("No directory save requested")
+        
+        # Return the content for browser download
         logger.log_step("Returning PNG content to client")
         return Response(content=new_content, media_type="image/png")
         
     except Exception as e:
         logger.log_error(f"Save failed: {str(e)}")
-        logger.log_error(traceback.format_exc())  # Add full traceback
+        logger.log_error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/import-backyard")

@@ -8,10 +8,10 @@ interface SettingsModalProps {
   onSettingsChange?: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ 
-  isOpen, 
+const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
   onClose,
-  onSettingsChange 
+  onSettingsChange
 }) => {
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [saveToDirectory, setSaveToDirectory] = useState(false);
@@ -26,9 +26,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         if (!response.ok) throw new Error('Failed to load settings');
         
         const data = await response.json();
+        console.log('Loaded settings:', data);
+        
         if (data.success && data.settings) {
           setCurrentDirectory(data.settings.character_directory || null);
-          setSaveToDirectory(data.settings.save_to_character_directory || false);
+          // Explicitly handle boolean value
+          setSaveToDirectory(Boolean(data.settings.save_to_character_directory));
         }
       } catch (err) {
         console.error('Failed to load settings:', err);
@@ -43,7 +46,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSaveSettings = async () => {
     setIsSaving(true);
     setError(null);
+    
     try {
+      console.log('Saving settings:', {
+        character_directory: currentDirectory,
+        save_to_character_directory: saveToDirectory
+      });
+
       const response = await fetch('/api/settings', {
         method: 'POST',
         headers: {
@@ -60,6 +69,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         throw new Error(data.message || 'Failed to save settings');
       }
 
+      console.log('Settings saved successfully:', data);
       onSettingsChange?.();
       onClose();
     } catch (err) {
@@ -78,10 +88,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       showCloseButton={false}
       buttons={[
         {
-            label: 'Cancel',
-            onClick: onClose,
+          label: 'Cancel',
+          onClick: onClose,
         },
-
         {
           label: isSaving ? 'Saving...' : 'Save',
           onClick: handleSaveSettings,
@@ -109,7 +118,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <input
                   type="checkbox"
                   checked={saveToDirectory}
-                  onChange={(e) => setSaveToDirectory(e.target.checked)}
+                  onChange={(e) => {
+                    console.log('Checkbox changed:', e.target.checked);
+                    setSaveToDirectory(e.target.checked);
+                  }}
                   disabled={!currentDirectory}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                 />
