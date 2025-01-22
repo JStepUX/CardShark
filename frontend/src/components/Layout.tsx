@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Upload, Link, Settings } from 'lucide-react';
+import { ImagePlus, Link, Settings } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
 import ImagePreview from './ImagePreview';
 import { useCharacter } from '../contexts/CharacterContext';
@@ -264,9 +264,10 @@ const Layout: React.FC = () => {
                 <Settings size={20} />
               </button>
               <DropdownMenu 
-                icon={Upload}
+                icon={ImagePlus}
+                title="Import character from PNG or URL" 
                 items={[
-                  { icon: Upload, label: "Load PNG", onClick: handleUploadClick },
+                  { icon: ImagePlus, label: "Load PNG", onClick: handleUploadClick },
                   { icon: Link, label: "Import by URL", onClick: handleUrlImport }
                 ]}
               />

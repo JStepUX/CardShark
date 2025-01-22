@@ -12,10 +12,8 @@ interface DropdownMenuProps {
   items: MenuItem[];
   buttonClassName?: string;
   menuClassName?: string;
-  /**
-   * Optional text to display next to the icon.
-   */
-  label?: string;  // <-- New prop for button label
+  label?: string;
+  title?: string; // Add title prop for tooltip
 }
 
 const DropdownMenu: React.FC<DropdownMenuProps> = ({
@@ -23,13 +21,13 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   items,
   buttonClassName = "w-10 h-10 bg-orange-700 rounded-full flex items-center justify-center hover:bg-orange-500 transition-colors",
   menuClassName = "absolute right-0 mt-2 w-56 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 z-10",
-  label // <-- label prop
+  label,
+  title // Destructure title prop
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Handle clicking outside of dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -52,6 +50,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center ${buttonClassName}`}
+        title={title} // Add title attribute for tooltip
       >
         <Icon className="w-5 h-5 text-white" />
         {label && (
