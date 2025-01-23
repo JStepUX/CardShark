@@ -62,14 +62,22 @@ def check_npm():
         return False
 
 def build_frontend(clean=False):
-    """Build frontend for production"""
+    """Build frontend for production with improved directory handling"""
+    original_dir = os.getcwd()
     try:
-        frontend_dir = Path('frontend')
+        # Get absolute path to frontend directory
+        frontend_dir = Path('frontend').resolve()
         if not frontend_dir.exists():
             log("Frontend directory not found!", "ERROR")
             return False
             
+        # Log current state
+        log(f"Building frontend from {frontend_dir}")
+        log(f"Current directory before: {os.getcwd()}")
+        
+        # Change to frontend directory
         os.chdir(frontend_dir)
+        log(f"Changed to: {os.getcwd()}")
         
         # Install dependencies
         log("Installing frontend dependencies...")
@@ -91,13 +99,24 @@ def build_frontend(clean=False):
             log_subprocess('npm run build', build_result, "ERROR")
             return False
             
-        os.chdir('..')
+        # Verify dist directory was created
+        dist_dir = frontend_dir / 'dist'
+        if not dist_dir.exists():
+            log("Frontend build failed - no dist directory created", "ERROR")
+            return False
+            
+        log(f"Frontend build completed. Dist directory: {dist_dir}")
         return True
         
     except Exception as e:
         log(f"Frontend build failed: {str(e)}", "ERROR")
         log(traceback.format_exc(), "DEBUG")
         return False
+        
+    finally:
+        # Always return to original directory
+        os.chdir(original_dir)
+        log(f"Restored working directory to: {os.getcwd()}")
 
 def serve_dev():
     """Start development server"""
@@ -208,36 +227,66 @@ def create_spec_file():
     try:
         log("Creating spec file...")
         spec_content = """# -*- mode: python ; coding: utf-8 -*-
+
 import sys
 import os
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
 
+# Collect all required data files
+frontend_datas = [
+    ('frontend/dist/*', 'frontend/dist/'),
+    ('frontend/dist/assets/*', 'frontend/dist/assets/'),
+]
+
+backend_datas = [
+    ('backend/*.py', 'backend'),
+]
+
+# Combine all data files
+all_datas = frontend_datas + backend_datas
+
+# Verified backend modules that exist in your project
+hidden_imports = [
+    # Core FastAPI and dependencies
+    'uvicorn.logging',
+    'uvicorn.loops',
+    'uvicorn.loops.auto',
+    'uvicorn.protocols',
+    'uvicorn.protocols.http',
+    'uvicorn.protocols.http.auto',
+    'uvicorn.lifespan',
+    'uvicorn.lifespan.on',
+    'uvicorn.protocols.websockets.auto',
+    'uvicorn.supervisors',
+    'uvicorn.supervisors.multiprocess',
+    
+    # Backend modules - only include ones that exist
+    'backend',
+    'backend.log_manager',
+    'backend.png_handler',
+    'backend.png_metadata_handler',
+    'backend.png_debug_handler',
+    'backend.backyard_handler',
+    'backend.settings_manager',
+    
+    # Important dependencies
+    'email_validator',
+    'typing_extensions',
+    'packaging',
+]
+
+# Add collections using collect_submodules
+for module in ['PIL', 'requests', 'fastapi', 'starlette', 'pydantic', 'uvicorn']:
+    hidden_imports.extend(collect_submodules(module))
+
 a = Analysis(
     ['backend/main.py'],
     pathex=[os.path.abspath('.')],
     binaries=[],
-    datas=[
-        ('frontend/dist', 'frontend/dist'),
-        ('backend/*.py', 'backend')  # Include all backend Python files
-    ],
-    hiddenimports=[
-        'uvicorn.logging',
-        'uvicorn.loops.auto',
-        'uvicorn.protocols.http.auto',
-        'uvicorn.lifespan.on',
-        'backend',  # Include backend package
-        'backend.log_manager',
-        'backend.png_handler',
-        'backend.json_handler',
-        'backend.v2_handler',
-        'backend.url_handler'
-    ] + collect_submodules('PIL') 
-      + collect_submodules('requests')
-      + collect_submodules('fastapi')
-      + collect_submodules('starlette')
-      + collect_submodules('pydantic'),
+    datas=all_datas,
+    hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -248,14 +297,22 @@ a = Analysis(
     noarchive=False
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+# Remove any duplicate files from the collection
+unique_datas = list(set(a.datas))
+a.datas = unique_datas
+
+pyz = PYZ(
+    a.pure, 
+    a.zipped_data,
+    cipher=block_cipher
+)
 
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
+    a.binaries,        # Include binaries
+    a.zipfiles,        # Include zipfiles
+    a.datas,          # Include datas
     [],
     name='CardShark',
     debug=False,
@@ -268,7 +325,8 @@ exe = EXE(
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
-    entitlements_file=None
+    entitlements_file=None,
+    icon='frontend/dist/cardshark.ico'
 )"""
         
         with open('CardShark.spec', 'w') as f:
@@ -302,17 +360,24 @@ def build_executable():
             shell=True,
             capture_output=True,
             text=True,
-            cwd=BASE_DIR  # Execute from project root
+            cwd=BASE_DIR
         )
         
         log_subprocess(cmd, result)
         
-        if result.returncode != 0:
-            log("PyInstaller failed!", "ERROR")
+        # Check for single file executable
+        exe_path = BASE_DIR / 'dist' / 'CardShark.exe'
+        if not exe_path.exists():
+            log(f"Executable not found at {exe_path}", "ERROR")
             return False
             
-        exe_path = BASE_DIR / 'dist' / 'CardShark.exe'
-        return exe_path.exists()
+        # Verify no _internal directory was created
+        internal_dir = BASE_DIR / 'dist' / '_internal'
+        if internal_dir.exists():
+            log("Warning: _internal directory was created unexpectedly", "WARNING")
+            
+        log(f"Executable successfully created at {exe_path}")
+        return True
         
     except Exception as e:
         log(f"Failed to build executable: {str(e)}", "ERROR")
@@ -367,6 +432,18 @@ def validate_paths():
             raise FileNotFoundError(f"Required path not found: {name} at {path}")
     
     log("All required paths validated")
+
+def get_asset_path(relative_path):
+    if getattr(sys, 'frozen', False):
+        # Running in PyInstaller bundle
+        base_path = sys._MEIPASS
+    else:
+        # Running in normal Python environment
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+icon_path = get_asset_path("frontend/dist/cardshark.ico")
+placeholder_path = get_asset_path("frontend/dist/pngPlaceholder.png")
 
 def build():
     """Main build process"""

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 
-const ImagePreview = ({ imageUrl = '', placeholderUrl = '/src/assets/pngPlaceholder.png' }) => {
+const ImagePreview = ({ 
+    imageUrl = '', 
+    placeholderUrl = './pngPlaceholder.png'  // Relative to dist folder
+}) => {
   const [imageError, setImageError] = useState(false);
   const [currentImage, setCurrentImage] = useState(imageUrl || placeholderUrl);
 
