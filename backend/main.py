@@ -17,6 +17,8 @@ import re
 import traceback
 from fastapi.responses import FileResponse, JSONResponse # type: ignore
 from typing import Optional
+import webbrowser
+from threading import Timer
 
 # Local imports
 from backend.log_manager import LogManager  # Change to relative import
@@ -450,6 +452,16 @@ if __name__ == "__main__":
         # Serve everything at "/", including index.html automatically
         app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="static")
         logger.log_step(f"Mounted frontend files from {frontend_path}")
+        
+        # Add the browser opening functionality
+        def open_browser():
+            """Open browser to application URL"""
+            logger.log_step("Opening browser to application URL")
+            webbrowser.open('http://localhost:9696')
+        
+        # Schedule browser opening after a short delay
+        Timer(1.5, open_browser).start()
+        logger.log_step("Scheduled browser opening")
     else:
         logger.log_warning(f"Frontend static files not found at {frontend_path}")
         raise FileNotFoundError(f"Frontend directory not found: {frontend_path}")
