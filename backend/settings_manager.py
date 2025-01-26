@@ -26,7 +26,7 @@ class SettingsManager:
             "save_to_character_directory": False,  # Add new default setting
             "last_export_directory": "",
             "theme": "dark",
-            "version": "0.6"
+            "version": "0.7"
         }
         
         try:

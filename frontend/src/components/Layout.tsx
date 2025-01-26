@@ -13,6 +13,7 @@ import { AboutDialog } from './AboutDialog';
 import TokenCounter from './TokenCounter';
 import CharacterGallery from './CharacterGallery';
 import SettingsModal from './SettingsModal';
+import { LorePosition } from '../types/loreTypes';
 
 type View = 'gallery' | 'info' | 'lore' | 'json' | 'messages';
 
@@ -36,30 +37,46 @@ const Layout: React.FC = () => {
   setError
 } = useCharacter();
 
+
+  const normalizePosition = (pos: any): LorePosition => {
+    if (pos === 0 || pos === 1 || pos === 2 || pos === 3 || pos === 4 || pos === 5 || pos === 6) {
+      return pos;
+    }
+    return LorePosition.AfterCharacter; // Default to 1
+  };
+
   // Handle file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
+  
     try {
       setIsLoading(true);
       setError(null);
-
+  
       const formData = new FormData();
       formData.append('file', file);
-
+  
       const response = await fetch('/api/upload-png', {
         method: 'POST',
         body: formData,
       });
-
+  
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.statusText}`);
       }
-
+  
       const data = await response.json();
       
       if (data.success && data.metadata) {
+        // Normalize lore positions on character load
+        if (data.metadata.data?.character_book?.entries) {
+          data.metadata.data.character_book.entries = 
+            data.metadata.data.character_book.entries.map((entry: any) => ({
+              ...entry,
+              position: normalizePosition(entry.position)
+            }));
+        }
         setCharacterData(data.metadata);
         setImageUrl(URL.createObjectURL(file));
       } else {
