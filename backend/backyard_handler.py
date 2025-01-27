@@ -2,12 +2,12 @@ import re
 import json
 import requests # type: ignore
 from typing import Tuple, Dict, Optional
+from character_validator import CharacterValidator
 
 class BackyardHandler:
-    """Handles importing characters from Backyard.ai URLs."""
-    
     def __init__(self, logger):
         self.logger = logger
+        self.validator = CharacterValidator(logger)
 
     def import_character(self, url: str) -> Tuple[Dict, Optional[str]]:
         """Import character data from a Backyard.ai URL."""
@@ -42,6 +42,7 @@ class BackyardHandler:
 
                 # Convert to V2 format
                 v2_data = self._convert_to_v2(character)
+                validated_data = self.validator.normalize(v2_data)
 
                 # Get preview image URL
                 preview_url = None
@@ -54,7 +55,7 @@ class BackyardHandler:
                     if preview_url:
                         self.logger.log_step(f"Found preview image: {preview_url}")
 
-                return v2_data, preview_url
+                return validated_data, preview_url
 
             except json.JSONDecodeError as e:
                 self.logger.log_error(f"JSON parse error: {str(e)}")

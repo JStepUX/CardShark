@@ -61,7 +61,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
         <button
           type="submit"
           className="w-full flex items-center justify-center gap-2 px-4 py-2 
-                   bg-purple-800 text-white rounded-lg hover:bg-blue-700 
+                   bg-purple-800 text-white rounded-lg hover:bg-purple-700 
                    transition-colors"
         >
           <FolderOpen size={18} />

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ImagePlus, Link, Settings } from 'lucide-react';
+import { ImagePlus, Link, Settings, Save } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
 import ImagePreview from './ImagePreview';
 import { useCharacter } from '../contexts/CharacterContext';
@@ -288,6 +288,13 @@ const Layout: React.FC = () => {
                   { icon: Link, label: "Import by URL", onClick: handleUrlImport }
                 ]}
               />
+              <button
+                onClick={handleSave}
+                className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                title="Settings"
+              >
+                <Save size={20} />
+              </button>
             </div>
           </div>
 

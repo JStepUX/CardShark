@@ -27,6 +27,7 @@ from backend.errors import CardSharkError
 from backend.backyard_handler import BackyardHandler
 from backend.png_debug_handler import PngDebugHandler # type: ignore
 from backend.settings_manager import SettingsManager
+from character_validator import CharacterValidator
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -51,6 +52,7 @@ logger = LogManager()
 settings_manager = SettingsManager(logger)
 png_handler = PngMetadataHandler(logger)
 backyard_handler = BackyardHandler(logger)
+validator = CharacterValidator(logger)
 
 # API Endpoints
 

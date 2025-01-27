@@ -4,12 +4,14 @@ from io import BytesIO
 import base64
 import json
 import re
+from character_validator import CharacterValidator  # Add validator import
 
 class PngMetadataHandler:
     """Handles reading and writing character card metadata in PNG files."""
     
     def __init__(self, logger):
         self.logger = logger
+        self.validator = CharacterValidator(logger)  # Add validator
 
     def read_metadata(self, file_data: Union[bytes, BinaryIO]) -> Dict:
         """Read character metadata from a PNG file."""
@@ -41,7 +43,8 @@ class PngMetadataHandler:
             if chara_key:
                 self.logger.log_step(f"Found {chara_key} field")
                 try:
-                    metadata = self._decode_metadata(image.info[chara_key])
+                    raw_metadata = self._decode_metadata(image.info[chara_key])
+                    metadata = self.validator.normalize(raw_metadata)
                 except Exception as e:
                     self.logger.log_error(f"Failed to decode {chara_key}: {str(e)}")
                     
@@ -290,7 +293,7 @@ class PngMetadataHandler:
 
     def _create_empty_card(self) -> Dict:
         """Create an empty V2 character card structure."""
-        return {
+        empty = {
             "spec": "chara_card_v2",
             "spec_version": "2.0",
             "data": {
@@ -318,12 +321,14 @@ class PngMetadataHandler:
                 }
             }
         }
+        return self.validator.normalize(empty)
 
     def write_metadata(self, image_data: bytes, metadata: Dict) -> bytes:
         """Write character metadata to a PNG file."""
         try:
+            validated_metadata = self.validator.normalize(metadata)
             # Encode metadata to base64
-            json_str = json.dumps(metadata)
+            json_str = json.dumps(validated_metadata)
             base64_str = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
 
             # Set up PNG info
