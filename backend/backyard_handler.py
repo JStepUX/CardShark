@@ -2,7 +2,7 @@ import re
 import json
 import requests # type: ignore
 from typing import Tuple, Dict, Optional
-from character_validator import CharacterValidator
+from backend.character_validator import CharacterValidator
 
 class BackyardHandler:
     def __init__(self, logger):

@@ -4,7 +4,7 @@ from io import BytesIO
 import base64
 import json
 import re
-from character_validator import CharacterValidator  # Add validator import
+from backend.character_validator import CharacterValidator
 
 class PngMetadataHandler:
     """Handles reading and writing character card metadata in PNG files."""
