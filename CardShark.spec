@@ -42,6 +42,7 @@ hidden_imports = [
     'backend.png_debug_handler',
     'backend.backyard_handler',
     'backend.settings_manager',
+    'backend.character_validator',
     
     # Important dependencies
     'email_validator',

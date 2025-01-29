@@ -14,16 +14,14 @@ enum SelectiveLogic {
 interface LogicOption {
   label: string;
   value: SelectiveLogic;
-  requiresSecondary: boolean;
 }
 
-// Available logic options in desired order
+// Available logic options
 const logicOptions: LogicOption[] = [
-  { label: 'Only', value: SelectiveLogic.AND_ANY, requiresSecondary: false },
-  { label: 'And Any', value: SelectiveLogic.AND_ANY, requiresSecondary: true },
-  { label: 'And All', value: SelectiveLogic.AND_ALL, requiresSecondary: true },
-  { label: 'Not Any', value: SelectiveLogic.NOT_ANY, requiresSecondary: true },
-  { label: 'Not All', value: SelectiveLogic.NOT_ALL, requiresSecondary: true },
+  { label: 'And Any', value: SelectiveLogic.AND_ANY },
+  { label: 'And All', value: SelectiveLogic.AND_ALL },
+  { label: 'Not Any', value: SelectiveLogic.NOT_ANY },
+  { label: 'Not All', value: SelectiveLogic.NOT_ALL },
 ];
 
 interface LoreCardProps {
@@ -49,11 +47,6 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   const [secondaryKeys, setSecondaryKeys] = useState(item.keysecondary?.join(', ') || '');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Simplified currentLogic determination
-  const currentLogic = logicOptions.find(
-    option => option.value === item.selectiveLogic
-  ) || logicOptions[0];
-
   const handlePrimaryKeysBlur = () => {
     const keys = primaryKeys
       .split(',')
@@ -70,16 +63,28 @@ export const LoreCard: React.FC<LoreCardProps> = ({
     onUpdate(item.uid, { keysecondary: keys });
   };
 
+  const handleSelectiveChange = (checked: boolean) => {
+    // If turning off selective, reset both backend and local state
+    if (!checked) {
+      setSecondaryKeys(''); // Reset local state
+      onUpdate(item.uid, { 
+        selective: false,
+        keysecondary: [], // Clear backend data
+        selectiveLogic: SelectiveLogic.AND_ANY // Reset logic to default
+      });
+    } else {
+      // If turning on selective, just enable it with defaults
+      onUpdate(item.uid, { 
+        selective: true,
+        keysecondary: [], // Start fresh
+        selectiveLogic: SelectiveLogic.AND_ANY
+      });
+    }
+  };
+
   const handleLogicChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedOption = logicOptions[Number(e.target.value)];
-    console.log('Logic changed:', {
-        before: currentLogic,
-        selected: selectedOption,
-        requiresSecondary: selectedOption.requiresSecondary
-    });
     onUpdate(item.uid, { 
-        selectiveLogic: selectedOption.value,
-        keysecondary: selectedOption.requiresSecondary ? item.keysecondary || [] : []
+      selectiveLogic: Number(e.target.value)
     });
   };
 
@@ -87,7 +92,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
     <div className={`bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg 
       ${item.disable ? 'opacity-60' : ''}`}>
       
-      {/* Top Controls Row */}
+      {/* Top controls row */}
       <div className="flex items-center justify-between gap-4 mb-4">
         {/* Left side controls */}
         <div className="flex items-center gap-2">
@@ -99,6 +104,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             {item.disable ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}
           </button>
           
+          {/* Position selector - unchanged */}
           <select
             value={`${item.position}${item.position === LorePosition.AtDepth ? '-' + (item.role ?? 0) : ''}`}
             onChange={(e) => {
@@ -129,6 +135,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             <option value={LorePosition.AfterExampleMsgs}>After Example Messages</option>
           </select>
 
+          {/* Depth input - unchanged */}
           {item.position === LorePosition.AtDepth && (
             <input
               type="number"
@@ -141,7 +148,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           )}
         </div>
 
-        {/* Right side controls */}
+        {/* Right side controls - unchanged */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => onMoveUp(item.uid)}
@@ -189,11 +196,10 @@ export const LoreCard: React.FC<LoreCardProps> = ({
 
       {/* Main Content Area */}
       <div className="space-y-4">
-        {/* Primary Keys and Logic Row */}
-        <div className="flex gap-4">
-          {/* Primary Keys Input - 80% width */}
+        {/* Primary Keys Row */}
+        <div className="flex items-center gap-4">
           <div className="flex-1">
-            <label className="block text-sm text-gray-400 mb-1">Trigger Key(s)</label>
+            <label className="block text-sm text-gray-400 mb-1">Primary Trigger Key(s)</label>
             <input
               type="text"
               value={primaryKeys}
@@ -203,44 +209,51 @@ export const LoreCard: React.FC<LoreCardProps> = ({
               placeholder="Enter comma-separated keywords"
             />
           </div>
-
-          {/* Logic Selection - 20% width */}
-          <div className="w-1/5">
-            <label className="block text-sm text-gray-400 mb-1">Logic</label>
-            <select
-              value={logicOptions.findIndex(opt => 
-                opt.value === item.selectiveLogic
-              )}
-              onChange={handleLogicChange}
-              className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
-            >
-              {logicOptions.map((option, index) => (
-                <option key={index} value={index}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+          
+          <div className="flex items-center h-[80px] ml-6">
+            <label className="flex items-center gap-2 pt-5">
+              <input
+                type="checkbox"
+                checked={item.selective}
+                onChange={(e) => handleSelectiveChange(e.target.checked)}
+                className="form-checkbox"
+              />
+              <span className="text-sm text-gray-400">Selective</span>
+            </label>
           </div>
         </div>
 
-        {/* Secondary Keys Input - Animated */}
-        <div
-          className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            currentLogic.requiresSecondary 
-              ? 'max-h-24 opacity-100' 
-              : 'max-h-0 opacity-0'
-          }`}
-        >
-          <label className="block text-sm text-gray-400 mb-1">Secondary Key(s)</label>
-          <input
-            type="text"
-            value={secondaryKeys}
-            onChange={(e) => setSecondaryKeys(e.target.value)}
-            onBlur={handleSecondaryKeysBlur}
-            className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
-            placeholder="Enter comma-separated secondary keywords"
-          />
-        </div>
+        {/* Secondary Keys Row */}
+        {item.selective && (
+          <div className="flex items-center">
+            <div className="w-48 ml-4">
+              <label className="block text-sm text-gray-400 mb-1">Logic</label>
+              <select
+                value={item.selectiveLogic}
+                onChange={handleLogicChange}
+                className="bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+              >
+                {logicOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex-1">
+              <label className="block text-sm text-gray-400 mb-1">Secondary Key(s)</label>
+              <input
+                type="text"
+                value={secondaryKeys}
+                onChange={(e) => setSecondaryKeys(e.target.value)}
+                onBlur={handleSecondaryKeysBlur}
+                className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                placeholder="Enter comma-separated secondary keywords"
+              />
+            </div>          
+          </div>
+        )}
 
         {/* Content Input */}
         <div>
@@ -274,21 +287,13 @@ export const LoreCard: React.FC<LoreCardProps> = ({
               <label className="flex items-center gap-2 mb-2">
                 <input
                   type="checkbox"
-                  checked={item.selective}
-                  onChange={(e) => onUpdate(item.uid, { selective: e.target.checked })}
-                  className="form-checkbox"
-                />
-                <span className="text-sm text-gray-400">Selective</span>
-              </label>
-              <label className="flex items-center gap-2 mb-2">
-                <input
-                  type="checkbox"
                   checked={item.useProbability}
                   onChange={(e) => onUpdate(item.uid, { useProbability: e.target.checked })}
                   className="form-checkbox"
                 />
                 <span className="text-sm text-gray-400">Use Probability</span>
               </label>
+
               {item.useProbability && (
                 <div className="flex items-center gap-2 mb-2">
                   <input
@@ -303,7 +308,11 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                 </div>
               )}
             </div>
-            <div>
+
+            {/* Numeric fields row */}
+            <div className="grid grid-cols-5 gap-4">
+              {/* Order */}
+              <div>
                 <label className="block text-sm text-gray-400 mb-1">Order</label>
                 <input
                   type="number"
@@ -311,66 +320,59 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                   onChange={(e) => onUpdate(item.uid, { order: Number(e.target.value) })}
                   className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
                 />
+              </div>
+
+              {/* Scan Depth */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Scan Depth</label>
+                <input
+                  type="number"
+                  value={item.scanDepth ?? ''}
+                  onChange={(e) => onUpdate(item.uid, { scanDepth: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                  placeholder="Default"
+                />
+              </div>
+
+              {/* Sticky */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Sticky</label>
+                <input
+                  type="number"
+                  value={item.sticky ?? ''}
+                  onChange={(e) => onUpdate(item.uid, { sticky: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                  placeholder="Not sticky"
+                />
+              </div>
+
+              {/* Cooldown */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Cooldown</label>
+                <input
+                  type="number"
+                  value={item.cooldown ?? ''}
+                  onChange={(e) => onUpdate(item.uid, { cooldown: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                  placeholder="No cooldown"
+                />
+              </div>
+
+              {/* Delay */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Delay</label>
+                <input
+                  type="number"
+                  value={item.delay ?? ''}
+                  onChange={(e) => onUpdate(item.uid, { delay: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                  placeholder="No delay"
+                />
+              </div>
             </div>
           </div>
         )}
       </div>
-    </div>
-  );
-};
-
-
-// SearchBar component unchanged
-interface SearchBarProps {
-  value: string;
-  onChange: (value: string) => void;
-  onSelectAll: () => void;
-  allSelected: boolean;
-}
-
-export const SearchBar: React.FC<SearchBarProps> = ({ 
-  value, 
-  onChange, 
-  onSelectAll, 
-  allSelected 
-}) => {
-  return (
-    <div className="flex items-center gap-4 mb-6">
-      <div className="relative flex-1">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Search keys and content"
-          className="w-full bg-gray-950 text-white rounded-lg pl-10 pr-4 py-2"
-        />
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg 
-            className="w-5 h-5 text-gray-400" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2} 
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
-            />
-          </svg>
-        </div>
-      </div>
-      
-      <button
-        onClick={onSelectAll}
-        className={`px-4 py-2 rounded-lg transition-colors ${
-          allSelected 
-            ? 'bg-blue-600 text-white' 
-            : 'bg-slate-700 text-gray-300 hover:text-white'
-        }`}
-      >
-        Select All
-      </button>
     </div>
   );
 };
