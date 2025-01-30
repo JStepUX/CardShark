@@ -10,3 +10,6 @@ Import lore/worldbooks from PNG, JSON, and TSV
 
 TSV Example (just 2 columns, 1 for key and one for content at this point):
 ![exampleTSV](https://github.com/user-attachments/assets/a6e4fe3e-e4c1-4644-8240-3cdea105cac4)
+
+Import from Backyard.AI
+![byImport](https://github.com/user-attachments/assets/5c64a1cc-ee6d-4dff-9a7b-1b5c1296a468)
