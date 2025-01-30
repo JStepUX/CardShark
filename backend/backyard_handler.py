@@ -77,7 +77,8 @@ class BackyardHandler:
             ("{Character}", "{{char}}"),
             ("{user}", "{{user}}"),
             ("{USER}", "{{user}}"),
-            ("{User}", "{{user}}")
+            ("{User}", "{{user}}"),
+            ("User", "{{user}}"),
         ]
         
         result = text

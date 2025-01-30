@@ -290,8 +290,8 @@ const Layout: React.FC = () => {
               />
               <button
                 onClick={handleSave}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                title="Settings"
+                className="w-10 h-10 bg-purple-700 rounded-full flex items-center justify-center hover:bg-purple-500 transition-colors"
+                title="Save PNG"
               >
                 <Save size={20} />
               </button>
@@ -353,13 +353,7 @@ const Layout: React.FC = () => {
               <ImagePreview imageUrl={imageUrl} />
             </div>
             <TokenCounter characterData={characterData} />
-            <button
-              onClick={handleSave}
-              className="w-full mt-4 py-2 px-4 bg-orange-700 hover:bg-orange-500 text-white rounded-lg transition-colors"
-              disabled={!imageUrl}
-            >
-              Save PNG
-            </button>
+
           </div>
         </div>
         {/* Add status indicator at bottom */}

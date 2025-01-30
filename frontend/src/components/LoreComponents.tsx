@@ -210,7 +210,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             />
           </div>
           
-          <div className="flex items-center h-[80px] ml-6">
+          <div className="flex items-center h-[80px] ml-[-6]">
             <label className="flex items-center gap-2 pt-5">
               <input
                 type="checkbox"
