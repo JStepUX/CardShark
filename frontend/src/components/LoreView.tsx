@@ -5,27 +5,138 @@ import { Plus, BookOpen, ImagePlus, Table2, FileJson } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
 import { LoreItem, LorePosition } from '../types/loreTypes';
 
+interface ExportData {
+  entries: Record<number, {
+    key: string[];
+    keysecondary: string[];
+    // ...other fields
+  }>;
+  originalData: {
+    entries: Array<{
+      keys: string[];
+      content: string;
+      // ...other fields
+    }>;
+    name: string;
+    description: string;
+    scan_depth: number;
+    token_budget: number;
+    recursive_scanning: boolean;
+    extensions: Record<string, unknown>;
+  };
+}
+
 const LoreView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
   const [searchTerm, setSearchTerm] = useState('');
 
+  const createExportData = (items: LoreItem[]): ExportData => ({
+    entries: items.reduce((acc, item, index) => {
+      acc[item.uid] = {
+        key: item.keys,
+        keysecondary: item.keysecondary || [],
+        comment: item.comment || "",
+        content: item.content || "",
+        constant: item.constant || false,
+        vectorized: item.vectorized || false,
+        selective: item.selective || false,
+        selectiveLogic: item.selectiveLogic || 0,
+        addMemo: true,
+        order: item.order || index,
+        position: item.position || 1,
+        disable: item.disable || false,
+        excludeRecursion: item.excludeRecursion || false,
+        preventRecursion: item.preventRecursion || false,
+        delayUntilRecursion: item.delayUntilRecursion || false,
+        probability: item.probability || 100,
+        useProbability: item.useProbability ?? true,
+        depth: item.depth || 4,
+        group: item.group || "",
+        groupOverride: item.groupOverride || false,
+        groupWeight: item.groupWeight || 100,
+        scanDepth: item.scanDepth || null,
+        caseSensitive: item.caseSensitive || null,
+        matchWholeWords: item.matchWholeWords || null,
+        useGroupScoring: item.useGroupScoring || null,
+        automationId: item.automationId || "",
+        role: item.role || null,
+        sticky: item.sticky || 0,
+        cooldown: item.cooldown || 0,
+        delay: item.delay || 0,
+        uid: item.uid,
+        displayIndex: item.displayIndex || index,
+        extensions: {}
+      };
+      return acc;
+    }, {} as Record<number, any>),
+    originalData: {
+      entries: items.map((item, index) => ({
+        keys: item.keys,
+        content: item.content || "",
+        enabled: !item.disable,
+        insertion_order: index,
+        case_sensitive: item.caseSensitive || false,
+        priority: 10,
+        id: item.uid,
+        comment: item.comment || "",
+        selective: item.selective || false,
+        constant: item.constant || false,
+        position: "after_char"
+      })),
+      name: "",
+      description: "",
+      scan_depth: 100,
+      token_budget: 2048,
+      recursive_scanning: false,
+      extensions: {}
+    }
+  });
+
+  const handleExportJson = () => {
+    try {
+      if (!characterData || !loreItems.length) {
+        console.warn('No data to export');
+        return;
+      }
+
+      const exportData = createExportData(loreItems);
+      const safeName = characterData?.data?.name?.replace(/[^a-z0-9]/gi, '_').trim();
+      const filename = safeName ? `${safeName}-lorebook.json` : 'cardshark-lorebook.json';
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      try {
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+      } finally {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  };
+
+  // Normalize position helper
   const normalizePosition = (pos: any): LorePosition => {
     if (pos === 0 || pos === 1 || pos === 2 || pos === 3 || pos === 4 || pos === 5 || pos === 6) {
       return pos;
     }
-    return LorePosition.AfterCharacter; // Default to 1
+    return LorePosition.AfterCharacter;
   };
 
-  // Get lore items with proper type checking
+  // Get and normalize lore items
   const loreItems: LoreItem[] = useMemo(() => {
     if (!characterData) return [];
 
-    // For V2 format
     const entries = characterData.data?.character_book?.entries || 
                    characterData.character_book?.entries || 
                    [];
 
-    // Map to ensure all entries have correct types
     return entries.map((entry: any): LoreItem => ({
       uid: entry.uid ?? entry.id ?? Date.now(),
       keys: entry.keys ?? [],
@@ -306,7 +417,6 @@ const handleImportPng = async () => {
   input.click();
 };
 
-
   // Add new lore item
   const handleAddItem = () => {
     if (!characterData) return;
@@ -435,6 +545,14 @@ const handleImportPng = async () => {
               ]}
               buttonClassName="p-2 hover:bg-gray-700 rounded-lg transition-colors"
             />
+            <button
+              onClick={handleExportJson}
+              className="flex items-center gap-2 px-4 py-2  
+                       text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              <FileJson size={18} />
+              Export Lore
+            </button>
             <button
               onClick={handleAddItem}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 

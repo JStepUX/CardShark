@@ -28,7 +28,19 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    emptyOutDir: true,  // Clean dist directory on build
-    sourcemap: false    // Disable sourcemaps for production
+    emptyOutDir: true,
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        assetFileNames: (assetInfo) => {
+          // Put images in assets folder
+          if (assetInfo.name && /\.(png|jpe?g|svg|gif|ico)$/.test(assetInfo.name)) {
+            return 'assets/[name][extname]';
+          }
+          // Default handling for other assets
+          return '[name][extname]';
+        }
+      }
+    }
   }
 });

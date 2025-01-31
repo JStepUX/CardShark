@@ -13,25 +13,20 @@ class LorePosition(IntEnum):
     AFTER_EXAMPLE = 6
 
 class CharacterValidator:
-    """Validates and normalizes character card data structure."""
-    
     def __init__(self, logger):
         self.logger = logger
 
     def normalize(self, data: Dict) -> Dict:
         """Main entry point - normalizes character data to V2 spec."""
         try:
-            # Ensure we have a valid dictionary
             if not isinstance(data, dict):
                 self.logger.log_error("Invalid data format")
                 return self._create_empty_character()
 
-            # Normalize to V2 structure
             character = {
                 'spec': 'chara_card_v2',
                 'spec_version': '2.0',
                 'data': {
-                    # Get core fields with defaults
                     'name': str(data.get('data', {}).get('name', '')),
                     'description': str(data.get('data', {}).get('description', '')),
                     'personality': str(data.get('data', {}).get('personality', '')),
@@ -45,8 +40,6 @@ class CharacterValidator:
                     'tags': data.get('data', {}).get('tags', []),
                     'creator': str(data.get('data', {}).get('creator', '')),
                     'character_version': str(data.get('data', {}).get('character_version', '1.0')),
-                    
-                    # Handle character book
                     'character_book': {
                         'entries': self._normalize_entries(
                             data.get('data', {}).get('character_book', {}).get('entries', [])
@@ -69,38 +62,84 @@ class CharacterValidator:
             return self._create_empty_character()
 
     def _normalize_entries(self, entries: List[Dict]) -> List[Dict]:
-        """Normalize lore entries."""
+        """Normalize lore entries with proper field preservation."""
         if not isinstance(entries, list):
             return []
             
         normalized = []
         for entry in entries:
             if isinstance(entry, dict):
-                normalized.append({
-                    'keys': self._ensure_list(entry.get('keys', entry.get('key', []))),
-                    'content': str(entry.get('content', '')),
-                    'enabled': not bool(entry.get('disable', False)),
-                    'insertion_order': int(entry.get('order', 0)),
-                    'case_sensitive': bool(entry.get('case_sensitive', False)),
-                    'priority': int(entry.get('priority', 0)),
-                    'id': int(entry.get('id', entry.get('uid', time.time() * 1000))),
-                    'comment': str(entry.get('comment', '')),
-                    'selective': bool(entry.get('selective', False)),
-                    'constant': bool(entry.get('constant', False)),
-                    'position': self._normalize_position(entry.get('position', 1))
-                })
+                try:
+                    # Preserve position and normalize it
+                    position = entry.get('position')
+                    if isinstance(position, (int, str)):
+                        try:
+                            position = int(position)
+                            if position not in range(7):  # Valid positions are 0-6
+                                position = 1  # Default to AFTER_CHAR
+                        except (ValueError, TypeError):
+                            position = 1
+                    else:
+                        position = 1
+
+                    # Preserve depth and cooldown with proper type handling
+                    depth = entry.get('depth')
+                    if depth is not None:
+                        try:
+                            depth = int(depth)
+                        except (ValueError, TypeError):
+                            depth = None
+
+                    cooldown = entry.get('cooldown')
+                    if cooldown is not None:
+                        try:
+                            cooldown = int(cooldown)
+                        except (ValueError, TypeError):
+                            cooldown = None
+
+                    normalized_entry = {
+                        'keys': self._ensure_list(entry.get('keys', entry.get('key', []))),
+                        'content': str(entry.get('content', '')),
+                        'enabled': not bool(entry.get('disable', False)),
+                        'insertion_order': int(entry.get('order', 0)),
+                        'case_sensitive': bool(entry.get('case_sensitive', False)),
+                        'priority': int(entry.get('priority', 0)),
+                        'id': int(entry.get('id', entry.get('uid', 0))),
+                        'comment': str(entry.get('comment', '')),
+                        'selective': bool(entry.get('selective', False)),
+                        'constant': bool(entry.get('constant', False)),
+                        'position': position,
+                        'depth': depth,
+                        'cooldown': cooldown,
+                        'role': entry.get('role'),  # Preserve role as-is
+                        'keysecondary': self._ensure_list(entry.get('keysecondary', [])),
+                        'useProbability': bool(entry.get('useProbability', True)),
+                        'probability': int(entry.get('probability', 100)),
+                        'displayIndex': int(entry.get('displayIndex', 0)),
+                        'excludeRecursion': bool(entry.get('excludeRecursion', False)),
+                        'preventRecursion': bool(entry.get('preventRecursion', False)),
+                        'delayUntilRecursion': entry.get('delayUntilRecursion', False),
+                        'group': str(entry.get('group', '')),
+                        'groupOverride': bool(entry.get('groupOverride', False)),
+                        'groupWeight': int(entry.get('groupWeight', 100)),
+                        'scanDepth': entry.get('scanDepth'),
+                        'matchWholeWords': entry.get('matchWholeWords'),
+                        'useGroupScoring': entry.get('useGroupScoring'),
+                        'automationId': str(entry.get('automationId', '')),
+                        'sticky': entry.get('sticky'),
+                        'delay': entry.get('delay')
+                    }
+                    
+                    # Log the normalization for debugging
+                    self.logger.log_step(f"Normalized entry - Position: {position}, Depth: {depth}, Cooldown: {cooldown}")
+                    
+                    normalized.append(normalized_entry)
+                    
+                except Exception as e:
+                    self.logger.log_error(f"Error normalizing entry: {str(e)}")
+                    continue
                 
         return normalized
-
-    def _normalize_position(self, position: Any) -> int:
-        """Normalize position to valid integer (0-6) or default to 1."""
-        try:
-            pos_int = int(position)
-            if 0 <= pos_int <= 6:
-                return pos_int
-        except (ValueError, TypeError):
-            pass
-        return 1  # Default to AFTER_CHAR for any invalid value
 
     def _ensure_list(self, value: Any) -> List[str]:
         """Convert any value to list of strings."""
