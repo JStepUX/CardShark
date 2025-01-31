@@ -1,530 +1,133 @@
+// src/components/LoreView.tsx
 import React, { useState, useMemo } from 'react';
+import { Plus, BookOpen, ImagePlus, Table2, FileJson } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { LoreCard } from './LoreComponents';
-import { Plus, BookOpen, ImagePlus, Table2, FileJson } from 'lucide-react';
 import DropdownMenu from './DropDownMenu';
-import { LoreItem, LorePosition } from '../types/loreTypes';
-
-interface ExportData {
-  entries: Record<number, {
-    key: string[];
-    keysecondary: string[];
-    // ...other fields
-  }>;
-  originalData: {
-    entries: Array<{
-      keys: string[];
-      content: string;
-      // ...other fields
-    }>;
-    name: string;
-    description: string;
-    scan_depth: number;
-    token_budget: number;
-    recursive_scanning: boolean;
-    extensions: Record<string, unknown>;
-  };
-}
+import { LoreItem } from '../types/loreTypes';
+import { importPng, importTsv, importJson } from '../handlers/importHandlers';
+import { createLoreExport } from '../handlers/exportHandlers';
+import { 
+  createLoreItem, 
+  updateLoreItem, 
+  deleteLoreItem, 
+  moveLoreItem,
+  filterLoreItems,
+  updateCharacterBookEntries 
+} from '../handlers/loreHandlers';
 
 const LoreView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
   const [searchTerm, setSearchTerm] = useState('');
 
-  const createExportData = (items: LoreItem[]): ExportData => ({
-    entries: items.reduce((acc, item, index) => {
-      acc[item.uid] = {
-        key: item.keys,
-        keysecondary: item.keysecondary || [],
-        comment: item.comment || "",
-        content: item.content || "",
-        constant: item.constant || false,
-        vectorized: item.vectorized || false,
-        selective: item.selective || false,
-        selectiveLogic: item.selectiveLogic || 0,
-        addMemo: true,
-        order: item.order || index,
-        position: item.position || 1,
-        disable: item.disable || false,
-        excludeRecursion: item.excludeRecursion || false,
-        preventRecursion: item.preventRecursion || false,
-        delayUntilRecursion: item.delayUntilRecursion || false,
-        probability: item.probability || 100,
-        useProbability: item.useProbability ?? true,
-        depth: item.depth || 4,
-        group: item.group || "",
-        groupOverride: item.groupOverride || false,
-        groupWeight: item.groupWeight || 100,
-        scanDepth: item.scanDepth || null,
-        caseSensitive: item.caseSensitive || null,
-        matchWholeWords: item.matchWholeWords || null,
-        useGroupScoring: item.useGroupScoring || null,
-        automationId: item.automationId || "",
-        role: item.role || null,
-        sticky: item.sticky || 0,
-        cooldown: item.cooldown || 0,
-        delay: item.delay || 0,
-        uid: item.uid,
-        displayIndex: item.displayIndex || index,
-        extensions: {}
-      };
-      return acc;
-    }, {} as Record<number, any>),
-    originalData: {
-      entries: items.map((item, index) => ({
-        keys: item.keys,
-        content: item.content || "",
-        enabled: !item.disable,
-        insertion_order: index,
-        case_sensitive: item.caseSensitive || false,
-        priority: 10,
-        id: item.uid,
-        comment: item.comment || "",
-        selective: item.selective || false,
-        constant: item.constant || false,
-        position: "after_char"
-      })),
-      name: "",
-      description: "",
-      scan_depth: 100,
-      token_budget: 2048,
-      recursive_scanning: false,
-      extensions: {}
-    }
-  });
-
-  const handleExportJson = () => {
-    try {
-      if (!characterData || !loreItems.length) {
-        console.warn('No data to export');
-        return;
-      }
-
-      const exportData = createExportData(loreItems);
-      const safeName = characterData?.data?.name?.replace(/[^a-z0-9]/gi, '_').trim();
-      const filename = safeName ? `${safeName}-lorebook.json` : 'cardshark-lorebook.json';
-
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      
-      try {
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-      } finally {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
-    }
-  };
-
-  // Normalize position helper
-  const normalizePosition = (pos: any): LorePosition => {
-    if (pos === 0 || pos === 1 || pos === 2 || pos === 3 || pos === 4 || pos === 5 || pos === 6) {
-      return pos;
-    }
-    return LorePosition.AfterCharacter;
-  };
-
-  // Get and normalize lore items
-  const loreItems: LoreItem[] = useMemo(() => {
+  // Get lore items from character data
+  const loreItems = useMemo(() => {
     if (!characterData) return [];
-
-    const entries = characterData.data?.character_book?.entries || 
-                   characterData.character_book?.entries || 
-                   [];
-
-    return entries.map((entry: any): LoreItem => ({
-      uid: entry.uid ?? entry.id ?? Date.now(),
-      keys: entry.keys ?? [],
-      keysecondary: entry.keysecondary ?? [],
-      comment: entry.comment ?? '',
-      content: entry.content ?? '',
-      constant: entry.constant ?? false,
-      vectorized: entry.vectorized ?? false,
-      selective: entry.selective ?? false,
-      selectiveLogic: entry.selectiveLogic ?? 0,
-      order: entry.order ?? 100,
-      position: normalizePosition(entry.position),
-      disable: entry.disable ?? !entry.enabled ?? false,
-      excludeRecursion: entry.excludeRecursion ?? false,
-      preventRecursion: entry.preventRecursion ?? false,
-      delayUntilRecursion: entry.delayUntilRecursion ?? false,
-      displayIndex: entry.displayIndex ?? entry.uid,
-      probability: entry.probability ?? 100,
-      useProbability: entry.useProbability ?? true,
-      depth: entry.depth ?? 4,
-      group: entry.group ?? '',
-      groupOverride: entry.groupOverride ?? false,
-      groupWeight: entry.groupWeight ?? 100,
-      scanDepth: entry.scanDepth ?? null,
-      caseSensitive: entry.caseSensitive ?? null,
-      matchWholeWords: entry.matchWholeWords ?? null,
-      useGroupScoring: entry.useGroupScoring ?? null,
-      automationId: entry.automationId ?? '',
-      role: entry.role ?? null,
-      sticky: entry.sticky ?? null,
-      cooldown: entry.cooldown ?? null,
-      delay: entry.delay ?? null
-    }));
+    return characterData.data?.character_book?.entries || [];
   }, [characterData]);
 
   // Filter items based on search
   const filteredItems = useMemo(() => {
-    if (!searchTerm) return loreItems;
-
-    const searchWords = searchTerm.toLowerCase().trim().split(/\s+/);
-    
-    return loreItems.filter((item: LoreItem) => {
-      const keyTerms = item.keys
-        .join(',')
-        .toLowerCase()
-        .split(',')
-        .map(k => k.trim())
-        .filter(k => k.length > 0);
-        
-      return searchWords.some(word => 
-        keyTerms.some(term => term.includes(word)) ||
-        item.content.toLowerCase().includes(word)
-      );
-    });
+    return filterLoreItems(loreItems, searchTerm);
   }, [loreItems, searchTerm]);
 
-  // Helper to update character data with new entries
-  const updateCharacterBookEntries = (newEntries: LoreItem[]) => {
+  // Handlers for item operations
+  const handleAddItem = () => {
     if (!characterData) return;
-
-    const updatedData = {
-      ...characterData,
-      data: {
-        ...characterData.data,
-        character_book: {
-          ...(characterData.data?.character_book || {}),
-          entries: newEntries
-        }
-      }
-    };
-
+    const newItem = createLoreItem(loreItems.length);
+    const updatedEntries = [...loreItems, newItem];
+    const updatedData = updateCharacterBookEntries(characterData, updatedEntries);
     setCharacterData(updatedData);
   };
 
-  // Helper function to convert legacy character format
-const convertTextFields = (text: string): string => {
-  if (!text) return text;
-  return text.replace(/{character}/g, "{{char}}");
-};
-
-// Handler functions
-const handleImportJson = async () => {
-  if (!characterData) return;
-
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
-  
-  input.onchange = async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      
-      // Use originalData.entries if available, otherwise try entries directly
-      const entries = data.originalData?.entries || data.entries;
-      
-      if (!entries) {
-        throw new Error('No valid entries found in JSON file');
-      }
-
-      const currentMaxOrder = Math.max(-1, ...loreItems.map(item => item.order));
-      
-      const newItems = entries.map((item: any, index: number): LoreItem => ({
-        uid: Date.now() + index,
-        keys: Array.isArray(item.keys) ? item.keys : item.key || [],
-        keysecondary: item.keysecondary || [],
-        comment: item.comment || '',
-        content: convertTextFields(item.content || ''),
-        constant: item.constant || false,
-        vectorized: item.vectorized || false,
-        selective: item.selective ?? true,
-        selectiveLogic: item.selectiveLogic || 0,
-        order: currentMaxOrder + index + 1,
-        position: item.position || LorePosition.AfterCharacter,
-        disable: !item.enabled,
-        excludeRecursion: item.excludeRecursion || false,
-        preventRecursion: item.preventRecursion || false,
-        delayUntilRecursion: item.delayUntilRecursion || false,
-        displayIndex: currentMaxOrder + index + 1,
-        probability: item.probability || 100,
-        useProbability: item.useProbability ?? true,
-        depth: item.depth || 4,
-        group: item.group || '',
-        groupOverride: item.groupOverride || false,
-        groupWeight: item.groupWeight || 100,
-        scanDepth: item.scanDepth || null,
-        caseSensitive: item.caseSensitive || null,
-        matchWholeWords: item.matchWholeWords || null,
-        useGroupScoring: item.useGroupScoring || null,
-        automationId: item.automationId || '',
-        role: item.role || null,
-        sticky: item.sticky || null,
-        cooldown: item.cooldown || null,
-        delay: item.delay || null
-      }));
-
-      const updatedEntries = [...loreItems, ...newItems];
-      updateCharacterBookEntries(updatedEntries);
-    } catch (error) {
-      console.error('Error importing JSON:', error);
-    }
-  };
-  input.click();
-};
-
-const handleImportTsv = () => {
-  if (!characterData) return;
-
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.tsv';
-  input.onchange = async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) {
-      const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim());
-
-      const currentMaxOrder = Math.max(-1, ...loreItems.map(item => item.order));
-
-      const newItems = lines
-        .map((line, index) => {
-          const [key, value] = line.split('\t');
-          if (!key?.trim() || !value?.trim()) return null;
-
-          return {
-            uid: Date.now() + index,
-            keys: [key.trim()],
-            keysecondary: [],
-            comment: '',
-            content: convertTextFields(value.trim()),
-            constant: false,
-            vectorized: false,
-            selective: true,
-            selectiveLogic: 0,
-            order: currentMaxOrder + index + 1,
-            position: LorePosition.AfterCharacter,
-            disable: false,
-            excludeRecursion: false,
-            preventRecursion: false,
-            delayUntilRecursion: false,
-            displayIndex: currentMaxOrder + index + 1,
-            probability: 100,
-            useProbability: true,
-            depth: 4,
-            group: '',
-            groupOverride: false,
-            groupWeight: 100,
-            scanDepth: null,
-            caseSensitive: null,
-            matchWholeWords: null,
-            useGroupScoring: null,
-            automationId: '',
-            role: null,
-            sticky: null,
-            cooldown: null,
-            delay: null
-          } as LoreItem;
-        })
-        .filter((item): item is LoreItem => item !== null);
-
-      const updatedEntries = [...loreItems, ...newItems];
-      updateCharacterBookEntries(updatedEntries);
-    }
-  };
-  input.click();
-};
-
-const handleImportPng = async () => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.png';
-  input.onchange = async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file || !characterData) return;
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/extract-lore', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to extract lore');
-      }
-
-      const data = await response.json();
-      
-      if (data.success && data.loreItems) {
-        const currentMaxOrder = Math.max(-1, ...loreItems.map(item => item.order));
-        
-        const newItems = data.loreItems.map((item: any, index: number): LoreItem => ({
-          uid: Date.now() + index,
-          keys: Array.isArray(item.keys) ? item.keys : item.key || [],
-          keysecondary: item.keysecondary || [],
-          comment: item.comment || '',
-          content: convertTextFields(item.content || ''),
-          constant: item.constant || false,
-          vectorized: item.vectorized || false,
-          selective: item.selective ?? true,
-          selectiveLogic: item.selectiveLogic || 0,
-          order: currentMaxOrder + index + 1,
-          position: item.position || LorePosition.AfterCharacter,
-          disable: !item.enabled,
-          excludeRecursion: item.excludeRecursion || false,
-          preventRecursion: item.preventRecursion || false,
-          delayUntilRecursion: item.delayUntilRecursion || false,
-          displayIndex: currentMaxOrder + index + 1,
-          probability: item.probability || 100,
-          useProbability: item.useProbability ?? true,
-          depth: item.depth || 4,
-          group: item.group || '',
-          groupOverride: item.groupOverride || false,
-          groupWeight: item.groupWeight || 100,
-          scanDepth: item.scanDepth || null,
-          caseSensitive: item.caseSensitive || null,
-          matchWholeWords: item.matchWholeWords || null,
-          useGroupScoring: item.useGroupScoring || null,
-          automationId: item.automationId || '',
-          role: item.role || null,
-          sticky: item.sticky || null,
-          cooldown: item.cooldown || null,
-          delay: item.delay || null
-        }));
-
-        const updatedEntries = [...loreItems, ...newItems];
-        updateCharacterBookEntries(updatedEntries);
-      }
-    } catch (error) {
-      console.error('Error importing lore:', error);
-    }
-  };
-  input.click();
-};
-
-  // Add new lore item
-  const handleAddItem = () => {
-    if (!characterData) return;
-
-    const newItem: LoreItem = {
-      uid: Date.now(),
-      keys: [],
-      keysecondary: [],
-      comment: '',
-      content: '',
-      constant: false,
-      vectorized: false,
-      selective: true,
-      selectiveLogic: 0,
-      order: loreItems.length,
-      position: LorePosition.AfterCharacter,
-      disable: false,
-      excludeRecursion: false,
-      preventRecursion: false,
-      delayUntilRecursion: false,
-      displayIndex: loreItems.length,
-      probability: 100,
-      useProbability: true,
-      depth: 4,
-      group: '',
-      groupOverride: false,
-      groupWeight: 100,
-      scanDepth: null,
-      caseSensitive: null,
-      matchWholeWords: null,
-      useGroupScoring: null,
-      automationId: '',
-      role: null,
-      sticky: null,
-      cooldown: null,
-      delay: null
-    };
-
-    const updatedEntries = [...loreItems, newItem];
-    updateCharacterBookEntries(updatedEntries);
-  };
-
-  // Delete lore item
   const handleDeleteItem = (uid: number) => {
     if (!characterData) return;
-
-    const updatedEntries = loreItems
-      .filter(item => item.uid !== uid)
-      .map((item, index) => ({
-        ...item,
-        order: index,
-        displayIndex: index
-      }));
-
-    updateCharacterBookEntries(updatedEntries);
+    const updatedEntries = deleteLoreItem(loreItems, uid);
+    const updatedData = updateCharacterBookEntries(characterData, updatedEntries);
+    setCharacterData(updatedData);
   };
 
-  // Update lore item
   const handleUpdateItem = (uid: number, updates: Partial<LoreItem>) => {
     if (!characterData) return;
-
-    const updatedEntries = loreItems.map(item =>
-      item.uid === uid ? { ...item, ...updates } : item
-    );
-
-    updateCharacterBookEntries(updatedEntries);
+    const updatedEntries = updateLoreItem(loreItems, uid, updates);
+    const updatedData = updateCharacterBookEntries(characterData, updatedEntries);
+    setCharacterData(updatedData);
   };
 
-  // Move item up
-  const handleMoveUp = (uid: number) => {
+  const handleMoveItem = (uid: number, direction: 'up' | 'down') => {
     if (!characterData) return;
-
-    const index = loreItems.findIndex(item => item.uid === uid);
-    if (index <= 0) return;
-
-    const newEntries = [...loreItems];
-    const temp = newEntries[index];
-    newEntries[index] = newEntries[index - 1];
-    newEntries[index - 1] = temp;
-
-    // Update order and displayIndex
-    newEntries.forEach((item, idx) => {
-      item.order = idx;
-      item.displayIndex = idx;
-    });
-
-    updateCharacterBookEntries(newEntries);
+    const updatedEntries = moveLoreItem(loreItems, uid, direction);
+    const updatedData = updateCharacterBookEntries(characterData, updatedEntries);
+    setCharacterData(updatedData);
   };
 
-  // Move item down
-  const handleMoveDown = (uid: number) => {
-    if (!characterData) return;
+  // Import handlers
+  const handleImportPng = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.png';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file || !characterData) return;
 
-    const index = loreItems.findIndex(item => item.uid === uid);
-    if (index === -1 || index >= loreItems.length - 1) return;
+      try {
+        const newItems = await importPng(file);
+        const updatedEntries = [...loreItems, ...newItems];
+        const updatedData = updateCharacterBookEntries(characterData, updatedEntries);
+        setCharacterData(updatedData);
+      } catch (error) {
+        console.error('Error importing PNG:', error);
+      }
+    };
+    input.click();
+  };
 
-    const newEntries = [...loreItems];
-    const temp = newEntries[index];
-    newEntries[index] = newEntries[index + 1];
-    newEntries[index + 1] = temp;
+  const handleImportJson = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file || !characterData) return;
 
-    // Update order and displayIndex
-    newEntries.forEach((item, idx) => {
-      item.order = idx;
-      item.displayIndex = idx;
-    });
+      try {
+        const currentMaxOrder = Math.max(-1, ...loreItems.map((item: { order: any; }) => item.order));
+        const newItems = await importJson(file, currentMaxOrder);
+        const updatedEntries = [...loreItems, ...newItems];
+        const updatedData = updateCharacterBookEntries(characterData, updatedEntries);
+        setCharacterData(updatedData);
+      } catch (error) {
+        console.error('Error importing JSON:', error);
+      }
+    };
+    input.click();
+  };
 
-    updateCharacterBookEntries(newEntries);
+  const handleImportTsv = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.tsv';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file || !characterData) return;
+
+      try {
+        const currentMaxOrder = Math.max(-1, ...loreItems.map((item: { order: any; }) => item.order));
+        const newItems = await importTsv(file, currentMaxOrder);
+        const updatedEntries = [...loreItems, ...newItems];
+        const updatedData = updateCharacterBookEntries(characterData, updatedEntries);
+        setCharacterData(updatedData);
+      } catch (error) {
+        console.error('Error importing TSV:', error);
+      }
+    };
+    input.click();
+  };
+
+  // Export handler
+  const handleExport = () => {
+    if (!characterData?.data?.name || !loreItems.length) return;
+    createLoreExport(loreItems, characterData.data.name);
   };
 
   return (
@@ -535,7 +138,7 @@ const handleImportPng = async () => {
             Lore Manager ({loreItems.length} items)
           </h2>
           <div className="flex items-center gap-2">
-          <DropdownMenu
+            <DropdownMenu
               icon={BookOpen}
               label="Import Lore"
               items={[
@@ -546,7 +149,7 @@ const handleImportPng = async () => {
               buttonClassName="p-2 hover:bg-gray-700 rounded-lg transition-colors"
             />
             <button
-              onClick={handleExportJson}
+              onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2  
                        text-white rounded-lg hover:bg-gray-600 transition-colors"
             >
@@ -584,8 +187,8 @@ const handleImportPng = async () => {
                 item={item}
                 onDelete={handleDeleteItem}
                 onUpdate={handleUpdateItem}
-                onMoveUp={handleMoveUp}
-                onMoveDown={handleMoveDown}
+                onMoveUp={(uid) => handleMoveItem(uid, 'up')}
+                onMoveDown={(uid) => handleMoveItem(uid, 'down')}
                 isFirst={index === 0}
                 isLast={index === filteredItems.length - 1}
               />
