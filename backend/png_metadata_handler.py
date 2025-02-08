@@ -4,6 +4,7 @@ from io import BytesIO
 import base64
 import json
 import re
+import traceback
 from backend.character_validator import CharacterValidator
 
 class PngMetadataHandler:
@@ -12,6 +13,7 @@ class PngMetadataHandler:
     def __init__(self, logger):
         self.logger = logger
         self.validator = CharacterValidator(logger)  # Add validator
+        self.logger.log_step("Initializing PngMetadataHandler v2 with metadata preservation")
 
     def read_metadata(self, file_data: Union[bytes, BinaryIO]) -> Dict:
         """Read character metadata from a PNG file."""
@@ -326,26 +328,75 @@ class PngMetadataHandler:
     def write_metadata(self, image_data: bytes, metadata: Dict) -> bytes:
         """Write character metadata to a PNG file."""
         try:
-            validated_metadata = self.validator.normalize(metadata)
-            # Encode metadata to base64
-            json_str = json.dumps(validated_metadata)
-            base64_str = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
-
-            # Set up PNG info
-            png_info = PngImagePlugin.PngInfo()
-            png_info.add_text('chara', base64_str)
-
-            # Create output buffer
-            output = BytesIO()
+            # Debug dump of incoming metadata
+            self.logger.log_step("=== DEBUG: Incoming Metadata ===")
+            self.logger.log_step(json.dumps(metadata, indent=2)[:500] + "...")
             
-            # Open and save image with new metadata
+            # 1. Validate incoming data
+            self.logger.log_step("=== Starting Metadata Write ===")
+            self.logger.log_step(f"Input metadata keys: {list(metadata.keys())}")
+            
+            validated_metadata = self.validator.normalize(metadata)
+            self.logger.log_step(f"Validated metadata - spec version: {validated_metadata.get('spec_version')}")
+            
+            # 2. Encode to JSON then base64
+            json_str = json.dumps(validated_metadata)
+            self.logger.log_step(f"JSON string length: {len(json_str)}")
+            self.logger.log_step(f"JSON preview: {json_str[:200]}...")
+            
+            base64_bytes = base64.b64encode(json_str.encode('utf-8'))
+            base64_str = base64_bytes.decode('utf-8')
+            self.logger.log_step(f"Base64 length: {len(base64_str)}")
+            
+            # 3. Prepare PNG metadata
+            png_info = PngImagePlugin.PngInfo()
+            
+            # 4. Open image and preserve existing metadata
             with Image.open(BytesIO(image_data)) as img:
-                img.save(output, format="PNG", pnginfo=png_info)
+                self.logger.log_step(f"Original image info keys: {list(img.info.keys())}")
+                
+                # Copy all existing metadata except 'chara'
+                for key, value in img.info.items():
+                    if key != 'chara':
+                        try:
+                            png_info.add_text(key, value)
+                            self.logger.log_step(f"Preserved metadata key: {key}")
+                        except Exception as e:
+                            self.logger.log_warning(f"Could not preserve metadata key {key}: {str(e)}")
+                
+                # Add our new metadata
+                png_info.add_text('chara', base64_str)
+                self.logger.log_step("Added new chara metadata")
+                
+                # Create output buffer and save with combined metadata
+                output = BytesIO()
+                img.save(output, format="PNG", pnginfo=png_info, optimize=False)
+                self.logger.log_step("Saved image with updated metadata")
+                
+                # 5. Verify the write
+                output_bytes = output.getvalue()
+                verify_img = Image.open(BytesIO(output_bytes))
+                
+                if 'chara' in verify_img.info:
+                    encoded_len = len(verify_img.info['chara'])
+                    self.logger.log_step(f"Verified chara field exists, length: {encoded_len}")
+                    
+                    # Try to decode and verify content
+                    try:
+                        decoded = base64.b64decode(verify_img.info['chara']).decode('utf-8')
+                        decoded_json = json.loads(decoded)
+                        self.logger.log_step("Successfully decoded metadata")
+                        self.logger.log_step(f"Decoded spec version: {decoded_json.get('spec_version')}")
+                    except Exception as decode_err:
+                        self.logger.log_error(f"Metadata verification failed: {str(decode_err)}")
+                else:
+                    self.logger.log_error("ERROR: No chara field found in saved image!")
 
-            return output.getvalue()
+                return output_bytes
 
         except Exception as e:
             self.logger.log_error(f"Failed to write metadata: {str(e)}")
+            self.logger.log_error(f"Stack trace: {traceback.format_exc()}")
             raise
 
     def _decode_backyard_metadata(self, raw_data: Union[str, bytes]) -> Dict:

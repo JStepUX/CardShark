@@ -1,14 +1,17 @@
+// src/components/LoreComponents.tsx
 import React, { useState } from 'react';
-import { ChevronUp, ChevronDown, Settings, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
-import { LoreItem, LorePosition } from '../types/loreTypes';
-
-// Enum for selective logic
-enum SelectiveLogic {
-  AND_ANY = 0,
-  NOT_ALL = 1,
-  NOT_ANY = 2,
-  AND_ALL = 3,
-}
+import {
+  ChevronUp,
+  ChevronDown,
+  Settings,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Clock,
+  AlertTriangle,
+  Timer
+} from 'lucide-react';
+import { LoreItem, LorePosition, SelectiveLogic } from '../types/loreTypes';
 
 // Interface for logic options
 interface LogicOption {
@@ -43,16 +46,36 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   isFirst,
   isLast
 }) => {
-  const [primaryKeys, setPrimaryKeys] = useState(item.keys.join(', '));
+  // Simple null check - we trust that UIDs exist now
+  if (!item?.uid) {
+    console.error('LoreCard received invalid item:', item);
+    return null;  // Don't render invalid items
+  }
+
+  // Initialize state with the item's current values
+  console.log('LoreCard received item:', {
+    item,
+    keyType: typeof item.key,
+    keyValue: item.key
+  });
+  
+  // Then initialize state safely:
+  const [primaryKey, setPrimaryKey] = useState(() => {
+    if (Array.isArray(item.key)) {
+      return item.key.join(', ');
+    }
+    if (typeof item.key === 'string') {
+      return item.key;
+    }
+    return '';
+  });
   const [secondaryKeys, setSecondaryKeys] = useState(item.keysecondary?.join(', ') || '');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handlePrimaryKeysBlur = () => {
-    const keys = primaryKeys
-      .split(',')
-      .map(k => k.trim())
-      .filter(k => k.length > 0);
-    onUpdate(item.uid, { keys });
+    // Convert the comma-separated string to array of strings
+    const key = primaryKey.split(',').map(k => k.trim()).filter(k => k.length > 0);
+    onUpdate(item.uid, { key });
   };
 
   const handleSecondaryKeysBlur = () => {
@@ -64,34 +87,59 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   };
 
   const handleSelectiveChange = (checked: boolean) => {
-    // If turning off selective, reset both backend and local state
     if (!checked) {
-      setSecondaryKeys(''); // Reset local state
-      onUpdate(item.uid, { 
+      setSecondaryKeys('');
+      onUpdate(item.uid, {
         selective: false,
-        keysecondary: [], // Clear backend data
-        selectiveLogic: SelectiveLogic.AND_ANY // Reset logic to default
+        keysecondary: [],
+        selectiveLogic: SelectiveLogic.AND_ANY
       });
     } else {
-      // If turning on selective, just enable it with defaults
-      onUpdate(item.uid, { 
+      onUpdate(item.uid, {
         selective: true,
-        keysecondary: [], // Start fresh
+        keysecondary: [],
         selectiveLogic: SelectiveLogic.AND_ANY
       });
     }
   };
 
   const handleLogicChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onUpdate(item.uid, { 
-      selectiveLogic: Number(e.target.value)
+    onUpdate(item.uid, { selectiveLogic: Number(e.target.value) });
+  };
+
+  const handlePositionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    const originalUid = item.uid;  // Store original uid
+    
+    console.log('LoreCard position change:', {
+      componentUid: originalUid,
+      itemUid: item.uid,
+      value,
+      fullItem: item
     });
+
+    const updates: Partial<LoreItem> = {};
+    
+    if (value.startsWith(`${LorePosition.AtDepth}-`)) {
+      const role = Number(value.split('-')[1]);
+      updates.position = LorePosition.AtDepth;
+      updates.role = role;
+    } else {
+      updates.position = Number(value);
+      updates.role = null;
+    }
+
+    console.log('LoreCard sending update:', {
+      uid: originalUid,
+      updates,
+      verification: `Updating item ${originalUid} to position ${updates.position}`
+    });
+
+    onUpdate(originalUid, updates);
   };
 
   return (
-    <div className={`bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg 
-      ${item.disable ? 'opacity-60' : ''}`}>
-      
+    <div className={`bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg ${item.disable ? 'opacity-60' : ''}`}>
       {/* Top controls row */}
       <div className="flex items-center justify-between gap-4 mb-4">
         {/* Left side controls */}
@@ -103,25 +151,10 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           >
             {item.disable ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}
           </button>
-          
-          {/* Position selector - unchanged */}
+
           <select
             value={`${item.position}${item.position === LorePosition.AtDepth ? '-' + (item.role ?? 0) : ''}`}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value.startsWith(`${LorePosition.AtDepth}-`)) {
-                const role = Number(value.split('-')[1]);
-                onUpdate(item.uid, { 
-                  position: LorePosition.AtDepth,
-                  role: role 
-                });
-              } else {
-                onUpdate(item.uid, { 
-                  position: Number(value),
-                  role: null 
-                });
-              }
-            }}
+            onChange={handlePositionChange}
             className="bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
           >
             <option value={LorePosition.BeforeCharacter}>Before Character</option>
@@ -135,7 +168,6 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             <option value={LorePosition.AfterExampleMsgs}>After Example Messages</option>
           </select>
 
-          {/* Depth input - unchanged */}
           {item.position === LorePosition.AtDepth && (
             <input
               type="number"
@@ -148,34 +180,26 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           )}
         </div>
 
-        {/* Right side controls - unchanged */}
+        {/* Right side controls */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => onMoveUp(item.uid)}
             disabled={isFirst}
-            className={`p-1 rounded ${
-              isFirst 
-                ? 'text-gray-600 cursor-not-allowed' 
-                : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'
-            }`}
+            className={`p-1 rounded ${isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'}`}
             title="Move up"
           >
             <ChevronUp size={18} />
           </button>
-          
+
           <button
             onClick={() => onMoveDown(item.uid)}
             disabled={isLast}
-            className={`p-1 rounded ${
-              isLast 
-                ? 'text-gray-600 cursor-not-allowed' 
-                : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'
-            }`}
+            className={`p-1 rounded ${isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'}`}
             title="Move down"
           >
             <ChevronDown size={18} />
           </button>
-          
+
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="p-1 text-gray-400 hover:text-blue-400 hover:bg-gray-800 rounded"
@@ -183,7 +207,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           >
             <Settings size={18} />
           </button>
-          
+
           <button 
             onClick={() => onDelete(item.uid)}
             className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded"
@@ -202,8 +226,8 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             <label className="block text-sm text-gray-400 mb-1">Primary Trigger Key(s)</label>
             <input
               type="text"
-              value={primaryKeys}
-              onChange={(e) => setPrimaryKeys(e.target.value)}
+              value={primaryKey}
+              onChange={(e) => setPrimaryKey(e.target.value)}
               onBlur={handlePrimaryKeysBlur}
               className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
               placeholder="Enter comma-separated keywords"
@@ -267,14 +291,13 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           />
         </div>
 
-        {/* Advanced Settings Panel */}
+        {/* Advanced Settings Panel (with integrated Timing Controls) */}
         {showAdvanced && (
           <div className="mt-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
             <h4 className="text-sm font-medium text-gray-300 mb-3">Advanced Settings</h4>
-            
             {/* Basic toggles row */}
             <div className="flex gap-4 mb-4">
-              <label className="flex items-center gap-2 mb-2">
+              <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={item.constant}
@@ -284,7 +307,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                 <span className="text-sm text-gray-400">Constant</span>
               </label>
               
-              <label className="flex items-center gap-2 mb-2">
+              <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={item.useProbability}
@@ -295,7 +318,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
               </label>
 
               {item.useProbability && (
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <input
                     type="number"
                     value={item.probability}
@@ -310,65 +333,106 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             </div>
 
             {/* Numeric fields row */}
-            <div className="grid grid-cols-5 gap-4">
-              {/* Order */}
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Order</label>
                 <input
                   type="number"
                   value={item.order}
                   onChange={(e) => onUpdate(item.uid, { order: Number(e.target.value) })}
-                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                  className="w-full bg-zinc-900 text-white rounded px-2 py-1 border border-zinc-800"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Defines a priority for insertion. Higher order values will be inserted closer to the end of the context.
+                </p>
               </div>
 
-              {/* Scan Depth */}
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Scan Depth</label>
                 <input
                   type="number"
                   value={item.scanDepth ?? ''}
-                  onChange={(e) => onUpdate(item.uid, { scanDepth: e.target.value === '' ? null : Number(e.target.value) })}
-                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                  onChange={(e) =>
+                    onUpdate(item.uid, { scanDepth: e.target.value === '' ? null : Number(e.target.value) })
+                  }
+                  className="w-full bg-zinc-900 text-white rounded px-2 py-1 border border-zinc-800"
                   placeholder="Default"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Defines how many messages in the chat history should be scanned for keys.
+                  0: Only recursed entries, 1: Last message, 2: Last two messages, etc.
+                </p>
               </div>
+            </div>
 
-              {/* Sticky */}
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Sticky</label>
-                <input
-                  type="number"
-                  value={item.sticky ?? ''}
-                  onChange={(e) => onUpdate(item.uid, { sticky: e.target.value === '' ? null : Number(e.target.value) })}
-                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
-                  placeholder="Not sticky"
-                />
-              </div>
+            {/* Integrated Timing Controls Section */}
+            <div className="mt-4">
+              <h5 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-1">
+                <Clock size={16} />
+                <span>Timing Controls</span>
+              </h5>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Sticky Duration</label>
+                  <input
+                    type="number"
+                    value={item.sticky ?? ''}
+                    onChange={(e) => onUpdate(item.uid, { sticky: e.target.value === '' ? null : Number(e.target.value) })}
+                    min="0"
+                    className="w-full bg-zinc-900 text-white rounded px-2 py-1 border border-zinc-800"
+                    placeholder="# Messages"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Stay active for N messages</p>
+                </div>
 
-              {/* Cooldown */}
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Cooldown</label>
-                <input
-                  type="number"
-                  value={item.cooldown ?? ''}
-                  onChange={(e) => onUpdate(item.uid, { cooldown: e.target.value === '' ? null : Number(e.target.value) })}
-                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
-                  placeholder="No cooldown"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Cooldown Period</label>
+                  <input
+                    type="number"
+                    value={item.cooldown ?? ''}
+                    onChange={(e) => onUpdate(item.uid, { cooldown: e.target.value === '' ? null : Number(e.target.value) })}
+                    min="0"
+                    className="w-full bg-zinc-900 text-white rounded px-2 py-1 border border-zinc-800"
+                    placeholder="# Messages"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Wait N messages before reactivating</p>
+                </div>
 
-              {/* Delay */}
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Delay</label>
-                <input
-                  type="number"
-                  value={item.delay ?? ''}
-                  onChange={(e) => onUpdate(item.uid, { delay: e.target.value === '' ? null : Number(e.target.value) })}
-                  className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
-                  placeholder="No delay"
-                />
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Initial Delay</label>
+                  <input
+                    type="number"
+                    value={item.delay ?? ''}
+                    onChange={(e) => onUpdate(item.uid, { delay: e.target.value === '' ? null : Number(e.target.value) })}
+                    min="0"
+                    className="w-full bg-zinc-900 text-white rounded px-2 py-1 border border-zinc-800"
+                    placeholder="# Messages"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Require N messages before first trigger</p>
+                </div>
               </div>
+              {(item.sticky || item.cooldown || item.delay) && (
+                <div className="flex gap-3 mt-2">
+                  {item.sticky ? (
+                    <div className="flex items-center text-blue-400 text-xs gap-1">
+                      <Clock size={12} />
+                      <span>Sticky: {item.sticky}m</span>
+                    </div>
+                  ) : null}
+                  {item.cooldown ? (
+                    <div className="flex items-center text-orange-400 text-xs gap-1">
+                      <AlertTriangle size={12} />
+                      <span>CD: {item.cooldown}m</span>
+                    </div>
+                  ) : null}
+                  {item.delay ? (
+                    <div className="flex items-center text-purple-400 text-xs gap-1">
+                      <Timer size={12} />
+                      <span>Delay: {item.delay}m</span>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
         )}

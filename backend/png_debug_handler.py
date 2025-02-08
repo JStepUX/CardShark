@@ -1,5 +1,6 @@
 """Debug handler for PNG metadata issues"""
 from PIL import Image, ExifTags
+from fastapi import UploadFile # type: ignore # ignore
 from io import BytesIO
 import base64
 import json
@@ -7,6 +8,11 @@ import json
 class PngDebugHandler:
     def __init__(self, logger):
         self.logger = logger
+        
+    async def debug_png(self, file: UploadFile) -> dict:
+        """Debug endpoint handler for PNG files"""
+        content = await file.read()
+        return self.debug_png_metadata(content)
         
     def debug_png_metadata(self, file_data: bytes) -> dict:
         """Analyze PNG metadata and return debug info"""

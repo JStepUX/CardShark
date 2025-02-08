@@ -1,157 +1,140 @@
 // src/handlers/importHandlers.ts
-import { LoreItem, LorePosition } from '../types/loreTypes';
+import { LoreItem } from '../types/loreTypes';
+import { createLoreItem } from './loreHandlers';
 
-// TSV Import - **ONLY 2 COLUMN TSV FILES ARE SUPPORTED** KEY/CONTENT ONLY
-export async function importTsv(file: File, currentMaxOrder: number): Promise<LoreItem[]> {
-  const text = await file.text();
-  const lines = text.split('\n').filter(line => line.trim());
-
-  return lines
-    .map((line, index) => {
-      const [key, value] = line.split('\t');
-      if (!key?.trim() || !value?.trim()) return null;
-
-      return {
-        uid: Date.now() + index,
-        keys: [key.trim()],
-        content: convertTextFields(value.trim()),
-        order: currentMaxOrder + index + 1,
-        displayIndex: currentMaxOrder + index + 1,
-        // Let type system handle defaults for all other fields
-      } as LoreItem;
-    })
-    .filter((item): item is LoreItem => item !== null);
+function parseKey(key: string | string[] | undefined): string[] {
+    if (Array.isArray(key)) {
+        return key;
+    }
+    if (typeof key === 'string') {
+        return key.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+    }
+    return [];
 }
 
-// JSON Import
-export async function importJson(file: File, currentMaxOrder: number): Promise<LoreItem[]> {
-    const text = await file.text();
-    const data = JSON.parse(text);
-    
-    // Get entries from the file - handle both formats
-    let importedEntries = [];
-    if (data.entries) {
-      importedEntries = typeof data.entries === 'object' ? 
-        Object.values(data.entries) : data.entries;
-    } else if (data.originalData?.entries) {
-      importedEntries = data.originalData.entries;
+export async function importJson(jsonData: string | object, currentMaxOrder: number): Promise<LoreItem[]> {
+    let data;
+    try {
+        // Parse JSON if it's a string
+        data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+        if (!data) return [];
+
+        // Detect format
+        let entries: any[] = [];
+        if (data.entries) {
+            // Handle V2/CardShark format
+            entries = Object.entries(data.entries).map(([key, value]: [string, any]) => ({
+                ...value,
+                uid: value.uid ?? parseInt(key)
+            }));
+        } else if (Array.isArray(data)) {
+            // Handle array format
+            entries = data;
+        } else if (data.originalData?.entries) {
+            // Handle SillyTavern format
+            entries = data.originalData.entries;
+        } else {
+            console.error('Unknown lore format:', data);
+            return [];
+        }
+
+        // Normalize entries
+        return entries.map((entry: any, index: number) => {
+            try {
+                // Calculate new order value based on currentMaxOrder
+                const newOrder = currentMaxOrder + index + 1;
+
+                // Handle string keys vs array keys
+                const keys = Array.isArray(entry.key) 
+                    ? entry.key 
+                    : (entry.keys || entry.key || '').split(',').map((k: string) => k.trim());
+
+                return {
+                    ...entry,
+                    keys,
+                    uid: entry.uid ?? entry.id ?? parseInt(entry.uid) ?? Date.now() + index,
+                    position: entry.position ?? 1,
+                    order: newOrder,
+                    displayIndex: newOrder,
+                    disable: entry.disable ?? !entry.enabled ?? false,
+                    selective: entry.selective ?? false,
+                    constant: entry.constant ?? false,
+                    keysecondary: entry.keysecondary || [],
+                    selectiveLogic: entry.selectiveLogic ?? 0
+                };
+            } catch (e) {
+                console.error('Failed to normalize entry:', e, entry);
+                return null;
+            }
+        }).filter((entry): entry is LoreItem => entry !== null);
+    } catch (error) {
+        console.error('Error importing JSON:', error);
+        throw error;
     }
-  
-    if (!importedEntries?.length) {
-      throw new Error('No entries found in JSON file');
+}
+
+export async function importTsv(file: File, currentMaxOrder: number): Promise<LoreItem[]> {
+    try {
+        const text = await file.text();
+        const lines = text.split('\n').filter((line: string) => line.trim());
+
+        return lines
+            .map((line: string, index: number) => {
+                try {
+                    const [key, value] = line.split('\t');
+                    if (!key?.trim() || !value?.trim()) return null;
+
+                    const newItem = createLoreItem(currentMaxOrder + index);
+                    return {
+                        ...newItem,
+                        key: [key.trim()],
+                        content: value.trim(),
+                        order: currentMaxOrder + index + 1,
+                        displayIndex: currentMaxOrder + index + 1
+                    };
+                } catch (error) {
+                    console.error(`Error processing TSV line ${index + 1}:`, error);
+                    return null;
+                }
+            })
+            .filter((item): item is LoreItem => item !== null);
+    } catch (error) {
+        console.error('Error importing TSV file:', error);
+        throw error;
     }
-  
-    console.log('Importing entries:', importedEntries); // Debug log
-  
-    return importedEntries.map((item: any, index: number): LoreItem => {
-      // Ensure order is properly handled
-      const order = typeof item.order === 'number' ? item.order : 
-                   typeof item.insertion_order === 'number' ? item.insertion_order : 
-                   currentMaxOrder + index + 1;
-  
-      return {
-        uid: Date.now() + index,
-        keys: Array.isArray(item.key) ? item.key : 
-              Array.isArray(item.keys) ? item.keys : [],
-        keysecondary: item.keysecondary ?? [],
-        comment: item.comment ?? '',
-        content: convertTextFields(item.content || ''),
-        constant: item.constant ?? false,
-        vectorized: item.vectorized ?? false,
-        selective: item.selective ?? true,
-        selectiveLogic: item.selectiveLogic ?? 0,
-        order: order,  // Using calculated order
-        position: item.position ?? LorePosition.AfterCharacter,
-        disable: item.disable ?? false,
-        excludeRecursion: item.excludeRecursion ?? false,
-        preventRecursion: item.preventRecursion ?? false,
-        delayUntilRecursion: item.delayUntilRecursion ?? false,
-        probability: item.probability ?? 100,
-        useProbability: item.useProbability ?? true,
-        depth: item.depth ?? 4,
-        group: item.group ?? '',
-        groupOverride: item.groupOverride ?? false,
-        groupWeight: item.groupWeight ?? 100,
-        scanDepth: item.scanDepth ?? null,
-        caseSensitive: item.caseSensitive ?? null,
-        matchWholeWords: item.matchWholeWords ?? null,
-        useGroupScoring: item.useGroupScoring ?? null,
-        displayIndex: currentMaxOrder + index + 1,
-        automationId: item.automationId ?? '',
-        role: item.role ?? null,
-        sticky: item.sticky ?? null,    // Changed to use null as default
-        cooldown: item.cooldown ?? null, // Changed to use null as default
-        delay: item.delay ?? null,       // Changed to use null as default
-        extensions: item.extensions ?? {}
-      };
-    });
-  }
-  
-  // PNG Import
-  export async function importPng(file: File): Promise<LoreItem[]> {
-    const formData = new FormData();
-    formData.append('file', file);
-  
-    const response = await fetch('/api/extract-lore', {
-      method: 'POST',
-      body: formData,
-    });
-  
-    if (!response.ok) {
-      throw new Error('Failed to extract lore');
+}
+
+export async function importPng(file: File): Promise<LoreItem[]> {
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/extract-lore', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to extract lore');
+        }
+
+        const data = await response.json();
+        
+        if (!data.success || !data.loreItems) {
+            throw new Error('No lore items found in PNG');
+        }
+
+        return data.loreItems.map((item: any, index: number): LoreItem => {
+            const newItem = createLoreItem(index);
+            return {
+                ...newItem,
+                ...item,
+                key: parseKey(item.key),
+                displayIndex: index
+            };
+        });
+    } catch (error) {
+        console.error('Error importing PNG:', error);
+        throw error;
     }
-  
-    const data = await response.json();
-    
-    if (!data.success || !data.loreItems) {
-      throw new Error('No lore items found in PNG');
-    }
-  
-    return data.loreItems.map((item: any, index: number): LoreItem => {
-      // Ensure order is properly handled
-      const order = typeof item.order === 'number' ? item.order : 
-                   typeof item.insertion_order === 'number' ? item.insertion_order : 
-                   index;
-                   
-      return {
-        uid: Date.now() + index,
-        keys: Array.isArray(item.keys) ? item.keys : item.key || [],
-        keysecondary: item.keysecondary ?? [],
-        comment: item.comment ?? '',
-        content: convertTextFields(item.content || ''),
-        constant: item.constant ?? false,
-        vectorized: item.vectorized ?? false,
-        selective: item.selective ?? true,
-        selectiveLogic: item.selectiveLogic ?? 0,
-        order: order,  // Using calculated order
-        position: item.position ?? LorePosition.AfterCharacter,
-        disable: !item.enabled,
-        excludeRecursion: item.excludeRecursion ?? false,
-        preventRecursion: item.preventRecursion ?? false,
-        delayUntilRecursion: item.delayUntilRecursion ?? false,
-        probability: item.probability ?? 100,
-        useProbability: item.useProbability ?? true,
-        depth: item.depth ?? 4,
-        group: item.group ?? '',
-        groupOverride: item.groupOverride ?? false,
-        groupWeight: item.groupWeight ?? 100,
-        scanDepth: item.scanDepth ?? null,
-        caseSensitive: item.caseSensitive ?? null,
-        matchWholeWords: item.matchWholeWords ?? null,
-        useGroupScoring: item.useGroupScoring ?? null,
-        displayIndex: index,
-        automationId: item.automationId ?? '',
-        role: item.role ?? null,
-        sticky: item.sticky ?? null,    // Changed to use null as default
-        cooldown: item.cooldown ?? null, // Changed to use null as default
-        delay: item.delay ?? null,       // Changed to use null as default
-        extensions: item.extensions ?? {}
-      };
-    });
-  }
-  
-  // Helper function for character conversion
-  function convertTextFields(text: string): string {
-    if (!text) return text;
-    return text.replace(/{character}/g, "{{char}}");
-  }
+}

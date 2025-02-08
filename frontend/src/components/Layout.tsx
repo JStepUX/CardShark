@@ -129,70 +129,106 @@ const Layout: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
-      // Get and log settings
+      // Get settings first
       const settingsResponse = await fetch('/api/settings');
       const settingsData = await settingsResponse.json();
-      console.log('=== Save Process Started ===');
-      console.log('Settings Response:', settingsData);
-      console.log('Directory:', settingsData.settings?.character_directory);
-      console.log('Save to Directory Flag:', Boolean(settingsData.settings?.save_to_character_directory));
-      console.log('Full Settings:', settingsData.settings);
-      
       const settings = settingsData.settings;
       
+      // Log start of save process
+      console.log('=== Save Process Started ===');
+      console.log('Character Name:', characterData.data?.name);
+      console.log('Settings:', settings);
+      
+      // Get the image data
       const response = await fetch(imageUrl);
       const blob = await response.blob();
       const file = new File([blob], 'character.png', { type: 'image/png' });
       
+      // Prepare form data
       const formData = new FormData();
       formData.append('file', file);
       formData.append('metadata', JSON.stringify(characterData));
       
+      // Check if we should save to directory
       const usingSaveDirectory = Boolean(settings.save_to_character_directory) && settings.character_directory;
       
-      // Add save directory if enabled and log what we're doing
       if (usingSaveDirectory) {
-        console.log('=== Directory Save Attempt ===');
-        console.log('Directory:', settings.character_directory);
-        console.log('Save to Directory Flag:', Boolean(settings.save_to_character_directory));
-        
+        console.log('=== Directory Save Mode ===');
+        console.log('Target Directory:', settings.character_directory);
         formData.append('save_directory', settings.character_directory);
       } else {
-        console.log('=== Browser Save Attempt ===');
-        console.log('Save to directory enabled:', Boolean(settings.save_to_character_directory));
-        console.log('Has directory:', Boolean(settings.character_directory));
+        console.log('=== Browser Save Mode ===');
       }
       
+      // Send save request
       console.log('Sending save request...');
       const saveResponse = await fetch('/api/save-png', {
         method: 'POST',
         body: formData
       });
       
+      // Handle save response
       if (!saveResponse.ok) {
         const errorText = await saveResponse.text();
-        throw new Error(`Failed to save PNG: ${saveResponse.status} ${saveResponse.statusText} - ${errorText}`);
+        throw new Error(`Save failed: ${errorText}`);
       }
       
+      // Update image URL with saved version
       const savedBlob = await saveResponse.blob();
       const newImageUrl = URL.createObjectURL(savedBlob);
       setImageUrl(newImageUrl);
       
-      // Only trigger browser download if not saving to directory
+      // Handle browser download if not saving to directory
       if (!usingSaveDirectory) {
+        const sanitizedName = (characterData.data?.name || 'character')
+          .replace(/[^a-zA-Z0-9]/g, '_')
+          .replace(/_+/g, '_')
+          .toLowerCase();
+          
         const link = document.createElement('a');
         link.href = newImageUrl;
-        link.download = `${characterData?.data?.name || 'character'}.png`;
+        link.download = `${sanitizedName}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       }
+      
+      if (usingSaveDirectory && settings.character_directory) {
+        const characterName = characterData.data?.name || 'character';
+        const filePath = `${settings.character_directory}/${characterName}.png`;
+        console.log('Verifying save at:', filePath);
+        const verified = await verifySave(filePath);
+        console.log('Save verified:', verified);
+      }
+
+      console.log('Save completed successfully');
       
     } catch (error) {
       console.error('Save failed:', error);
       setError(error instanceof Error ? error.message : 'Failed to save character');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const verifySave = async (path: string) => {
+    try {
+      // Wait a short time to ensure file is written
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Try to fetch the file we just saved
+      const verifyResponse = await fetch(`/api/character-image/${encodeURIComponent(path)}`);
+      console.log('=== Save Verification ===');
+      console.log('Verification response:', verifyResponse.status);
+      if (verifyResponse.ok) {
+        const verifyBlob = await verifyResponse.blob();
+        console.log('Verification file size:', verifyBlob.size);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Verification failed:', err);
+      return false;
     }
   };
 

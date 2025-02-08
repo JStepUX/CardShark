@@ -1,26 +1,35 @@
-// Strict numeric positions - no string values allowed
+// src/types/loreTypes.ts
+
+export enum SelectiveLogic {
+    AND_ANY = 0,
+    NOT_ALL = 1,
+    NOT_ANY = 2,
+    AND_ALL = 3,
+}
+
 export enum LorePosition {
-    BeforeCharacter = 0,    // Before character definition
-    AfterCharacter = 1,     // After character definition
-    AuthorsNoteTop = 2,     // Top of author's note
-    AuthorsNoteBottom = 3,  // Bottom of author's note
-    AtDepth = 4,            // At specific chat depth
-    BeforeExampleMsgs = 5,  // Before example messages
-    AfterExampleMsgs = 6    // After example messages
+    BeforeCharacter = 0,
+    AfterCharacter = 1,
+    AuthorsNoteTop = 2,
+    AuthorsNoteBottom = 3,
+    AtDepth = 4,
+    BeforeExampleMsgs = 5,
+    AfterExampleMsgs = 6
 }
 
 export interface LoreItem {
     uid: number;
-    keys: string[];
+    key: string[];          // Array of trigger strings
     keysecondary: string[];
     comment: string;
     content: string;
     constant: boolean;
     vectorized: boolean;
     selective: boolean;
-    selectiveLogic: number;
+    selectiveLogic: SelectiveLogic;
+    addMemo: boolean;       // Added to match ST format
     order: number;
-    position: LorePosition; // Must be a numeric value 0-6
+    position: LorePosition;
     disable: boolean;
     excludeRecursion: boolean;
     preventRecursion: boolean;
@@ -41,39 +50,59 @@ export interface LoreItem {
     sticky: number | null;
     cooldown: number | null;
     delay: number | null;
-    extensions: Record<string, unknown>; // Required field, properly typed
+    extensions: Record<string, unknown>;
 }
 
-// Helper to validate position values
-export function validatePosition(position: any): LorePosition {
-    if (typeof position === 'number' && 
-        position >= 0 && 
-        position <= 6) {
-        return position;
+// Create new lore item with current length info
+export function createLoreItem(currentLength: number): LoreItem {
+    return {
+        ...DEFAULT_LORE_ITEM,
+        uid: Date.now() + Math.floor(Math.random() * 1000), // Direct numeric UID
+        order: currentLength,
+        displayIndex: currentLength
+    };
+}
+
+// Modified to handle string/number mapping
+export function ensureLoreItemUID(item: Partial<LoreItem>, index: number): LoreItem {
+    let uid: number;
+    
+    if (item.uid !== undefined) {
+        // Convert string UIDs to numbers if needed
+        uid = typeof item.uid === 'string' ? parseInt(item.uid) : Number(item.uid);
+    } else {
+        // Generate new UID if none exists
+        uid = Date.now() + index;
     }
-    return LorePosition.AfterCharacter; // Default to 1
+
+    return {
+        ...DEFAULT_LORE_ITEM,
+        ...item,
+        uid
+    };
 }
 
-// Default values when creating new items
-export const DEFAULT_LORE_ITEM: Partial<LoreItem> = {
-    position: LorePosition.AfterCharacter, // Always default to 1
-    keys: [],
-    keysecondary: [],
-    comment: '',
-    content: '',
-    constant: false,
-    vectorized: false,
-    selective: false,
-    selectiveLogic: 0,
-    order: 0,
+// NOTE: This default item MUST match the Python DEFAULT_LORE_ITEM in character_validator.py
+// If you update this, you MUST also update the Python version
+export const DEFAULT_LORE_ITEM: Omit<LoreItem, 'uid'> = {
+    key: [],              // Array of trigger strings
+    keysecondary: [],     // Array of secondary keys
+    comment: '',          // User notes about this entry
+    content: '',          // The actual lore content
+    constant: false,      // Always included regardless of trigger
+    vectorized: false,    
+    selective: true,
+    selectiveLogic: 0,    // Logic for combining primary/secondary keys
+    addMemo: true,        // Matches ST format
+    order: 100,
+    position: 1,          // Default position
     disable: false,
     excludeRecursion: false,
     preventRecursion: false,
     delayUntilRecursion: false,
-    displayIndex: 0,
     probability: 100,
     useProbability: true,
-    depth: 4,
+    depth: 0,            // Depth for insertion
     group: '',
     groupOverride: false,
     groupWeight: 100,
@@ -82,9 +111,18 @@ export const DEFAULT_LORE_ITEM: Partial<LoreItem> = {
     matchWholeWords: null,
     useGroupScoring: null,
     automationId: '',
-    role: null,
-    sticky: null,
-    cooldown: null,
-    delay: null,
-    extensions: {} // Empty object as default
+    role: 0,
+    sticky: 0,
+    cooldown: 0,
+    delay: 0,
+    displayIndex: 0,
+    extensions: {}
 };
+
+// Update generateStableUID to return a number
+export function generateStableUID(seed: string): number {
+    // Convert seed into a stable numeric hash
+    const timestamp = Date.now();
+    const hashCode = seed.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0))|0, 0);
+    return timestamp + hashCode;
+}
