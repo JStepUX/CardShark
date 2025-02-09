@@ -1,5 +1,4 @@
 // src/types/loreTypes.ts
-
 export enum SelectiveLogic {
     AND_ANY = 0,
     NOT_ALL = 1,
@@ -91,7 +90,7 @@ export const DEFAULT_LORE_ITEM: Omit<LoreItem, 'uid'> = {
     content: '',          // The actual lore content
     constant: false,      // Always included regardless of trigger
     vectorized: false,    
-    selective: true,
+    selective: false,
     selectiveLogic: 0,    // Logic for combining primary/secondary keys
     addMemo: true,        // Matches ST format
     order: 100,
@@ -111,12 +110,12 @@ export const DEFAULT_LORE_ITEM: Omit<LoreItem, 'uid'> = {
     matchWholeWords: null,
     useGroupScoring: null,
     automationId: '',
-    role: 0,
-    sticky: 0,
-    cooldown: 0,
-    delay: 0,
+    role: 0,             // Keeping original default
+    sticky: 0,           // Keeping original default
+    cooldown: 0,         // Keeping original default
+    delay: 0,            // Keeping original default
     displayIndex: 0,
-    extensions: {}
+    extensions: {}       // Preserved extensions field
 };
 
 // Update generateStableUID to return a number

@@ -13,7 +13,6 @@ import { AboutDialog } from './AboutDialog';
 import TokenCounter from './TokenCounter';
 import CharacterGallery from './CharacterGallery';
 import SettingsModal from './SettingsModal';
-import { LorePosition } from '../types/loreTypes';
 
 type View = 'gallery' | 'info' | 'lore' | 'json' | 'messages';
 
@@ -37,13 +36,6 @@ const Layout: React.FC = () => {
   setError
 } = useCharacter();
 
-
-  const normalizePosition = (pos: any): LorePosition => {
-    if (pos === 0 || pos === 1 || pos === 2 || pos === 3 || pos === 4 || pos === 5 || pos === 6) {
-      return pos;
-    }
-    return LorePosition.AfterCharacter; // Default to 1
-  };
 
   // Handle file upload
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,14 +61,7 @@ const Layout: React.FC = () => {
       const data = await response.json();
       
       if (data.success && data.metadata) {
-        // Normalize lore positions on character load
-        if (data.metadata.data?.character_book?.entries) {
-          data.metadata.data.character_book.entries = 
-            data.metadata.data.character_book.entries.map((entry: any) => ({
-              ...entry,
-              position: normalizePosition(entry.position)
-            }));
-        }
+        // Remove normalization - server handles it
         setCharacterData(data.metadata);
         setImageUrl(URL.createObjectURL(file));
       } else {

@@ -21,27 +21,36 @@ const LoreView: React.FC = () => {
 
   // Get lore items from character data
   const loreItems = useMemo(() => {
+    console.log('LoreView characterData:', characterData);
+    console.log('character_book:', characterData?.data?.character_book);
+    console.log('entries:', characterData?.data?.character_book?.entries);
+    
     if (!characterData) return [];
-    return characterData.data?.character_book?.entries || [];
+    
+    // Ensure we get an array back
+    const entries = characterData.data?.character_book?.entries;
+    if (!entries) return [];
+    
+    // Convert to array if it's an object
+    if (!Array.isArray(entries) && typeof entries === 'object') {
+      return Object.values(entries);
+    }
+    
+    return Array.isArray(entries) ? entries : [];
   }, [characterData]);
-
+  
   // Filter items based on search
   const filterLoreItemsMemoized = useCallback(
     (items: LoreItem[], term: string) => {
-      if (!term) return items;
-
-      const searchWords = term.toLowerCase().trim().split(/\s+/);
-
-      return items.filter((item) => {
-        const keyTerms = Array.isArray(item.key)
-          ? item.key.map((k) => k.toLowerCase())
-          : (typeof item.key === 'string' ? item.key : '').toLowerCase().split(',').map((k) => k.trim());
-
-        const content = item.content?.toLowerCase() || '';
-
-        return (
-          searchWords.some((word) => keyTerms.some((term) => term.includes(word))) ||
-          content.includes(term.toLowerCase())
+      if (!Array.isArray(items)) return [];
+      if (!term.trim()) return items;
+  
+      return items.filter(item => {
+        // Get the keys as an array
+        const keys = Array.isArray(item.key) ? item.key : [];
+        // Check if search term matches any key
+        return keys.some(key => 
+          key.toLowerCase().includes(term.toLowerCase().trim())
         );
       });
     },
@@ -49,6 +58,7 @@ const LoreView: React.FC = () => {
   );
 
   const filteredItems = useMemo(() => {
+    console.log('Filtering loreItems:', loreItems);
     return filterLoreItemsMemoized(loreItems, searchTerm);
   }, [loreItems, searchTerm, filterLoreItemsMemoized]);
 

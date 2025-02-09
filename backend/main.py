@@ -326,20 +326,19 @@ async def health_check():
 
 @app.post("/api/upload-png")
 async def upload_png(file: UploadFile = File(...)):
-    """Handle PNG upload with metadata extraction."""
+    """Handle PNG upload with metadata extraction and validation."""
     try:
         content = await file.read()
-        metadata = png_handler.read_metadata(content)
+        raw_metadata = png_handler.read_metadata(content)
+        # Validate the metadata through CharacterValidator
+        validated_metadata = validator.normalize(raw_metadata)
         return {
             "success": True,
-            "metadata": metadata,
+            "metadata": validated_metadata,
         }
     except Exception as e:
         logger.log_error(f"Upload failed: {str(e)}")
         return {"success": False, "error": str(e)}
-
-from typing import Optional
-import os
 
 @app.post("/api/save-png")
 async def save_png(
@@ -347,11 +346,13 @@ async def save_png(
     metadata: str = Form(...),
     save_directory: Optional[str] = Form(None),
 ):
-    """Handle PNG save with proper file handle management."""
+    """Handle PNG save with validation."""
     try:
         content = await file.read()
         metadata_dict = json.loads(metadata)
-        char_name = metadata_dict.get("data", {}).get("name", "character")
+        # Validate metadata before saving
+        validated_metadata = validator.normalize(metadata_dict)
+        char_name = validated_metadata.get("data", {}).get("name", "character")
         
         # Clean filename
         safe_name = re.sub(r'[<>:"/\\|?*]', '_', char_name)
@@ -372,8 +373,8 @@ async def save_png(
                 
                 logger.log_step(f"Final save path: {save_path}")
                 
-                # Try writing file with unique name
-                updated_content = png_handler.write_metadata(content, metadata_dict)
+                # Try writing file with unique name using validated metadata
+                updated_content = png_handler.write_metadata(content, validated_metadata)
 
                 with open(save_path, 'wb') as f:
                     f.write(updated_content)
@@ -385,7 +386,7 @@ async def save_png(
                 file_size = save_path.stat().st_size
                 logger.log_step(f"File written successfully. Size: {file_size} bytes")
                 
-                return Response(content=content, media_type="image/png")
+                return Response(content=updated_content, media_type="image/png")
                 
             except PermissionError as pe:
                 logger.log_error(f"Permission denied: {str(pe)}")
@@ -396,8 +397,8 @@ async def save_png(
                 logger.log_error(traceback.format_exc())
                 raise HTTPException(status_code=500, detail=str(e))
         
-        # If no directory specified, just return for browser download
-        return Response(content=content, media_type="image/png")
+        # If no directory specified, return validated content for browser download
+        return Response(content=updated_content, media_type="image/png")
         
     except Exception as e:
         logger.log_error(f"Unexpected error: {str(e)}")
@@ -439,21 +440,32 @@ async def extract_lore(file: UploadFile = File(...)):
     """Extract lore items from a PNG character card."""
     try:
         content = await file.read()
+        logger.log_step("Reading PNG metadata")
         metadata = png_handler.read_metadata(content)
         
         if not metadata:
+            logger.log_warning("No character data found in PNG")
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "message": "No character data found in PNG"}
             )
         
+        # Log the metadata structure
+        logger.log_step(f"Metadata structure: {json.dumps(metadata, indent=2)[:500]}...")
+        
         # Extract lore items from V2 format
         lore_items = []
         if metadata.get('spec') == 'chara_card_v2':
+            logger.log_step("Found V2 spec character")
             if 'data' in metadata and 'character_book' in metadata['data']:
+                logger.log_step("Extracting from data.character_book")
                 lore_items = metadata['data']['character_book'].get('entries', [])
             elif 'character_book' in metadata:
+                logger.log_step("Extracting from character_book")
                 lore_items = metadata['character_book'].get('entries', [])
+                
+        logger.log_step(f"Found {len(lore_items)} lore items")
+        logger.log_step(f"First item sample: {json.dumps(lore_items[0] if lore_items else None, indent=2)}")
             
         return JSONResponse(
             status_code=200,
@@ -465,6 +477,7 @@ async def extract_lore(file: UploadFile = File(...)):
         
     except Exception as e:
         logger.log_error(f"Error extracting lore: {str(e)}")
+        logger.log_error(traceback.format_exc())
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": str(e)}

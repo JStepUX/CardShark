@@ -1,4 +1,6 @@
 import time
+import json
+import traceback
 from typing import Dict, List, Any
 from enum import IntEnum
 
@@ -15,13 +17,14 @@ class LorePosition(IntEnum):
 # NOTE: This default item MUST match the TypeScript DEFAULT_LORE_ITEM in loreTypes.ts
 # If you update this, you MUST also update the TypeScript version
 DEFAULT_LORE_ITEM = {
-    "key": [],  # Changed to empty array instead of empty string
+    "uid": 0,  # This will be overwritten by _generate_uid()
+    "key": [],
     "keysecondary": [],
     "comment": "",
     "content": "",
     "constant": False,
     "vectorized": False,
-    "selective": False,
+    "selective": True,  # Changed to match example
     "selectiveLogic": 0,
     "addMemo": True,
     "order": 100,
@@ -32,9 +35,9 @@ DEFAULT_LORE_ITEM = {
     "delayUntilRecursion": False,
     "probability": 100,
     "useProbability": True,
-    "depth": 0,
+    "depth": 4,  # Changed to match example
     "group": "",
-    "groupOverride": False,
+    "groupOverride": True,  # Changed to match example
     "groupWeight": 100,
     "scanDepth": None,
     "caseSensitive": None,
@@ -49,45 +52,6 @@ DEFAULT_LORE_ITEM = {
     "extensions": {}
 }
 
-def _normalize_entry(self, entry: Dict) -> Dict:
-    """Normalize a single lore entry using defaults"""
-    if not isinstance(entry, dict):
-        self.logger.log_warning(f"Entry is not a dict: {type(entry)}")
-        return dict(DEFAULT_LORE_ITEM)
-
-    # Create new dict with defaults
-    normalized = dict(DEFAULT_LORE_ITEM)
-    
-    # Handle UID
-    normalized["uid"] = entry.get("uid") or self._generate_uid()
-
-    # Handle key - ensure it's always an array
-    if "key" in entry:
-        if isinstance(entry["key"], str):
-            # Convert comma-separated string to array
-            normalized["key"] = [k.strip() for k in entry["key"].split(',') if k.strip()]
-        elif isinstance(entry["key"], list):
-            # Keep array as is
-            normalized["key"] = entry["key"]
-        else:
-            normalized["key"] = []
-    
-    # Copy remaining fields from input
-    for key in DEFAULT_LORE_ITEM.keys():
-        if key in entry and key not in ["uid", "key"]:  # Skip uid and key as we handled them
-            # Special handling for position to ensure it's valid
-            if key == "position":
-                try:
-                    pos = int(entry[key])
-                    if 0 <= pos <= 6:
-                        normalized[key] = pos
-                except (ValueError, TypeError):
-                    pass
-            else:
-                normalized[key] = entry[key]
-
-    return normalized
-
 class CharacterValidator:
     def __init__(self, logger):
         self.logger = logger
@@ -98,48 +62,56 @@ class CharacterValidator:
         self.next_uid += 1
         return self.next_uid
 
+    def _validate_position(self, position: any) -> int:
+        """Validate and normalize a lore entry position."""
+        try:
+            pos = int(position)
+            if 0 <= pos <= 6:  # Valid range from LorePosition enum
+                return pos
+            self.logger.log_warning(f"Invalid position value {pos}, defaulting to AfterCharacter (1)")
+            return 1  # Default to AfterCharacter
+        except (ValueError, TypeError):
+            self.logger.log_warning(f"Non-integer position value {position}, defaulting to AfterCharacter (1)")
+            return 1
+
     def _normalize_entry(self, entry: Dict) -> Dict:
         """Normalize a single lore entry using defaults"""
         if not isinstance(entry, dict):
             self.logger.log_warning(f"Entry is not a dict: {type(entry)}")
-            # Create completely new entry with new UID
-            return dict(DEFAULT_LORE_ITEM, uid=self._generate_uid())
+            return dict(DEFAULT_LORE_ITEM)
 
         # Create new dict with defaults
-        normalized = dict(DEFAULT_LORE_ITEM)
+        normalized = dict(DEFAULT_LORE_ITEM)  # Start with our default format
         
-        # Handle UID - preserve existing or generate new
-        if "uid" in entry and entry["uid"] is not None:
-            normalized["uid"] = entry["uid"]
-            self.logger.log_step(f"Preserving existing UID: {entry['uid']}")
-        else:
-            normalized["uid"] = self._generate_uid()
-            self.logger.log_step(f"Generated new UID: {normalized['uid']}")
-
-        # Convert keys array to key string if needed
-        if "keys" in entry and isinstance(entry["keys"], list):
-            normalized["key"] = ", ".join(map(str, entry["keys"]))
-            self.logger.log_step(f"Converted keys array to string: {normalized['key']}")
-        elif "key" in entry:
-            normalized["key"] = str(entry["key"])
-
-        # Copy remaining fields from schema
+        # Update with any provided values
         for key in DEFAULT_LORE_ITEM.keys():
-            if key in entry and key not in ["uid", "key"]:  # Skip uid and key as already handled
-                if key == "position":
-                    try:
-                        pos = int(entry[key])
-                        if 0 <= pos <= 6:
-                            normalized[key] = pos
-                    except (ValueError, TypeError):
-                        pass  # Keep default if invalid
-                else:
-                    normalized[key] = entry[key]
-
+            if key in entry:
+                normalized[key] = entry[key]
+        
+        # Ensure UID exists
+        normalized["uid"] = entry.get("uid") or entry.get("id") or self._generate_uid()
+        
+        # Convert keys if they're in ST format
+        if "keys" in entry and isinstance(entry["keys"], list):
+            normalized["key"] = entry["keys"]
+        if "secondary_keys" in entry and isinstance(entry["secondary_keys"], list):
+            normalized["keysecondary"] = entry["secondary_keys"]
+        
+        # Convert enabled/disable
+        if "enabled" in entry:
+            normalized["disable"] = not entry["enabled"]
+        
+        # Convert insertion_order to order if needed
+        if "insertion_order" in entry:
+            normalized["order"] = entry["insertion_order"]
+        
+        # Ensure key arrays
+        normalized["key"] = normalized["key"] if isinstance(normalized["key"], list) else []
+        normalized["keysecondary"] = normalized["keysecondary"] if isinstance(normalized["keysecondary"], list) else []
+        
         return normalized
 
     def normalize(self, data: Any) -> Dict:
-        """Normalize character data to V2 spec"""
         try:
             if not isinstance(data, dict):
                 self.logger.log_warning("Invalid or missing data, creating empty character")
@@ -152,21 +124,53 @@ class CharacterValidator:
 
             # Get and normalize lore entries
             character_book_data = char_data.get('character_book', {})
-            entries = character_book_data.get('entries', [])
+            raw_entries = character_book_data.get('entries', {})
 
-            # Convert entries object to array if needed
-            if isinstance(entries, dict):
-                self.logger.log_step("Converting entries object to an array")
-                entries = list(entries.values())
+            # Convert entries to SillyTavern import format
+            entries_array = []
+            if isinstance(raw_entries, dict):
+                # Convert object format to array
+                for key, entry in raw_entries.items():
+                    st_entry = {
+                        "id": entry.get("uid", None),
+                        "keys": entry.get("key", []),
+                        "secondary_keys": entry.get("keysecondary", []),
+                        "comment": entry.get("comment", ""),
+                        "content": entry.get("content", ""),
+                        "constant": entry.get("constant", False),
+                        "selective": entry.get("selective", False),
+                        "insertion_order": entry.get("order", 100),
+                        "enabled": not entry.get("disable", False),
+                        "position": "after_char",  # Default
+                        "extensions": {
+                            "exclude_recursion": entry.get("excludeRecursion", False),
+                            "prevent_recursion": entry.get("preventRecursion", False),
+                            "delay_until_recursion": entry.get("delayUntilRecursion", False),
+                            "display_index": entry.get("displayIndex", 0),
+                            "probability": entry.get("probability", 100),
+                            "useProbability": entry.get("useProbability", True),
+                            "depth": entry.get("depth", 4),
+                            "selectiveLogic": entry.get("selectiveLogic", 0),
+                            "group": entry.get("group", ""),
+                            "group_override": entry.get("groupOverride", False),
+                            "group_weight": entry.get("groupWeight", 100),
+                            "scan_depth": entry.get("scanDepth", None),
+                            "case_sensitive": entry.get("caseSensitive", None),
+                            "match_whole_words": entry.get("matchWholeWords", None),
+                            "use_group_scoring": entry.get("useGroupScoring", None),
+                            "automation_id": entry.get("automationId", ""),
+                            "role": entry.get("role", 0),
+                            "vectorized": entry.get("vectorized", False),
+                            "sticky": entry.get("sticky", None),
+                            "cooldown": entry.get("cooldown", None),
+                            "delay": entry.get("delay", None)
+                        }
+                    }
+                    entries_array.append(st_entry)
+            elif isinstance(raw_entries, list):
+                entries_array = raw_entries
 
-            # Normalize each entry
-            normalized_entries = [self._normalize_entry(entry) for entry in entries]
-
-            # Log UIDs for debugging
-            self.logger.log_step(f"Normalized {len(normalized_entries)} entries with UIDs: " + 
-                               str([entry['uid'] for entry in normalized_entries]))
-
-            # Build normalized character structure
+            # Build character structure
             character = {
                 'spec': 'chara_card_v2',
                 'spec_version': '2.0',
@@ -185,13 +189,13 @@ class CharacterValidator:
                     'creator': str(char_data.get('creator', '')),
                     'character_version': str(char_data.get('character_version', '1.0')),
                     'character_book': {
-                        'entries': normalized_entries,
-                        'name': '',
-                        'description': '',
-                        'scan_depth': 100,
-                        'token_budget': 2048,
-                        'recursive_scanning': False,
-                        'extensions': {}
+                        'entries': entries_array,  # Now using array format
+                        'name': character_book_data.get('name', ''),
+                        'description': character_book_data.get('description', ''),
+                        'scan_depth': character_book_data.get('scan_depth', 100),
+                        'token_budget': character_book_data.get('token_budget', 2048),
+                        'recursive_scanning': character_book_data.get('recursive_scanning', False),
+                        'extensions': character_book_data.get('extensions', {})
                     }
                 }
             }
@@ -200,10 +204,10 @@ class CharacterValidator:
 
         except Exception as e:
             self.logger.log_error(f"Error normalizing character: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
             return self._create_empty_character()
 
     def _create_empty_character(self) -> Dict:
-        """Create an empty character structure"""
         return {
             'spec': 'chara_card_v2',
             'spec_version': '2.0',
@@ -222,7 +226,7 @@ class CharacterValidator:
                 'creator': '',
                 'character_version': '1.0',
                 'character_book': {
-                    'entries': [],
+                    'entries': {},  # Changed from [] to {}
                     'name': '',
                     'description': '',
                     'scan_depth': 100,

@@ -1,13 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { LorePosition } from '../types/loreTypes';
-
-const normalizePosition = (pos: any): LorePosition => {
-  if (pos === 0 || pos === 1 || pos === 2 || pos === 3 || pos === 4 || pos === 5 || pos === 6) {
-    return pos;
-  }
-  return LorePosition.AfterCharacter; // Default to 1
-};
 
 interface CharacterFile {
   name: string;
@@ -122,14 +114,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
       const data = await uploadResponse.json();
       
       if (data.success && data.metadata) {
-        // Normalize lore positions before setting data
-        if (data.metadata.data?.character_book?.entries) {
-          data.metadata.data.character_book.entries = 
-            data.metadata.data.character_book.entries.map((entry: any) => ({
-              ...entry,
-              position: normalizePosition(entry.position)
-            }));
-        }
+        // Remove this normalization - the server will handle it
         setCharacterData(data.metadata);
         setImageUrl(URL.createObjectURL(blob));
       }
