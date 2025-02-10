@@ -1,56 +1,73 @@
 import React, { createContext, useContext, useState } from 'react';
-
-// Simple interface - we just accept what the backend sends us
-interface CharacterData {
-  character_book: any;
-  data: Record<string, any>;  // Accepts any data structure from backend
-  spec: string;
-  spec_version: string;
-}
+import { CharacterCard } from '../types/schema';
 
 interface CharacterContextType {
-  characterData: CharacterData | null;
-  setCharacterData: (data: CharacterData | null) => void;
-  imageUrl: string | undefined;  // Changed from string | null
-  setImageUrl: (url: string | undefined) => void;  // Changed from string | null
+  characterData: CharacterCard | null;
+  setCharacterData: React.Dispatch<React.SetStateAction<CharacterCard | null>>;
+  imageUrl: string | undefined;
+  setImageUrl: React.Dispatch<React.SetStateAction<string | undefined>>;
   isLoading: boolean;
-  setIsLoading: (loading: boolean) => void;
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
   error: string | null;
-  setError: (error: string | null) => void;
-  createNewCharacter: (name: string) => void;  // Add this line
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
+  createNewCharacter: (name: string) => void;
 }
 
 const CharacterContext = createContext<CharacterContextType | null>(null);
 
 export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [characterData, setCharacterData] = useState<CharacterData | null>(null);
+  const [characterData, setCharacterData] = useState<CharacterCard | null>(null);
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);  // Changed from string | null
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const createNewCharacter = (name: string) => {
-    const newCharacter: CharacterData = {
+    const newCharacter: CharacterCard = {
+      name: "",
+      description: "",
+      personality: "",
+      scenario: "",
+      first_mes: "",
+      mes_example: "",
+      creatorcomment: "",
+      avatar: "none",
+      chat: "",
+      talkativeness: "0.5",
+      fav: false,
+      tags: [],
       spec: "chara_card_v2",
       spec_version: "2.0",
       data: {
         name: name,
         description: "",
         personality: "",
+        scenario: "",
         first_mes: "",
         mes_example: "",
-        scenario: "",
         creator_notes: "",
         system_prompt: "",
         post_history_instructions: "",
-        alternate_greetings: [],
         tags: [],
         creator: "",
         character_version: "",
+        alternate_greetings: [],
+        extensions: {
+          talkativeness: "0.5",
+          fav: false,
+          world: "Fresh",
+          depth_prompt: {
+            prompt: "",
+            depth: 4,
+            role: "system"
+          }
+        },
+        group_only_greetings: [],
         character_book: {
-          entries: []
+          entries: [],
+          name: ""
         }
       },
-      character_book: undefined
+      create_date: ""
     };
     setCharacterData(newCharacter);
   };
@@ -82,5 +99,5 @@ export const useCharacter = () => {
   return context;
 };
 
-export type { CharacterData };
+export type { CharacterCard as CharacterData };
 export default CharacterContext;

@@ -1,238 +1,291 @@
+from enum import IntEnum
+from typing import Dict, List, Any, Union, Optional
 import time
 import json
 import traceback
-from typing import Dict, List, Any
-from enum import IntEnum
+import logging
 
-class LorePosition(IntEnum):
-    """Matches TypeScript LorePosition enum exactly"""
+class WorldInfoPosition(IntEnum):
+    """Matches TypeScript WorldInfoPosition enum"""
     BEFORE_CHAR = 0
     AFTER_CHAR = 1
-    AUTHORS_NOTE_TOP = 2  
-    AUTHORS_NOTE_BOTTOM = 3
+    AN_TOP = 2
+    AN_BOTTOM = 3
     AT_DEPTH = 4
     BEFORE_EXAMPLE = 5
     AFTER_EXAMPLE = 6
 
-# NOTE: This default item MUST match the TypeScript DEFAULT_LORE_ITEM in loreTypes.ts
-# If you update this, you MUST also update the TypeScript version
-DEFAULT_LORE_ITEM = {
-    "uid": 0,  # This will be overwritten by _generate_uid()
-    "key": [],
-    "keysecondary": [],
-    "comment": "",
-    "content": "",
-    "constant": False,
-    "vectorized": False,
-    "selective": True,  # Changed to match example
-    "selectiveLogic": 0,
-    "addMemo": True,
-    "order": 100,
-    "position": 1,
-    "disable": False,
-    "excludeRecursion": False,
-    "preventRecursion": False,
-    "delayUntilRecursion": False,
-    "probability": 100,
-    "useProbability": True,
-    "depth": 4,  # Changed to match example
-    "group": "",
-    "groupOverride": True,  # Changed to match example
-    "groupWeight": 100,
-    "scanDepth": None,
-    "caseSensitive": None,
-    "matchWholeWords": None,
-    "useGroupScoring": None,
-    "automationId": "",
-    "role": 0,
-    "sticky": 0,
-    "cooldown": 0,
-    "delay": 0,
-    "displayIndex": 0,
-    "extensions": {}
+class WorldInfoLogic(IntEnum):
+    """Matches TypeScript WorldInfoLogic enum"""
+    AND_ANY = 0
+    NOT_ALL = 1
+    NOT_ANY = 2
+    AND_ALL = 3
+
+class InsertionStrategy(IntEnum):
+    """Matches TypeScript InsertionStrategy enum"""
+    EVENLY = 0
+    CHARACTER_FIRST = 1
+    GLOBAL_FIRST = 2
+
+# Default structure for a lore entry
+DEFAULT_LORE_ENTRY = {
+    "id": None,  # Unique identifier (can be 1+index)
+    "keys": [],  # Primary trigger keywords
+    "secondary_keys": [],  # Secondary/optional filter keywords
+    "comment": "",  # User notes
+    "content": "",  # The actual lore content
+    "constant": False,  # Always included
+    "selective": False,  # Use secondary key logic
+    "insertion_order": 100,  # Insertion priority
+    "enabled": True,  # Entry is enabled
+    "position": "after_char",  # Insertion position
+    "use_regex": True,  # Use regular expressions
+    "extensions": {  # Additional settings
+        "position": 1,
+        "exclude_recursion": False,
+        "display_index": 0,
+        "probability": 100,
+        "useProbability": True,
+        "depth": 4,
+        "selectiveLogic": 0,
+        "group": "",
+        "group_override": False,
+        "group_weight": 100,
+        "prevent_recursion": False,
+        "delay_until_recursion": False,
+        "scan_depth": None,
+        "match_whole_words": None,
+        "use_group_scoring": False,
+        "case_sensitive": None,
+        "automation_id": "",
+        "role": 0,
+        "vectorized": False,
+        "sticky": 0,
+        "cooldown": 0,
+        "delay": 0
+    }
 }
 
 class CharacterValidator:
-    def __init__(self, logger):
-        self.logger = logger
-        self.next_uid = int(time.time() * 1000)  # Initialize UID counter
-        
+    """Validates and normalizes character card data to match TypeScript interfaces"""
+    
+    def __init__(self, logger: logging.Logger):
+        self.logger = logging.getLogger(__name__)
+        self.next_uid = int(time.time() * 1000)
+
     def _generate_uid(self) -> int:
-        """Generate a unique ID for a lore entry"""
+        """Generates unique numeric ID"""
         self.next_uid += 1
         return self.next_uid
 
-    def _validate_position(self, position: any) -> int:
-        """Validate and normalize a lore entry position."""
-        try:
-            pos = int(position)
-            if 0 <= pos <= 6:  # Valid range from LorePosition enum
-                return pos
-            self.logger.log_warning(f"Invalid position value {pos}, defaulting to AfterCharacter (1)")
-            return 1  # Default to AfterCharacter
-        except (ValueError, TypeError):
-            self.logger.log_warning(f"Non-integer position value {position}, defaulting to AfterCharacter (1)")
-            return 1
+    def _ensure_list(self, value: Any) -> List:
+        """Ensures value is a list"""
+        if isinstance(value, list):
+            return value
+        elif value is None:
+            return []
+        else:
+            return [value]
 
-    def _normalize_entry(self, entry: Dict) -> Dict:
-        """Normalize a single lore entry using defaults"""
+    def _normalize_lore_entry(self, entry: Dict) -> Dict:
+        """Normalizes a single lore entry to match the new structure"""
         if not isinstance(entry, dict):
-            self.logger.log_warning(f"Entry is not a dict: {type(entry)}")
-            return dict(DEFAULT_LORE_ITEM)
+            self.logger.log_warning(f"Invalid entry format: {type(entry)}")
+            return DEFAULT_LORE_ENTRY.copy()
 
-        # Create new dict with defaults
-        normalized = dict(DEFAULT_LORE_ITEM)  # Start with our default format
-        
-        # Update with any provided values
-        for key in DEFAULT_LORE_ITEM.keys():
-            if key in entry:
-                normalized[key] = entry[key]
-        
-        # Ensure UID exists
-        normalized["uid"] = entry.get("uid") or entry.get("id") or self._generate_uid()
-        
-        # Convert keys if they're in ST format
-        if "keys" in entry and isinstance(entry["keys"], list):
-            normalized["key"] = entry["keys"]
-        if "secondary_keys" in entry and isinstance(entry["secondary_keys"], list):
-            normalized["keysecondary"] = entry["secondary_keys"]
-        
-        # Convert enabled/disable
-        if "enabled" in entry:
-            normalized["disable"] = not entry["enabled"]
-        
-        # Convert insertion_order to order if needed
-        if "insertion_order" in entry:
-            normalized["order"] = entry["insertion_order"]
-        
-        # Ensure key arrays
-        normalized["key"] = normalized["key"] if isinstance(normalized["key"], list) else []
-        normalized["keysecondary"] = normalized["keysecondary"] if isinstance(normalized["keysecondary"], list) else []
-        
-        return normalized
+        normalized = DEFAULT_LORE_ENTRY.copy()
 
-    def normalize(self, data: Any) -> Dict:
         try:
-            if not isinstance(data, dict):
-                self.logger.log_warning("Invalid or missing data, creating empty character")
-                return self._create_empty_character()
+            # Update with provided values
+            for key, default_value in DEFAULT_LORE_ENTRY.items():
+                if key == "extensions":
+                    # Handle extensions separately
+                    extensions = entry.get("extensions", {})
+                    for ext_key, ext_default in DEFAULT_LORE_ENTRY["extensions"].items():
+                        normalized["extensions"][ext_key] = extensions.get(ext_key, ext_default)
+                else:
+                    normalized[key] = entry.get(key, default_value)
 
-            char_data = data.get('data', {})
-            if not isinstance(char_data, dict):
-                self.logger.log_warning(f"data.data is not a dict: {type(char_data)}")
-                char_data = {}
+            # Ensure ID exists
+            if normalized["id"] is None:
+                normalized["id"] = self._generate_uid()
 
-            # Get and normalize lore entries
-            character_book_data = char_data.get('character_book', {})
-            raw_entries = character_book_data.get('entries', {})
-
-            # Convert entries to SillyTavern import format
-            entries_array = []
-            if isinstance(raw_entries, dict):
-                # Convert object format to array
-                for key, entry in raw_entries.items():
-                    st_entry = {
-                        "id": entry.get("uid", None),
-                        "keys": entry.get("key", []),
-                        "secondary_keys": entry.get("keysecondary", []),
-                        "comment": entry.get("comment", ""),
-                        "content": entry.get("content", ""),
-                        "constant": entry.get("constant", False),
-                        "selective": entry.get("selective", False),
-                        "insertion_order": entry.get("order", 100),
-                        "enabled": not entry.get("disable", False),
-                        "position": "after_char",  # Default
-                        "extensions": {
-                            "exclude_recursion": entry.get("excludeRecursion", False),
-                            "prevent_recursion": entry.get("preventRecursion", False),
-                            "delay_until_recursion": entry.get("delayUntilRecursion", False),
-                            "display_index": entry.get("displayIndex", 0),
-                            "probability": entry.get("probability", 100),
-                            "useProbability": entry.get("useProbability", True),
-                            "depth": entry.get("depth", 4),
-                            "selectiveLogic": entry.get("selectiveLogic", 0),
-                            "group": entry.get("group", ""),
-                            "group_override": entry.get("groupOverride", False),
-                            "group_weight": entry.get("groupWeight", 100),
-                            "scan_depth": entry.get("scanDepth", None),
-                            "case_sensitive": entry.get("caseSensitive", None),
-                            "match_whole_words": entry.get("matchWholeWords", None),
-                            "use_group_scoring": entry.get("useGroupScoring", None),
-                            "automation_id": entry.get("automationId", ""),
-                            "role": entry.get("role", 0),
-                            "vectorized": entry.get("vectorized", False),
-                            "sticky": entry.get("sticky", None),
-                            "cooldown": entry.get("cooldown", None),
-                            "delay": entry.get("delay", None)
-                        }
-                    }
-                    entries_array.append(st_entry)
-            elif isinstance(raw_entries, list):
-                entries_array = raw_entries
-
-            # Build character structure
-            character = {
-                'spec': 'chara_card_v2',
-                'spec_version': '2.0',
-                'data': {
-                    'name': str(char_data.get('name', '')),
-                    'description': str(char_data.get('description', '')),
-                    'personality': str(char_data.get('personality', '')),
-                    'scenario': str(char_data.get('scenario', '')),
-                    'first_mes': str(char_data.get('first_mes', '')),
-                    'mes_example': str(char_data.get('mes_example', '')),
-                    'creator_notes': str(char_data.get('creator_notes', '')),
-                    'system_prompt': str(char_data.get('system_prompt', '')),
-                    'post_history_instructions': str(char_data.get('post_history_instructions', '')),
-                    'alternate_greetings': char_data.get('alternate_greetings', []),
-                    'tags': char_data.get('tags', []),
-                    'creator': str(char_data.get('creator', '')),
-                    'character_version': str(char_data.get('character_version', '1.0')),
-                    'character_book': {
-                        'entries': entries_array,  # Now using array format
-                        'name': character_book_data.get('name', ''),
-                        'description': character_book_data.get('description', ''),
-                        'scan_depth': character_book_data.get('scan_depth', 100),
-                        'token_budget': character_book_data.get('token_budget', 2048),
-                        'recursive_scanning': character_book_data.get('recursive_scanning', False),
-                        'extensions': character_book_data.get('extensions', {})
-                    }
-                }
-            }
-
-            return character
+            return normalized
 
         except Exception as e:
-            self.logger.log_error(f"Error normalizing character: {str(e)}")
+            self.logger.log_error(f"Error normalizing entry: {str(e)}")
+            return DEFAULT_LORE_ENTRY.copy()
+
+    def _normalize_character_book(self, book: Dict) -> Dict:
+        """Normalizes character book to match TypeScript CharacterBook interface with array-based entries"""
+        if not isinstance(book, dict):
+            self.logger.log_warning("Invalid character book format")
+            book = {}
+
+        # Initialize normalized entries list
+        normalized_entries = []
+        
+        # Handle entries from either format
+        raw_entries = book.get('entries', [])
+        
+        # Convert dict to list if necessary
+        if isinstance(raw_entries, dict):
+            self.logger.log_step("Converting dict entries to list")
+            # Sort by order if available, otherwise by key
+            sorted_entries = sorted(
+                raw_entries.items(),
+                key=lambda x: x[1].get('order', int(x[0])) if isinstance(x[1], dict) else int(x[0])
+            )
+            raw_entries = [entry for _, entry in sorted_entries]
+        elif not isinstance(raw_entries, list):
+            self.logger.log_warning(f"Unexpected entries format: {type(raw_entries)}")
+            raw_entries = []
+
+        # Normalize each entry and add to list
+        for idx, entry in enumerate(raw_entries):
+            if isinstance(entry, dict):
+                normalized_entry = self._normalize_lore_entry(entry)
+                normalized_entry['order'] = normalized_entry.get('order', idx)
+                normalized_entries.append(normalized_entry)
+
+        return {
+            "entries": normalized_entries,  # Now using list instead of dict
+            "name": str(book.get('name', '')),
+            "description": str(book.get('description', '')),
+            "scan_depth": int(book.get('scan_depth', 100)),
+            "token_budget": int(book.get('token_budget', 2048)),
+            "recursive_scanning": bool(book.get('recursive_scanning', False)),
+            "extensions": book.get('extensions', {})
+        }
+
+    def normalize(self, data: Any) -> Dict:
+        """Normalizes character data to match the new JSON format"""
+        try:
+            if not isinstance(data, dict):
+                self.logger.log_warning("Invalid data format, creating empty character")
+                return self._create_empty_character()
+
+            # Create a copy of the empty character and update it with the provided data
+            normalized = self._create_empty_character()
+
+            # Update top-level fields
+            normalized.update({
+                "name": str(data.get("name", "")),
+                "description": str(data.get("description", "")),
+                "personality": str(data.get("personality", "")),
+                "scenario": str(data.get("scenario", "")),
+                "first_mes": str(data.get("first_mes", "")),
+                "mes_example": str(data.get("mes_example", "")),
+                "creatorcomment": str(data.get("creatorcomment", "")),
+                "avatar": str(data.get("avatar", "none")),
+                "chat": str(data.get("chat", "")),
+                "talkativeness": str(data.get("talkativeness", "0.5")),
+                "fav": bool(data.get("fav", False)),
+                "tags": data.get("tags", []),
+                "spec": str(data.get("spec", "chara_card_v2")),
+                "spec_version": str(data.get("spec_version", "2.0")),
+                "create_date": str(data.get("create_date", ""))
+            })
+
+            # Normalize data section
+            data_section = data.get("data", {})
+            normalized["data"].update({
+                "name": str(data_section.get("name", "")),
+                "description": str(data_section.get("description", "")),
+                "personality": str(data_section.get("personality", "")),
+                "scenario": str(data_section.get("scenario", "")),
+                "first_mes": str(data_section.get("first_mes", "")),
+                "mes_example": str(data_section.get("mes_example", "")),
+                "creator_notes": str(data_section.get("creator_notes", "")),
+                "system_prompt": str(data_section.get("system_prompt", "")),
+                "post_history_instructions": str(data_section.get("post_history_instructions", "")),
+                "tags": data_section.get("tags", []),
+                "creator": str(data_section.get("creator", "")),
+                "character_version": str(data_section.get("character_version", "")),
+                "alternate_greetings": data_section.get("alternate_greetings", []),
+            })
+
+            # Normalize data extensions
+            extensions = data_section.get("extensions", {})
+            normalized["data"]["extensions"].update({
+                "talkativeness": str(extensions.get("talkativeness", "0.5")),
+                "fav": bool(extensions.get("fav", False)),
+                "world": str(extensions.get("world", "")),
+            })
+
+            depth_prompt = extensions.get("depth_prompt", {})
+            normalized["data"]["extensions"]["depth_prompt"] = {
+                "prompt": str(depth_prompt.get("prompt", "")),
+                "depth": int(depth_prompt.get("depth", 4)),
+                "role": str(depth_prompt.get("role", "system"))
+            }
+
+            # Normalize character book
+            character_book = data_section.get("character_book", {})
+            normalized["data"]["character_book"]["name"] = str(character_book.get("name", ""))
+
+            # Normalize lore entries
+            entries = character_book.get("entries", [])
+            normalized_entries = []
+            for index, entry in enumerate(entries):
+                normalized_entry = self._normalize_lore_entry(entry)
+                normalized_entries.append(normalized_entry)
+            normalized["data"]["character_book"]["entries"] = normalized_entries
+
+            return normalized
+
+        except Exception as e:
+            self.logger.log_error(f"Error normalizing character data: {str(e)}")
             self.logger.log_error(traceback.format_exc())
             return self._create_empty_character()
 
     def _create_empty_character(self) -> Dict:
+        """Creates empty character structure matching the new JSON format"""
         return {
-            'spec': 'chara_card_v2',
-            'spec_version': '2.0',
-            'data': {
-                'name': '',
-                'description': '',
-                'personality': '',
-                'scenario': '',
-                'first_mes': '',
-                'mes_example': '',
-                'creator_notes': '',
-                'system_prompt': '',
-                'post_history_instructions': '',
-                'alternate_greetings': [],
-                'tags': [],
-                'creator': '',
-                'character_version': '1.0',
-                'character_book': {
-                    'entries': {},  # Changed from [] to {}
-                    'name': '',
-                    'description': '',
-                    'scan_depth': 100,
-                    'token_budget': 2048,
-                    'recursive_scanning': False,
-                    'extensions': {}
+            "name": "",
+            "description": "",
+            "personality": "",
+            "scenario": "",
+            "first_mes": "",
+            "mes_example": "",
+            "creatorcomment": "",
+            "avatar": "none",
+            "chat": "",
+            "talkativeness": "0.5",
+            "fav": False,
+            "tags": [],
+            "spec": "chara_card_v2",
+            "spec_version": "2.0",
+            "data": {
+                "name": "",
+                "description": "",
+                "personality": "",
+                "scenario": "",
+                "first_mes": "",
+                "mes_example": "",
+                "creator_notes": "",
+                "system_prompt": "",
+                "post_history_instructions": "",
+                "tags": [],
+                "creator": "",
+                "character_version": "",
+                "alternate_greetings": [],
+                "extensions": {
+                    "talkativeness": "0.5",
+                    "fav": False,
+                    "world": "",
+                    "depth_prompt": {
+                        "prompt": "",
+                        "depth": 4,
+                        "role": "system"
+                    }
+                },
+                "group_only_greetings": [],
+                "character_book": {
+                    "entries": [],
+                    "name": ""
                 }
-            }
+            },
+            "create_date": ""
         }

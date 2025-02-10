@@ -1,140 +1,145 @@
-// src/handlers/importHandlers.ts
-import { LoreItem } from '../types/loreTypes';
-import { createLoreItem } from './loreHandlers';
+import { LoreEntry, createEmptyLoreEntry } from '../types/schema';
 
-function parseKey(key: string | string[] | undefined): string[] {
-    if (Array.isArray(key)) {
-        return key;
-    }
-    if (typeof key === 'string') {
-        return key.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
-    }
-    return [];
+// Parse line-based formats into LoreEntry array
+async function parseTsvContent(content: string, startIndex: number): Promise<LoreEntry[]> {
+  return content
+    .split('\n')
+    .filter(line => line.trim())
+    .map((line, index) => {
+      const [key, value] = line.split('\t').map(s => s.trim());
+      if (!key || !value) return null;
+
+      const entry = createEmptyLoreEntry(startIndex + index);
+      entry.keys = [key]; // Changed key to keys
+      entry.content = value;
+      entry.insertion_order = startIndex + index; // Changed order to insertion_order
+      return entry;
+    })
+    .filter((entry): entry is LoreEntry => entry !== null);
 }
 
-export async function importJson(jsonData: string | object, currentMaxOrder: number): Promise<LoreItem[]> {
-    let data;
-    try {
-        // Parse JSON if it's a string
-        data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
-        if (!data) return [];
-
-        // Detect format
-        let entries: any[] = [];
-        if (data.entries) {
-            // Handle V2/CardShark format
-            entries = Object.entries(data.entries).map(([key, value]: [string, any]) => ({
-                ...value,
-                uid: value.uid ?? parseInt(key)
-            }));
-        } else if (Array.isArray(data)) {
-            // Handle array format
-            entries = data;
-        } else if (data.originalData?.entries) {
-            // Handle SillyTavern format
-            entries = data.originalData.entries;
-        } else {
-            console.error('Unknown lore format:', data);
-            return [];
-        }
-
-        // Normalize entries
-        return entries.map((entry: any, index: number) => {
-            try {
-                // Calculate new order value based on currentMaxOrder
-                const newOrder = currentMaxOrder + index + 1;
-
-                // Handle string keys vs array keys
-                const keys = Array.isArray(entry.key) 
-                    ? entry.key 
-                    : (entry.keys || entry.key || '').split(',').map((k: string) => k.trim());
-
-                return {
-                    ...entry,
-                    keys,
-                    uid: entry.uid ?? entry.id ?? parseInt(entry.uid) ?? Date.now() + index,
-                    position: entry.position ?? 1,
-                    order: newOrder,
-                    displayIndex: newOrder,
-                    disable: entry.disable ?? !entry.enabled ?? false,
-                    selective: entry.selective ?? false,
-                    constant: entry.constant ?? false,
-                    keysecondary: entry.keysecondary || [],
-                    selectiveLogic: entry.selectiveLogic ?? 0
-                };
-            } catch (e) {
-                console.error('Failed to normalize entry:', e, entry);
-                return null;
-            }
-        }).filter((entry): entry is LoreItem => entry !== null);
-    } catch (error) {
-        console.error('Error importing JSON:', error);
-        throw error;
-    }
+// Import from TSV file
+export async function importTsv(file: File, startIndex: number): Promise<LoreEntry[]> {
+  try {
+    const content = await file.text();
+    return parseTsvContent(content, startIndex);
+  } catch (error) {
+    console.error('TSV import failed:', error);
+    throw new Error(`Failed to import TSV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
-export async function importTsv(file: File, currentMaxOrder: number): Promise<LoreItem[]> {
-    try {
-        const text = await file.text();
-        const lines = text.split('\n').filter((line: string) => line.trim());
+// Extract entries from JSON data in various formats
+function extractEntriesFromJson(data: any): LoreEntry[] {
+  if (!data) return [];
 
-        return lines
-            .map((line: string, index: number) => {
-                try {
-                    const [key, value] = line.split('\t');
-                    if (!key?.trim() || !value?.trim()) return null;
+  // Handle various JSON formats
+  let rawEntries: any[] = [];
 
-                    const newItem = createLoreItem(currentMaxOrder + index);
-                    return {
-                        ...newItem,
-                        key: [key.trim()],
-                        content: value.trim(),
-                        order: currentMaxOrder + index + 1,
-                        displayIndex: currentMaxOrder + index + 1
-                    };
-                } catch (error) {
-                    console.error(`Error processing TSV line ${index + 1}:`, error);
-                    return null;
-                }
-            })
-            .filter((item): item is LoreItem => item !== null);
-    } catch (error) {
-        console.error('Error importing TSV file:', error);
-        throw error;
-    }
+  if (Array.isArray(data?.data?.character_book?.entries)) {
+    // New format: data.data.character_book.entries is an array
+    rawEntries = data.data.character_book.entries;
+  } else if (data?.data?.character_book?.entries && typeof data.data.character_book.entries === 'object') {
+    // New format: data.data.character_book.entries is an object
+    rawEntries = Object.values(data.data.character_book.entries);
+  }
+   else if (Array.isArray(data.entries)) {
+    // Already in array format
+    rawEntries = data.entries;
+  } else if (data.entries && typeof data.entries === 'object') {
+    // Convert object format to array
+    rawEntries = Object.values(data.entries);
+  }
+   else if (Array.isArray(data)) {
+    // Direct array format
+    rawEntries = data;
+  } else if (data.originalData?.entries) {
+    // Handle SillyTavern format
+    rawEntries = Array.isArray(data.originalData.entries) 
+      ? data.originalData.entries 
+      : Object.values(data.originalData.entries);
+  }
+
+  return rawEntries
+    .map((entry: any, index: number) => {
+      if (!entry || typeof entry !== 'object') return null;
+
+      // Use the new LoreEntry interface
+      return {
+        id: entry.id ?? index + 1,
+        keys: Array.isArray(entry.keys) ? entry.keys : (entry.keys || '').split(',').map((k: string) => k.trim()),
+        secondary_keys: Array.isArray(entry.secondary_keys) ? entry.secondary_keys : (entry.secondary_keys || '').split(',').map((k: string) => k.trim()),
+        comment: entry.comment || '',
+        content: entry.content || '',
+        constant: entry.constant || false,
+        selective: entry.selective || false,
+        insertion_order: entry.insertion_order ?? 100,
+        enabled: entry.enabled ?? true,
+        position: entry.position || "after_char",
+        use_regex: entry.use_regex ?? true,
+        extensions: {
+            position: entry.extensions?.position ?? 1,
+            exclude_recursion: entry.extensions?.exclude_recursion ?? false,
+            display_index: entry.extensions?.display_index ?? 0,
+            probability: entry.extensions?.probability ?? 100,
+            useProbability: entry.extensions?.useProbability ?? true,
+            depth: entry.extensions?.depth ?? 4,
+            selectiveLogic: entry.extensions?.selectiveLogic ?? 0,
+            group: entry.extensions?.group ?? "",
+            group_override: entry.extensions?.group_override ?? false,
+            group_weight: entry.extensions?.group_weight ?? 100,
+            prevent_recursion: entry.extensions?.prevent_recursion ?? false,
+            delay_until_recursion: entry.extensions?.delay_until_recursion ?? false,
+            scan_depth: entry.extensions?.scan_depth ?? null,
+            match_whole_words: entry.extensions?.match_whole_words ?? null,
+            use_group_scoring: entry.extensions?.use_group_scoring ?? false,
+            case_sensitive: entry.extensions?.case_sensitive ?? null,
+            automation_id: entry.extensions?.automation_id ?? "",
+            role: entry.extensions?.role ?? 0,
+            vectorized: entry.extensions?.vectorized ?? false,
+            sticky: entry.extensions?.sticky ?? 0,
+            cooldown: entry.extensions?.cooldown ?? 0,
+            delay: entry.extensions?.delay ?? 0
+        }
+      };
+    })
+    .filter((entry): entry is LoreEntry => entry !== null);
 }
 
-export async function importPng(file: File): Promise<LoreItem[]> {
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
+// Import from JSON data
+export async function importJson(jsonData: string | object): Promise<LoreEntry[]> {
+  try {
+    const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+    return extractEntriesFromJson(data);
+  } catch (error) {
+    console.error('JSON import failed:', error);
+    throw new Error(`Failed to import JSON: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
 
-        const response = await fetch('/api/extract-lore', {
-            method: 'POST',
-            body: formData,
-        });
+// Import from PNG character card
+export async function importPng(file: File): Promise<LoreEntry[]> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
 
-        if (!response.ok) {
-            throw new Error('Failed to extract lore');
-        }
+    const response = await fetch('/api/extract-lore', {
+      method: 'POST',
+      body: formData,
+    });
 
-        const data = await response.json();
-        
-        if (!data.success || !data.loreItems) {
-            throw new Error('No lore items found in PNG');
-        }
-
-        return data.loreItems.map((item: any, index: number): LoreItem => {
-            const newItem = createLoreItem(index);
-            return {
-                ...newItem,
-                ...item,
-                key: parseKey(item.key),
-                displayIndex: index
-            };
-        });
-    } catch (error) {
-        console.error('Error importing PNG:', error);
-        throw error;
+    if (!response.ok) {
+      throw new Error('Failed to extract lore from PNG');
     }
+
+    const data = await response.json();
+    if (!data.success || !data.loreItems) {
+      throw new Error('No lore items found in PNG');
+    }
+
+    return extractEntriesFromJson(data.loreItems);
+  } catch (error) {
+    console.error('PNG import failed:', error);
+    throw new Error(`Failed to import PNG: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
