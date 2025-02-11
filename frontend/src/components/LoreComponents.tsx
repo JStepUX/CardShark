@@ -69,19 +69,45 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           </button>
 
           <select
-            value={item.position}
-            onChange={handlePositionChange}
-            className="bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
-          >
-            <option value="before_char">Before Character</option>
-            <option value="after_char">After Character</option>
-            <option value="an_top">Author's Note Top</option>
-            <option value="an_bottom">Author's Note Bottom</option>
-            <option value="at_depth">@ Depth</option>
-            <option value="before_example">Before Examples</option>
-            <option value="after_example">After Examples</option>
-          </select>
-        </div>
+              value={item.position}
+              onChange={handlePositionChange}
+              className="bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
+            >
+              <option value="before_char">Before Character</option>
+              <option value="after_char">After Character</option>
+              <option value="an_top">Author's Note Top</option>
+              <option value="an_bottom">Author's Note Bottom</option>
+              <option value="at_depth">@ Depth</option>
+              <option value="before_example">Before Examples</option>
+              <option value="after_example">After Examples</option>
+            </select>
+            
+            {item.position === 'at_depth' && (
+              <>
+                <select
+                  value={item.extensions.role || 0}
+                  onChange={(e) => onUpdate(item.id, { 
+                    extensions: { ...item.extensions, role: parseInt(e.target.value) }
+                  })}
+                  className="bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
+                >
+                  <option value={0}>as System</option>
+                  <option value={1}>as User</option>
+                  <option value={2}>as Character</option>
+                </select>
+                <input
+                  type="number"
+                  value={item.extensions.depth || ''}
+                  onChange={(e) => onUpdate(item.id, { 
+                    extensions: { ...item.extensions, depth: parseInt(e.target.value) || 0 }
+                  })}
+                  placeholder="Depth"
+                  className="w-20 bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
+                  min="0"
+                />
+              </>
+            )}
+          </div>
 
         {/* Right side controls */}
         <div className="flex items-center gap-1">
