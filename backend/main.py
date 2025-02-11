@@ -56,6 +56,7 @@ validator = CharacterValidator(logger)
 png_debug = PngDebugHandler(logger)
 
 # API Endpoints
+
 @app.post("/api/debug-png")
 async def debug_png_metadata(file: UploadFile = File(...)):
     """Debug endpoint to analyze PNG metadata"""
@@ -326,16 +327,60 @@ async def health_check():
 
 @app.post("/api/upload-png")
 async def upload_png(file: UploadFile = File(...)):
-    """Handle PNG upload with metadata extraction and validation."""
+    """Handle PNG upload with metadata extraction."""
     try:
         content = await file.read()
+        logger.log_step("Reading PNG metadata")
         raw_metadata = png_handler.read_metadata(content)
-        # Validate the metadata through CharacterValidator
+        
+        if not raw_metadata:
+            logger.log_step("No metadata found, creating empty character")
+            raw_metadata = validator.create_empty_character()
+        else:
+            logger.log_step("Raw metadata structure:")
+            logger.log_step(json.dumps(raw_metadata, indent=2)[:500])
+            
+            # If this is Backyard format (has 'character' field), pass directly to validator
+            if 'character' in raw_metadata:
+                logger.log_step("Detected Backyard.ai format")
+                # Extract just the character data for validator
+                character_data = raw_metadata['character']
+                # Convert lore items if present
+                lore_entries = []
+                if 'loreItems' in character_data:
+                    for item in character_data['loreItems']:
+                        entry = {
+                            'keys': item['key'].split(','),
+                            'content': item['value']
+                        }
+                        lore_entries.append(entry)
+
+                v2_data = {
+                    "data": {
+                        "name": character_data.get('aiName') or character_data.get('aiDisplayName') or '',
+                        "description": character_data.get('aiPersona', ''),
+                        "scenario": character_data.get('scenario', ''),
+                        "first_mes": character_data.get('firstMessage', ''),
+                        "mes_example": character_data.get('customDialogue', ''),
+                        "system_prompt": character_data.get('basePrompt', ''),
+                        "character_book": {
+                            "entries": lore_entries,
+                            "name": "Imported Lore"
+                        }
+                    }
+                }
+                raw_metadata = v2_data
+                logger.log_step("Converted to V2 structure:")
+                logger.log_step(json.dumps(raw_metadata, indent=2))
+        
+        # Always validate with our V2 validator
         validated_metadata = validator.normalize(raw_metadata)
+        
         return {
             "success": True,
             "metadata": validated_metadata,
         }
+        
     except Exception as e:
         logger.log_error(f"Upload failed: {str(e)}")
         return {"success": False, "error": str(e)}
