@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, BookOpen, FileJson } from 'lucide-react';
+import { Plus, BookOpen, FileJson, FileText, Image } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { LoreCard } from './LoreComponents';
 import DropdownMenu from './DropDownMenu';
 import { LoreEntry, createEmptyLoreEntry, CharacterCard } from '../types/schema';
-import { importJson } from '../handlers/importHandlers';
+import { importJson, importTsv, importPng } from '../handlers/importHandlers';
 
 // Type guard to validate LoreEntry
 function isLoreEntry(value: unknown): value is LoreEntry {
@@ -24,19 +24,16 @@ const LoreView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Get entries from character data
+  // Existing entries and filtering logic (unchanged)
   const entries = useMemo(() => {
     if (!characterData?.data?.character_book?.entries) return [];
 
     const rawEntries = characterData.data.character_book.entries;
     
-    // Handle both array and object formats
     let entriesArray: LoreEntry[] = [];
     if (Array.isArray(rawEntries)) {
-      // Already an array
       entriesArray = rawEntries;
     } else if (typeof rawEntries === 'object' && rawEntries !== null) {
-      // Convert object to array
       entriesArray = Object.entries(rawEntries)
         .map(([key, value]) => {
           if (typeof value === 'object' && value !== null) {
@@ -51,7 +48,6 @@ const LoreView: React.FC = () => {
         .filter((entry): entry is LoreEntry => entry !== null);
     }
 
-    // Validate and sort entries
     return entriesArray
       .filter(isLoreEntry)
       .map((entry, index) => ({
@@ -72,7 +68,7 @@ const LoreView: React.FC = () => {
     });
   }, [entries, searchTerm]);
 
-  // Helper function to update character data with new entries
+  // Helper function to update character data
   const updateCharacterData = (updatedEntries: LoreEntry[]): void => {
     if (!characterData) return;
 
@@ -90,62 +86,93 @@ const LoreView: React.FC = () => {
     setCharacterData(updatedCharacterData);
   };
 
-  // Add new entry
+  // Generic import handler
+  const handleImport = async (
+    importFunction: (file: File, startIndex: number) => Promise<LoreEntry[]>,
+    accept: string,
+    fileType: string
+  ) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+
+    input.onchange = async (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      
+      if (!file || !characterData) return;
+
+      try {
+        const importedEntries = await importFunction(file, entries.length);
+        
+        // Add imported entries to existing ones
+        const updatedEntries = [
+          ...entries,
+          ...importedEntries.map((entry, index) => ({
+            ...entry,
+            id: entries.length + index + 1,
+            insertion_order: entries.length + index
+          }))
+        ];
+
+        updateCharacterData(updatedEntries);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Failed to import ${fileType}`);
+      }
+    };
+
+    input.click();
+  };
+
+  // Specific import handlers using the generic handler
+  const handleImportJson = () => handleImport(importJson, '.json', 'JSON');
+  const handleImportTsv = () => handleImport(importTsv, '.tsv,.txt', 'TSV');
+  const handleImportPng = () => handleImport(importPng, '.png', 'PNG');
+
+  // Basic entry management handlers
   const handleAddEntry = () => {
     if (!characterData) return;
-    
     const newEntry = createEmptyLoreEntry(entries.length);
-    const updatedEntries = [...entries, newEntry];
-    
-    updateCharacterData(updatedEntries);
+    updateCharacterData([...entries, newEntry]);
   };
 
-  // Delete entry
   const handleDeleteEntry = (id: number) => {
     if (!characterData) return;
-
     const updatedEntries = entries
-      .filter((entry: LoreEntry) => entry.id !== id)
-      .map((entry: LoreEntry, index: number) => ({
+      .filter(entry => entry.id !== id)
+      .map((entry, index) => ({
         ...entry,
-        id: index + 1, // re-index entries
+        id: index + 1
       }));
-
     updateCharacterData(updatedEntries);
   };
 
-  // Update entry
   const handleUpdateEntry = (id: number, updates: Partial<LoreEntry>) => {
     if (!characterData) return;
-    
-    const updatedEntries = entries.map((entry: LoreEntry) => 
+    const updatedEntries = entries.map(entry =>
       entry.id === id ? { ...entry, ...updates } : entry
     );
-    
     updateCharacterData(updatedEntries);
   };
 
-  // Move entry up/down
   const handleMoveEntry = (id: number, direction: 'up' | 'down') => {
     if (!characterData) return;
     
-    const index = entries.findIndex((e: LoreEntry) => e.id === id);
+    const index = entries.findIndex(e => e.id === id);
     if (index === -1) return;
     
     const updatedEntries = [...entries];
     
     if (direction === 'up' && index > 0) {
-      const temp = updatedEntries[index];
-      updatedEntries[index] = updatedEntries[index - 1];
-      updatedEntries[index - 1] = temp;
+      [updatedEntries[index], updatedEntries[index - 1]] = 
+      [updatedEntries[index - 1], updatedEntries[index]];
     } else if (direction === 'down' && index < updatedEntries.length - 1) {
-      const temp = updatedEntries[index];
-      updatedEntries[index] = updatedEntries[index + 1];
-      updatedEntries[index + 1] = temp;
+      [updatedEntries[index], updatedEntries[index + 1]] = 
+      [updatedEntries[index + 1], updatedEntries[index]];
     }
     
-    // Update order numbers
-    const reorderedEntries = updatedEntries.map((entry: LoreEntry, idx: number) => ({
+    const reorderedEntries = updatedEntries.map((entry, idx) => ({
       ...entry,
       id: idx + 1
     }));
@@ -153,40 +180,8 @@ const LoreView: React.FC = () => {
     updateCharacterData(reorderedEntries);
   };
 
-  // Import JSON
-  const handleImportJson = async () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file || !characterData) return;
-
-      try {
-        const text = await file.text();
-        const importedEntries = await importJson(text);
-        
-        // Add new entries to existing ones with updated orders
-        const updatedEntries = [
-          ...entries,
-          ...importedEntries.map((entry: LoreEntry, index: number) => ({
-            ...entry,
-            id: entries.length + index + 1,
-            insertion_order: entries.length + index
-          }))
-        ];
-        
-        updateCharacterData(updatedEntries);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to import JSON');
-      }
-    };
-    input.click();
-  };
-
   return (
     <div className="h-full flex flex-col">
-      {/* Header Controls */}
       <div className="p-8 pb-4 flex flex-col gap-4">
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold">
@@ -197,7 +192,9 @@ const LoreView: React.FC = () => {
               icon={BookOpen}
               label="Import Lore"
               items={[
-                { icon: FileJson, label: 'Import from JSON', onClick: handleImportJson }
+                { icon: FileJson, label: 'Import from JSON', onClick: handleImportJson },
+                { icon: FileText, label: 'Import from TSV', onClick: handleImportTsv },
+                { icon: Image, label: 'Import from PNG', onClick: handleImportPng }
               ]}
               buttonClassName="p-2 hover:bg-gray-700 rounded-lg transition-colors"
             />
@@ -211,7 +208,6 @@ const LoreView: React.FC = () => {
           </div>
         </div>
 
-        {/* Search */}
         <input
           type="text"
           placeholder="Search keys..."
@@ -220,7 +216,6 @@ const LoreView: React.FC = () => {
           className="px-4 py-2 bg-stone-950 rounded-lg border-slate-700"
         />
 
-        {/* Error display */}
         {error && (
           <div className="px-4 py-2 bg-red-900/50 text-red-200 rounded-lg">
             {error}
@@ -228,7 +223,6 @@ const LoreView: React.FC = () => {
         )}
       </div>
 
-      {/* Entries List */}
       <div className="flex-1 overflow-y-auto px-8 pb-8">
         <div className="space-y-4">
           {filteredEntries.map((entry: LoreEntry, index: number) => (

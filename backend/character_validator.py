@@ -39,7 +39,7 @@ DEFAULT_LORE_ENTRY = {
     "selective": False,  # Use secondary key logic
     "insertion_order": 100,  # Insertion priority
     "enabled": True,  # Entry is enabled
-    "position": "after_char",  # Insertion position
+    "position": 1,  # Insertion position
     "use_regex": True,  # Use regular expressions
     "extensions": {  # Additional settings
         "position": 1,

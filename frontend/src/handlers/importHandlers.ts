@@ -75,7 +75,7 @@ function extractEntriesFromJson(data: any): LoreEntry[] {
         selective: entry.selective || false,
         insertion_order: entry.insertion_order ?? 100,
         enabled: entry.enabled ?? true,
-        position: entry.position || "after_char",
+        position: entry.position || 1,
         use_regex: entry.use_regex ?? true,
         extensions: {
             position: entry.extensions?.position ?? 1,

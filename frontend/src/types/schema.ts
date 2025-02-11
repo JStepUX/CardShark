@@ -120,10 +120,10 @@ export function createEmptyLoreEntry(index: number): LoreEntry {
         comment: '',
         content: '',
         constant: false,
-        selective: true,
+        selective: false,
         insertion_order: 100,
         enabled: true,
-        position: "after_char",
+        position: "1",
         use_regex: true,
         extensions: {
             position: 1,
