@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse # type: ignore
 from typing import Optional
 import webbrowser
 from threading import Timer
+import time
 
 # Local imports
 from backend.log_manager import LogManager  # Change to relative import
@@ -28,6 +29,7 @@ from backend.errors import CardSharkError
 from backend.backyard_handler import BackyardHandler
 from backend.settings_manager import SettingsManager
 from backend.character_validator import CharacterValidator
+from backend.api_handler import ApiHandler
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -54,8 +56,58 @@ png_handler = PngMetadataHandler(logger)
 backyard_handler = BackyardHandler(logger)
 validator = CharacterValidator(logger)
 png_debug = PngDebugHandler(logger)
+api_handler = ApiHandler(logger)
 
 # API Endpoints
+
+@app.post("/api/test-connection")
+async def test_api_connection(request: Request):
+    """Test connection to KoboldCPP API."""
+    try:
+        data = await request.json()
+        url = data.get('url')
+        api_key = data.get('apiKey')
+        
+        if not url:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "URL is required"
+                }
+            )
+            
+        success, error = api_handler.test_connection(url, api_key)
+        
+        if success:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "message": "Connection successful",
+                    "timestamp": time.time()
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": error or "Connection failed",
+                    "timestamp": time.time()
+                }
+            )
+            
+    except Exception as e:
+        logger.log_error(f"API connection test failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e),
+                "timestamp": time.time()
+            }
+        )
 
 @app.post("/api/debug-png")
 async def debug_png_metadata(file: UploadFile = File(...)):
