@@ -84,7 +84,6 @@ class PngMetadataHandler:
                     self.logger.log_step(f"Info Key: {key}")
                 
                 return {}
-
         except Exception as e:
             self.logger.log_error(f"Failed to read metadata: {str(e)}")
             raise

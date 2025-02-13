@@ -2,7 +2,7 @@ import sys
 import os
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Response, Request # type: ignore
-from fastapi.responses import FileResponse, JSONResponse # type: ignore
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse # type: ignore
 from fastapi.staticfiles import StaticFiles # type: ignore
 from fastapi.middleware.cors import CORSMiddleware # type: ignore
 import uvicorn # type: ignore
@@ -59,16 +59,57 @@ png_debug = PngDebugHandler(logger)
 api_handler = ApiHandler(logger)
 
 # API Endpoints
+@app.post("/api/generate")
+async def generate_message(request: Request):
+    """Handle streaming message generation request."""
+    try:
+        data = await request.json()
+        logger.log_step("Received generation request")
+        
+        # Get current API settings
+        api_settings = settings_manager.get_api_settings()
+        
+        if not api_settings.get('enabled'):
+            raise HTTPException(status_code=400, detail="API is not enabled")
+
+        url = api_settings.get('url')
+        if not url:
+            raise HTTPException(status_code=400, detail="API URL not configured")
+
+        logger.log_step("Starting streaming response")
+        
+        # Return a streaming response with appropriate headers
+        return StreamingResponse(
+            api_handler.stream_generate(
+                url, 
+                api_settings.get('apiKey'), 
+                data['prompt']
+            ),
+            media_type='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no'  # Disable buffering
+            }
+        )
+
+    except Exception as e:
+        logger.log_error(f"Error in stream generation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/test-connection")
 async def test_api_connection(request: Request):
-    """Test connection to KoboldCPP API."""
+    """Test connection to LLM API endpoint."""
     try:
         data = await request.json()
         url = data.get('url')
         api_key = data.get('apiKey')
         
+        logger.log_step(f"Testing API connection to: {url}")
+        logger.log_step(f"API Key provided: {'Yes' if api_key else 'No'}")
+        
         if not url:
+            logger.log_warning("No URL provided for API test")
             return JSONResponse(
                 status_code=400,
                 content={
@@ -80,6 +121,17 @@ async def test_api_connection(request: Request):
         success, error = api_handler.test_connection(url, api_key)
         
         if success:
+            logger.log_step("API connection test successful")
+            # Update settings to enable API
+            settings_manager.update_setting('api', {
+                'enabled': True,
+                'url': url,
+                'apiKey': api_key,
+                'lastConnectionStatus': {
+                    'connected': True,
+                    'timestamp': time.time(),
+                }
+            })
             return JSONResponse(
                 status_code=200,
                 content={
@@ -89,6 +141,18 @@ async def test_api_connection(request: Request):
                 }
             )
         else:
+            logger.log_warning(f"API connection test failed: {error}")
+            # Update settings to disable API
+            settings_manager.update_setting('api', {
+                'enabled': False,
+                'url': url,
+                'apiKey': api_key,
+                'lastConnectionStatus': {
+                    'connected': False,
+                    'timestamp': time.time(),
+                    'error': error
+                }
+            })
             return JSONResponse(
                 status_code=400,
                 content={
@@ -99,7 +163,7 @@ async def test_api_connection(request: Request):
             )
             
     except Exception as e:
-        logger.log_error(f"API connection test failed: {str(e)}")
+        logger.log_error(f"API connection test error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
