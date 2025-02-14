@@ -104,15 +104,19 @@ const MessagesView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `You are helping to write a first message or greeting for a character named "${characterData?.data?.name}".
-Character description: ${characterData?.data?.description}
+          prompt: `You are tasked with crafting a new, engaging first message for a character using the information provided below. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark.
+
+Character Name: "${characterData?.data?.name}"
+Description: ${characterData?.data?.description}
 Personality: ${characterData?.data?.personality}
 Scenario: ${characterData?.data?.scenario}
 
-Write a natural, in-character first message that introduces the character and starts the conversation. Keep it engaging and use the following existing first message as a guide for expected quality, length, and style without being too similar in content:
+Use the following as reference points:
 Current First Message: ${characterData?.data?.first_mes}
-Example Messages:
-${characterData?.data?.mes_example}`
+Example Messages: 
+${characterData?.data?.mes_example}
+
+Craft a new introductory message that starts the conversation in a fresh and engaging way, ensuring variety from the existing scenario.`
         })
       });
 

@@ -65,7 +65,8 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         character_book: {
           entries: [],
           name: ""
-        }
+        },
+        spec: ''
       },
       create_date: ""
     };

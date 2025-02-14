@@ -58,12 +58,13 @@ export interface LoreEntry {
 
 // Character Book Interface
 export interface CharacterBook {
-    entries: LoreEntry[];
+    entries: any[];
     name: string;
 }
 
 // Main Character Data Interface
 export interface CharacterData {
+    spec: string;
     name: string;
     description: string;
     personality: string;
@@ -107,7 +108,35 @@ export interface CharacterCard {
     tags: string[];
     spec: string;
     spec_version: string;
-    data: CharacterData;
+    data: {
+        name: string;
+        description: string;
+        personality: string;
+        scenario: string;
+        first_mes: string;
+        mes_example: string;
+        creator_notes: string;
+        system_prompt: string;
+        post_history_instructions: string;
+        tags: string[];
+        imported_images?: string[];
+        creator: string;
+        character_version: string;
+        alternate_greetings: string[];
+        extensions: {
+            talkativeness: string;
+            fav: boolean;
+            world: string;
+            depth_prompt: {
+                prompt: string;
+                depth: number;
+                role: string;
+            };
+        };
+        group_only_greetings: string[];
+        character_book: CharacterBook;
+        spec: string;
+    };
     create_date: string;
 }
 
@@ -196,7 +225,8 @@ export function createEmptyCharacterCard(): CharacterCard {
             character_book: {
                 entries: [],
                 name: "Fresh"
-            }
+            },
+            spec: ""
         },
         create_date: ""
     };

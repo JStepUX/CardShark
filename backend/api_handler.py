@@ -6,8 +6,8 @@ class ApiHandler:
     def __init__(self, logger):
         self.logger = logger
 
-    def test_connection(self, url: str, api_key: Optional[str] = None) -> Tuple[bool, Optional[str]]:
-        """Test connection to LLM API endpoint."""
+    def test_connection(self, url: str, api_key: Optional[str] = None) -> Tuple[bool, Optional[str], Optional[Dict]]:
+        """Test connection to LLM API endpoint and detect template."""
         try:
             # Ensure URL has protocol
             if not url.startswith(('http://', 'https://')):
@@ -24,9 +24,9 @@ class ApiHandler:
             
             test_data = {
                 "messages": [
-                    {"role": "user", "content": "Test connection"}
+                    {"role": "user", "content": "Hi"}
                 ],
-                "max_tokens": 40,
+                "max_tokens": 10,
                 "temperature": 0.7
             }
             
@@ -38,8 +38,20 @@ class ApiHandler:
             )
             
             if response.status_code == 200:
-                self.logger.log_step("Connection test successful")
-                return True, None
+                try:
+                    response_data = response.json()
+                    response_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    self.logger.log_step(f"Got response text: {response_text}")
+                    
+                    # Detect template from response
+                    template = self._detect_template(response_text)
+                    template_name = template['name'] if template else 'Unknown'
+                    self.logger.log_step(f"Detected template: {template_name}")
+                    
+                    return True, None, template
+                except Exception as e:
+                    self.logger.log_error(f"Template detection failed: {str(e)}")
+                    return True, None, None
             else:
                 error_msg = f"API returned status {response.status_code}"
                 try:
@@ -49,22 +61,22 @@ class ApiHandler:
                 except:
                     pass
                 self.logger.log_warning(error_msg)
-                return False, error_msg
+                return False, error_msg, None
                     
         except requests.exceptions.ConnectionError:
             error = "Could not connect to server"
             self.logger.log_warning(error)
-            return False, error
+            return False, error, None
             
         except requests.exceptions.Timeout:
             error = "Connection timed out"
             self.logger.log_warning(error)
-            return False, error
+            return False, error, None
                 
         except Exception as e:
             error = f"Unexpected error: {str(e)}"
             self.logger.log_error(error)
-            return False, error
+            return False, error, None
         
     def wake_api(self, url: str, api_key: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         """Light-weight check to wake up API if sleeping."""
@@ -197,3 +209,50 @@ class ApiHandler:
             error_msg = f"Stream generation failed: {str(e)}"
             self.logger.log_error(error_msg)
             yield f"data: {json.dumps({'error': error_msg})}\n\n".encode('utf-8')
+
+    def get_model_info(self, url: str, api_key: Optional[str] = None) -> Optional[dict]:
+        """Get model information from the API if available."""
+        try:
+            # Ensure URL has protocol
+            if not url.startswith(('http://', 'https://')):
+                url = f'http://{url}'
+                
+            url = url.rstrip('/') + '/v1/models'
+            self.logger.log_step(f"Fetching model info from: {url}")
+            
+            headers = {'Content-Type': 'application/json'}
+            if api_key:
+                headers['Authorization'] = f'Bearer {api_key}'
+            
+            response = requests.get(
+                url,
+                headers=headers,
+                timeout=5  # Short timeout since this is optional
+            )
+            
+            self.logger.log_step(f"Models response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.logger.log_step(f"Models response data: {data}")
+                
+                if 'data' in data and len(data['data']) > 0:
+                    model = data['data'][0]  # Get first/default model
+                    model_info = {
+                        'id': model.get('id'),
+                        'owned_by': model.get('owned_by'),
+                        'created': model.get('created')
+                    }
+                    self.logger.log_step(f"Extracted model info: {model_info}")
+                    return model_info
+            
+            self.logger.log_step("No model info available")
+            return None
+            
+        except requests.exceptions.RequestException as e:
+            self.logger.log_step(f"Could not fetch model info: {str(e)}")
+            return None
+            
+        except Exception as e:
+            self.logger.log_error(f"Error getting model info: {str(e)}")
+            return None

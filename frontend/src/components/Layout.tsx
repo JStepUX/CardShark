@@ -1,74 +1,93 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { ImagePlus, Link, Settings, Save } from 'lucide-react';
-import DropdownMenu from './DropDownMenu';
-import ImagePreview from './ImagePreview';
-import { useCharacter } from '../contexts/CharacterContext';
-import LoreView from './LoreView';
-import MessagesView from './MessagesView';
-import CharacterInfoView from './CharacterInfoView';
-import JsonViewer from './JsonViewer';
-import logo from '../assets/cardshark_justfin.png';
-import { BackyardImportDialog } from './BackyardImportDialog';
-import { AboutDialog } from './AboutDialog';
-import TokenCounter from './TokenCounter';
-import CharacterGallery from './CharacterGallery';
-import SettingsModal from './SettingsModal';
+import React, { useRef, useState, useEffect } from "react";
+import { ImagePlus, Link, Save } from "lucide-react";
+import DropdownMenu from "./DropDownMenu";
+import ImagePreview from "./ImagePreview";
+import { useCharacter } from "../contexts/CharacterContext";
+import LoreView from "./LoreView";
+import MessagesView from "./MessagesView";
+import CharacterInfoView from "./CharacterInfoView";
+import JsonViewer from "./JsonViewer";
+import APISettingsView from "./APISettingsView";
+import logo from "../assets/cardshark_justfin.png";
+import { BackyardImportDialog } from "./BackyardImportDialog";
+import { AboutDialog } from "./AboutDialog";
+import TokenCounter from "./TokenCounter";
+import CharacterGallery from "./CharacterGallery";
+import SettingsModal from "./SettingsModal";
+import { ChatTemplate } from "../types/api";
+import { Settings, DEFAULT_SETTINGS } from "../types/settings";
 
-type View = 'gallery' | 'info' | 'lore' | 'json' | 'messages';
+type View = "gallery" | "settings" | "info" | "lore" | "json" | "messages";
 
 const Layout: React.FC = () => {
-  // Existing state
-  const [currentView, setCurrentView] = useState<View>('gallery'); // Changed back to gallery
+  const [currentView, setCurrentView] = useState<View>("gallery");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showBackyardDialog, setShowBackyardDialog] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
-  const [backendStatus, setBackendStatus] = useState<'running' | 'disconnected'>('disconnected');
-  const {
-  characterData,
-  setCharacterData,
-  imageUrl,
-  setImageUrl,
-  isLoading,
-  setIsLoading,
-  error,
-  setError
-} = useCharacter();
+  const [backendStatus, setBackendStatus] = useState<"running" | "disconnected">("disconnected");
+  const { characterData, setCharacterData, imageUrl, setImageUrl, isLoading, setIsLoading, error, setError } = useCharacter();
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch("/api/settings");
+        if (!response.ok) throw new Error("Failed to load settings");
+        const data = await response.json();
+        if (data.success) {
+          setSettings(data.settings);
+        }
+      } catch (err) {
+        console.error("Failed to load settings:", err);
+      }
+    };
+    loadSettings();
+  }, []);
 
-  // Handle file upload
+  const handleSettingsUpdate = async (updates: Partial<Settings>) => {
+    try {
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error("Failed to save settings");
+      const data = await response.json();
+      if (data.success) {
+        setSettings((prev) => ({ ...prev, ...updates }));
+        setSettingsChangeCount((prev) => prev + 1);
+      }
+    } catch (err) {
+      console.error("Failed to save settings:", err);
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-  
     try {
       setIsLoading(true);
       setError(null);
-  
       const formData = new FormData();
-      formData.append('file', file);
-  
-      const response = await fetch('/api/upload-png', {
-        method: 'POST',
+      formData.append("file", file);
+      const response = await fetch("/api/upload-png", {
+        method: "POST",
         body: formData,
       });
-  
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.statusText}`);
       }
-  
       const data = await response.json();
-      
       if (data.success && data.metadata) {
-        // Remove normalization - server handles it
         setCharacterData(data.metadata);
         setImageUrl(URL.createObjectURL(file));
       } else {
-        throw new Error(data.message || 'Failed to process character data');
+        throw new Error(data.message || "Failed to process character data");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load character');
+      setError(err instanceof Error ? err.message : "Failed to load character");
       setCharacterData(null);
       setImageUrl(undefined);
     } finally {
@@ -76,32 +95,63 @@ const Layout: React.FC = () => {
     }
   };
 
-  // Trigger file input click
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
 
-  // Handle URL import (placeholder)
   const handleUrlImport = () => {
     setShowBackyardDialog(true);
   };
 
-  // Render main content based on current view
   const renderContent = () => {
     switch (currentView) {
-      case 'lore':
+      case "lore":
         return <LoreView />;
-      
-      case 'json':
+      case "json":
         return <JsonViewer />;
-
-      case 'messages':
+      case "messages":
         return <MessagesView />;
-        
-      case 'gallery':
+      case "gallery":
         return <CharacterGallery settingsChangeCount={settingsChangeCount} />;
-      
-      case 'info':
+      case "settings":
+        return (
+          <APISettingsView
+            settings={{
+              url: settings.api?.url || "",
+              apiKey: settings.api?.apiKey || "",
+              template: settings.api?.template || ChatTemplate.MISTRAL_V1,
+              lastConnectionResult: settings.api?.lastConnectionStatus
+                ? {
+                    success: settings.api.lastConnectionStatus.connected,
+                    timestamp: settings.api.lastConnectionStatus.timestamp,
+                    error: settings.api.lastConnectionStatus.error,
+                  }
+                : undefined,
+              character_directory: settings.character_directory,
+              save_to_character_directory: settings.save_to_character_directory,
+            }}
+            onUpdate={(updates) => {
+              const newSettings: Partial<Settings> = {
+                api: {
+                  ...settings.api,
+                  url: updates.url || settings.api.url,
+                  apiKey: updates.apiKey || settings.api.apiKey,
+                  template: updates.template || settings.api.template,
+                  lastConnectionStatus: updates.lastConnectionResult
+                    ? {
+                        connected: updates.lastConnectionResult.success,
+                        timestamp: updates.lastConnectionResult.timestamp,
+                        error: updates.lastConnectionResult.error,
+                      }
+                    : settings.api.lastConnectionStatus,
+                },
+                character_directory: updates.character_directory || updates.character_directory,
+                save_to_character_directory: updates.save_to_character_directory ?? settings.save_to_character_directory,
+              };
+              handleSettingsUpdate(newSettings);
+            }}
+          />
+        );
       default:
         return <CharacterInfoView />;
     }
@@ -109,88 +159,64 @@ const Layout: React.FC = () => {
 
   const handleSave = async () => {
     if (!characterData || !imageUrl) return;
-    
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Get settings first
-      const settingsResponse = await fetch('/api/settings');
+      const settingsResponse = await fetch("/api/settings");
       const settingsData = await settingsResponse.json();
       const settings = settingsData.settings;
-      
-      // Log start of save process
-      console.log('=== Save Process Started ===');
-      console.log('Character Name:', characterData.data?.name);
-      console.log('Settings:', settings);
-      
-      // Get the image data
+      console.log("=== Save Process Started ===");
+      console.log("Character Name:", characterData.data?.name);
+      console.log("Settings:", settings);
       const response = await fetch(imageUrl);
       const blob = await response.blob();
-      const file = new File([blob], 'character.png', { type: 'image/png' });
-      
-      // Prepare form data
+      const file = new File([blob], "character.png", { type: "image/png" });
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('metadata', JSON.stringify(characterData));
-      
-      // Check if we should save to directory
+      formData.append("file", file);
+      formData.append("metadata", JSON.stringify(characterData));
       const usingSaveDirectory = Boolean(settings.save_to_character_directory) && settings.character_directory;
-      
       if (usingSaveDirectory) {
-        console.log('=== Directory Save Mode ===');
-        console.log('Target Directory:', settings.character_directory);
-        formData.append('save_directory', settings.character_directory);
+        console.log("=== Directory Save Mode ===");
+        console.log("Target Directory:", settings.character_directory);
+        formData.append("save_directory", settings.character_directory);
       } else {
-        console.log('=== Browser Save Mode ===');
+        console.log("=== Browser Save Mode ===");
       }
-      
-      // Send save request
-      console.log('Sending save request...');
-      const saveResponse = await fetch('/api/save-png', {
-        method: 'POST',
-        body: formData
+      console.log("Sending save request...");
+      const saveResponse = await fetch("/api/save-png", {
+        method: "POST",
+        body: formData,
       });
-      
-      // Handle save response
       if (!saveResponse.ok) {
         const errorText = await saveResponse.text();
         throw new Error(`Save failed: ${errorText}`);
       }
-      
-      // Update image URL with saved version
       const savedBlob = await saveResponse.blob();
       const newImageUrl = URL.createObjectURL(savedBlob);
       setImageUrl(newImageUrl);
-      
-      // Handle browser download if not saving to directory
       if (!usingSaveDirectory) {
-        const sanitizedName = (characterData.data?.name || 'character')
-          .replace(/[^a-zA-Z0-9]/g, '_')
-          .replace(/_+/g, '_')
+        const sanitizedName = (characterData.data?.name || "character")
+          .replace(/[^a-zA-Z0-9]/g, "_")
+          .replace(/_+/g, "_")
           .toLowerCase();
-          
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = newImageUrl;
         link.download = `${sanitizedName}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       }
-      
       if (usingSaveDirectory && settings.character_directory) {
-        const characterName = characterData.data?.name || 'character';
+        const characterName = characterData.data?.name || "character";
         const filePath = `${settings.character_directory}/${characterName}.png`;
-        console.log('Verifying save at:', filePath);
+        console.log("Verifying save at:", filePath);
         const verified = await verifySave(filePath);
-        console.log('Save verified:', verified);
+        console.log("Save verified:", verified);
       }
-
-      console.log('Save completed successfully');
-      
+      console.log("Save completed successfully");
     } catch (error) {
-      console.error('Save failed:', error);
-      setError(error instanceof Error ? error.message : 'Failed to save character');
+      console.error("Save failed:", error);
+      setError(error instanceof Error ? error.message : "Failed to save character");
     } finally {
       setIsLoading(false);
     }
@@ -198,21 +224,20 @@ const Layout: React.FC = () => {
 
   const verifySave = async (path: string) => {
     try {
-      // Wait a short time to ensure file is written
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Try to fetch the file we just saved
-      const verifyResponse = await fetch(`/api/character-image/${encodeURIComponent(path)}`);
-      console.log('=== Save Verification ===');
-      console.log('Verification response:', verifyResponse.status);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const verifyResponse = await fetch(
+        `/api/character-image/${encodeURIComponent(path)}`
+      );
+      console.log("=== Save Verification ===");
+      console.log("Verification response:", verifyResponse.status);
       if (verifyResponse.ok) {
         const verifyBlob = await verifyResponse.blob();
-        console.log('Verification file size:', verifyBlob.size);
+        console.log("Verification file size:", verifyBlob.size);
         return true;
       }
       return false;
     } catch (err) {
-      console.error('Verification failed:', err);
+      console.error("Verification failed:", err);
       return false;
     }
   };
@@ -221,61 +246,53 @@ const Layout: React.FC = () => {
     try {
       setIsLoading(true);
       setError(null);
-  
-      const response = await fetch('/api/import-backyard', {
-        method: 'POST',
+      const response = await fetch("/api/import-backyard", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url }),
       });
-  
       if (!response.ok) {
         throw new Error(`Import failed: ${response.statusText}`);
       }
-  
       const data = await response.json();
-      
       if (data.success && data.metadata) {
         setCharacterData(data.metadata);
         if (data.imageUrl) {
           setImageUrl(data.imageUrl);
         }
       } else {
-        throw new Error(data.message || 'Failed to process character data');
+        throw new Error(data.message || "Failed to process character data");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import character');
+      setError(
+        err instanceof Error ? err.message : "Failed to import character"
+      );
       setCharacterData(null);
       setImageUrl(undefined);
-      throw err; // Re-throw to be caught by dialog
+      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Add health check effect
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const response = await fetch('/api/health');
-        setBackendStatus(response.ok ? 'running' : 'disconnected');
+        const response = await fetch("/api/health");
+        setBackendStatus(response.ok ? "running" : "disconnected");
       } catch {
-        setBackendStatus('disconnected');
+        setBackendStatus("disconnected");
       }
     };
-
-    // Initial check
     checkBackend();
-    
-    // Poll every 30 seconds
     const interval = setInterval(checkBackend, 30000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="h-screen w-screen flex bg-stone-950 text-gray-100 overflow-hidden">
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -283,30 +300,28 @@ const Layout: React.FC = () => {
         onChange={handleFileUpload}
         className="hidden"
       />
-
-      {/* Left Sidebar - Column 1 */}
       <div className="w-96 min-w-[384px] bg-stone-950 shrink-0 flex flex-col">
         <div className="p-6 flex-1">
-          {/* Header */}
           <div className="flex justify-between items-center mb-8">
             <div className="flex items-center gap-2">
               <img src={logo} alt="CardShark Logo" className="w-5 h-6" />
               <span className="text-orange-500 text-xl">CardShark</span>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                title="Settings"
-              >
-                <Settings size={20} />
-              </button>
-              <DropdownMenu 
+              <DropdownMenu
                 icon={ImagePlus}
-                title="Import character from PNG or URL" 
+                title="Import character from PNG or URL"
                 items={[
-                  { icon: ImagePlus, label: "Load PNG", onClick: handleUploadClick },
-                  { icon: Link, label: "Import by URL", onClick: handleUrlImport }
+                  {
+                    icon: ImagePlus,
+                    label: "Load PNG",
+                    onClick: handleUploadClick,
+                  },
+                  {
+                    icon: Link,
+                    label: "Import by URL",
+                    onClick: handleUrlImport,
+                  },
                 ]}
               />
               <button
@@ -318,92 +333,78 @@ const Layout: React.FC = () => {
               </button>
             </div>
           </div>
-
-          {/* Navigation */}
           <nav className="space-y-2 mb-8">
-          <button 
-            className={`w-full text-left px-4 py-2 rounded-lg transition-colors
-              ${currentView === 'gallery' 
-                ? 'bg-slate-700 text-white' 
-                : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
-            onClick={() => setCurrentView('gallery')}
-          >
-            Character Folder (Optional)
-          </button>
-            <button 
+            <button
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
-                ${currentView === 'info' 
-                  ? 'bg-slate-700 text-white' 
-                  : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
-              onClick={() => setCurrentView('info')}
+                ${currentView === "gallery" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
+              onClick={() => setCurrentView("gallery")}
+            >
+              Character Folder
+            </button>
+            <button
+              className={`w-full text-left px-4 py-2 rounded-lg transition-colors
+                ${currentView === "info" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
+              onClick={() => setCurrentView("info")}
             >
               Character Info
             </button>
-            <button 
+            <button
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
-                ${currentView === 'messages' 
-                  ? 'bg-slate-700 text-white' 
-                  : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
-              onClick={() => setCurrentView('messages')}
+                ${currentView === "messages" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
+              onClick={() => setCurrentView("messages")}
             >
               First Message(s)
             </button>
-            <button 
+            <button
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
-                ${currentView === 'lore' 
-                  ? 'bg-slate-700 text-white' 
-                  : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
-              onClick={() => setCurrentView('lore')}
+                ${currentView === "lore" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
+              onClick={() => setCurrentView("lore")}
             >
               Lore Manager
             </button>
-            <button 
+            <button
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
-                ${currentView === 'json' 
-                  ? 'bg-slate-700 text-white' 
-                  : 'text-gray-300 hover:text-white hover:bg-slate-700'}`}
-              onClick={() => setCurrentView('json')}
+                ${currentView === "json" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
+              onClick={() => setCurrentView("json")}
             >
               JSON View
             </button>
+            <button
+              className={`w-full text-left px-4 py-2 rounded-lg transition-colors
+                ${currentView === "settings" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
+              onClick={() => setCurrentView("settings")}
+            >
+              Settings
+            </button>
           </nav>
-          
-          {/* Image Preview Area */}
           <div className="mt-auto flex flex-col h-[64vh]">
             <div className="flex-1 min-h-0">
               <ImagePreview imageUrl={imageUrl} />
             </div>
             <TokenCounter characterData={characterData} />
-
           </div>
         </div>
-        {/* Add status indicator at bottom */}
         <div className="p-4 text-xs text-gray-500 flex justify-between items-center">
-        <div>Backend: {backendStatus === 'running' ? 'Connected' : 'Disconnected'}</div>
-        <button 
-          onClick={() => setShowAboutDialog(true)}
-          className="text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          About
-        </button>
-      </div>
-      </div>
-
-      {/* Main Content - Column 2 */}
-      <div className="flex-1 flex flex-col min-w-[800px] bg-gray-900">
-        {/* Status Messages */}
-        {error && (
-          <div className="px-8 py-4 bg-red-900/50 text-red-200">
-            {error}
+          <div>
+            Backend: {backendStatus === "running" ? "Connected" : "Disconnected"}
           </div>
+          <button
+            onClick={() => setShowAboutDialog(true)}
+            className="text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            About
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 flex flex-col min-w-[800px] bg-gray-900">
+        {error && (
+          <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
         )}
         {isLoading && (
           <div className="px-8 py-4 bg-blue-900/50 text-blue-200">
             Loading character data...
           </div>
         )}
-
-        {/* Main Content */}
         {renderContent()}
       </div>
       <BackyardImportDialog
@@ -411,14 +412,14 @@ const Layout: React.FC = () => {
         onClose={() => setShowBackyardDialog(false)}
         onImport={handleBackyardImport}
       />
-      <AboutDialog 
+      <AboutDialog
         isOpen={showAboutDialog}
         onClose={() => setShowAboutDialog(false)}
       />
       <SettingsModal
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
-        onSettingsChange={() => setSettingsChangeCount(prev => prev + 1)}
+        onSettingsChange={() => setSettingsChangeCount((prev: number) => prev + 1)}
       />
     </div>
   );

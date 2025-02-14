@@ -1,34 +1,21 @@
 import React from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
+import { CharacterCard } from '../types/schema';
 import HighlightedTextArea from './HighlightedTextArea';
 
-// Type definitions matching our consolidated JSON structure
-interface CharacterData {
-  spec: string;
-  spec_version: string;
-  data: {
-    name?: string;
-    description?: string;
-    personality?: string;
-    scenario?: string;
-    mes_example?: string;
-    system_prompt?: string;
-    post_history_instructions?: string;
-    tags?: string[];
-    imported_images?: string[];
-    [key: string]: any; // Allow other fields from V2 spec
-  };
-}
 
 const CharacterInfoView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
 
-  const handleFieldChange = (field: keyof CharacterData['data'], value: string | string[]): void => {
-    if (!characterData) return;
-
+  const handleFieldChange = (field: keyof CharacterCard['data'], value: string | string[]): void => {
     try {
-      // Create new data object ensuring V2 structure
-      const newData = {
+      if (!characterData?.data) {
+        console.error("Character data is missing.");
+        return;
+      }
+
+      // Create new data object preserving all existing properties
+      const newData: CharacterCard = {
         ...characterData,
         data: {
           ...characterData.data,
@@ -36,7 +23,6 @@ const CharacterInfoView: React.FC = () => {
         }
       };
 
-      // Validate spec requirements
       if (newData.spec !== "chara_card_v2" || !newData.spec_version) {
         console.error("Invalid character data structure");
         return;
@@ -49,8 +35,12 @@ const CharacterInfoView: React.FC = () => {
   };
 
   // Helper function to safely get field value
-  const getFieldValue = (field: keyof CharacterData['data']): string => {
-    return characterData?.data?.[field]?.toString() || '';
+  const getFieldValue = (field: keyof CharacterCard['data']): string => {
+    const value = characterData?.data?.[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value?.toString() || '';
   };
 
   // Download handler function
@@ -186,7 +176,7 @@ const CharacterInfoView: React.FC = () => {
                 onChange={(e) => handleFieldChange('imported_images', e.target.value.split('\n').map(url => url.trim()))}
                 placeholder="One image URL per line"
               />
-              {characterData?.data?.imported_images?.length > 0 && (
+              {(characterData?.data?.imported_images?.length ?? 0) > 0 && (
                 <button
                   onClick={handleDownloadImages}
                   className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"

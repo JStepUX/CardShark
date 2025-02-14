@@ -99,60 +99,58 @@ async def generate_message(request: Request):
 
 @app.post("/api/test-connection")
 async def test_api_connection(request: Request):
-    """Test connection to LLM API endpoint."""
     try:
         data = await request.json()
         url = data.get('url')
         api_key = data.get('apiKey')
         
         logger.log_step(f"Testing API connection to: {url}")
-        logger.log_step(f"API Key provided: {'Yes' if api_key else 'No'}")
         
         if not url:
-            logger.log_warning("No URL provided for API test")
             return JSONResponse(
                 status_code=400,
-                content={
-                    "success": False,
-                    "message": "URL is required"
-                }
+                content={"success": False, "message": "URL is required"}
             )
             
-        success, error = api_handler.test_connection(url, api_key)
+        # Try to get model info first
+        model_info = api_handler.get_model_info(url, api_key)
+        
+        # Then test connection and detect template
+        success, error, detected_template = api_handler.test_connection(url, api_key)
+        logger.log_step(f"Connection result: success={success}, error={error}, template={detected_template}")
         
         if success:
             logger.log_step("API connection test successful")
-            # Update settings to enable API
+            template_name = detected_template['name'] if detected_template else None
+            logger.log_step(f"Detected template: {template_name}")
+            
+            if model_info:
+                logger.log_step(f"Model info: {model_info}")
+            
             settings_manager.update_setting('api', {
                 'enabled': True,
                 'url': url,
                 'apiKey': api_key,
+                'template': template_name,
+                'model_info': model_info,  # Save model info in settings
                 'lastConnectionStatus': {
                     'connected': True,
                     'timestamp': time.time(),
                 }
             })
+            
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Connection successful",
+                    "template": template_name,
+                    "model": model_info,  # Include in response
                     "timestamp": time.time()
                 }
             )
         else:
             logger.log_warning(f"API connection test failed: {error}")
-            # Update settings to disable API
-            settings_manager.update_setting('api', {
-                'enabled': False,
-                'url': url,
-                'apiKey': api_key,
-                'lastConnectionStatus': {
-                    'connected': False,
-                    'timestamp': time.time(),
-                    'error': error
-                }
-            })
             return JSONResponse(
                 status_code=400,
                 content={
@@ -164,6 +162,7 @@ async def test_api_connection(request: Request):
             
     except Exception as e:
         logger.log_error(f"API connection test error: {str(e)}")
+        logger.log_error(traceback.format_exc())
         return JSONResponse(
             status_code=500,
             content={
