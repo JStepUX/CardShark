@@ -5,6 +5,7 @@ interface HighlightedTextAreaProps {
   placeholder?: string;
   value?: string;
   onChange: (value: string) => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
   minHeight?: string;
 }
 
@@ -13,6 +14,7 @@ const HighlightedTextArea = ({
   onChange,
   className = '',
   placeholder = '',
+  onKeyDown,
   minHeight = '120px'
 }: HighlightedTextAreaProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -86,6 +88,7 @@ const HighlightedTextArea = ({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        onKeyDown={onKeyDown}
         spellCheck={false}
         className={`${baseStyles} bg-transparent text-transparent caret-white`}
       />

@@ -14,8 +14,9 @@ import { AboutDialog } from "./AboutDialog";
 import TokenCounter from "./TokenCounter";
 import CharacterGallery from "./CharacterGallery";
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
+import ChatView from "./ChatView"; 
 
-type View = "gallery" | "settings" | "info" | "lore" | "json" | "messages";
+type View = "gallery" | "settings" | "info" | "lore" | "json" | "messages" | "chat";
 
 const Layout: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>("gallery");
@@ -108,6 +109,8 @@ const Layout: React.FC = () => {
         return <JsonViewer />;
       case "messages":
         return <MessagesView />;
+      case "chat":            // Add this case
+        return <ChatView />; 
       case "gallery":
         return <CharacterGallery settingsChangeCount={settingsChangeCount} />;
       case "settings":
@@ -254,7 +257,7 @@ const Layout: React.FC = () => {
       }
     };
     checkBackend();
-    const interval = setInterval(checkBackend, 30000);
+    const interval = setInterval(checkBackend, 90000);
     return () => clearInterval(interval);
   }, []);
 
@@ -335,6 +338,13 @@ const Layout: React.FC = () => {
               onClick={() => setCurrentView("json")}
             >
               JSON View
+            </button>
+            <button
+              className={`w-full text-left px-4 py-2 rounded-lg transition-colors
+                ${currentView === "chat" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
+              onClick={() => setCurrentView("chat")}
+            >
+              Chat
             </button>
             <button
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors

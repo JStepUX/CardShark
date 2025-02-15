@@ -233,25 +233,25 @@ Craft a new introductory message that starts the conversation in a fresh and eng
           <h2 className="text-lg font-semibold">Messages Manager</h2>
           <div className="flex items-center gap-2">
             <button
+                onClick={handleGenerateMessage}
+                disabled={isGenerating}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Wand2 size={18} />
+                )}
+                Generate Message
+              </button>
+            <button
               onClick={handleAddMessage}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus size={18} />
               Add Message
             </button>
-            <button
-              onClick={handleGenerateMessage}
-              disabled={isGenerating}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isGenerating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Wand2 size={18} />
-              )}
-              Generate Message
-            </button>
-          </div>
+            </div>
         </div>
       </div>
 
