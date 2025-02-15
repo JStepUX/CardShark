@@ -115,6 +115,9 @@ const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
         {Object.keys(settings.apis || {}).length === 0 && (
           <div className="text-center py-12 text-gray-400">
             No APIs configured. Click "Add API" to add one.
+            <br />
+            <br />
+            (KoboldCPP at localhost:5001 works out of the box, no config necessary.)
           </div>
         )}
 

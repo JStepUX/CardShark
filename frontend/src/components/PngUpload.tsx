@@ -15,7 +15,7 @@ const PngUpload: React.FC = () => {
   const [filename, setFilename] = useState<string>('');
   const [characterData, setCharacterData] = useState<any>(null);
   const [showNewCharacterDialog, setShowNewCharacterDialog] = useState<boolean>(false);
-  const [currentFile, setCurrentFile] = useState<File | null>(null);
+  const [, setCurrentFile] = useState<File | null>(null);
   
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

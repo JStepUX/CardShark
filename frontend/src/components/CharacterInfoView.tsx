@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Search } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { CharacterCard } from '../types/schema';
 import HighlightedTextArea from './HighlightedTextArea';
-
+import { FindReplaceDialog } from './FindReplaceDialog';
 
 const CharacterInfoView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
+  const [showFindReplace, setShowFindReplace] = useState(false);
 
   const handleFieldChange = (field: keyof CharacterCard['data'], value: string | string[]): void => {
     try {
@@ -43,46 +45,19 @@ const CharacterInfoView: React.FC = () => {
     return value?.toString() || '';
   };
 
-  // Download handler function
-  async function handleDownloadImages() {
-    if (!characterData?.data?.imported_images?.length) return;
-
-    try {
-      for (const url of characterData.data.imported_images) {
-        if (!url.trim()) continue;
-        
-        try {
-          const response = await fetch(url);
-          if (!response.ok) continue;
-          
-          const blob = await response.blob();
-          const filename = url.split('/').pop() || 'image.png';
-          
-          // Create temporary download link
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(a.href);
-          
-        } catch (err) {
-          console.error(`Failed to download image: ${url}`, err);
-        }
-      }
-      
-      alert('Images downloaded successfully!');
-    } catch (err) {
-      alert('Failed to download images. Please try again.');
-    }
-  }
-
   return (
     <>
-      <div className="p-8 pb-4">
+      <div className="p-8 pb-4 flex justify-between items-center">
         <h2 className="text-lg font-semibold">Primary Character Info</h2>
+        <button
+          onClick={() => setShowFindReplace(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-colors"
+        >
+          <Search className="w-4 h-4" />
+          Find & Replace
+        </button>
       </div>
+
       <div className="flex-1 overflow-y-auto">
         <div className="px-8 pb-8">
           <div className="space-y-6">
@@ -167,32 +142,18 @@ const CharacterInfoView: React.FC = () => {
               />
             </div>
 
-            {/* Imported Images Field */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Imported Images</label>
-              <textarea
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 h-32 resize-none"
-                value={characterData?.data?.imported_images?.join('\n') || ''}
-                onChange={(e) => handleFieldChange('imported_images', e.target.value.split('\n').map(url => url.trim()))}
-                placeholder="One image URL per line"
-              />
-              {(characterData?.data?.imported_images?.length ?? 0) > 0 && (
-                <button
-                  onClick={handleDownloadImages}
-                  className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download Imported Images
-                </button>
-              )}
-            </div>
-
             <div className="h-8" /> {/* Bottom spacing */}
           </div>
         </div>
       </div>
+
+      {/* Find and Replace Dialog */}
+      <FindReplaceDialog
+        isOpen={showFindReplace}
+        onClose={() => setShowFindReplace(false)}
+        characterData={characterData}
+        onReplace={setCharacterData}
+      />
     </>
   );
 };
