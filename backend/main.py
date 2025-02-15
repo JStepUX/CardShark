@@ -99,63 +99,109 @@ async def generate_message(request: Request):
 
 @app.post("/api/test-connection")
 async def test_api_connection(request: Request):
+    """Test connection to an API endpoint."""
     try:
+        # Get request data and log it
         data = await request.json()
+        logger.log_step(f"Testing API connection with data: {data}")
+        
         url = data.get('url')
         api_key = data.get('apiKey')
-        
-        logger.log_step(f"Testing API connection to: {url}")
+        provider = data.get('provider')
+        model = data.get('model')
         
         if not url:
+            logger.log_warning("No URL provided")
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "message": "URL is required"}
             )
-            
-        # Try to get model info first
-        model_info = api_handler.get_model_info(url, api_key)
         
-        # Then test connection and detect template
-        success, error, detected_template = api_handler.test_connection(url, api_key)
-        logger.log_step(f"Connection result: success={success}, error={error}, template={detected_template}")
+        # Log the connection attempt details
+        logger.log_step(f"Attempting connection to: {url}")
+        logger.log_step(f"Provider: {provider}")
+        logger.log_step(f"Model: {model}")
         
-        if success:
-            logger.log_step("API connection test successful")
-            template_name = detected_template['name'] if detected_template else None
-            logger.log_step(f"Detected template: {template_name}")
+        # Ensure URL has protocol
+        if not url.startswith(('http://', 'https://')):
+            url = f'http://{url}'
+        
+        # Add trailing /v1/chat/completions if not present
+        if not url.endswith('/v1/chat/completions'):
+            url = url.rstrip('/') + '/v1/chat/completions'
             
-            if model_info:
-                logger.log_step(f"Model info: {model_info}")
+        logger.log_step(f"Final URL: {url}")
+        
+        # Prepare headers
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        if api_key:
+            if provider == 'OpenAI':
+                headers['Authorization'] = f'Bearer {api_key}'
+            elif provider == 'Claude':
+                headers['x-api-key'] = api_key
+            elif provider == 'Gemini':
+                headers['x-goog-api-key'] = api_key
+                
+        logger.log_step(f"Headers prepared: {headers}")
+        
+        # Prepare test message
+        test_data = {
+            "messages": [
+                {"role": "user", "content": "Hi"}
+            ],
+            "max_tokens": 10,
+            "temperature": 0.7
+        }
+        
+        # Add model if provided
+        if model:
+            test_data["model"] = model
             
-            settings_manager.update_setting('api', {
-                'enabled': True,
-                'url': url,
-                'apiKey': api_key,
-                'template': template_name,
-                'model_info': model_info,  # Save model info in settings
-                'lastConnectionStatus': {
-                    'connected': True,
-                    'timestamp': time.time(),
-                }
-            })
-            
+        logger.log_step(f"Test data prepared: {test_data}")
+        
+        # Make the test request
+        response = requests.post(
+            url,
+            headers=headers,
+            json=test_data,
+            timeout=10
+        )
+        
+        logger.log_step(f"Response status: {response.status_code}")
+        logger.log_step(f"Response headers: {dict(response.headers)}")
+        
+        try:
+            response_data = response.json()
+            logger.log_step(f"Response data: {response_data}")
+        except:
+            logger.log_warning("Could not parse response as JSON")
+            response_data = None
+        
+        if response.status_code == 200:
+            logger.log_step("Connection test successful")
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Connection successful",
-                    "template": template_name,
-                    "model": model_info,  # Include in response
+                    "model": response_data.get('model') if response_data else None,
                     "timestamp": time.time()
                 }
             )
         else:
-            logger.log_warning(f"API connection test failed: {error}")
+            error_msg = "Connection failed"
+            if response_data and 'error' in response_data:
+                error_msg = f"{error_msg}: {response_data['error']}"
+            
+            logger.log_warning(f"Connection test failed: {error_msg}")
             return JSONResponse(
                 status_code=400,
                 content={
                     "success": False,
-                    "message": error or "Connection failed",
+                    "message": error_msg,
                     "timestamp": time.time()
                 }
             )

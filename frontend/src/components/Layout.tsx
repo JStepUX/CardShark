@@ -13,8 +13,6 @@ import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
 import TokenCounter from "./TokenCounter";
 import CharacterGallery from "./CharacterGallery";
-import SettingsModal from "./SettingsModal";
-import { ChatTemplate } from "../types/api";
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
 
 type View = "gallery" | "settings" | "info" | "lore" | "json" | "messages";
@@ -24,7 +22,6 @@ const Layout: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showBackyardDialog, setShowBackyardDialog] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
   const [backendStatus, setBackendStatus] = useState<"running" | "disconnected">("disconnected");
   const { characterData, setCharacterData, imageUrl, setImageUrl, isLoading, setIsLoading, error, setError } = useCharacter();
@@ -116,39 +113,9 @@ const Layout: React.FC = () => {
       case "settings":
         return (
           <APISettingsView
-            settings={{
-              url: settings.api?.url || "",
-              apiKey: settings.api?.apiKey || "",
-              template: settings.api?.template || ChatTemplate.MISTRAL_V1,
-              lastConnectionResult: settings.api?.lastConnectionStatus
-                ? {
-                    success: settings.api.lastConnectionStatus.connected,
-                    timestamp: settings.api.lastConnectionStatus.timestamp,
-                    error: settings.api.lastConnectionStatus.error,
-                  }
-                : undefined,
-              character_directory: settings.character_directory,
-              save_to_character_directory: settings.save_to_character_directory,
-            }}
+            settings={settings}
             onUpdate={(updates) => {
-              const newSettings: Partial<Settings> = {
-                api: {
-                  ...settings.api,
-                  url: updates.url || settings.api.url,
-                  apiKey: updates.apiKey || settings.api.apiKey,
-                  template: updates.template || settings.api.template,
-                  lastConnectionStatus: updates.lastConnectionResult
-                    ? {
-                        connected: updates.lastConnectionResult.success,
-                        timestamp: updates.lastConnectionResult.timestamp,
-                        error: updates.lastConnectionResult.error,
-                      }
-                    : settings.api.lastConnectionStatus,
-                },
-                character_directory: updates.character_directory || updates.character_directory,
-                save_to_character_directory: updates.save_to_character_directory ?? settings.save_to_character_directory,
-              };
-              handleSettingsUpdate(newSettings);
+              handleSettingsUpdate(updates);
             }}
           />
         );
@@ -346,7 +313,7 @@ const Layout: React.FC = () => {
                 ${currentView === "info" ? "bg-slate-700 text-white" : "text-gray-300 hover:text-white hover:bg-slate-700"}`}
               onClick={() => setCurrentView("info")}
             >
-              Character Info
+              Basic Info
             </button>
             <button
               className={`w-full text-left px-4 py-2 rounded-lg transition-colors
@@ -415,11 +382,6 @@ const Layout: React.FC = () => {
       <AboutDialog
         isOpen={showAboutDialog}
         onClose={() => setShowAboutDialog(false)}
-      />
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-        onSettingsChange={() => setSettingsChangeCount((prev: number) => prev + 1)}
       />
     </div>
   );

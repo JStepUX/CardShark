@@ -74,6 +74,56 @@ class CharacterValidator:
         self.logger = logging.getLogger(__name__)
         self.next_uid = int(time.time() * 1000)
 
+    def create_empty_character(self) -> Dict:
+        """Creates empty character structure matching the new JSON format"""
+        return {
+            "name": "",
+            "description": "",
+            "personality": "",
+            "scenario": "",
+            "first_mes": "",
+            "mes_example": "",
+            "creatorcomment": "",
+            "avatar": "none",
+            "chat": "",
+            "talkativeness": "0.5",
+            "fav": False,
+            "tags": [],
+            "spec": "chara_card_v2",
+            "spec_version": "2.0",
+            "data": {
+                "name": "",
+                "description": "",
+                "personality": "",
+                "scenario": "",
+                "first_mes": "",
+                "mes_example": "",
+                "creator_notes": "",
+                "system_prompt": "",
+                "post_history_instructions": "",
+                "tags": [],
+                "creator": "",
+                "character_version": "",
+                "alternate_greetings": [],
+                "extensions": {
+                    "talkativeness": "0.5",
+                    "fav": False,
+                    "world": "",
+                    "depth_prompt": {
+                        "prompt": "",
+                        "depth": 4,
+                        "role": "system"
+                    }
+                },
+                "group_only_greetings": [],
+                "character_book": {
+                    "entries": [],
+                    "name": ""
+                }
+            },
+            "create_date": ""
+        }
+    
     def _generate_uid(self) -> int:
         """Generates unique numeric ID"""
         self.next_uid += 1

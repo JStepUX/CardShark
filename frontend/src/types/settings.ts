@@ -1,50 +1,38 @@
 // types/settings.ts
-
-import { ChatTemplate } from './api';
-
-export interface APISettings {
-  enabled: boolean;
-  url: string;
-  apiKey: string;
-  template: ChatTemplate;
-  lastConnectionStatus?: {
-    connected: boolean;
-    timestamp: number;
-    error?: string;
-  }
-}
+import { APIConfig, APIProvider, createAPIConfig } from './api';
 
 export interface Settings {
-    api: {
-      model_info: { id: string; owned_by?: string | undefined; created?: number | undefined; } | undefined;
-      enabled: boolean; // Add the enabled property
-      url: string;
-      apiKey: string;
-      template: ChatTemplate;
-      lastConnectionStatus?: {
-        connected: boolean;
-        timestamp: number;
-        error?: string;
-      };
-    };
-    character_directory: string;
-    save_to_character_directory: boolean;
-    theme: string;
-    version: string;
-  }
+  // App Settings
+  character_directory: string;
+  save_to_character_directory: boolean;
+  theme: 'dark' | 'light';
+  version: string;
+  
+  // API Configurations
+  apis: Record<string, APIConfig>;
+}
 
-// Default settings
 export const DEFAULT_SETTINGS: Settings = {
+  // App defaults
   character_directory: '',
   save_to_character_directory: false,
   theme: 'dark',
   version: '1.0',
-  api: {
-    enabled: false,
-    url: 'http://localhost:5001',
-    apiKey: '',
-    template: ChatTemplate.MISTRAL_V1,
-    lastConnectionStatus: undefined,
-    model_info: undefined // Add the model_info property
+  
+  // Initialize with a default KoboldCPP configuration
+  apis: {
+    ['default_kobold']: createAPIConfig(APIProvider.KOBOLD)
   }
 };
+
+// Type guard to validate settings
+export function isValidSettings(settings: any): settings is Settings {
+  return (
+    settings &&
+    typeof settings.character_directory === 'string' &&
+    typeof settings.save_to_character_directory === 'boolean' &&
+    (settings.theme === 'dark' || settings.theme === 'light') &&
+    typeof settings.version === 'string' &&
+    typeof settings.apis === 'object'
+  );
+}

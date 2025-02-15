@@ -1,55 +1,122 @@
-// API Template Types
-export enum ChatTemplate {
-  ALPACA = 'alpaca',
-  CHATML = 'chatml',
-  COMMAND_R = 'command-r',
-  GEMMA_2 = 'gemma-2',
-  DEEPSEEK_V2 = 'deepseek-v2',
-  LLAMA_2 = 'llama-2',
-  LLAMA_3 = 'llama-3',
-  METHARME = 'metharme',
-  MISTRAL_V1 = 'mistral-v1',
-  MISTRAL_V2 = 'mistral-v2',
-  MISTRAL_V3 = 'mistral-v3',
-  PHI_3 = 'phi-3',
-  VICUNA = 'vicuna'
+// types/api.ts
+
+export enum APIProvider {
+  KOBOLD = 'KoboldCPP',
+  CLAUDE = 'Claude',
+  OPENAI = 'OpenAI',
+  GEMINI = 'Gemini',
+  OPENROUTER = 'OpenRouter'
 }
 
-// API Settings Interface
-export interface APISettings {
-  enabled: boolean;
-  url: string;
-  apiKey: string;
+export enum ChatTemplate {
+  OPENAI = 'openai',
+  CLAUDE = 'claude',
+  GEMINI = 'gemini',
+  MISTRAL = 'mistral',
+  LLAMA2 = 'llama2'
+}
+
+// Display names for templates
+export const TEMPLATE_NAMES: Record<ChatTemplate, string> = {
+  [ChatTemplate.OPENAI]: 'OpenAI',
+  [ChatTemplate.CLAUDE]: 'Claude',
+  [ChatTemplate.GEMINI]: 'Gemini',
+  [ChatTemplate.MISTRAL]: 'Mistral',
+  [ChatTemplate.LLAMA2]: 'Llama2'
+};
+
+export enum OpenAIModel {
+  GPT4 = 'gpt-4',
+  GPT4_TURBO = 'gpt-4-turbo-preview',
+  GPT4_LATEST = 'gpt-4-0125-preview',
+  GPT35_TURBO = 'gpt-3.5-turbo',
+  GPT35_LATEST = 'gpt-3.5-turbo-0125'
+}
+
+export enum ClaudeModel {
+  CLAUDE_3_OPUS = 'claude-3-opus-20240229',
+  CLAUDE_3_SONNET = 'claude-3-sonnet-20240229',
+  CLAUDE_3_HAIKU = 'claude-3-haiku-20240307',
+  CLAUDE_2_1 = 'claude-2.1'
+}
+
+export enum GeminiModel {
+  GEMINI_PRO = 'gemini-pro',
+  GEMINI_PRO_VISION = 'gemini-pro-vision'
+}
+
+export type ModelType = OpenAIModel | ClaudeModel | GeminiModel | string;
+
+export interface ProviderConfig {
+  defaultUrl: string;
   template: ChatTemplate;
+  requiresApiKey: boolean;
+  availableModels?: ModelType[];
+  defaultModel?: ModelType;
+}
+
+export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
+  [APIProvider.KOBOLD]: {
+    defaultUrl: 'http://localhost:5001',
+    template: ChatTemplate.MISTRAL,
+    requiresApiKey: false
+  },
+  [APIProvider.OPENAI]: {
+    defaultUrl: 'https://api.openai.com',
+    template: ChatTemplate.OPENAI,
+    requiresApiKey: true,
+    availableModels: Object.values(OpenAIModel),
+    defaultModel: OpenAIModel.GPT35_TURBO
+  },
+  [APIProvider.CLAUDE]: {
+    defaultUrl: 'https://api.anthropic.com/v1/messages',
+    template: ChatTemplate.CLAUDE,
+    requiresApiKey: true,
+    availableModels: Object.values(ClaudeModel),
+    defaultModel: ClaudeModel.CLAUDE_3_SONNET
+  },
+  [APIProvider.GEMINI]: {
+    defaultUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+    template: ChatTemplate.GEMINI,
+    requiresApiKey: true,
+    availableModels: Object.values(GeminiModel),
+    defaultModel: GeminiModel.GEMINI_PRO
+  },
+  [APIProvider.OPENROUTER]: {
+    defaultUrl: 'https://openrouter.ai',
+    template: ChatTemplate.OPENAI,
+    requiresApiKey: true
+  }
+};
+
+export interface APIConfig {
+  id: string;
+  provider: APIProvider;
+  url: string;
+  apiKey?: string;
+  model?: ModelType;
+  template: ChatTemplate;
+  enabled: boolean;
   lastConnectionStatus?: {
     connected: boolean;
     timestamp: number;
     error?: string;
-  }
+  };
+  model_info?: {
+    id: string;
+    name?: string;
+    provider?: string;
+  };
 }
 
-// Default Settings
-export const DEFAULT_API_SETTINGS: APISettings = {
-  enabled: false,
-  url: 'http://localhost:5001',
-  apiKey: '',
-  template: ChatTemplate.CHATML,
-  lastConnectionStatus: undefined
-};
-
-// Template Display Names
-export const TEMPLATE_NAMES: Record<ChatTemplate, string> = {
-  [ChatTemplate.ALPACA]: 'Alpaca',
-  [ChatTemplate.CHATML]: 'ChatML',
-  [ChatTemplate.COMMAND_R]: 'Command-R',
-  [ChatTemplate.GEMMA_2]: 'Gemma 2',
-  [ChatTemplate.DEEPSEEK_V2]: 'DeepSeek V2',
-  [ChatTemplate.LLAMA_2]: 'Llama 2',
-  [ChatTemplate.LLAMA_3]: 'Llama 3',
-  [ChatTemplate.METHARME]: 'Metharme',
-  [ChatTemplate.MISTRAL_V1]: 'Mistral V1',
-  [ChatTemplate.MISTRAL_V2]: 'Mistral V2',
-  [ChatTemplate.MISTRAL_V3]: 'Mistral V3',
-  [ChatTemplate.PHI_3]: 'Phi-3',
-  [ChatTemplate.VICUNA]: 'Vicuna'
-};
+export function createAPIConfig(provider: APIProvider): APIConfig {
+  const config = PROVIDER_CONFIGS[provider];
+  return {
+    id: `api_${Date.now()}`,
+    provider,
+    url: config.defaultUrl,
+    template: config.template,
+    enabled: false,
+    model: config.defaultModel
+  };
+}
