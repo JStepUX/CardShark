@@ -29,14 +29,13 @@ const ChatView: React.FC = () => {
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const lastCharacterId = useRef<string | null>(null);
 
-  
+  // Update handleNewChat function
   const handleNewChat = async () => {
     if (!characterData?.data?.first_mes) return;
   
-    // Clear messages immediately and completely
+    // Clear messages immediately
     setMessages([]); 
   
-    // Small delay to ensure UI is clear
     await new Promise(resolve => setTimeout(resolve, 50));
   
     // Create fresh first message from character
@@ -47,7 +46,6 @@ const ChatView: React.FC = () => {
       timestamp: Date.now()
     };
   
-    // Add only this message to UI
     setMessages([firstMessage]);
   
     // Save with force_new=true to create new chat file
@@ -56,7 +54,7 @@ const ChatView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character_name: characterData.data.name,
+          character_data: characterData,  // Send full data
           messages: [firstMessage],
           force_new: true
         })
@@ -120,7 +118,7 @@ const ChatView: React.FC = () => {
     }
   }, [messages]);
 
-  // Add new save chat function
+  // Update saveChatState function
   const saveChatState = async () => {
     if (!characterData?.data?.name) return;
     
@@ -129,7 +127,7 @@ const ChatView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character_name: characterData.data.name,
+          character_data: characterData,  // Send full data
           messages
         })
       });
@@ -142,6 +140,7 @@ const ChatView: React.FC = () => {
     }
   };
 
+  // Update appendMessage function
   const appendMessage = async (message: Message) => {
     if (!characterData?.data?.name) return;
     
@@ -150,7 +149,7 @@ const ChatView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character_name: characterData.data.name,
+          character_data: characterData,  // Send full data
           message
         })
       });
@@ -247,13 +246,18 @@ const ChatView: React.FC = () => {
     setEditState(null);
   };
 
-  // Load most recent chat on character change
+  // Update loadLatestChat inside useEffect
   useEffect(() => {
     const loadLatestChat = async () => {
       if (!characterData?.data?.name) return;
       
       try {
-        const response = await fetch(`/api/load-latest-chat/${encodeURIComponent(characterData.data.name)}`);
+        const response = await fetch('/api/load-latest-chat', {
+          method: 'POST',  // Changed from GET
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ character_data: characterData })  // Send full data
+        });
+        
         if (!response.ok) return;
         
         const data = await response.json();

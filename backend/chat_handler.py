@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -9,53 +10,140 @@ from typing import Dict, List, Optional
 class ChatHandler:
     def __init__(self, logger):
         self.logger = logger
-        self._current_chat_file = None  # Track current chat file
+        self._current_chat_file = None
+        self._character_ids = {}  # Cache of character IDs
+
+    def _generate_character_id(self, character_data: Dict) -> str:
+        """Generate a unique, persistent ID for a character."""
+        try:
+            # Get core character data
+            data = character_data.get('data', {})
+            name = data.get('name', '')
+            desc = data.get('description', '')
+            personality = data.get('personality', '')
+            
+            # Create a unique string combining key character attributes
+            unique_string = f"{name}|{desc[:100]}|{personality[:100]}"
+            
+            # Generate a short hash
+            hash_obj = hashlib.md5(unique_string.encode('utf-8'))
+            short_hash = hash_obj.hexdigest()[:8]
+            
+            # Create a human-readable ID
+            safe_name = self._sanitize_filename(name)
+            char_id = f"{safe_name}-{short_hash}"
+            
+            self.logger.log_step(f"Generated character ID: {char_id}")
+            return char_id
+            
+        except Exception as e:
+            self.logger.log_error(f"Error generating character ID: {str(e)}")
+            # Fallback to timestamp-based ID
+            return f"character-{int(time.time())}"
 
     def _sanitize_filename(self, name: str) -> str:
         """Remove invalid characters from filename."""
         return "".join(c for c in name if c.isalnum() or c in ('-', '_', ' '))
 
-    def _get_chat_path(self, character_name: str) -> Path:
-        """Get the chat directory path for a character."""
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        char_dir = base_dir / 'chats' / self._sanitize_filename(character_name)
-        char_dir.mkdir(parents=True, exist_ok=True)
-        return char_dir
-
-    def _get_or_create_chat_file(self, character_name: str, force_new: bool = False) -> Path:
-        """Get current chat file or create new one.
+    def _get_chat_path(self, character_data: Dict) -> Path:
+        """Get the chat directory path for a character using unique ID and versioning."""
+        # Get base name and sanitize
+        char_name = self._sanitize_filename(character_data.get('data', {}).get('name', 'unknown'))
         
-        Args:
-            character_name: Name of the character
-            force_new: If True, always create a new file
+        # Get or generate character ID
+        char_id = self._character_ids.get(character_data.get('data', {}).get('name'))
+        if not char_id:
+            char_id = self._generate_character_id(character_data)
+            self._character_ids[character_data.get('data', {}).get('name')] = char_id
+
+        # Create base directory path
+        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        chats_dir = base_dir / 'chats'
+        
+        # Find all existing directories for this character
+        existing_dirs = [
+            d for d in chats_dir.glob(f"{char_name}*")
+            if d.is_dir() and (d.name == char_name or d.name.startswith(f"{char_name} ("))
+        ]
+        
+        # If no directories exist, use base name
+        if not existing_dirs:
+            chat_dir = chats_dir / char_name
+            self.logger.log_step(f"Creating first directory for {char_name}")
+        else:
+            # Check if we have a matching directory by character ID
+            matching_dir = None
+            for d in existing_dirs:
+                meta_file = d / "character_meta.json"
+                if meta_file.exists():
+                    try:
+                        with open(meta_file, 'r') as f:
+                            meta = json.load(f)
+                            if meta.get('character_id') == char_id:
+                                matching_dir = d
+                                break
+                    except:
+                        continue
             
-        Returns:
-            Path to the chat file
-        """
-        if self._current_chat_file and self._current_chat_file.exists():
+            if matching_dir:
+                chat_dir = matching_dir
+                self.logger.log_step(f"Using existing directory: {chat_dir}")
+            else:
+                # Create new versioned directory
+                version = len(existing_dirs) + 1
+                chat_dir = chats_dir / f"{char_name} ({version})"
+                self.logger.log_step(f"Creating new versioned directory: {chat_dir}")
+        
+        # Create directory and metadata
+        chat_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save character metadata
+        meta_file = chat_dir / "character_meta.json"
+        if not meta_file.exists():
+            meta = {
+                "character_id": char_id,
+                "character_data": char_name,
+                "created_at": datetime.now().isoformat(),
+                "description_hash": hashlib.md5(
+                    character_data.get('data', {}).get('description', '').encode()
+                ).hexdigest()
+            }
+            with open(meta_file, 'w') as f:
+                json.dump(meta, f, indent=2)
+        
+        self.logger.log_step(f"Using chat directory: {chat_dir}")
+        return chat_dir
+
+    def _get_or_create_chat_file(self, character_data: Dict, force_new: bool = False) -> Path:
+        """Get current chat file or create new one."""
+        if self._current_chat_file and self._current_chat_file.exists() and not force_new:
             return self._current_chat_file
             
-        # Create new file if needed
-        if force_new or not self._current_chat_file or not self._current_chat_file.exists():
-            chat_dir = self._get_chat_path(character_name)
-            timestamp = datetime.now().strftime("%Y%m%d@%Hh%Mm")
-            self._current_chat_file = chat_dir / f"{self._sanitize_filename(character_name)}-{timestamp}.jsonl"
-            
-            # Write metadata if new file
-            if not self._current_chat_file.exists():
-                with open(self._current_chat_file, 'w', encoding='utf-8') as f:
-                    json.dump(self._create_chat_metadata(character_name), f)
-                    f.write('\n')
+        # Create new file
+        chat_dir = self._get_chat_path(character_data)
+        timestamp = datetime.now().strftime("%Y%m%d@%Hh%Mm")
+        char_name = self._sanitize_filename(character_data.get('data', {}).get('name', 'unknown'))
+        
+        self._current_chat_file = chat_dir / f"{char_name}-{timestamp}.jsonl"
+        
+        # Write metadata if new file
+        if not self._current_chat_file.exists():
+            with open(self._current_chat_file, 'w', encoding='utf-8') as f:
+                json.dump(self._create_chat_metadata(character_data), f)
+                f.write('\n')
                     
-            self.logger.log_step(f"Created new chat file: {self._current_chat_file}")
-                    
+        self.logger.log_step(f"Created new chat file: {self._current_chat_file}")
         return self._current_chat_file
 
-    def _create_chat_metadata(self, character_name: str) -> Dict:
-        """Create initial chat metadata matching Silly Tavern format."""
+    def _create_chat_metadata(self, character_data: Dict) -> Dict:
+        """Create initial chat metadata with character ID."""
+        char_id = self._character_ids.get(character_data.get('data', {}).get('name')) or \
+                 self._generate_character_id(character_data)
+                 
         return {
             "user_name": "User",
-            "character_name": character_name,
+            "character_data": character_data.get('data', {}).get('name', ''),
+            "character_id": char_id,
             "create_date": datetime.now().strftime("%Y-%m-%d@%Hh%Mm%Ss"),
             "chat_metadata": {
                 "chat_id_hash": hash(str(time.time())),
@@ -67,11 +155,11 @@ class ChatHandler:
             }
         }
 
-    def _format_message(self, msg: Dict, character_name: str) -> Dict:
+    def _format_message(self, msg: Dict, character_data: str) -> Dict:
         """Format a message to match Silly Tavern format."""
         is_user = msg['role'] == 'user'
         formatted = {
-            "name": "User" if is_user else character_name,
+            "name": "User" if is_user else character_data,
             "is_user": is_user,
             "is_system": False,
             "send_date": datetime.fromtimestamp(msg['timestamp']/1000).strftime("%B %d, %Y %I:%M%p"),
@@ -122,13 +210,13 @@ class ChatHandler:
             self.logger.log_error(f"Error converting message: {str(e)}")
             return None
 
-    def append_message(self, character_name: str, message: Dict) -> bool:
+    def append_message(self, character_data: str, message: Dict) -> bool:
         """Append a single message to the current chat file."""
         try:
-            chat_file = self._get_or_create_chat_file(character_name, force_new=False)
+            chat_file = self._get_or_create_chat_file(character_data, force_new=False)
             
             with open(chat_file, 'a', encoding='utf-8') as f:
-                json.dump(self._format_message(message, character_name), f)
+                json.dump(self._format_message(message, character_data), f)
                 f.write('\n')
                 
             self.logger.log_step(f"Appended message to {chat_file}")
@@ -138,19 +226,19 @@ class ChatHandler:
             self.logger.log_error(f"Failed to append message: {str(e)}")
             return False
 
-    def save_chat_state(self, character_name: str, messages: List[Dict]) -> bool:
+    def save_chat_state(self, character_data: str, messages: List[Dict]) -> bool:
         """Save the complete chat state to a JSONL file."""
         try:
-            chat_file = self._get_or_create_chat_file(character_name, force_new=False)
+            chat_file = self._get_or_create_chat_file(character_data, force_new=False)
             
             with open(chat_file, 'w', encoding='utf-8') as f:
                 # Write metadata first
-                json.dump(self._create_chat_metadata(character_name), f)
+                json.dump(self._create_chat_metadata(character_data), f)
                 f.write('\n')
                 
                 # Write all messages
                 for msg in messages:
-                    json.dump(self._format_message(msg, character_name), f)
+                    json.dump(self._format_message(msg, character_data), f)
                     f.write('\n')
                     
             self.logger.log_step(f"Saved full chat state to {chat_file}")
@@ -161,23 +249,23 @@ class ChatHandler:
             self.logger.log_error(f"Failed to save chat: {str(e)}")
             return False
 
-    def load_latest_chat(self, character_name: str) -> Optional[List[Dict]]:
+    def load_latest_chat(self, character_data: str) -> Optional[List[Dict]]:
         """Load the most recent chat for a character."""
         try:
-            self.logger.log_step(f"Loading latest chat for character: {character_name}")
+            self.logger.log_step(f"Loading latest chat for character: {character_data}")
             
             # Update current character
-            self._current_character = character_name
+            self._current_character = character_data
             self._current_chat_file = None  # Reset current file
             
-            chat_dir = self._get_chat_path(character_name)
+            chat_dir = self._get_chat_path(character_data)
             self.logger.log_step(f"Scanning directory: {chat_dir}")
             
-            chat_files = list(chat_dir.glob(f"{self._sanitize_filename(character_name)}*.jsonl"))
+            chat_files = list(chat_dir.glob(f"{self._sanitize_filename(character_data)}*.jsonl"))
             self.logger.log_step(f"Found {len(chat_files)} chat files")
             
             if not chat_files:
-                self.logger.log_step(f"No existing chats found for {character_name}")
+                self.logger.log_step(f"No existing chats found for {character_data}")
                 return None
                 
             # Get most recent chat file

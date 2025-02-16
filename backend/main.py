@@ -66,13 +66,13 @@ async def append_chat_message(request: Request):
     """Append a single message to the current chat."""
     try:
         data = await request.json()
-        character_name = data.get('character_name')
+        character_data = data.get('character_data')  # Changed from character_name
         message = data.get('message')
         
-        if not character_name or not message:
+        if not character_data or not message:
             raise HTTPException(status_code=400, detail="Missing required fields")
             
-        success = chat_handler.append_message(character_name, message)
+        success = chat_handler.append_message(character_data, message)
         
         return JSONResponse(
             status_code=200,
@@ -92,11 +92,17 @@ async def append_chat_message(request: Request):
             }
         )
 
-@app.get("/api/load-latest-chat/{character_name}")
-async def load_latest_chat(character_name: str):
+@app.post("/api/load-latest-chat")  # Changed to POST to accept character data
+async def load_latest_chat(request: Request):
     """Load the most recent chat for a character."""
     try:
-        messages = chat_handler.load_latest_chat(character_name)
+        data = await request.json()
+        character_data = data.get('character_data')
+        
+        if not character_data:
+            raise HTTPException(status_code=400, detail="Character data is required")
+            
+        messages = chat_handler.load_latest_chat(character_data)
         
         return JSONResponse(
             status_code=200,
@@ -107,12 +113,12 @@ async def load_latest_chat(character_name: str):
         )
         
     except Exception as e:
-        logger.log_error(f"Error loading chat: {str(e)}")
+        logger.log_error(f"Failed to load chat: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
-                "message": f"Failed to load chat: {str(e)}",
+                "message": str(e),
                 "messages": None
             }
         )
@@ -122,16 +128,14 @@ async def save_chat_state(request: Request):
     """Save the current state of the chat."""
     try:
         data = await request.json()
-        character_name = data.get('character_name')
+        character_data = data.get('character_data')  # Changed from character_name
         messages = data.get('messages', [])
-        force_new = data.get('force_new', False)  # Add this parameter
+        force_new = data.get('force_new', False)
         
-        if not character_name:
-            raise HTTPException(status_code=400, detail="Missing character name")
+        if not character_data:
+            raise HTTPException(status_code=400, detail="Character data is required")
             
-        # Get chat file path, forcing new if requested
-        chat_file = chat_handler._get_or_create_chat_file(character_name, force_new=force_new)
-        success = chat_handler.save_chat_state(character_name, messages)
+        success = chat_handler.save_chat_state(character_data, messages)
         
         return JSONResponse(
             status_code=200,
@@ -150,6 +154,7 @@ async def save_chat_state(request: Request):
                 "message": f"Failed to save chat: {str(e)}"
             }
         )
+
     
 @app.post("/api/generate")
 async def generate_message(request: Request):

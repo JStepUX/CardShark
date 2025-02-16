@@ -270,7 +270,7 @@ const Layout: React.FC = () => {
         onChange={handleFileUpload}
         className="hidden"
       />
-      <div className="w-96 min-w-[384px] bg-stone-950 shrink-0 flex flex-col">
+      <div className="w-96 min-w-[220px] bg-stone-950 shrink-0 flex flex-col">
         <div className="p-6 flex-1">
           <div className="flex justify-between items-center mb-8">
             <div className="flex items-center gap-2">
