@@ -1,6 +1,5 @@
-// ChatView.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, Check } from 'lucide-react';
+import { Send, X, Check, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import HighlightedTextArea from './HighlightedTextArea';
@@ -10,23 +9,14 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  variations?: string[];
+  currentVariation?: number;
 }
 
 interface EditState {
   messageId: string;
   content: string;
 }
-
-const highlightText = (text: string): string => {
-    return text
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-200">$1</span>')
-      .replace(/(\*[^*\n]+\*)/g, '<span class="text-blue-300">$1</span>')
-      .replace(/(`[^`\n]+`)/g, '<span class="text-yellow-300">$1</span>')
-      .replace(/(\{\{[^}\n]+\}\})/g, '<span class="text-pink-300">$1</span>')
-      .replace(/\n$/g, '\n\n');
-  };
 
 const ChatView: React.FC = () => {
   const { characterData } = useCharacter();
@@ -37,12 +27,36 @@ const ChatView: React.FC = () => {
   const [editState, setEditState] = useState<EditState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const lastCharacterId = useRef<string | null>(null);
+
+  // Clear chat and post first message when character changes
+  useEffect(() => {
+    const currentCharId = characterData?.data?.name;
+
+    if (currentCharId !== lastCharacterId.current) {
+      // Clear existing messages
+      setMessages([]);
+      lastCharacterId.current = currentCharId !== undefined ? currentCharId : null;
+
+      // Post character's first message if available
+      if (characterData?.data?.first_mes) {
+        const firstMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: characterData.data.first_mes,
+          timestamp: Date.now(),
+          variations: [],
+          currentVariation: 0
+        };
+        setMessages([firstMessage]);
+      }
+    }
+  }, [characterData]);
 
   // Handle auto-focus when entering edit mode
   useEffect(() => {
     if (editState && editTextAreaRef.current) {
       editTextAreaRef.current.focus();
-      // Put cursor at end of text
       const length = editTextAreaRef.current.value.length;
       editTextAreaRef.current.setSelectionRange(length, length);
     }
@@ -77,7 +91,9 @@ const ChatView: React.FC = () => {
       id: Date.now().toString(),
       role: 'user',
       content: inputValue.trim(),
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      variations: [],
+      currentVariation: 0
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -88,7 +104,9 @@ const ChatView: React.FC = () => {
       id: (Date.now() + 1).toString(),
       role: 'assistant',
       content: '',
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      variations: [],
+      currentVariation: 0
     };
 
     setMessages(prev => [...prev, assistantMessage]);
@@ -105,10 +123,12 @@ const ChatView: React.FC = () => {
         throw new Error('Generation failed - check API settings');
       }
 
+      let newContent = '';
       for await (const chunk of PromptHandler.streamResponse(response)) {
+        newContent += chunk;
         setMessages(prev => prev.map(msg =>
           msg.id === assistantMessage.id
-            ? { ...msg, content: msg.content + chunk }
+            ? { ...msg, content: newContent, variations: [newContent], currentVariation: 0 }
             : msg
         ));
       }
@@ -133,7 +153,7 @@ const ChatView: React.FC = () => {
     if (!editState) return;
     setMessages(prev => prev.map(msg =>
       msg.id === editState.messageId
-        ? { ...msg, content: editState.content }
+        ? { ...msg, content: editState.content, variations: [editState.content], currentVariation: 0 }
         : msg
     ));
     setEditState(null);
@@ -150,6 +170,192 @@ const ChatView: React.FC = () => {
     }
   };
 
+  const handleTryAgain = async (message: Message) => {
+    if (!characterData || isGenerating) return;
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      // Get all messages up to this one for context
+      const messageIndex = messages.findIndex(m => m.id === message.id);
+      const contextMessages = messages.slice(0, messageIndex + 1).map(({ role, content }) => ({ role, content }));
+
+      const response = await PromptHandler.generateChatResponse(
+        characterData,
+        "Please provide another version of your last response that conveys the same meaning but expressed differently.",
+        contextMessages
+      );
+
+      if (!response.ok) {
+        throw new Error('Generation failed - check API settings');
+      }
+
+      // Initialize variations if needed
+      const currentVariations = message.variations || [message.content];
+      let newVariation = '';
+
+      // Update edit state to show streaming content
+      setEditState(prev => ({
+        ...prev,
+        messageId: message.id,
+        content: ''  // Start empty
+      }));
+
+      for await (const chunk of PromptHandler.streamResponse(response)) {
+        newVariation += chunk;
+        
+        // Update just the edit state during streaming
+        setEditState(prev => ({
+          ...prev,
+          messageId: message.id,
+          content: newVariation
+        }));
+      }
+
+      // Only add to variations once streaming is complete
+      setMessages(prev => prev.map(msg =>
+        msg.id === message.id
+          ? {
+              ...msg,
+              content: newVariation,
+              variations: [...currentVariations, newVariation],
+              currentVariation: currentVariations.length // Point to the new variation
+            }
+          : msg
+      ));
+
+      // Update edit state with final content
+      setEditState(prev => ({
+        ...prev,
+        messageId: message.id,
+        content: newVariation
+      }));
+
+    } catch (error) {
+      console.error('Generation failed:', error);
+      setError(error instanceof Error ? error.message : 'Generation failed');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handlePrevVariation = (message: Message) => {
+    const variations = message.variations || [message.content];
+    if (variations.length <= 1) return;
+    
+    const currentIndex = message.currentVariation ?? 0;
+    const newIndex = currentIndex > 0 ? currentIndex - 1 : variations.length - 1;
+    
+    // Ensure we have a valid variation to switch to
+    const newContent = variations[newIndex];
+    if (!newContent) return;
+    
+    // Update both the message and edit state
+    setMessages(prev => prev.map(msg =>
+      msg.id === message.id
+        ? {
+            ...msg,
+            content: newContent,
+            currentVariation: newIndex
+          }
+        : msg
+    ));
+
+    setEditState(_prev => ({
+      messageId: message.id,
+      content: newContent
+    }));
+  };
+
+  const handleNextVariation = (message: Message) => {
+    const variations = message.variations || [message.content];
+    if (variations.length <= 1) return;
+    
+    const currentIndex = message.currentVariation ?? 0;
+    const newIndex = currentIndex < variations.length - 1 ? currentIndex + 1 : 0;
+    
+    // Ensure we have a valid variation to switch to
+    const newContent = variations[newIndex];
+    if (!newContent) return;
+    
+    // Update both the message and edit state
+    setMessages(prev => prev.map(msg =>
+      msg.id === message.id
+        ? {
+            ...msg,
+            content: newContent,
+            currentVariation: newIndex
+          }
+        : msg
+    ));
+
+    setEditState(_prev => ({
+      messageId: message.id,
+      content: newContent
+    }));
+  };
+
+  const renderEditControls = (message: Message) => {
+    const variations = message.variations || [];
+    const variationCount = variations.length || 1;
+    const currentVariation = (message.currentVariation ?? 0) + 1;
+
+    return (
+      <div className="flex justify-between items-center gap-2 mt-2 border-t border-stone-700 pt-2">
+        <div className="flex items-center gap-2">
+          {message.role === 'assistant' && editState?.messageId === message.id && (
+            <>
+              <button
+                onClick={() => handlePrevVariation(message)}
+                disabled={!message.variations || message.variations.length <= 1}
+                className="p-1 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50"
+                title="Previous version"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              
+              <span className="text-xs text-gray-500">
+                {currentVariation}/{variationCount}
+              </span>
+              
+              <button
+                onClick={() => handleNextVariation(message)}
+                disabled={!message.variations || message.variations.length <= 1}
+                className="p-1 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50"
+                title="Next version"
+              >
+                <ChevronRight size={16} />
+              </button>
+
+              <button
+                onClick={() => handleTryAgain(message)}
+                disabled={isGenerating}
+                className="p-1 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50"
+                title="Generate another version"
+              >
+                <RotateCw size={16} />
+              </button>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCancelEdit}
+            className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+          >
+            <X size={16} />
+          </button>
+          <button
+            onClick={handleSaveEdit}
+            className="p-1 text-gray-400 hover:text-green-400 transition-colors"
+          >
+            <Check size={16} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderMessage = (message: Message) => {
     const isEditing = editState?.messageId === message.id;
     const isUserMessage = message.role === 'user';
@@ -162,10 +368,10 @@ const ChatView: React.FC = () => {
         <div
           className={`max-w-[100%] w-full rounded-lg ${
             isEditing 
-              ? 'bg-stone-900 border border-stone-600' 
+              ? 'bg-stone-900 border border-stone-800' 
               : isUserMessage
-                ? 'bg-slate-900'
-                : 'bg-slate-950'
+                ? 'bg-gray-900'
+                : 'bg-gray-900'
           }`}
         >
           {isEditing ? (
@@ -176,33 +382,29 @@ const ChatView: React.FC = () => {
                 className="bg-transparent rounded-lg min-h-[6rem] w-full"
                 placeholder="Edit message..."
               />
-              <div className="flex justify-end gap-2 mt-2 border-t border-stone-700 pt-2">
-                <button
-                  onClick={handleCancelEdit}
-                  className="p-1 text-gray-400 hover:text-red-400 transition-colors"
-                >
-                  <X size={16} />
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="p-1 text-gray-400 hover:text-green-400 transition-colors"
-                >
-                  <Check size={16} />
-                </button>
-              </div>
+              {renderEditControls(message)}
             </div>
           ) : (
             <div
-            className={`p-4 ${!isGenerating && 'cursor-pointer hover:brightness-110'}`}
-            onClick={() => !isGenerating && handleStartEdit(message)}
+              className={`p-4 ${!isGenerating && 'cursor-pointer hover:brightness-110'}`}
+              onClick={() => !isGenerating && handleStartEdit(message)}
             >
-            <div 
+              <div 
                 className="whitespace-pre-wrap break-words"
-                dangerouslySetInnerHTML={{ __html: highlightText(message.content) }}
-            />
-            <div className="text-xs opacity-50 mt-1">
+                dangerouslySetInnerHTML={{ 
+                  __html: message.content
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-200">$1</span>')
+                    .replace(/(\*[^*\n]+\*)/g, '<span class="text-blue-300">$1</span>')
+                    .replace(/(`[^`\n]+`)/g, '<span class="text-yellow-300">$1</span>')
+                    .replace(/(\{\{[^}\n]+\}\})/g, '<span class="text-pink-300">$1</span>')
+                    .replace(/\n$/g, '\n\n')
+                }}
+              />
+              <div className="text-xs opacity-50 mt-1">
                 {new Date(message.timestamp).toLocaleTimeString()}
-            </div>
+              </div>
             </div>
           )}
         </div>
@@ -213,7 +415,11 @@ const ChatView: React.FC = () => {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-none p-8 pb-4">
-        <h2 className="text-lg font-semibold">Chat</h2>
+        <h2 className="text-lg font-semibold">
+          {characterData?.data?.name 
+            ? `Chatting with ${characterData.data.name}`
+            : 'Chat'}
+        </h2>
       </div>
 
       {error && (
