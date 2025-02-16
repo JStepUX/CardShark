@@ -29,6 +29,47 @@ const ChatView: React.FC = () => {
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const lastCharacterId = useRef<string | null>(null);
 
+  
+  const handleNewChat = async () => {
+    if (!characterData?.data?.first_mes) return;
+  
+    // Clear messages immediately and completely
+    setMessages([]); 
+  
+    // Small delay to ensure UI is clear
+    await new Promise(resolve => setTimeout(resolve, 50));
+  
+    // Create fresh first message from character
+    const firstMessage: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: characterData.data.first_mes,
+      timestamp: Date.now()
+    };
+  
+    // Add only this message to UI
+    setMessages([firstMessage]);
+  
+    // Save with force_new=true to create new chat file
+    try {
+      const response = await fetch('/api/save-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_name: characterData.data.name,
+          messages: [firstMessage],
+          force_new: true
+        })
+      });
+  
+      if (!response.ok) {
+        console.error('Failed to start new chat');
+      }
+    } catch (error) {
+      console.error('Error starting new chat:', error);
+    }
+  };
+
   // Clear chat and post first message when character changes
   useEffect(() => {
     const currentCharId = characterData?.data?.name;
@@ -79,26 +120,66 @@ const ChatView: React.FC = () => {
     }
   }, [messages]);
 
+  // Add new save chat function
+  const saveChatState = async () => {
+    if (!characterData?.data?.name) return;
+    
+    try {
+      const response = await fetch('/api/save-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_name: characterData.data.name,
+          messages
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save chat');
+      }
+    } catch (error) {
+      console.error('Error saving chat:', error);
+    }
+  };
+
+  const appendMessage = async (message: Message) => {
+    if (!characterData?.data?.name) return;
+    
+    try {
+      const response = await fetch('/api/append-chat-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_name: characterData.data.name,
+          message
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to append message');
+      }
+    } catch (error) {
+      console.error('Error appending message:', error);
+    }
+  };
+
+  // Modify handleSend to save after complete exchange
   const handleSend = async () => {
     if (!inputValue.trim() || !characterData || isGenerating) return;
-
-    messagesEndRef.current?.scrollIntoView({
-      behavior: 'instant',
-      block: 'end'
-    });
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
       content: inputValue.trim(),
-      timestamp: Date.now(),
-      variations: [],
-      currentVariation: 0
+      timestamp: Date.now()
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setError(null);
+    
+    // Save user message immediately
+    await appendMessage(userMessage);
 
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
@@ -132,6 +213,16 @@ const ChatView: React.FC = () => {
             : msg
         ));
       }
+
+      // Save assistant message after completion
+      const completedAssistantMessage = {
+        ...assistantMessage,
+        content: newContent,
+        variations: [newContent],
+        currentVariation: 0
+      };
+      await appendMessage(completedAssistantMessage);
+      
     } catch (error) {
       console.error('Generation failed:', error);
       setError(error instanceof Error ? error.message : 'Generation failed');
@@ -141,22 +232,48 @@ const ChatView: React.FC = () => {
     }
   };
 
+  // Save after edits/variations confirmed
+  const handleSaveEdit = async () => {
+    if (!editState) return;
+    
+    setMessages(prev => prev.map(msg =>
+      msg.id === editState.messageId
+        ? { ...msg, content: editState.content, variations: [editState.content], currentVariation: 0 }
+        : msg
+    ));
+    
+    // Save after variation/edit confirmed
+    await saveChatState();
+    setEditState(null);
+  };
+
+  // Load most recent chat on character change
+  useEffect(() => {
+    const loadLatestChat = async () => {
+      if (!characterData?.data?.name) return;
+      
+      try {
+        const response = await fetch(`/api/load-latest-chat/${encodeURIComponent(characterData.data.name)}`);
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        if (data.success && data.messages) {
+          setMessages(data.messages);
+        }
+      } catch (error) {
+        console.error('Failed to load chat:', error);
+      }
+    };
+    
+    loadLatestChat();
+  }, [characterData?.data?.name]);
+
   const handleStartEdit = (message: Message) => {
     if (isGenerating) return;
     setEditState({
       messageId: message.id,
       content: message.content
     });
-  };
-
-  const handleSaveEdit = () => {
-    if (!editState) return;
-    setMessages(prev => prev.map(msg =>
-      msg.id === editState.messageId
-        ? { ...msg, content: editState.content, variations: [editState.content], currentVariation: 0 }
-        : msg
-    ));
-    setEditState(null);
   };
 
   const handleCancelEdit = () => {
@@ -182,7 +299,7 @@ const ChatView: React.FC = () => {
 
       const response = await PromptHandler.generateChatResponse(
         characterData,
-        "Please provide another version of your last response that conveys the same meaning but expressed differently.",
+        "Please rework your previous response into a new, engaging version that's both insightful and clearly connected to the current scene.",
         contextMessages
       );
 
@@ -368,7 +485,7 @@ const ChatView: React.FC = () => {
         <div
           className={`max-w-[100%] w-full rounded-lg ${
             isEditing 
-              ? 'bg-stone-900 border border-stone-800' 
+              ? 'bg-gray-900 border border-stone-800' 
               : isUserMessage
                 ? 'bg-gray-900'
                 : 'bg-gray-900'
@@ -379,7 +496,7 @@ const ChatView: React.FC = () => {
               <HighlightedTextArea
                 value={editState.content}
                 onChange={(content) => setEditState({ ...editState, content })}
-                className="bg-transparent rounded-lg min-h-[6rem] w-full"
+                className="bg-transparent rounded-lg min-h-[8rem] w-full"
                 placeholder="Edit message..."
               />
               {renderEditControls(message)}
@@ -414,12 +531,20 @@ const ChatView: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-none p-8 pb-4">
+      <div className="flex-none p-8 pb-4 flex justify-between items-center">
         <h2 className="text-lg font-semibold">
           {characterData?.data?.name 
             ? `Chatting with ${characterData.data.name}`
             : 'Chat'}
         </h2>
+        <button
+          onClick={handleNewChat}
+          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 
+                   transition-colors disabled:opacity-50"
+          disabled={!characterData?.data?.first_mes}
+        >
+          New Chat
+        </button>
       </div>
 
       {error && (

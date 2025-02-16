@@ -32,7 +32,7 @@ class SettingsManager:
             "last_export_directory": "",
             "save_to_character_directory": False,
             "theme": "dark",
-            "version": "1.1",
+            "version": "1.2",
             "api": {
                 "enabled": False,
                 "url": "http://localhost:5001",

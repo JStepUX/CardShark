@@ -30,6 +30,7 @@ from backend.backyard_handler import BackyardHandler
 from backend.settings_manager import SettingsManager
 from backend.character_validator import CharacterValidator
 from backend.api_handler import ApiHandler
+from backend.chat_handler import ChatHandler
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -57,8 +58,99 @@ backyard_handler = BackyardHandler(logger)
 validator = CharacterValidator(logger)
 png_debug = PngDebugHandler(logger)
 api_handler = ApiHandler(logger)
+chat_handler = ChatHandler(logger) 
 
 # API Endpoints
+@app.post("/api/append-chat-message")
+async def append_chat_message(request: Request):
+    """Append a single message to the current chat."""
+    try:
+        data = await request.json()
+        character_name = data.get('character_name')
+        message = data.get('message')
+        
+        if not character_name or not message:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+            
+        success = chat_handler.append_message(character_name, message)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": success,
+                "message": "Message appended successfully" if success else "Failed to append message"
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error appending message: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to append message: {str(e)}"
+            }
+        )
+
+@app.get("/api/load-latest-chat/{character_name}")
+async def load_latest_chat(character_name: str):
+    """Load the most recent chat for a character."""
+    try:
+        messages = chat_handler.load_latest_chat(character_name)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "messages": messages
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error loading chat: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to load chat: {str(e)}",
+                "messages": None
+            }
+        )
+    
+@app.post("/api/save-chat")
+async def save_chat_state(request: Request):
+    """Save the current state of the chat."""
+    try:
+        data = await request.json()
+        character_name = data.get('character_name')
+        messages = data.get('messages', [])
+        force_new = data.get('force_new', False)  # Add this parameter
+        
+        if not character_name:
+            raise HTTPException(status_code=400, detail="Missing character name")
+            
+        # Get chat file path, forcing new if requested
+        chat_file = chat_handler._get_or_create_chat_file(character_name, force_new=force_new)
+        success = chat_handler.save_chat_state(character_name, messages)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": success,
+                "message": "Chat saved successfully" if success else "Failed to save chat"
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error saving chat: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to save chat: {str(e)}"
+            }
+        )
+    
 @app.post("/api/generate")
 async def generate_message(request: Request):
     """Handle streaming message generation request."""
