@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 chats
+users
+node_modules
 
 # Editor directories and files
 .vscode/*
