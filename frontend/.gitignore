@@ -13,7 +13,8 @@ dist-ssr
 *.local
 chats
 users
-node_modules
+__tests__
+scripts
 
 # Editor directories and files
 .vscode/*
