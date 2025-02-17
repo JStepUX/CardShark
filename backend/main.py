@@ -906,24 +906,30 @@ async def extract_lore(file: UploadFile = File(...)):
         )
 
 if __name__ == "__main__":
-    frontend_path = get_frontend_path()
-    if (frontend_path.exists()):
-        # Serve everything at "/", including index.html automatically
-        app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="static")
-        logger.log_step(f"Mounted frontend files from {frontend_path}")
-        
-        # Add the browser opening functionality
-        def open_browser():
-            """Open browser to application URL"""
-            logger.log_step("Opening browser to application URL")
-            webbrowser.open('http://localhost:9696')
-        
-        # Schedule browser opening after a short delay
-        Timer(1.5, open_browser).start()
-        logger.log_step("Scheduled browser opening")
-    else:
-        logger.log_warning(f"Frontend static files not found at {frontend_path}")
-        raise FileNotFoundError(f"Frontend directory not found: {frontend_path}")
+    try:
+        frontend_path = get_frontend_path()
+        if (frontend_path.exists()):
+            # Serve everything at "/", including index.html automatically
+            app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="static")
+            logger.log_step(f"Mounted frontend files from {frontend_path}")
+            
+            # Add the browser opening functionality
+            def open_browser():
+                """Open browser to application URL"""
+                logger.log_step("Opening browser to application URL")
+                webbrowser.open('http://localhost:9696')
+            
+            # Schedule browser opening after a short delay
+            Timer(1.5, open_browser).start()
+            logger.log_step("Scheduled browser opening")
+        else:
+            logger.log_warning(f"Frontend static files not found at {frontend_path}")
+            raise FileNotFoundError(f"Frontend directory not found: {frontend_path}")
 
-    import uvicorn # type: ignore
-    uvicorn.run(app, host="127.0.0.1", port=9696)
+        from network_server import run_server  # Import the new module
+        run_server(app, port=9696, local_only=False)  # Enable network access
+        
+    except Exception as e:
+        logger.log_error(f"Server startup failed: {str(e)}")
+        input("\nPress Enter to exit...")  # Allow user to see error in EXE context
+        sys.exit(1)
