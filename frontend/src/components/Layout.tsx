@@ -373,7 +373,7 @@ const Layout: React.FC = () => {
           </button>
         </div>
       </div>
-      <div className="flex-1 flex flex-col min-w-[800px] bg-gray-900">
+      <div className="flex-1 flex flex-col min-w-[600px] bg-stone-900">
         {error && (
           <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
         )}

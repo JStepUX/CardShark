@@ -41,7 +41,7 @@ const JsonViewer = () => {
       {error && <div className="text-red-500 mb-2">{error}</div>}
       <textarea
         className="w-full h-[calc(100vh-12rem)]
-                  bg-gray-900 text-white font-mono text-sm
+                  bg-stone-900 text-white font-mono text-sm
                   rounded-lg p-4 overflow-auto
                   whitespace-pre-wrap break-words resize-none"
         value={editableJson}

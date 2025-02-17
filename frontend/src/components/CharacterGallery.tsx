@@ -137,7 +137,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
   return (
     <div className="h-full flex flex-col">
       {/* Fixed header section */}
-      <div className="flex-none bg-slate-900 border-b border-stone-800">
+      <div className="flex-none bg-stone-900 border-b border-stone-800">
         <div className="p-4">
           <h2 className="text-lg font-semibold">
             Character Gallery {filteredCharacters.length ? `(${filteredCharacters.length})` : ''}

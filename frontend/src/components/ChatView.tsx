@@ -28,6 +28,89 @@ const ChatView: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const lastCharacterId = useRef<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [, setIsLoading] = useState(false);
+
+  // Load chat history when character changes or component mounts
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      // Don't load if we don't have character data
+      if (!characterData?.data?.name) {
+        console.log('No character data available');
+        return;
+      }
+      
+      console.log('Loading chat history for:', characterData.data.name);
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Make sure we're sending the full character data
+        const response = await fetch('/api/load-latest-chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            character_data: characterData // Send full character data
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load chat: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Received chat data:', data);
+
+        if (data.success) {
+          if (data.messages && data.messages.length > 0) {
+            console.log(`Setting ${data.messages.length} messages from history`);
+            setMessages(data.messages);
+          } else if (isInitialLoad && characterData.data.first_mes) {
+            // Only set first message on initial load with no history
+            console.log('Setting initial message');
+            const firstMessage = {
+              id: Date.now().toString(),
+              role: 'assistant' as "assistant",
+              content: characterData.data.first_mes,
+              timestamp: Date.now()
+            };
+            setMessages([firstMessage]);
+            
+            // Save this initial message
+            await fetch('/api/save-chat', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                character_data: characterData,
+                messages: [firstMessage],
+                force_new: true
+              })
+            });
+          }
+        } else {
+          throw new Error(data.message || 'Failed to load chat history');
+        }
+      } catch (error) {
+        console.error('Chat loading error:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load chat');
+        setMessages([]); // Clear messages on error
+      } finally {
+        setIsLoading(false);
+        setIsInitialLoad(false);
+      }
+    };
+
+    // Load chat history when character changes
+    if (characterData?.data?.name !== lastCharacterId.current) {
+      console.log('Character changed, reloading chat history');
+      lastCharacterId.current = characterData?.data?.name || null;
+      loadChatHistory();
+    }
+  }, [characterData?.data?.name, isInitialLoad]);
 
   // Update handleNewChat function
   const handleNewChat = async () => {
@@ -120,23 +203,33 @@ const ChatView: React.FC = () => {
 
   // Update saveChatState function
   const saveChatState = async () => {
-    if (!characterData?.data?.name) return;
-    
+    if (!characterData?.data?.name) {
+      console.log('No character data available for saving');
+      return false;
+    }
+
     try {
+      console.log(`Saving ${messages.length} messages for ${characterData.data.name}`);
       const response = await fetch('/api/save-chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          character_data: characterData,  // Send full data
-          messages
+          character_data: characterData,
+          messages: messages
         })
       });
-      
+
       if (!response.ok) {
-        console.error('Failed to save chat');
+        throw new Error('Failed to save chat state');
       }
+
+      const data = await response.json();
+      return data.success;
     } catch (error) {
-      console.error('Error saving chat:', error);
+      console.error('Failed to save chat:', error);
+      return false;
     }
   };
 
@@ -245,32 +338,6 @@ const ChatView: React.FC = () => {
     await saveChatState();
     setEditState(null);
   };
-
-  // Update loadLatestChat inside useEffect
-  useEffect(() => {
-    const loadLatestChat = async () => {
-      if (!characterData?.data?.name) return;
-      
-      try {
-        const response = await fetch('/api/load-latest-chat', {
-          method: 'POST',  // Changed from GET
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ character_data: characterData })  // Send full data
-        });
-        
-        if (!response.ok) return;
-        
-        const data = await response.json();
-        if (data.success && data.messages) {
-          setMessages(data.messages);
-        }
-      } catch (error) {
-        console.error('Failed to load chat:', error);
-      }
-    };
-    
-    loadLatestChat();
-  }, [characterData?.data?.name]);
 
   const handleStartEdit = (message: Message) => {
     if (isGenerating) return;
@@ -489,10 +556,10 @@ const ChatView: React.FC = () => {
         <div
           className={`max-w-[100%] w-full rounded-lg ${
             isEditing 
-              ? 'bg-gray-900 border border-stone-800' 
+              ? 'bg-stone-900 border border-stone-800' 
               : isUserMessage
-                ? 'bg-gray-900'
-                : 'bg-gray-900'
+                ? 'bg-stone-900'
+                : 'bg-stone-900'
           }`}
         >
           {isEditing ? (
@@ -578,7 +645,7 @@ const ChatView: React.FC = () => {
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || isGenerating}
-            className="px-4 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
+            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
                      transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send size={20} />

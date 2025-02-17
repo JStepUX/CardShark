@@ -5,6 +5,7 @@ import time
 import hashlib
 from datetime import datetime
 from pathlib import Path
+import traceback
 from typing import Dict, List, Optional
 
 class ChatHandler:
@@ -249,42 +250,58 @@ class ChatHandler:
             self.logger.log_error(f"Failed to save chat: {str(e)}")
             return False
 
-    def load_latest_chat(self, character_data: str) -> Optional[List[Dict]]:
+    def load_latest_chat(self, character_data: Dict) -> Optional[List[Dict]]:
         """Load the most recent chat for a character."""
         try:
-            self.logger.log_step(f"Loading latest chat for character: {character_data}")
+            self.logger.log_step(f"Loading latest chat for character: {character_data.get('data', {}).get('name')}")
             
-            # Update current character
-            self._current_character = character_data
-            self._current_chat_file = None  # Reset current file
+            # Reset current chat file
+            self._current_chat_file = None
             
+            # Get chat directory and all potential chat files
             chat_dir = self._get_chat_path(character_data)
             self.logger.log_step(f"Scanning directory: {chat_dir}")
             
-            chat_files = list(chat_dir.glob(f"{self._sanitize_filename(character_data)}*.jsonl"))
+            # Get character name for file matching
+            char_name = self._sanitize_filename(character_data.get('data', {}).get('name', 'unknown'))
+            
+            # Find all chat files for this character
+            chat_files = list(chat_dir.glob(f"{char_name}*.jsonl"))
             self.logger.log_step(f"Found {len(chat_files)} chat files")
             
             if not chat_files:
-                self.logger.log_step(f"No existing chats found for {character_data}")
+                self.logger.log_step("No existing chats found")
                 return None
                 
-            # Get most recent chat file
-            latest_chat = max(chat_files, key=os.path.getctime)
-            self._current_chat_file = latest_chat  # Track current file
-            self.logger.log_step(f"Loading chat from {latest_chat}")
+            # Get the most recent chat file by creation time
+            latest_chat = max(chat_files, key=lambda f: f.stat().st_mtime)
+            self._current_chat_file = latest_chat
             
+            self.logger.log_step(f"Loading chat from {latest_chat}")
+            self.logger.log_step(f"File modification time: {latest_chat.stat().st_mtime}")
+            
+            # Load and convert messages
             messages = []
             with open(latest_chat, 'r', encoding='utf-8') as f:
                 for line in f:
                     if line.strip():
-                        st_message = json.loads(line)
-                        converted = self._convert_silly_tavern_message(st_message)
-                        if converted:  # Skip metadata object
-                            messages.append(converted)
+                        try:
+                            st_message = json.loads(line)
+                            converted = self._convert_silly_tavern_message(st_message)
+                            if converted:  # Skip metadata object
+                                messages.append(converted)
+                        except json.JSONDecodeError as e:
+                            self.logger.log_error(f"Error parsing message: {e}")
+                            continue
                             
             self.logger.log_step(f"Loaded {len(messages)} messages")
+            
+            # Validate messages are in correct order
+            messages.sort(key=lambda x: x['timestamp'])
+            
             return messages
             
         except Exception as e:
             self.logger.log_error(f"Failed to load chat: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
             return None
