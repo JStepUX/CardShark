@@ -5,6 +5,7 @@ interface DialogButton {
   label: string;
   onClick: () => void;
   variant?: 'primary' | 'secondary';
+  disabled?: boolean;
 }
 
 interface DialogProps {
@@ -75,11 +76,12 @@ export function Dialog({
                 <button
                   key={index}
                   onClick={button.onClick}
+                  disabled={button.disabled}
                   className={`px-4 py-2 rounded-lg transition-colors ${
                     button.variant === 'primary'
                       ? 'bg-blue-600 text-white hover:bg-blue-700'
                       : 'text-gray-300 hover:text-white hover:bg-gray-700'
-                  }`}
+                  } ${button.disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                 >
                   {button.label}
                 </button>

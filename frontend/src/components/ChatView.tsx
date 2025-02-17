@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, Check, ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
+import { Send, X, Check, ChevronLeft, ChevronRight, RotateCw, User } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import HighlightedTextArea from './HighlightedTextArea';
+import UserSelect from './UserSelect';
 
 interface Message {
   id: string;
@@ -18,6 +19,13 @@ interface EditState {
   content: string;
 }
 
+interface UserProfile {
+  name: string;
+  path: string;
+  size: number;
+  modified: number;
+}
+
 const ChatView: React.FC = () => {
   const { characterData } = useCharacter();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -25,6 +33,8 @@ const ChatView: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+  const [showUserSelect, setShowUserSelect] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const lastCharacterId = useRef<string | null>(null);
@@ -34,74 +44,57 @@ const ChatView: React.FC = () => {
   // Load chat history when character changes or component mounts
   useEffect(() => {
     const loadChatHistory = async () => {
-      // Don't load if we don't have character data
-      if (!characterData?.data?.name) {
-        console.log('No character data available');
-        return;
-      }
-      
-      console.log('Loading chat history for:', characterData.data.name);
-      setIsLoading(true);
-      setError(null);
+      if (!characterData?.data?.name) return;
 
       try {
-        // Make sure we're sending the full character data
+        console.log('Loading chat history...'); // Debug
         const response = await fetch('/api/load-latest-chat', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            character_data: characterData // Send full character data
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ character_data: characterData })
         });
 
-        if (!response.ok) {
-          throw new Error(`Failed to load chat: ${response.statusText}`);
-        }
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Chat data loaded:', data); // Debug
+          
+          if (data.success) {
+            // Load messages
+            if (data.messages && data.messages.length > 0) {
+              setMessages(data.messages);
+            } else if (isInitialLoad && characterData?.data?.first_mes) {
+              const firstMessage: Message = {
+                id: Date.now().toString(),
+                role: 'assistant' as "assistant",
+                content: characterData.data.first_mes,
+                timestamp: Date.now(),
+                variations: [characterData.data.first_mes],
+                currentVariation: 0
+              };
+              setMessages([firstMessage]);
+            }
 
-        const data = await response.json();
-        console.log('Received chat data:', data);
-
-        if (data.success) {
-          if (data.messages && data.messages.length > 0) {
-            console.log(`Setting ${data.messages.length} messages from history`);
-            setMessages(data.messages);
-          } else if (isInitialLoad && characterData.data.first_mes) {
-            // Only set first message on initial load with no history
-            console.log('Setting initial message');
-            const firstMessage = {
-              id: Date.now().toString(),
-              role: 'assistant' as "assistant",
-              content: characterData.data.first_mes,
-              timestamp: Date.now()
-            };
-            setMessages([firstMessage]);
-            
-            // Save this initial message
-            await fetch('/api/save-chat', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                character_data: characterData,
-                messages: [firstMessage],
-                force_new: true
-              })
-            });
+            // Load last user if available
+            if (data.lastUser) {
+              try {
+                // Verify user still exists
+                const userResponse = await fetch(`/api/user-image/${encodeURIComponent(data.lastUser.path)}`);
+                if (userResponse.ok) {
+                  setCurrentUser(data.lastUser);
+                }
+              } catch (error) {
+                console.error('Failed to load last user:', error);
+              }
+            }
           }
-        } else {
-          throw new Error(data.message || 'Failed to load chat history');
         }
       } catch (error) {
-        console.error('Chat loading error:', error);
-        setError(error instanceof Error ? error.message : 'Failed to load chat');
-        setMessages([]); // Clear messages on error
-      } finally {
-        setIsLoading(false);
-        setIsInitialLoad(false);
+        console.error('Failed to load chat history:', error);
+        setError('Failed to load chat history');
       }
+
+      setIsLoading(false);
+      setIsInitialLoad(false);
     };
 
     // Load chat history when character changes
@@ -255,14 +248,45 @@ const ChatView: React.FC = () => {
     }
   };
 
-  // Modify handleSend to save after complete exchange
+  // Handle user selection
+  const handleUserSelect = async (user: UserProfile) => {
+    setCurrentUser(user);
+    setShowUserSelect(false);
+
+    // Save user selection to chat metadata
+    try {
+      const response = await fetch('/api/save-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_data: characterData,
+          messages,
+          lastUser: user
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Failed to save user selection');
+      }
+    } catch (error) {
+      console.error('Error saving user selection:', error);
+    }
+  };
+
+  // Replace {{user}} with selected user name
+  const formatMessage = (content: string): string => {
+    if (!content) return content;
+    return content.replace(/\{\{user\}\}/g, currentUser?.name || 'User');
+  };
+
+  // Modify handleSend to include user replacement
   const handleSend = async () => {
     if (!inputValue.trim() || !characterData || isGenerating) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue.trim(),
+      content: formatMessage(inputValue.trim()),
       timestamp: Date.now()
     };
 
@@ -270,7 +294,6 @@ const ChatView: React.FC = () => {
     setInputValue('');
     setError(null);
     
-    // Save user message immediately
     await appendMessage(userMessage);
 
     const assistantMessage: Message = {
@@ -301,15 +324,14 @@ const ChatView: React.FC = () => {
         newContent += chunk;
         setMessages(prev => prev.map(msg =>
           msg.id === assistantMessage.id
-            ? { ...msg, content: newContent, variations: [newContent], currentVariation: 0 }
+            ? { ...msg, content: formatMessage(newContent), variations: [newContent], currentVariation: 0 }
             : msg
         ));
       }
 
-      // Save assistant message after completion
       const completedAssistantMessage = {
         ...assistantMessage,
-        content: newContent,
+        content: formatMessage(newContent),
         variations: [newContent],
         currentVariation: 0
       };
@@ -544,6 +566,7 @@ const ChatView: React.FC = () => {
     );
   };
 
+  // Update message rendering to format user names
   const renderMessage = (message: Message) => {
     const isEditing = editState?.messageId === message.id;
     const isUserMessage = message.role === 'user';
@@ -580,7 +603,7 @@ const ChatView: React.FC = () => {
               <div 
                 className="whitespace-pre-wrap break-words"
                 dangerouslySetInnerHTML={{ 
-                  __html: message.content
+                  __html: formatMessage(message.content)
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;')
                     .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-200">$1</span>')
@@ -632,26 +655,55 @@ const ChatView: React.FC = () => {
       </div>
 
       <div className="flex-none p-4 border-t border-stone-800">
-        <div className="flex items-end gap-4">
-          <div className="flex-1">
-            <HighlightedTextArea
-              value={inputValue}
-              onChange={setInputValue}
-              className="bg-stone-950 border border-stone-800 rounded-lg h-24"
-              placeholder="Type your message..."
-              onKeyDown={handleKeyPress}
-            />
+  <div className="flex items-stretch gap-4">
+    {/* User Avatar - now uses h-24 to match textarea and aspect-[3/5] for taller profile */}
+      <button
+        onClick={() => setShowUserSelect(true)}
+        className="flex-none w-24 h-30 overflow-hidden hover:ring-2 hover:ring-blue-500 
+                  transition-all bg-stone-800 rounded-lg"
+        title={currentUser?.name || "Select User"}
+      >
+        {currentUser ? (
+          <img 
+            src={`/api/user-image/${encodeURIComponent(currentUser.path)}`}
+            alt={currentUser.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <User className="w-8 h-8 text-gray-400" />
           </div>
-          <button
-            onClick={handleSend}
-            disabled={!inputValue.trim() || isGenerating}
-            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
-                     transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send size={20} />
-          </button>
-        </div>
+        )}
+      </button>
+
+      <div className="flex-1">
+        <HighlightedTextArea
+          value={inputValue}
+          onChange={setInputValue}
+          className="bg-stone-950 border border-stone-800 rounded-lg h-24"
+          placeholder="Type your message..."
+          onKeyDown={handleKeyPress}
+        />
       </div>
+
+      <button
+        onClick={handleSend}
+        disabled={!inputValue.trim() || isGenerating}
+        className="px-4 py-4 h-24 bg-transparent text-white rounded-lg hover:bg-orange-700 
+                transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Send size={20} />
+      </button>
+    </div>
+  </div>
+
+      {/* User Selection Dialog */}
+      <UserSelect
+        isOpen={showUserSelect}
+        onClose={() => setShowUserSelect(false)}
+        onSelect={handleUserSelect}
+        currentUser={currentUser?.name}
+      />
     </div>
   );
 };

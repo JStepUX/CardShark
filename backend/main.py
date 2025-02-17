@@ -61,6 +61,125 @@ api_handler = ApiHandler(logger)
 chat_handler = ChatHandler(logger) 
 
 # API Endpoints
+@app.get("/api/users")
+async def get_users():
+    """List user profiles from the users directory."""
+    try:
+        # Get base directory
+        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        users_dir = base_dir / 'users'
+        
+        # Create users directory if it doesn't exist
+        users_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.log_step(f"Scanning users directory: {users_dir}")
+        
+        # List all PNG files in users directory
+        png_files = []
+        for file in users_dir.glob("*.png"):
+            logger.log_step(f"Found user PNG: {file.name}")
+            png_files.append({
+                "name": file.stem,
+                "path": str(file),
+                "size": file.stat().st_size,
+                "modified": file.stat().st_mtime
+            })
+            
+        # Sort alphabetically by name
+        png_files.sort(key=lambda x: x["name"].lower())
+        
+        logger.log_step(f"Found {len(png_files)} user profiles")
+        
+        return {
+            "success": True,
+            "users": png_files
+        }
+        
+    except Exception as e:
+        logger.log_error(f"Error scanning users: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to scan users: {str(e)}"
+        )
+
+@app.post("/api/user-image/{path:path}")
+async def upload_user_image(
+    file: UploadFile = File(...),
+    metadata: str = Form(...),
+):
+    """Save a user profile image with metadata."""
+    try:
+        # Read file content
+        content = await file.read()
+        metadata_dict = json.loads(metadata)
+        
+        # Validate metadata (using same validator as characters)
+        validated_metadata = validator.normalize(metadata_dict)
+        
+        # Get base directory
+        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        users_dir = base_dir / 'users'
+        users_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate filename from name
+        name = validated_metadata.get("data", {}).get("name", "user")
+        safe_name = re.sub(r'[<>:"/\\|?*]', '_', name)
+        filename = f"{safe_name}.png"
+        save_path = users_dir / filename
+        
+        # Handle filename conflicts
+        counter = 1
+        while save_path.exists():
+            save_path = users_dir / f"{safe_name}_{counter}.png"
+            counter += 1
+            
+        logger.log_step(f"Saving user profile to: {save_path}")
+        
+        # Write metadata to PNG
+        updated_content = png_handler.write_metadata(content, validated_metadata)
+        
+        with open(save_path, 'wb') as f:
+            f.write(updated_content)
+            
+        if not save_path.exists():
+            raise HTTPException(
+                status_code=500, 
+                detail="File write failed"
+            )
+            
+        return {
+            "success": True,
+            "path": str(save_path)
+        }
+        
+    except Exception as e:
+        logger.log_error(f"Error saving user profile: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+@app.get("/api/user-image/{path:path}")
+async def get_user_image(path: str):
+    """Serve user profile images."""
+    try:
+        file_path = Path(path)
+        
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=404, 
+                detail="Image not found"
+            )
+            
+        return FileResponse(file_path)
+        
+    except Exception as e:
+        logger.log_error(f"Error serving user image: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=str(e)
+        )
+
 @app.post("/api/append-chat-message")
 async def append_chat_message(request: Request):
     """Append a single message to the current chat."""

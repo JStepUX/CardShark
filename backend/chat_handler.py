@@ -139,8 +139,8 @@ class ChatHandler:
     def _create_chat_metadata(self, character_data: Dict) -> Dict:
         """Create initial chat metadata with character ID."""
         char_id = self._character_ids.get(character_data.get('data', {}).get('name')) or \
-                 self._generate_character_id(character_data)
-                 
+                self._generate_character_id(character_data)
+                
         return {
             "user_name": "User",
             "character_data": character_data.get('data', {}).get('name', ''),
@@ -152,7 +152,8 @@ class ChatHandler:
                 "timedWorldInfo": {
                     "sticky": {},
                     "cooldown": {}
-                }
+                },
+                "lastUser": None  # Add this field for user persistence
             }
         }
 
@@ -227,14 +228,19 @@ class ChatHandler:
             self.logger.log_error(f"Failed to append message: {str(e)}")
             return False
 
-    def save_chat_state(self, character_data: str, messages: List[Dict]) -> bool:
+    def save_chat_state(self, character_data: str, messages: List[Dict], lastUser: Optional[Dict] = None) -> bool:
         """Save the complete chat state to a JSONL file."""
         try:
             chat_file = self._get_or_create_chat_file(character_data, force_new=False)
             
             with open(chat_file, 'w', encoding='utf-8') as f:
+                # Create metadata with lastUser
+                metadata = self._create_chat_metadata(character_data)
+                if lastUser:
+                    metadata["chat_metadata"]["lastUser"] = lastUser
+                
                 # Write metadata first
-                json.dump(self._create_chat_metadata(character_data), f)
+                json.dump(metadata, f)
                 f.write('\n')
                 
                 # Write all messages
@@ -244,13 +250,12 @@ class ChatHandler:
                     
             self.logger.log_step(f"Saved full chat state to {chat_file}")
             return True
-            return True
-            
+                
         except Exception as e:
             self.logger.log_error(f"Failed to save chat: {str(e)}")
             return False
 
-    def load_latest_chat(self, character_data: Dict) -> Optional[List[Dict]]:
+    def load_latest_chat(self, character_data: Dict) -> Optional[Dict]:
         """Load the most recent chat for a character."""
         try:
             self.logger.log_step(f"Loading latest chat for character: {character_data.get('data', {}).get('name')}")
@@ -280,16 +285,21 @@ class ChatHandler:
             self.logger.log_step(f"Loading chat from {latest_chat}")
             self.logger.log_step(f"File modification time: {latest_chat.stat().st_mtime}")
             
-            # Load and convert messages
+            # Load messages and metadata
             messages = []
+            metadata = None
             with open(latest_chat, 'r', encoding='utf-8') as f:
                 for line in f:
                     if line.strip():
                         try:
-                            st_message = json.loads(line)
-                            converted = self._convert_silly_tavern_message(st_message)
-                            if converted:  # Skip metadata object
-                                messages.append(converted)
+                            data = json.loads(line)
+                            if 'chat_metadata' in data:  # This is the metadata line
+                                metadata = data
+                                self.logger.log_step("Found chat metadata")
+                            else:  # This is a message
+                                converted = self._convert_silly_tavern_message(data)
+                                if converted:  # Skip metadata object
+                                    messages.append(converted)
                         except json.JSONDecodeError as e:
                             self.logger.log_error(f"Error parsing message: {e}")
                             continue
@@ -299,7 +309,11 @@ class ChatHandler:
             # Validate messages are in correct order
             messages.sort(key=lambda x: x['timestamp'])
             
-            return messages
+            return {
+                'success': True,
+                'messages': messages,
+                'metadata': metadata
+            }
             
         except Exception as e:
             self.logger.log_error(f"Failed to load chat: {str(e)}")

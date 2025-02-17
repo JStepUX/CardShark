@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, UserPlus } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, UserPlus, ImagePlus } from 'lucide-react';
+import { Dialog } from './Dialog';
+import { createEmptyCharacterCard } from '../types/schema';
 
 interface UserProfile {
   name: string;
@@ -25,6 +27,15 @@ const UserSelect: React.FC<UserSelectProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showNewUserDialog, setShowNewUserDialog] = useState(false);
+  
+  // New user form state
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserDescription, setNewUserDescription] = useState('');
+  const [newUserImage, setNewUserImage] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -51,6 +62,76 @@ const UserSelect: React.FC<UserSelectProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    setNewUserImage(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setError(null);
+  };
+
+  const handleCreateUser = async () => {
+    if (!newUserName.trim()) {
+      setError('Please enter a name');
+      return;
+    }
+
+    if (!newUserImage) {
+      setError('Please select a profile image');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError(null);
+
+      // Create a minimal character card structure for the user
+      const userCard = createEmptyCharacterCard();
+      userCard.data.name = newUserName.trim();
+      userCard.data.description = newUserDescription.trim();
+
+      // Create form data
+      const formData = new FormData();
+      formData.append('file', newUserImage);
+      formData.append('metadata', JSON.stringify(userCard));
+
+      // Upload to users directory
+      const response = await fetch('/api/user-image', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to create user');
+      }
+
+      // Reset form and refresh users
+      resetNewUserForm();
+      loadUsers();
+      setShowNewUserDialog(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create user');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetNewUserForm = () => {
+    setNewUserName('');
+    setNewUserDescription('');
+    setNewUserImage(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setError(null);
   };
 
   const filteredUsers = users.filter(user =>
@@ -99,7 +180,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
                          border-stone-800 hover:border-stone-700 transition-colors
                          flex flex-col items-center justify-center cursor-pointer
                          text-gray-400 hover:text-gray-200"
-                onClick={() => {/* TODO: Implement create new user */}}
+                onClick={() => setShowNewUserDialog(true)}
               >
                 <UserPlus size={32} />
                 <span className="mt-2">New User</span>
@@ -130,6 +211,100 @@ const UserSelect: React.FC<UserSelectProps> = ({
           )}
         </div>
       </div>
+
+      {/* Create New User Dialog */}
+      <Dialog
+        isOpen={showNewUserDialog}
+        onClose={() => {
+          setShowNewUserDialog(false);
+          resetNewUserForm();
+        }}
+        title="Create New User"
+        buttons={[
+          {
+            label: isSubmitting ? 'Creating...' : 'Create',
+            onClick: handleCreateUser,
+            variant: 'primary',
+            disabled: isSubmitting
+          },
+          {
+            label: 'Cancel',
+            onClick: () => {
+              setShowNewUserDialog(false);
+              resetNewUserForm();
+            },
+            disabled: isSubmitting
+          }
+        ]}
+      >
+        <div className="space-y-4">
+          {/* Image Upload */}
+          <div 
+            className="relative w-32 h-32 mx-auto cursor-pointer group"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="w-full h-full object-cover rounded-lg"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center 
+                           bg-stone-800 rounded-lg border-2 border-dashed border-stone-700
+                           group-hover:border-stone-600 transition-colors">
+                <ImagePlus className="w-8 h-8 text-gray-400 group-hover:text-gray-300" />
+                <span className="mt-2 text-sm text-gray-400 group-hover:text-gray-300">
+                  Select Image
+                </span>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+          </div>
+
+          {/* Name Field */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Name
+            </label>
+            <input
+              type="text"
+              value={newUserName}
+              onChange={(e) => setNewUserName(e.target.value)}
+              className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
+                       rounded-lg focus:ring-1 focus:ring-blue-500"
+              placeholder="Enter name"
+            />
+          </div>
+
+          {/* Description Field */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Description (Optional)
+            </label>
+            <textarea
+              value={newUserDescription}
+              onChange={(e) => setNewUserDescription(e.target.value)}
+              className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
+                       rounded-lg focus:ring-1 focus:ring-blue-500 h-24 resize-none"
+              placeholder="Enter description"
+            />
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="text-sm text-red-500 bg-red-950/50 p-3 rounded-lg">
+              {error}
+            </div>
+          )}
+        </div>
+      </Dialog>
     </div>
   );
 };
