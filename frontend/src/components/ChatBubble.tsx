@@ -83,8 +83,9 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
   };
 
   // Highlighting function (copied from HighlightedTextArea)
-  const highlightSyntax = (text: string) => {
-    return text
+  const highlightSyntax = (text: string, userName?: string) => {
+    const replacedText = userName ? text.replace(/\{\{user\}\}/gi, userName) : text;
+    return replacedText
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-200">$1</span>')
@@ -99,7 +100,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
     return (
       <div
         className="whitespace-pre-wrap"
-        dangerouslySetInnerHTML={{ __html: highlightSyntax(text) }}
+        dangerouslySetInnerHTML={{ __html: highlightSyntax(text, currentUser) }}
       />
     );
   };
