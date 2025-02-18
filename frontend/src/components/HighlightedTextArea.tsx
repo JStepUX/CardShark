@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 
 interface HighlightedTextAreaProps {
   className?: string;
@@ -6,26 +6,31 @@ interface HighlightedTextAreaProps {
   value?: string;
   onChange: (value: string) => void;
   onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+  readOnly?: boolean; // Add this line
   minHeight?: string;
 }
 
-const HighlightedTextArea = ({
+const HighlightedTextArea = forwardRef<HTMLTextAreaElement, HighlightedTextAreaProps>(({
   value = '',
   onChange,
   className = '',
   placeholder = '',
   onKeyDown,
+  readOnly = false, // Add this line and set a default value
   minHeight = '120px'
-}: HighlightedTextAreaProps) => {
+}, ref) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Use useImperativeHandle to expose the textareaRef to the parent component
+  useImperativeHandle(ref, () => textareaRef.current!, [textareaRef]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
     const highlight = highlightRef.current;
     const container = containerRef.current;
-    
+
     if (!textarea || !highlight || !container) return;
 
     // Sync scroll positions
@@ -70,7 +75,7 @@ const HighlightedTextArea = ({
   const baseStyles = 'absolute inset-0 w-full h-full overflow-auto whitespace-pre-wrap p-3';
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className={`relative ${className} resize-y overflow-hidden`}
       style={{ minHeight }}
@@ -89,11 +94,14 @@ const HighlightedTextArea = ({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         onKeyDown={onKeyDown}
+        readOnly={readOnly} // Add this line
         spellCheck={false}
         className={`${baseStyles} bg-transparent text-transparent caret-white`}
       />
     </div>
   );
-};
+});
+
+HighlightedTextArea.displayName = 'HighlightedTextArea'; // Optional: for better debugging
 
 export default HighlightedTextArea;

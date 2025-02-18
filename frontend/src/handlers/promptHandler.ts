@@ -69,7 +69,8 @@ Craft a new introductory message that starts the conversation in a fresh and eng
   static async generateChatResponse(
     character: CharacterCard, 
     message: string,
-    history: { role: 'user' | 'assistant', content: string }[] = []
+    history: { role: 'user' | 'assistant', content: string }[] = [],
+    signal?: AbortSignal
   ): Promise<Response> {
     return fetch('/api/generate', {
       method: 'POST',
@@ -80,7 +81,8 @@ ${this.createCharacterContext(character)}
 Engage in conversation while staying true to the character's personality and background. Previous messages:
 ${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
 user: ${message}`
-      })
+      }),
+      signal
     });
   }
 }

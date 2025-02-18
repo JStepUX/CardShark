@@ -228,8 +228,9 @@ class ChatHandler:
             self.logger.log_error(f"Failed to append message: {str(e)}")
             return False
 
-    def save_chat_state(self, character_data: str, messages: List[Dict], lastUser: Optional[Dict] = None) -> bool:
-        """Save the complete chat state to a JSONL file."""
+    def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None) -> bool:
+        self.logger.log_step(f"Saving chat state for character: {character_data.get('data', {}).get('name')}")
+        self.logger.log_step(f"Received messages: {messages}")
         try:
             chat_file = self._get_or_create_chat_file(character_data, force_new=False)
             
@@ -250,7 +251,7 @@ class ChatHandler:
                     
             self.logger.log_step(f"Saved full chat state to {chat_file}")
             return True
-                
+                    
         except Exception as e:
             self.logger.log_error(f"Failed to save chat: {str(e)}")
             return False

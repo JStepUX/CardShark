@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, Check, ChevronLeft, ChevronRight, RotateCw, User } from 'lucide-react';
+import { Send, User, Plus } from 'lucide-react'; // Import User icon
 import { useCharacter } from '../contexts/CharacterContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import HighlightedTextArea from './HighlightedTextArea';
-import UserSelect from './UserSelect';
+import ChatBubble from './ChatBubble';
+import UserSelect from './UserSelect'; // Import UserSelect
 
 interface Message {
   id: string;
@@ -12,11 +13,6 @@ interface Message {
   timestamp: number;
   variations?: string[];
   currentVariation?: number;
-}
-
-interface EditState {
-  messageId: string;
-  content: string;
 }
 
 interface UserProfile {
@@ -32,89 +28,25 @@ const ChatView: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editState, setEditState] = useState<EditState | null>(null);
-  const [showUserSelect, setShowUserSelect] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const lastCharacterId = useRef<string | null>(null);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [, setIsLoading] = useState(false);
+  const [showUserSelect, setShowUserSelect] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null); // Use UserProfile type
+  const currentGenerationRef = useRef<AbortController | null>(null);
 
-  // Load chat history when character changes or component mounts
-  useEffect(() => {
-    const loadChatHistory = async () => {
-      if (!characterData?.data?.name) return;
-
-      try {
-        console.log('Loading chat history...'); // Debug
-        const response = await fetch('/api/load-latest-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ character_data: characterData })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Chat data loaded:', data); // Debug
-          
-          if (data.success) {
-            // Load messages
-            if (data.messages && data.messages.length > 0) {
-              setMessages(data.messages);
-            } else if (isInitialLoad && characterData?.data?.first_mes) {
-              const firstMessage: Message = {
-                id: Date.now().toString(),
-                role: 'assistant' as "assistant",
-                content: characterData.data.first_mes,
-                timestamp: Date.now(),
-                variations: [characterData.data.first_mes],
-                currentVariation: 0
-              };
-              setMessages([firstMessage]);
-            }
-
-            // Load last user if available
-            if (data.lastUser) {
-              try {
-                // Verify user still exists
-                const userResponse = await fetch(`/api/user-image/${encodeURIComponent(data.lastUser.path)}`);
-                if (userResponse.ok) {
-                  setCurrentUser(data.lastUser);
-                }
-              } catch (error) {
-                console.error('Failed to load last user:', error);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load chat history:', error);
-        setError('Failed to load chat history');
-      }
-
-      setIsLoading(false);
-      setIsInitialLoad(false);
-    };
-
-    // Load chat history when character changes
-    if (characterData?.data?.name !== lastCharacterId.current) {
-      console.log('Character changed, reloading chat history');
-      lastCharacterId.current = characterData?.data?.name || null;
-      loadChatHistory();
+  // Stop generation function - used by ChatBubble
+  const handleStopGeneration = () => {
+    if (currentGenerationRef.current) {
+      currentGenerationRef.current.abort();
     }
-  }, [characterData?.data?.name, isInitialLoad]);
+  };
 
-  // Update handleNewChat function
+  // Handle new chat creation
   const handleNewChat = async () => {
     if (!characterData?.data?.first_mes) return;
-  
-    // Clear messages immediately
     setMessages([]); 
-  
     await new Promise(resolve => setTimeout(resolve, 50));
   
-    // Create fresh first message from character
     const firstMessage: Message = {
       id: Date.now().toString(),
       role: 'assistant',
@@ -124,36 +56,42 @@ const ChatView: React.FC = () => {
   
     setMessages([firstMessage]);
   
-    // Save with force_new=true to create new chat file
     try {
       const response = await fetch('/api/save-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character_data: characterData,  // Send full data
+          character_data: characterData,
           messages: [firstMessage],
           force_new: true
         })
       });
   
       if (!response.ok) {
-        console.error('Failed to start new chat');
+        throw new Error('Failed to start new chat');
       }
-    } catch (error) {
-      console.error('Error starting new chat:', error);
+    } catch (err) {
+      console.error('Error starting new chat:', err);
     }
   };
+
+  // Cleanup function
+  useEffect(() => {
+    return () => {
+      if (currentGenerationRef.current) {
+        currentGenerationRef.current.abort();
+      }
+    };
+  }, []);
 
   // Clear chat and post first message when character changes
   useEffect(() => {
     const currentCharId = characterData?.data?.name;
 
     if (currentCharId !== lastCharacterId.current) {
-      // Clear existing messages
       setMessages([]);
       lastCharacterId.current = currentCharId !== undefined ? currentCharId : null;
 
-      // Post character's first message if available
       if (characterData?.data?.first_mes) {
         const firstMessage: Message = {
           id: Date.now().toString(),
@@ -168,22 +106,12 @@ const ChatView: React.FC = () => {
     }
   }, [characterData]);
 
-  // Handle auto-focus when entering edit mode
-  useEffect(() => {
-    if (editState && editTextAreaRef.current) {
-      editTextAreaRef.current.focus();
-      const length = editTextAreaRef.current.value.length;
-      editTextAreaRef.current.setSelectionRange(length, length);
-    }
-  }, [editState]);
-
   // Scroll handling
   useEffect(() => {
     if (messagesEndRef.current) {
       const parent = messagesEndRef.current.parentElement;
       if (parent) {
         const isScrolledToBottom = parent.scrollHeight - parent.scrollTop <= parent.clientHeight + 100;
-        
         if (isScrolledToBottom) {
           messagesEndRef.current.scrollIntoView({
             behavior: 'smooth',
@@ -194,39 +122,29 @@ const ChatView: React.FC = () => {
     }
   }, [messages]);
 
-  // Update saveChatState function
+  // Save and append message handlers
   const saveChatState = async () => {
-    if (!characterData?.data?.name) {
-      console.log('No character data available for saving');
-      return false;
-    }
+    if (!characterData?.data?.name) return;
 
     try {
-      console.log(`Saving ${messages.length} messages for ${characterData.data.name}`);
       const response = await fetch('/api/save-chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           character_data: characterData,
-          messages: messages
+          messages,
+          lastUser: currentUser // Add this line
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save chat state');
+        throw new Error('Failed to save chat');
       }
-
-      const data = await response.json();
-      return data.success;
-    } catch (error) {
-      console.error('Failed to save chat:', error);
-      return false;
+    } catch (err) {
+      console.error('Error saving chat:', err);
     }
   };
 
-  // Update appendMessage function
   const appendMessage = async (message: Message) => {
     if (!characterData?.data?.name) return;
     
@@ -235,58 +153,27 @@ const ChatView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character_data: characterData,  // Send full data
+          character_data: characterData,
           message
         })
       });
       
       if (!response.ok) {
-        console.error('Failed to append message');
+        throw new Error('Failed to append message');
       }
-    } catch (error) {
-      console.error('Error appending message:', error);
+    } catch (err) {
+      console.error('Error appending message:', err);
     }
   };
 
-  // Handle user selection
-  const handleUserSelect = async (user: UserProfile) => {
-    setCurrentUser(user);
-    setShowUserSelect(false);
-
-    // Save user selection to chat metadata
-    try {
-      const response = await fetch('/api/save-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: characterData,
-          messages,
-          lastUser: user
-        })
-      });
-
-      if (!response.ok) {
-        console.error('Failed to save user selection');
-      }
-    } catch (error) {
-      console.error('Error saving user selection:', error);
-    }
-  };
-
-  // Replace {{user}} with selected user name
-  const formatMessage = (content: string): string => {
-    if (!content) return content;
-    return content.replace(/\{\{user\}\}/g, currentUser?.name || 'User');
-  };
-
-  // Modify handleSend to include user replacement
+  // Handle message sending
   const handleSend = async () => {
     if (!inputValue.trim() || !characterData || isGenerating) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: formatMessage(inputValue.trim()),
+      content: inputValue.trim(),
       timestamp: Date.now()
     };
 
@@ -308,11 +195,15 @@ const ChatView: React.FC = () => {
     setMessages(prev => [...prev, assistantMessage]);
     setIsGenerating(true);
 
+    const abortController = new AbortController();
+    currentGenerationRef.current = abortController;
+
     try {
       const response = await PromptHandler.generateChatResponse(
         characterData,
         userMessage.content,
-        messages.map(({ role, content }) => ({ role, content }))
+        messages.map(({ role, content }) => ({ role, content })),
+        abortController.signal
       );
 
       if (!response.ok) {
@@ -324,53 +215,144 @@ const ChatView: React.FC = () => {
         newContent += chunk;
         setMessages(prev => prev.map(msg =>
           msg.id === assistantMessage.id
-            ? { ...msg, content: formatMessage(newContent), variations: [newContent], currentVariation: 0 }
+            ? { ...msg, content: newContent, variations: [newContent], currentVariation: 0 }
             : msg
         ));
       }
 
       const completedAssistantMessage = {
         ...assistantMessage,
-        content: formatMessage(newContent),
+        content: newContent,
         variations: [newContent],
         currentVariation: 0
       };
       await appendMessage(completedAssistantMessage);
       
-    } catch (error) {
-      console.error('Generation failed:', error);
-      setError(error instanceof Error ? error.message : 'Generation failed');
-      setMessages(prev => prev.filter(msg => msg.id !== assistantMessage.id));
+    } catch (err: any) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        console.log('Generation aborted');
+      } else {
+        console.error('Generation failed:', err);
+        setError(err instanceof Error ? err.message : 'Generation failed');
+        setMessages(prev => prev.filter(msg => msg.id !== assistantMessage.id));
+      }
+    } finally {
+      setIsGenerating(false);
+      currentGenerationRef.current = null;
+    }
+  };
+
+  // Message update handlers
+  const handleUpdateMessage = async (messageId: string, content: string) => {
+    setMessages(prev => prev.map(msg =>
+      msg.id === messageId
+        ? { ...msg, content, variations: [content], currentVariation: 0 }
+        : msg
+    ));
+    await saveChatState();
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    setMessages(prev => prev.filter(msg => msg.id !== messageId));
+    await saveChatState();
+  };
+
+  const handleTryAgain = async (message: Message) => {
+    if (!characterData || isGenerating) return;
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      const messageIndex = messages.findIndex(m => m.id === message.id);
+      const contextMessages = messages.slice(0, messageIndex + 1).map(({ role, content }) => ({ role, content }));
+
+      const response = await PromptHandler.generateChatResponse(
+        characterData,
+        "Please rework your previous response into a new version.",
+        contextMessages
+      );
+
+      if (!response.ok) {
+        throw new Error('Generation failed - check API settings');
+      }
+
+      const currentVariations = message.variations || [message.content];
+      let newVariation = '';
+
+      for await (const chunk of PromptHandler.streamResponse(response)) {
+        newVariation += chunk;
+        setMessages(prev => prev.map(msg =>
+          msg.id === message.id
+            ? { ...msg, content: newVariation }
+            : msg
+        ));
+      }
+
+      setMessages(prev => prev.map(msg =>
+        msg.id === message.id
+          ? {
+              ...msg,
+              content: newVariation,
+              variations: [...currentVariations, newVariation],
+              currentVariation: currentVariations.length
+            }
+          : msg
+      ));
+
+      await saveChatState();
+
+    } catch (err) {
+      console.error('Generation failed:', err);
+      setError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Save after edits/variations confirmed
-  const handleSaveEdit = async () => {
-    if (!editState) return;
+  const handlePrevVariation = async (message: Message) => {
+    const variations = message.variations || [message.content];
+    if (variations.length <= 1) return;
+    
+    const currentIndex = message.currentVariation ?? 0;
+    const newIndex = currentIndex > 0 ? currentIndex - 1 : variations.length - 1;
+    
+    const newContent = variations[newIndex];
+    if (!newContent) return;
     
     setMessages(prev => prev.map(msg =>
-      msg.id === editState.messageId
-        ? { ...msg, content: editState.content, variations: [editState.content], currentVariation: 0 }
+      msg.id === message.id
+        ? {
+            ...msg,
+            content: newContent,
+            currentVariation: newIndex
+          }
         : msg
     ));
-    
-    // Save after variation/edit confirmed
+
     await saveChatState();
-    setEditState(null);
   };
 
-  const handleStartEdit = (message: Message) => {
-    if (isGenerating) return;
-    setEditState({
-      messageId: message.id,
-      content: message.content
-    });
-  };
+  const handleNextVariation = async (message: Message) => {
+    const variations = message.variations || [message.content];
+    if (variations.length <= 1) return;
+    
+    const currentIndex = message.currentVariation ?? 0;
+    const newIndex = currentIndex < variations.length - 1 ? currentIndex + 1 : 0;
+    
+    const newContent = variations[newIndex];
+    if (!newContent) return;
+    
+    setMessages(prev => prev.map(msg =>
+      msg.id === message.id
+        ? {
+            ...msg,
+            content: newContent,
+            currentVariation: newIndex
+          }
+        : msg
+    ));
 
-  const handleCancelEdit = () => {
-    setEditState(null);
+    await saveChatState();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -380,247 +362,10 @@ const ChatView: React.FC = () => {
     }
   };
 
-  const handleTryAgain = async (message: Message) => {
-    if (!characterData || isGenerating) return;
-    setIsGenerating(true);
-    setError(null);
-
-    try {
-      // Get all messages up to this one for context
-      const messageIndex = messages.findIndex(m => m.id === message.id);
-      const contextMessages = messages.slice(0, messageIndex + 1).map(({ role, content }) => ({ role, content }));
-
-      const response = await PromptHandler.generateChatResponse(
-        characterData,
-        "Please rework your previous response into a new, engaging version that's both insightful and clearly connected to the current scene.",
-        contextMessages
-      );
-
-      if (!response.ok) {
-        throw new Error('Generation failed - check API settings');
-      }
-
-      // Initialize variations if needed
-      const currentVariations = message.variations || [message.content];
-      let newVariation = '';
-
-      // Update edit state to show streaming content
-      setEditState(prev => ({
-        ...prev,
-        messageId: message.id,
-        content: ''  // Start empty
-      }));
-
-      for await (const chunk of PromptHandler.streamResponse(response)) {
-        newVariation += chunk;
-        
-        // Update just the edit state during streaming
-        setEditState(prev => ({
-          ...prev,
-          messageId: message.id,
-          content: newVariation
-        }));
-      }
-
-      // Only add to variations once streaming is complete
-      setMessages(prev => prev.map(msg =>
-        msg.id === message.id
-          ? {
-              ...msg,
-              content: newVariation,
-              variations: [...currentVariations, newVariation],
-              currentVariation: currentVariations.length // Point to the new variation
-            }
-          : msg
-      ));
-
-      // Update edit state with final content
-      setEditState(prev => ({
-        ...prev,
-        messageId: message.id,
-        content: newVariation
-      }));
-
-    } catch (error) {
-      console.error('Generation failed:', error);
-      setError(error instanceof Error ? error.message : 'Generation failed');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handlePrevVariation = (message: Message) => {
-    const variations = message.variations || [message.content];
-    if (variations.length <= 1) return;
-    
-    const currentIndex = message.currentVariation ?? 0;
-    const newIndex = currentIndex > 0 ? currentIndex - 1 : variations.length - 1;
-    
-    // Ensure we have a valid variation to switch to
-    const newContent = variations[newIndex];
-    if (!newContent) return;
-    
-    // Update both the message and edit state
-    setMessages(prev => prev.map(msg =>
-      msg.id === message.id
-        ? {
-            ...msg,
-            content: newContent,
-            currentVariation: newIndex
-          }
-        : msg
-    ));
-
-    setEditState(_prev => ({
-      messageId: message.id,
-      content: newContent
-    }));
-  };
-
-  const handleNextVariation = (message: Message) => {
-    const variations = message.variations || [message.content];
-    if (variations.length <= 1) return;
-    
-    const currentIndex = message.currentVariation ?? 0;
-    const newIndex = currentIndex < variations.length - 1 ? currentIndex + 1 : 0;
-    
-    // Ensure we have a valid variation to switch to
-    const newContent = variations[newIndex];
-    if (!newContent) return;
-    
-    // Update both the message and edit state
-    setMessages(prev => prev.map(msg =>
-      msg.id === message.id
-        ? {
-            ...msg,
-            content: newContent,
-            currentVariation: newIndex
-          }
-        : msg
-    ));
-
-    setEditState(_prev => ({
-      messageId: message.id,
-      content: newContent
-    }));
-  };
-
-  const renderEditControls = (message: Message) => {
-    const variations = message.variations || [];
-    const variationCount = variations.length || 1;
-    const currentVariation = (message.currentVariation ?? 0) + 1;
-
-    return (
-      <div className="flex justify-between items-center gap-2 mt-2 border-t border-stone-700 pt-2">
-        <div className="flex items-center gap-2">
-          {message.role === 'assistant' && editState?.messageId === message.id && (
-            <>
-              <button
-                onClick={() => handlePrevVariation(message)}
-                disabled={!message.variations || message.variations.length <= 1}
-                className="p-1 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50"
-                title="Previous version"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              
-              <span className="text-xs text-gray-500">
-                {currentVariation}/{variationCount}
-              </span>
-              
-              <button
-                onClick={() => handleNextVariation(message)}
-                disabled={!message.variations || message.variations.length <= 1}
-                className="p-1 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50"
-                title="Next version"
-              >
-                <ChevronRight size={16} />
-              </button>
-
-              <button
-                onClick={() => handleTryAgain(message)}
-                disabled={isGenerating}
-                className="p-1 text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-50"
-                title="Generate another version"
-              >
-                <RotateCw size={16} />
-              </button>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleCancelEdit}
-            className="p-1 text-gray-400 hover:text-red-400 transition-colors"
-          >
-            <X size={16} />
-          </button>
-          <button
-            onClick={handleSaveEdit}
-            className="p-1 text-gray-400 hover:text-green-400 transition-colors"
-          >
-            <Check size={16} />
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // Update message rendering to format user names
-  const renderMessage = (message: Message) => {
-    const isEditing = editState?.messageId === message.id;
-    const isUserMessage = message.role === 'user';
-
-    return (
-      <div
-        key={message.id}
-        className={`flex ${isUserMessage ? 'justify-start' : 'justify-start'}`}
-      >
-        <div
-          className={`max-w-[100%] w-full rounded-lg ${
-            isEditing 
-              ? 'bg-stone-900 border border-stone-800' 
-              : isUserMessage
-                ? 'bg-stone-900'
-                : 'bg-stone-900'
-          }`}
-        >
-          {isEditing ? (
-            <div className="p-4">
-              <HighlightedTextArea
-                value={editState.content}
-                onChange={(content) => setEditState({ ...editState, content })}
-                className="bg-transparent rounded-lg min-h-[8rem] w-full"
-                placeholder="Edit message..."
-              />
-              {renderEditControls(message)}
-            </div>
-          ) : (
-            <div
-              className={`p-4 ${!isGenerating && 'cursor-pointer hover:brightness-110'}`}
-              onClick={() => !isGenerating && handleStartEdit(message)}
-            >
-              <div 
-                className="whitespace-pre-wrap break-words"
-                dangerouslySetInnerHTML={{ 
-                  __html: formatMessage(message.content)
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-200">$1</span>')
-                    .replace(/(\*[^*\n]+\*)/g, '<span class="text-blue-300">$1</span>')
-                    .replace(/(`[^`\n]+`)/g, '<span class="text-yellow-300">$1</span>')
-                    .replace(/(\{\{[^}\n]+\}\})/g, '<span class="text-pink-300">$1</span>')
-                    .replace(/\n$/g, '\n\n')
-                }}
-              />
-              <div className="text-xs opacity-50 mt-1">
-                {new Date(message.timestamp).toLocaleTimeString()}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+  // Handle user selection
+  const handleUserSelect = (user: UserProfile) => {
+    setCurrentUser(user);
+    setShowUserSelect(false);
   };
 
   return (
@@ -632,13 +377,12 @@ const ChatView: React.FC = () => {
             : 'Chat'}
         </h2>
         <button
-          onClick={handleNewChat}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 
-                   transition-colors disabled:opacity-50"
-          disabled={!characterData?.data?.first_mes}
-        >
-          New Chat
-        </button>
+              onClick={handleNewChat}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={18} />
+              New Chat
+            </button>
       </div>
 
       {error && (
@@ -649,53 +393,64 @@ const ChatView: React.FC = () => {
 
       <div className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth">
         <div className="flex flex-col space-y-4">
-          {messages.map(renderMessage)}
+          {messages.map((message) => (
+            <ChatBubble
+              key={message.id}
+              message={message}
+              isGenerating={isGenerating}
+              onEdit={(content: string) => handleUpdateMessage(message.id, content)}
+              onCancel={() => null}
+              onDelete={() => handleDeleteMessage(message.id)}
+              onStop={handleStopGeneration}
+              onTryAgain={() => handleTryAgain(message)}
+              onNextVariation={() => handleNextVariation(message)}
+              onPrevVariation={() => handlePrevVariation(message)}
+              currentUser={currentUser?.name} // Pass user name to ChatBubble
+            />
+          ))}
           <div ref={messagesEndRef} className="h-px" />
         </div>
       </div>
 
       <div className="flex-none p-4 border-t border-stone-800">
-  <div className="flex items-stretch gap-4">
-    {/* User Avatar - now uses h-24 to match textarea and aspect-[3/5] for taller profile */}
-      <button
-        onClick={() => setShowUserSelect(true)}
-        className="flex-none w-24 h-30 overflow-hidden hover:ring-2 hover:ring-blue-500 
-                  transition-all bg-stone-800 rounded-lg"
-        title={currentUser?.name || "Select User"}
-      >
-        {currentUser ? (
-          <img 
-            src={`/api/user-image/${encodeURIComponent(currentUser.path)}`}
-            alt={currentUser.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <User className="w-8 h-8 text-gray-400" />
+        <div className="flex items-end gap-4">
+          {/* User Avatar and Selection */}
+          <div
+            onClick={() => setShowUserSelect(true)}
+            className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden"
+          >
+            {currentUser ? (
+              <img
+                src={`/api/user-image/${encodeURIComponent(currentUser.path)}`}
+                alt={currentUser.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-transparent border border-gray-700 rounded-lg flex items-center justify-center">
+                <User className="text-gray-400" size={24} />
+              </div>
+            )}
           </div>
-        )}
-      </button>
 
-      <div className="flex-1">
-        <HighlightedTextArea
-          value={inputValue}
-          onChange={setInputValue}
-          className="bg-stone-950 border border-stone-800 rounded-lg h-24"
-          placeholder="Type your message..."
-          onKeyDown={handleKeyPress}
-        />
+          <div className="flex-1">
+            <HighlightedTextArea
+              value={inputValue}
+              onChange={setInputValue}
+              className="bg-stone-950 border border-stone-800 rounded-lg h-24"
+              placeholder="Type your message..."
+              onKeyDown={handleKeyPress}
+            />
+          </div>
+          <button
+            onClick={handleSend}
+            disabled={!inputValue.trim() || isGenerating}
+            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
+                     transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send size={20} />
+          </button>
+        </div>
       </div>
-
-      <button
-        onClick={handleSend}
-        disabled={!inputValue.trim() || isGenerating}
-        className="px-4 py-4 h-24 bg-transparent text-white rounded-lg hover:bg-orange-700 
-                transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <Send size={20} />
-      </button>
-    </div>
-  </div>
 
       {/* User Selection Dialog */}
       <UserSelect

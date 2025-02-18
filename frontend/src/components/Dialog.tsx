@@ -23,7 +23,7 @@ export function Dialog({
   children, 
   title,
   buttons = [],
-  showCloseButton = true 
+  showCloseButton = false 
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 

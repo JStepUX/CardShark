@@ -222,17 +222,17 @@ const UserSelect: React.FC<UserSelectProps> = ({
         title="Create New User"
         buttons={[
           {
-            label: isSubmitting ? 'Creating...' : 'Create',
-            onClick: handleCreateUser,
-            variant: 'primary',
-            disabled: isSubmitting
-          },
-          {
             label: 'Cancel',
             onClick: () => {
               setShowNewUserDialog(false);
               resetNewUserForm();
             },
+            disabled: isSubmitting
+          },
+          {
+            label: isSubmitting ? 'Creating...' : 'Create',
+            onClick: handleCreateUser,
+            variant: 'primary',
             disabled: isSubmitting
           }
         ]}
