@@ -83,37 +83,37 @@ const UserSelect: React.FC<UserSelectProps> = ({
       setError('Please enter a name');
       return;
     }
-
+  
     if (!newUserImage) {
       setError('Please select a profile image');
       return;
     }
-
+  
     try {
       setIsSubmitting(true);
       setError(null);
-
+  
       // Create a minimal character card structure for the user
       const userCard = createEmptyCharacterCard();
       userCard.data.name = newUserName.trim();
       userCard.data.description = newUserDescription.trim();
-
+  
       // Create form data
       const formData = new FormData();
       formData.append('file', newUserImage);
       formData.append('metadata', JSON.stringify(userCard));
-
-      // Upload to users directory
-      const response = await fetch('/api/user-image', {
+  
+      // Upload to users directory using new endpoint
+      const response = await fetch('/api/user-image/create', {  // Updated endpoint
         method: 'POST',
         body: formData
       });
-
+  
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.message || 'Failed to create user');
       }
-
+  
       // Reset form and refresh users
       resetNewUserForm();
       loadUsers();
@@ -195,12 +195,11 @@ const UserSelect: React.FC<UserSelectProps> = ({
                   onClick={() => onSelect(user)}
                 >
                   <div className="absolute inset-0 bg-stone-950 rounded-lg overflow-hidden">
-                    <img
-                      src={`/api/user-image/${encodeURIComponent(user.path)}`}
-                      alt={user.name}
-                      className="w-full h-full object-cover transform group-hover:scale-105 
-                             transition-transform"
-                    />
+                  <img
+                    src={`/api/user-image/serve/${encodeURIComponent(user.path)}`}  // Updated path
+                    alt={user.name}
+                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform"
+                  />
                   </div>
                   <div className="absolute inset-x-0 bottom-0 bg-black/50 p-2">
                     <div className="text-white text-center truncate">{user.name}</div>

@@ -31,6 +31,7 @@ from backend.settings_manager import SettingsManager
 from backend.character_validator import CharacterValidator
 from backend.api_handler import ApiHandler
 from backend.chat_handler import ChatHandler
+from backend.network_server import run_server
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -102,7 +103,9 @@ async def get_users():
             detail=f"Failed to scan users: {str(e)}"
         )
 
-@app.post("/api/user-image/{path:path}")
+# Add this to main.py after your imports but before your existing routes
+
+@app.post("/api/user-image/create")  # Changed from /api/user-image
 async def upload_user_image(
     file: UploadFile = File(...),
     metadata: str = Form(...),
@@ -113,21 +116,21 @@ async def upload_user_image(
         content = await file.read()
         metadata_dict = json.loads(metadata)
         
-        # Validate metadata (using same validator as characters)
+        # Validate metadata
         validated_metadata = validator.normalize(metadata_dict)
         
-        # Get base directory
+        # Get base directory for users
         base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
         users_dir = base_dir / 'users'
         users_dir.mkdir(parents=True, exist_ok=True)
         
-        # Generate filename from name
+        # Generate safe filename from name
         name = validated_metadata.get("data", {}).get("name", "user")
         safe_name = re.sub(r'[<>:"/\\|?*]', '_', name)
         filename = f"{safe_name}.png"
         save_path = users_dir / filename
         
-        # Handle filename conflicts
+        # Handle filename conflicts with incrementing counter
         counter = 1
         while save_path.exists():
             save_path = users_dir / f"{safe_name}_{counter}.png"
@@ -136,30 +139,45 @@ async def upload_user_image(
         logger.log_step(f"Saving user profile to: {save_path}")
         
         # Write metadata to PNG
-        updated_content = png_handler.write_metadata(content, validated_metadata)
-        
-        with open(save_path, 'wb') as f:
-            f.write(updated_content)
+        try:
+            updated_content = png_handler.write_metadata(content, validated_metadata)
             
-        if not save_path.exists():
-            raise HTTPException(
-                status_code=500, 
-                detail="File write failed"
+            with open(save_path, 'wb') as f:
+                f.write(updated_content)
+                
+            if not save_path.exists():
+                raise HTTPException(
+                    status_code=500, 
+                    detail="File write failed"
+                )
+                
+            logger.log_step("Successfully saved user profile")
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "path": str(save_path),
+                    "name": name
+                }
             )
             
-        return {
-            "success": True,
-            "path": str(save_path)
-        }
-        
+        except Exception as e:
+            logger.log_error(f"Error writing PNG: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to write PNG: {str(e)}"
+            )
+                
     except Exception as e:
         logger.log_error(f"Error saving user profile: {str(e)}")
+        logger.log_error(traceback.format_exc())
         raise HTTPException(
             status_code=500,
             detail=str(e)
         )
 
-@app.get("/api/user-image/{path:path}")
+@app.get("/api/user-image/serve/{path:path}")  # Changed from /api/user-image/{path:path}
 async def get_user_image(path: str):
     """Serve user profile images."""
     try:
@@ -556,23 +574,20 @@ async def update_settings(request: Request):
     try:
         data = await request.json()
         logger.log_step(f"Received settings update request: {data}")
-        
-        # Validate incoming settings
-        valid_settings = ["character_directory", "save_to_character_directory", 
+
+        # Validate incoming settings - these are still valid settings we process directly
+        valid_settings = ["character_directory", "save_to_character_directory",
                          "last_export_directory", "theme"]
-        
-        # Filter out any unexpected settings
+
+        # Filter out any unexpected settings for direct settings
         filtered_data = {k: v for k, v in data.items() if k in valid_settings}
-        
-        # Handle character_directory setting specifically
+
+        # Handle character_directory setting specifically (your existing logic - keep it)
         if 'character_directory' in filtered_data:
             directory = filtered_data['character_directory']
             logger.log_step(f"Validating directory: {directory}")
-            
-            # Log directory status
-            exists = os.path.exists(directory) if directory else True  # Allow empty string
+            exists = os.path.exists(directory) if directory else True
             logger.log_step(f"Directory exists: {exists}")
-            
             if directory and not exists:
                 logger.log_step("Directory validation failed")
                 return JSONResponse(
@@ -582,22 +597,46 @@ async def update_settings(request: Request):
                         "message": f"Directory does not exist: {directory}"
                     }
                 )
-            
-            # If directory is invalid, also disable save_to_directory setting
             if not directory:
                 filtered_data['save_to_character_directory'] = False
-                
             logger.log_step("Directory validation passed")
-        
-        # Update all validated settings
-        logger.log_step("Attempting to update settings...")
-        success = all(
+
+        # --- API SETTINGS HANDLING ---
+        if 'apis' in data and isinstance(data['apis'], dict): # Check if 'apis' is in data and is a dictionary
+            api_configs = data['apis']
+            if api_configs: # Check if apis is not empty
+                # Get the first API config (assuming only one active API at a time for 'enabled' status)
+                first_api_key = next(iter(api_configs)) # Get the first key (e.g., 'api_1739993545209')
+                first_api_config = api_configs[first_api_key]
+                api_enabled_from_apis = first_api_config.get('enabled', False) # Extract 'enabled'
+
+                # Update the top-level 'api' settings, specifically 'enabled'
+                current_api_settings = settings_manager.settings.get('api', {}) # Get current 'api' settings, default to empty dict
+                updated_api_settings = {
+                    **current_api_settings, # Keep existing API settings (url, apiKey, etc.)
+                    'enabled': api_enabled_from_apis  # <--- UPDATE TOP-LEVEL 'api.enabled'
+                }
+                settings_manager.update_setting('api', updated_api_settings) # Update the 'api' settings group
+
+                logger.log_step(f"Updated top-level api.enabled to: {api_enabled_from_apis} based on 'apis' data")
+            else:
+                logger.log_warning("'apis' data is empty, not updating api.enabled")
+        else:
+            logger.log_warning("'apis' key not found or not a dict in settings data, not updating api.enabled")
+
+
+        # --- UPDATE OTHER VALIDATED SETTINGS (character_directory, theme etc.) ---
+        logger.log_step("Attempting to update other settings...")
+        success_other_settings = all(
             settings_manager.update_setting(key, value)
             for key, value in filtered_data.items()
         )
-        
+
+        # Overall success is based on other settings updates (API settings update is handled separately above)
+        success = success_other_settings
+
         logger.log_step(f"Settings update success: {success}")
-        
+        logger.log_step(f"**Current settings after update:** {settings_manager.settings}") # Debug log
         if success:
             return JSONResponse(
                 status_code=200,
@@ -615,7 +654,7 @@ async def update_settings(request: Request):
                     "message": "Failed to update one or more settings"
                 }
             )
-            
+
     except Exception as e:
         logger.log_error(f"Error updating settings: {str(e)}")
         return JSONResponse(
@@ -922,13 +961,14 @@ if __name__ == "__main__":
             # Schedule browser opening after a short delay
             Timer(1.5, open_browser).start()
             logger.log_step("Scheduled browser opening")
+            
+            # Start the server
+            run_server(app, port=9696, local_only=False)  # Use the already imported run_server
+            
         else:
             logger.log_warning(f"Frontend static files not found at {frontend_path}")
             raise FileNotFoundError(f"Frontend directory not found: {frontend_path}")
 
-        from network_server import run_server  # Import the new module
-        run_server(app, port=9696, local_only=False)  # Enable network access
-        
     except Exception as e:
         logger.log_error(f"Server startup failed: {str(e)}")
         input("\nPress Enter to exit...")  # Allow user to see error in EXE context

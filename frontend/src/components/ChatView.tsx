@@ -1,404 +1,41 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { Send, User, Plus } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { PromptHandler } from '../handlers/promptHandler';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
 import UserSelect from './UserSelect';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-  variations?: string[];
-  currentVariation?: number;
-  aborted?: boolean;
-}
-
-interface UserProfile {
-  name: string;
-  path: string;
-  size: number;
-  modified: number;
-}
+import { useChatMessages } from '../hooks/useChatMessages';
 
 const ChatView: React.FC = () => {
   const { characterData } = useCharacter();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const lastCharacterId = useRef<string | null>(null);
   const [showUserSelect, setShowUserSelect] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const currentGenerationRef = useRef<AbortController | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Stop generation function
-  const handleStopGeneration = () => {
-    if (currentGenerationRef.current) {
-      currentGenerationRef.current.abort();
-    }
-  };
+  const {
+    messages,
+    isLoading,
+    isGenerating,
+    error,
+    currentUser,
+    generateResponse,
+    regenerateMessage,
+    cycleVariation,
+    stopGeneration,
+    deleteMessage,
+    updateMessage,
+    setCurrentUser
+  } = useChatMessages(characterData);
 
-    // Handle new chat creation
-    const handleNewChat = async () => {
-        if (!characterData?.data?.first_mes) return;
-
-        const firstMessage: Message = {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: characterData.data.first_mes,
-          timestamp: Date.now(),
-        };
-
-        setMessages([firstMessage]);
-
-        try {
-          const response = await fetch('/api/save-chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              character_data: characterData,
-              messages: [firstMessage],
-              force_new: true,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to start new chat');
-          }
-        } catch (err) {
-          console.error('Error starting new chat:', err);
-        }
-      };
-
-  // Cleanup function
-  useEffect(() => {
-    return () => {
-      if (currentGenerationRef.current) {
-        currentGenerationRef.current.abort();
-      }
-    };
-  }, []);
-
-  // Clear chat and post first message when character changes
-  useEffect(() => {
-    const currentCharId = characterData?.data?.name;
-
-    if (currentCharId !== lastCharacterId.current) {
-      setMessages([]);
-      lastCharacterId.current = currentCharId !== undefined ? currentCharId : null;
-
-      if (characterData?.data?.first_mes) {
-        const firstMessage: Message = {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: characterData.data.first_mes,
-          timestamp: Date.now(),
-          variations: [],
-          currentVariation: 0,
-        };
-        setMessages([firstMessage]);
-      }
-    }
-  }, [characterData]);
-
-  // Scroll handling
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      const parent = messagesEndRef.current.parentElement;
-      if (parent) {
-        const isScrolledToBottom =
-          parent.scrollHeight - parent.scrollTop <= parent.clientHeight + 100;
-        if (isScrolledToBottom) {
-          messagesEndRef.current.scrollIntoView({
-            behavior: 'smooth',
-            block: 'end',
-          });
-        }
-      }
-    }
-  }, [messages]);
-
-  // Save and append message handlers
-  const saveChatState = async () => {
-    if (!characterData?.data?.name) return;
-
-    try {
-      const response = await fetch('/api/save-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: characterData,
-          messages,
-          lastUser: currentUser,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save chat');
-      }
-    } catch (err) {
-      console.error('Error saving chat:', err);
-    }
-  };
-
-  const appendMessage = async (message: Message) => {
-    if (!characterData?.data?.name) return;
-
-    try {
-      const response = await fetch('/api/append-chat-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: characterData,
-          message,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to append message');
-      }
-    } catch (err) {
-      console.error('Error appending message:', err);
-    }
-  };
-
-// Handle message sending
-const handleSend = async () => {
+  const handleSend = () => {
     if (!inputValue.trim() || !characterData || isGenerating) return;
-
-    const userMessage: Message = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: inputValue.trim(),
-        timestamp: Date.now(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
+    generateResponse(inputValue.trim());
     setInputValue('');
-    setError(null);
-    await appendMessage(userMessage);
-
-    const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '',
-        timestamp: Date.now(),
-        variations: [],
-        currentVariation: 0,
-        aborted: false, // Initialize aborted to false
-    };
-
-    // Add assistant message immediately, but with empty content
-    setMessages(prev => [...prev, assistantMessage]);
-    setIsGenerating(true);
-
-    const abortController = new AbortController();
-    currentGenerationRef.current = abortController;
-
-    try {
-        const response = await PromptHandler.generateChatResponse(
-            characterData,
-            userMessage.content,
-            messages.map(({ role, content }) => ({ role, content })),
-            abortController.signal
-        );
-
-        if (!response.ok) {
-            throw new Error('Generation failed - check API settings');
-        }
-
-        let newContent = '';
-        for await (const chunk of PromptHandler.streamResponse(response)) {
-            newContent += chunk;
-            // Update the EXISTING assistant message with the accumulating content
-            setMessages(prevMessages =>
-                prevMessages.map(msg =>
-                    msg.id === assistantMessage.id ? { ...msg, content: newContent } : msg
-                )
-            );
-        }
-
-        // Final update after streaming is complete
-        setMessages(prevMessages =>
-            prevMessages.map(msg =>
-                msg.id === assistantMessage.id
-                    ? { ...msg, content: newContent, variations: [newContent], currentVariation: 0 }
-                    : msg
-            )
-        );
-        await appendMessage({ ...assistantMessage, content: newContent, variations: [newContent], currentVariation: 0 });
-
-    } catch (err: any) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-            console.log('Generation aborted');
-            // Mark the message as aborted instead of removing it
-            setMessages(prevMessages =>
-                prevMessages.map(msg =>
-                    msg.id === assistantMessage.id ? { ...msg, aborted: true } : msg
-                )
-            );
-        } else {
-            console.error('Generation failed:', err);
-            setError(err instanceof Error ? err.message : 'Generation failed');
-            // Optionally remove or modify the message in case of other errors
-            setMessages(prevMessages =>
-                prevMessages.map(msg =>
-                    msg.id === assistantMessage.id ? { ...msg, content: "Generation Failed", aborted:true } : msg
-                )
-            );
-        }
-    } finally {
-        setIsGenerating(false);
-        currentGenerationRef.current = null;
-    }
-};
-
-  // Message update handlers
-  const handleUpdateMessage = async (messageId: string, content: string) => {
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId
-          ? { ...msg, content, variations: [content], currentVariation: 0 }
-          : msg
-      )
-    );
-    await saveChatState();
   };
 
-  const handleDeleteMessage = async (messageId: string) => {
-    setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
-    await saveChatState();
-  };
-
-const handleTryAgain = async (message: Message) => {
-  if (!characterData || isGenerating) return;
-
-  setIsGenerating(true);
-  setError(null);
-
-  try {
-    const messageIndex = messages.findIndex((m) => m.id === message.id);
-    const contextMessages = messages
-      .slice(0, messageIndex)
-      .map(({ role, content }) => ({ role, content }));
-
-    const response = await PromptHandler.generateChatResponse(
-      characterData,
-      "Please rework your previous response into a new version.",
-      contextMessages,
-      currentGenerationRef.current?.signal
-    );
-
-    if (!response.ok) {
-      throw new Error("Generation failed - check API settings");
-    }
-
-    let newVariation = "";
-    for await (const chunk of PromptHandler.streamResponse(response)) {
-      newVariation += chunk;
-      // Update the content as it streams, but DO NOT update variations yet
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === message.id ? { ...msg, content: newVariation} : msg
-          )
-        );
-    }
-
-    // Crucial part: Append the new variation to the existing message's variations
-    setMessages((prevMessages) =>
-      prevMessages.map((msg) => {
-        if (msg.id === message.id) {
-          const newVariations = [...(msg.variations || []), newVariation]; // Ensure variations exists
-          return {
-            ...msg,
-            variations: newVariations,
-            currentVariation: newVariations.length - 1, // Set to the last (new) variation
-            content: newVariation, // Update the displayed content
-          };
-        }
-        return msg;
-      })
-    );
-
-    await saveChatState();
-  } catch (err: any) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      console.log("Generation aborted");
-      setMessages((prevMessages) =>
-        prevMessages.map((msg) =>
-          msg.id === message.id ? { ...msg, aborted: true } : msg
-        )
-      );
-    } else {
-      console.error("Generation failed:", err);
-      setError(err instanceof Error ? err.message : "Generation failed");
-      setMessages((prevMessages) =>
-        prevMessages.map((msg) =>
-          msg.id === message.id
-            ? { ...msg, content: "Generation Failed", aborted: true }
-            : msg
-        )
-      );
-    }
-  } finally {
-    setIsGenerating(false);
-    currentGenerationRef.current = null;
-  }
-};
-
-  const handlePrevVariation = async (message: Message) => {
-    const variations = message.variations || [message.content];
-    if (variations.length <= 1) return;
-
-    const currentIndex = message.currentVariation ?? 0;
-    const newIndex = currentIndex > 0 ? currentIndex - 1 : variations.length - 1;
-
-    const newContent = variations[newIndex];
-    if (!newContent) return;
-
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === message.id
-          ? {
-              ...msg,
-              content: newContent,
-              currentVariation: newIndex,
-            }
-          : msg
-      )
-    );
-
-    await saveChatState();
-  };
-
-  const handleNextVariation = async (message: Message) => {
-    const variations = message.variations || [message.content];
-    if (variations.length <= 1) return;
-
-    const currentIndex = message.currentVariation ?? 0;
-    const newIndex =
-      currentIndex < variations.length - 1 ? currentIndex + 1 : 0;
-
-    const newContent = variations[newIndex];
-    if (!newContent) return;
-
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === message.id
-          ? {
-              ...msg,
-              content: newContent,
-              currentVariation: newIndex,
-            }
-          : msg
-      )
-    );
-
-    await saveChatState();
+  const handleNewChat = async () => {
+    if (!characterData?.data?.first_mes) return;
+    generateResponse('/new'); // Special command to start new chat
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -408,27 +45,31 @@ const handleTryAgain = async (message: Message) => {
     }
   };
 
-  // Handle user selection
-  const handleUserSelect = (user: UserProfile) => {
-    setCurrentUser(user);
-    setShowUserSelect(false);
-  };
+  // Early return while loading
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-gray-400">Loading chat...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
+      {/* Header */}
       <div className="flex-none p-8 pb-4 flex justify-between items-center">
         <h2 className="text-lg font-semibold">
           {characterData?.data?.name
-            ? `Chatting with ${characterData.data?.name}`
+            ? `Chatting with ${characterData.data.name}`
             : 'Chat'}
         </h2>
         <button
-              onClick={handleNewChat}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus size={18} />
-              New Chat
-            </button>
+          onClick={handleNewChat}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus size={18} />
+          New Chat
+        </button>
       </div>
 
       {error && (
@@ -437,6 +78,7 @@ const handleTryAgain = async (message: Message) => {
         </div>
       )}
 
+      {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth">
         <div className="flex flex-col space-y-4">
           {messages.map((message) => (
@@ -444,14 +86,12 @@ const handleTryAgain = async (message: Message) => {
               key={message.id}
               message={message}
               isGenerating={isGenerating}
-              onContentChange={(content: string) =>
-                handleUpdateMessage(message.id, content)
-              }
-              onDelete={() => handleDeleteMessage(message.id)}
-              onStop={handleStopGeneration}
-              onTryAgain={() => handleTryAgain(message)}
-              onNextVariation={() => handleNextVariation(message)}
-              onPrevVariation={() => handlePrevVariation(message)}
+              onContentChange={(content) => updateMessage(message.id, content)}
+              onDelete={() => deleteMessage(message.id)}
+              onStop={stopGeneration}
+              onTryAgain={() => regenerateMessage(message)}
+              onNextVariation={() => cycleVariation(message.id, 'next')}
+              onPrevVariation={() => cycleVariation(message.id, 'prev')}
               currentUser={currentUser?.name}
               characterName={characterData?.data?.name}
             />
@@ -460,9 +100,9 @@ const handleTryAgain = async (message: Message) => {
         </div>
       </div>
 
+      {/* Input Area */}
       <div className="flex-none p-4 border-t border-stone-800">
         <div className="flex items-end gap-4">
-          {/* User Avatar and Selection */}
           <div
             onClick={() => setShowUserSelect(true)}
             className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden"
@@ -489,6 +129,7 @@ const handleTryAgain = async (message: Message) => {
               onKeyDown={handleKeyPress}
             />
           </div>
+
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || isGenerating}
@@ -500,11 +141,13 @@ const handleTryAgain = async (message: Message) => {
         </div>
       </div>
 
-      {/* User Selection Dialog */}
       <UserSelect
         isOpen={showUserSelect}
         onClose={() => setShowUserSelect(false)}
-        onSelect={handleUserSelect}
+        onSelect={(user) => {
+          setCurrentUser(user);
+          setShowUserSelect(false);  // Close the modal after selection
+        }}
         currentUser={currentUser?.name}
       />
     </div>

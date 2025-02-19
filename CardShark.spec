@@ -22,6 +22,13 @@ all_datas = frontend_datas + backend_datas
 # Verified backend modules that exist in your project
 hidden_imports = [
     # Core FastAPI and dependencies
+    'fastapi',
+    'starlette',
+    'pydantic',
+    'requests',
+    'uvicorn',
+    'uvicorn.main',
+    'uvicorn.config',
     'uvicorn.logging',
     'uvicorn.loops',
     'uvicorn.loops.auto',
@@ -36,13 +43,18 @@ hidden_imports = [
     
     # Backend modules - only include ones that exist
     'backend',
-    'backend.log_manager',
-    'backend.png_handler',
-    'backend.png_metadata_handler',
-    'backend.png_debug_handler',
-    'backend.backyard_handler',
-    'backend.settings_manager',
-    'backend.character_validator',
+    'backend.api_handler.py',
+    'backend.backyard_handler.py',
+    'backend.character_validator.py',
+    'backend.chat_handler.py',
+    'backend.errors.py',
+    'backend.log_manager.py',
+    'backend.network_server.py',
+    'backend.png_handler.py',
+    'backend.png_debug_handler.py',
+    'backend.png_metadata_handler.py',
+    'backend.settings_manager.py',
+    'backend.test_module.py',
     
     # Important dependencies
     'email_validator',

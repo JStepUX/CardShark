@@ -279,7 +279,7 @@ class ChatHandler:
                 self.logger.log_step("No existing chats found")
                 return None
                 
-            # Get the most recent chat file by creation time
+            # Get the most recent chat file by modification time
             latest_chat = max(chat_files, key=lambda f: f.stat().st_mtime)
             self._current_chat_file = latest_chat
             
