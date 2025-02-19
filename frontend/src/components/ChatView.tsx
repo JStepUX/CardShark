@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Plus } from 'lucide-react'; // Import User icon
+import { Send, User, Plus } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
-import UserSelect from './UserSelect'; // Import UserSelect
+import UserSelect from './UserSelect';
 
 interface Message {
   id: string;
@@ -13,6 +13,7 @@ interface Message {
   timestamp: number;
   variations?: string[];
   currentVariation?: number;
+  aborted?: boolean;
 }
 
 interface UserProfile {
@@ -31,49 +32,47 @@ const ChatView: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastCharacterId = useRef<string | null>(null);
   const [showUserSelect, setShowUserSelect] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null); // Use UserProfile type
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const currentGenerationRef = useRef<AbortController | null>(null);
 
-  // Stop generation function - used by ChatBubble
+  // Stop generation function
   const handleStopGeneration = () => {
     if (currentGenerationRef.current) {
       currentGenerationRef.current.abort();
     }
   };
 
-  // Handle new chat creation
-  const handleNewChat = async () => {
-    if (!characterData?.data?.first_mes) return;
-    setMessages([]); 
-    await new Promise(resolve => setTimeout(resolve, 50));
-  
-    const firstMessage: Message = {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: characterData.data.first_mes,
-      timestamp: Date.now()
-    };
-  
-    setMessages([firstMessage]);
-  
-    try {
-      const response = await fetch('/api/save-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: characterData,
-          messages: [firstMessage],
-          force_new: true
-        })
-      });
-  
-      if (!response.ok) {
-        throw new Error('Failed to start new chat');
-      }
-    } catch (err) {
-      console.error('Error starting new chat:', err);
-    }
-  };
+    // Handle new chat creation
+    const handleNewChat = async () => {
+        if (!characterData?.data?.first_mes) return;
+
+        const firstMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: characterData.data.first_mes,
+          timestamp: Date.now(),
+        };
+
+        setMessages([firstMessage]);
+
+        try {
+          const response = await fetch('/api/save-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              character_data: characterData,
+              messages: [firstMessage],
+              force_new: true,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to start new chat');
+          }
+        } catch (err) {
+          console.error('Error starting new chat:', err);
+        }
+      };
 
   // Cleanup function
   useEffect(() => {
@@ -99,7 +98,7 @@ const ChatView: React.FC = () => {
           content: characterData.data.first_mes,
           timestamp: Date.now(),
           variations: [],
-          currentVariation: 0
+          currentVariation: 0,
         };
         setMessages([firstMessage]);
       }
@@ -111,11 +110,12 @@ const ChatView: React.FC = () => {
     if (messagesEndRef.current) {
       const parent = messagesEndRef.current.parentElement;
       if (parent) {
-        const isScrolledToBottom = parent.scrollHeight - parent.scrollTop <= parent.clientHeight + 100;
+        const isScrolledToBottom =
+          parent.scrollHeight - parent.scrollTop <= parent.clientHeight + 100;
         if (isScrolledToBottom) {
           messagesEndRef.current.scrollIntoView({
             behavior: 'smooth',
-            block: 'end'
+            block: 'end',
           });
         }
       }
@@ -133,8 +133,8 @@ const ChatView: React.FC = () => {
         body: JSON.stringify({
           character_data: characterData,
           messages,
-          lastUser: currentUser // Add this line
-        })
+          lastUser: currentUser,
+        }),
       });
 
       if (!response.ok) {
@@ -147,17 +147,17 @@ const ChatView: React.FC = () => {
 
   const appendMessage = async (message: Message) => {
     if (!characterData?.data?.name) return;
-    
+
     try {
       const response = await fetch('/api/append-chat-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           character_data: characterData,
-          message
-        })
+          message,
+        }),
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to append message');
       }
@@ -166,32 +166,33 @@ const ChatView: React.FC = () => {
     }
   };
 
-  // Handle message sending
-  const handleSend = async () => {
+// Handle message sending
+const handleSend = async () => {
     if (!inputValue.trim() || !characterData || isGenerating) return;
 
     const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputValue.trim(),
-      timestamp: Date.now()
+        id: Date.now().toString(),
+        role: 'user',
+        content: inputValue.trim(),
+        timestamp: Date.now(),
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setError(null);
-    
     await appendMessage(userMessage);
 
     const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now(),
-      variations: [],
-      currentVariation: 0
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now(),
+        variations: [],
+        currentVariation: 0,
+        aborted: false, // Initialize aborted to false
     };
 
+    // Add assistant message immediately, but with empty content
     setMessages(prev => [...prev, assistantMessage]);
     setIsGenerating(true);
 
@@ -199,135 +200,177 @@ const ChatView: React.FC = () => {
     currentGenerationRef.current = abortController;
 
     try {
-      const response = await PromptHandler.generateChatResponse(
-        characterData,
-        userMessage.content,
-        messages.map(({ role, content }) => ({ role, content })),
-        abortController.signal
-      );
+        const response = await PromptHandler.generateChatResponse(
+            characterData,
+            userMessage.content,
+            messages.map(({ role, content }) => ({ role, content })),
+            abortController.signal
+        );
 
-      if (!response.ok) {
-        throw new Error('Generation failed - check API settings');
-      }
+        if (!response.ok) {
+            throw new Error('Generation failed - check API settings');
+        }
 
-      let newContent = '';
-      for await (const chunk of PromptHandler.streamResponse(response)) {
-        newContent += chunk;
-        setMessages(prev => prev.map(msg =>
-          msg.id === assistantMessage.id
-            ? { ...msg, content: newContent, variations: [newContent], currentVariation: 0 }
-            : msg
-        ));
-      }
+        let newContent = '';
+        for await (const chunk of PromptHandler.streamResponse(response)) {
+            newContent += chunk;
+            // Update the EXISTING assistant message with the accumulating content
+            setMessages(prevMessages =>
+                prevMessages.map(msg =>
+                    msg.id === assistantMessage.id ? { ...msg, content: newContent } : msg
+                )
+            );
+        }
 
-      const completedAssistantMessage = {
-        ...assistantMessage,
-        content: newContent,
-        variations: [newContent],
-        currentVariation: 0
-      };
-      await appendMessage(completedAssistantMessage);
-      
+        // Final update after streaming is complete
+        setMessages(prevMessages =>
+            prevMessages.map(msg =>
+                msg.id === assistantMessage.id
+                    ? { ...msg, content: newContent, variations: [newContent], currentVariation: 0 }
+                    : msg
+            )
+        );
+        await appendMessage({ ...assistantMessage, content: newContent, variations: [newContent], currentVariation: 0 });
+
     } catch (err: any) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        console.log('Generation aborted');
-      } else {
-        console.error('Generation failed:', err);
-        setError(err instanceof Error ? err.message : 'Generation failed');
-        setMessages(prev => prev.filter(msg => msg.id !== assistantMessage.id));
-      }
+        if (err instanceof DOMException && err.name === 'AbortError') {
+            console.log('Generation aborted');
+            // Mark the message as aborted instead of removing it
+            setMessages(prevMessages =>
+                prevMessages.map(msg =>
+                    msg.id === assistantMessage.id ? { ...msg, aborted: true } : msg
+                )
+            );
+        } else {
+            console.error('Generation failed:', err);
+            setError(err instanceof Error ? err.message : 'Generation failed');
+            // Optionally remove or modify the message in case of other errors
+            setMessages(prevMessages =>
+                prevMessages.map(msg =>
+                    msg.id === assistantMessage.id ? { ...msg, content: "Generation Failed", aborted:true } : msg
+                )
+            );
+        }
     } finally {
-      setIsGenerating(false);
-      currentGenerationRef.current = null;
+        setIsGenerating(false);
+        currentGenerationRef.current = null;
     }
-  };
+};
 
   // Message update handlers
   const handleUpdateMessage = async (messageId: string, content: string) => {
-    setMessages(prev => prev.map(msg =>
-      msg.id === messageId
-        ? { ...msg, content, variations: [content], currentVariation: 0 }
-        : msg
-    ));
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId
+          ? { ...msg, content, variations: [content], currentVariation: 0 }
+          : msg
+      )
+    );
     await saveChatState();
   };
 
   const handleDeleteMessage = async (messageId: string) => {
-    setMessages(prev => prev.filter(msg => msg.id !== messageId));
+    setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
     await saveChatState();
   };
 
-  const handleTryAgain = async (message: Message) => {
-    if (!characterData || isGenerating) return;
-    setIsGenerating(true);
-    setError(null);
+const handleTryAgain = async (message: Message) => {
+  if (!characterData || isGenerating) return;
 
-    try {
-      const messageIndex = messages.findIndex(m => m.id === message.id);
-      const contextMessages = messages.slice(0, messageIndex + 1).map(({ role, content }) => ({ role, content }));
+  setIsGenerating(true);
+  setError(null);
 
-      const response = await PromptHandler.generateChatResponse(
-        characterData,
-        "Please rework your previous response into a new version.",
-        contextMessages
-      );
+  try {
+    const messageIndex = messages.findIndex((m) => m.id === message.id);
+    const contextMessages = messages
+      .slice(0, messageIndex)
+      .map(({ role, content }) => ({ role, content }));
 
-      if (!response.ok) {
-        throw new Error('Generation failed - check API settings');
-      }
+    const response = await PromptHandler.generateChatResponse(
+      characterData,
+      "Please rework your previous response into a new version.",
+      contextMessages,
+      currentGenerationRef.current?.signal
+    );
 
-      const currentVariations = message.variations || [message.content];
-      let newVariation = '';
-
-      for await (const chunk of PromptHandler.streamResponse(response)) {
-        newVariation += chunk;
-        setMessages(prev => prev.map(msg =>
-          msg.id === message.id
-            ? { ...msg, content: newVariation }
-            : msg
-        ));
-      }
-
-      setMessages(prev => prev.map(msg =>
-        msg.id === message.id
-          ? {
-              ...msg,
-              content: newVariation,
-              variations: [...currentVariations, newVariation],
-              currentVariation: currentVariations.length
-            }
-          : msg
-      ));
-
-      await saveChatState();
-
-    } catch (err) {
-      console.error('Generation failed:', err);
-      setError(err instanceof Error ? err.message : 'Generation failed');
-    } finally {
-      setIsGenerating(false);
+    if (!response.ok) {
+      throw new Error("Generation failed - check API settings");
     }
-  };
+
+    let newVariation = "";
+    for await (const chunk of PromptHandler.streamResponse(response)) {
+      newVariation += chunk;
+      // Update the content as it streams, but DO NOT update variations yet
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            msg.id === message.id ? { ...msg, content: newVariation} : msg
+          )
+        );
+    }
+
+    // Crucial part: Append the new variation to the existing message's variations
+    setMessages((prevMessages) =>
+      prevMessages.map((msg) => {
+        if (msg.id === message.id) {
+          const newVariations = [...(msg.variations || []), newVariation]; // Ensure variations exists
+          return {
+            ...msg,
+            variations: newVariations,
+            currentVariation: newVariations.length - 1, // Set to the last (new) variation
+            content: newVariation, // Update the displayed content
+          };
+        }
+        return msg;
+      })
+    );
+
+    await saveChatState();
+  } catch (err: any) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      console.log("Generation aborted");
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === message.id ? { ...msg, aborted: true } : msg
+        )
+      );
+    } else {
+      console.error("Generation failed:", err);
+      setError(err instanceof Error ? err.message : "Generation failed");
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === message.id
+            ? { ...msg, content: "Generation Failed", aborted: true }
+            : msg
+        )
+      );
+    }
+  } finally {
+    setIsGenerating(false);
+    currentGenerationRef.current = null;
+  }
+};
 
   const handlePrevVariation = async (message: Message) => {
     const variations = message.variations || [message.content];
     if (variations.length <= 1) return;
-    
+
     const currentIndex = message.currentVariation ?? 0;
     const newIndex = currentIndex > 0 ? currentIndex - 1 : variations.length - 1;
-    
+
     const newContent = variations[newIndex];
     if (!newContent) return;
-    
-    setMessages(prev => prev.map(msg =>
-      msg.id === message.id
-        ? {
-            ...msg,
-            content: newContent,
-            currentVariation: newIndex
-          }
-        : msg
-    ));
+
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === message.id
+          ? {
+              ...msg,
+              content: newContent,
+              currentVariation: newIndex,
+            }
+          : msg
+      )
+    );
 
     await saveChatState();
   };
@@ -335,22 +378,25 @@ const ChatView: React.FC = () => {
   const handleNextVariation = async (message: Message) => {
     const variations = message.variations || [message.content];
     if (variations.length <= 1) return;
-    
+
     const currentIndex = message.currentVariation ?? 0;
-    const newIndex = currentIndex < variations.length - 1 ? currentIndex + 1 : 0;
-    
+    const newIndex =
+      currentIndex < variations.length - 1 ? currentIndex + 1 : 0;
+
     const newContent = variations[newIndex];
     if (!newContent) return;
-    
-    setMessages(prev => prev.map(msg =>
-      msg.id === message.id
-        ? {
-            ...msg,
-            content: newContent,
-            currentVariation: newIndex
-          }
-        : msg
-    ));
+
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === message.id
+          ? {
+              ...msg,
+              content: newContent,
+              currentVariation: newIndex,
+            }
+          : msg
+      )
+    );
 
     await saveChatState();
   };
@@ -372,8 +418,8 @@ const ChatView: React.FC = () => {
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-none p-8 pb-4 flex justify-between items-center">
         <h2 className="text-lg font-semibold">
-          {characterData?.data?.name 
-            ? `Chatting with ${characterData.data.name}`
+          {characterData?.data?.name
+            ? `Chatting with ${characterData.data?.name}`
             : 'Chat'}
         </h2>
         <button
@@ -398,14 +444,16 @@ const ChatView: React.FC = () => {
               key={message.id}
               message={message}
               isGenerating={isGenerating}
-              onEdit={(content: string) => handleUpdateMessage(message.id, content)}
-              onCancel={() => null}
+              onContentChange={(content: string) =>
+                handleUpdateMessage(message.id, content)
+              }
               onDelete={() => handleDeleteMessage(message.id)}
               onStop={handleStopGeneration}
               onTryAgain={() => handleTryAgain(message)}
               onNextVariation={() => handleNextVariation(message)}
               onPrevVariation={() => handlePrevVariation(message)}
-              currentUser={currentUser?.name} // Pass user name to ChatBubble
+              currentUser={currentUser?.name}
+              characterName={characterData?.data?.name}
             />
           ))}
           <div ref={messagesEndRef} className="h-px" />

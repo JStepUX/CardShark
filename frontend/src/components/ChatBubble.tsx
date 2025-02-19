@@ -1,15 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
-  Edit,
-  Check,
-  X,
   RotateCw,
   ArrowRight,
   ArrowLeft,
   Pause,
-  Trash2} from 'lucide-react';
-import HighlightedTextArea from './HighlightedTextArea';
-
+  Trash2,
+} from 'lucide-react';
 
 interface Message {
   id: string;
@@ -18,203 +14,196 @@ interface Message {
   timestamp: number;
   variations?: string[];
   currentVariation?: number;
+  aborted?: boolean;
 }
 
 interface ChatBubbleProps {
   message: Message;
-  isGenerating: boolean;
-  onEdit: (content: string) => void;
-  onCancel: () => void;
+  isGenerating: boolean; // Keep this for disabling buttons
+  onContentChange: (content: string) => void;
   onDelete: () => void;
-  onStop?: () => void;
+  onStop?: () => void;  // Keep for aborting
   onTryAgain: () => void;
   onNextVariation: () => void;
   onPrevVariation: () => void;
   currentUser?: string;
+  characterName?: string;
 }
 
 const ChatBubble: React.FC<ChatBubbleProps> = ({
   message,
   isGenerating,
-  onEdit,
-  onCancel,
+  onContentChange,
   onDelete,
   onStop,
   onTryAgain,
   onNextVariation,
   onPrevVariation,
-  currentUser
+  currentUser,
+  characterName,
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(message.content);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const isMounted = useRef(true); // Keep for safety
 
-  // Focus textarea when entering edit mode
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      textareaRef.current.focus();
+    useEffect(() => {
+        return () => {
+            isMounted.current = false
+        }
+    }, [])
+
+  // Use useCallback for event handlers (good practice)
+  const handleInput = useCallback(() => {
+    if (contentRef.current && isMounted.current) {
+      const newContent = contentRef.current.textContent || '';
+      onContentChange(newContent);
     }
-  }, [isEditing]);
+  }, [onContentChange, isMounted]);
 
-  const handleEditClick = () => {
-    setIsEditing(true);
-  };
+//   const handleFocus = useCallback(() => {
+//     setIsEditing(true); //Might not need
+//   }, []);
 
-  const handleCancelClick = () => {
-    setIsEditing(false);
-    setEditContent(message.content);
-    onCancel();
-  };
+//   const handleBlur = useCallback(() => {
+//     setIsEditing(false); //Might not need.
+//     if (contentRef.current && isMounted.current) {
+//         onContentChange(contentRef.current.textContent || '');
+//     }
+//   }, [onContentChange, isMounted]);
 
-  const handleSaveClick = () => {
-    setIsEditing(false);
-    onEdit(editContent);
-  };
+  // Simplified processContent (for basic highlighting)
+    const processContent = (text: string): React.ReactNode[] => {
+        const segments = text
+        .split(/(".*?"|\*.*?\*|`.*?`|\{\{.*?\}\})/g)
+        .filter(Boolean);
 
-  const handleTextareaChange = (value: string) => {
-    setEditContent(value);
-  };
+        return segments.map((segment, index) => {
+        const processedSegment = segment
+            .replace(/{{user}}/gi, currentUser || 'User')
+            .replace(/{{char}}/gi, characterName || 'Character');
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && e.shiftKey) {
-      e.preventDefault(); // Prevent newline
-      handleSaveClick();
-    }
-  };
+        if (segment.match(/^".*"$/)) {
+            return (
+            <span key={index} style={{ color: '#FFB86C' }}>
+                {processedSegment}
+            </span>
+            );
+        }
+        if (segment.match(/^\*.*\*$/)) {
+            return (
+            <span key={index} style={{ color: '#8BE9FD' }}>
+                {processedSegment}
+            </span>
+            );
+        }
+        if (segment.match(/^`.*`$/)) {
+            return (
+            <span key={index} style={{ color: '#F1FA8C' }}>
+                {processedSegment}
+            </span>
+            );
+        }
+        if (segment.match(/^\{\{.*\}\}$/)) {
+            return (
+            <span key={index} style={{ color: '#FF79C6' }}>
+                {processedSegment}
+            </span>
+            );
+        }
+        return processedSegment;
+        });
+    };
 
-  // Highlighting function (copied from HighlightedTextArea)
-  const highlightSyntax = (text: string, userName?: string) => {
-    const replacedText = userName ? text.replace(/\{\{user\}\}/gi, userName) : text;
-    return replacedText
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-200">$1</span>')
-      .replace(/(\*[^*\n]+\*)/g, '<span class="text-blue-300">$1</span>')
-      .replace(/(`[^`\n]+`)/g, '<span class="text-yellow-300">$1</span>')
-      .replace(/(\{\{[^}\n]+\}\})/g, '<span class="text-pink-300">$1</span>')
-      .replace(/\n$/g, '\n\n');
-  };
+  const bubbleClass =
+    message.role === 'user'
+      ? 'bg-stone-900 text-white self-end'
+      : 'bg-stone-900 text-gray-300 self-start';
 
-  // Display component for highlighted text
-  const HighlightedTextDisplay: React.FC<{ text: string }> = ({ text }) => {
-    return (
-      <div
-        className="whitespace-pre-wrap"
-        dangerouslySetInnerHTML={{ __html: highlightSyntax(text, currentUser) }}
-      />
-    );
-  };
-
-  const renderMessageContent = () => {
-    if (isEditing) {
-      return (
-        <HighlightedTextArea
-          ref={textareaRef} // Changed textAreaRef to ref
-          value={editContent}
-          onChange={handleTextareaChange}
-          onKeyDown={handleKeyDown}
-          readOnly={isGenerating}
-          className="w-full h-48 p-2 bg-gray-900 text-white rounded focus:outline-none"
-        />
-      );
-    } else {
-      return (
-        <HighlightedTextDisplay text={message.content} />
-      );
-    }
-  };
-
-  const renderActions = () => {
-    if (isEditing) {
-      return (
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={handleCancelClick}
-            className="px-4 py-2 text-gray-300 rounded hover:bg-gray-900 focus:outline-none"
-            disabled={isGenerating}
-          >
-            <X size={16} />
-
-          </button>
-          <button
-            onClick={handleSaveClick}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none"
-            disabled={isGenerating}
-          >
-            <Check size={16} />
-
-          </button>
+  return (
+    <div className={`w-full rounded-lg transition-colors ${bubbleClass}`}>
+      <div className="px-4 pt-2 flex justify-between items-center">
+        <div className="text-sm text-gray-500">
+          {message.role === 'user' ? currentUser : characterName || 'Character'}
         </div>
-      );
-    } else {
-      return (
-        <div className="flex justify-end gap-2">
+
+        <div className="flex items-center gap-2">
           {message.variations && message.variations.length > 0 && (
             <>
               <button
                 onClick={onPrevVariation}
-                className="px-4 py-2 text-gray-300 rounded hover:bg-gray-700 focus:outline-none"
+                className="p-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
                 disabled={isGenerating}
+                title="Previous version"
               >
                 <ArrowLeft size={16} />
               </button>
+              <span className="text-xs text-gray-500">
+                {(message.currentVariation ?? 0) + 1}/{message.variations.length}
+              </span>
               <button
                 onClick={onNextVariation}
-                className="px-4 py-2 text-gray-300 rounded hover:bg-gray-700 focus:outline-none"
+                className="p-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
                 disabled={isGenerating}
+                title="Next version"
               >
                 <ArrowRight size={16} />
               </button>
             </>
           )}
-          {isGenerating && onStop && (
+
+          {isGenerating && onStop ? (
             <button
               onClick={onStop}
-              className="px-4 py-2 text-gray-300 rounded hover:bg-gray-700 focus:outline-none"
+              className="p-1 text-gray-400 hover:text-red-400"
+              title="Stop generating"
             >
               <Pause size={16} />
-
             </button>
+          ) : (
+             message.role === 'assistant' && (
+              <button
+                onClick={onTryAgain}
+                className="p-1 text-gray-400 hover:text-blue-400 disabled:opacity-50"
+                disabled={isGenerating}
+                title="Regenerate response"
+              >
+                <RotateCw size={16} />
+              </button>
+            )
           )}
+
           <button
             onClick={onDelete}
-            className="p-2 text-gray-400 hover:text-red-400 transition-colors"
+            className="p-1 text-gray-400 hover:text-red-400 disabled:opacity-50"
             disabled={isGenerating}
+            title="Delete message"
           >
             <Trash2 size={16} />
-
           </button>
-          {!isGenerating && onTryAgain && (
-            
-            <button
-              onClick={onTryAgain}
-              className="px-4 py-2 text-gray-300 rounded hover:text-orange-400 focus:outline-none"
-            >
-              <RotateCw size={16} />
-
-            </button>
-          )}
-          <button
-            onClick={handleEditClick}
-            className="px-4 py-2 text-gray-300 rounded hover:text-orange-400 focus:outline-none"
-            disabled={isGenerating}
-          >
-            <Edit size={16} />
-
-          </button>
-          
         </div>
-      );
-    }
-  };
+      </div>
 
-  return (
-    <div className={`w-full p-4 rounded-lg ${message.role === 'user' ? 'bg-stone-900 text-white self-end' : 'bg-stone-900 text-gray-300 self-start'}`}>
-      {currentUser && message.role === 'user' && (
-        <div className="text-sm text-gray-500">{currentUser}</div>
-      )}
-      {renderMessageContent()}
-      {renderActions()}
+      <div className="p-4">
+        <div
+          ref={contentRef}
+          contentEditable={!isGenerating} // Always editable unless generating
+          suppressContentEditableWarning
+          onInput={handleInput}
+        //   onFocus={handleFocus}
+        //   onBlur={handleBlur}
+          onPaste={(e) => {
+            e.preventDefault();
+            const text = e.clipboardData.getData('text/plain');
+            document.execCommand('insertText', false, text);
+          }}
+          className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
+          style={{ minHeight: '1em' }}
+        >
+            {message.aborted
+              ? <span className="text-red-400">Generation aborted.</span>
+              :  processContent(message.content)
+            }
+        </div>
+      </div>
     </div>
   );
 };
