@@ -1,14 +1,91 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Send, User, Plus } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
 import UserSelect from './UserSelect';
-import { useChatMessages } from '../hooks/useChatMessages';
+import { useChatMessages, UserProfile } from '../hooks/useChatMessages';
 
+// Separate InputArea component
+const InputArea: React.FC<{
+  onSend: (text: string) => void;
+  isGenerating: boolean;
+  currentUser: UserProfile | null;
+  onUserSelect: () => void;
+}> = ({ onSend, isGenerating, currentUser, onUserSelect }) => {
+  const [inputValue, setInputValue] = useState('');
+  const [imageError, setImageError] = useState(false);
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (inputValue.trim() && !isGenerating) {
+        onSend(inputValue.trim());
+        setInputValue('');
+      }
+    }
+  };
+
+  // Reset image error state when user changes
+  useEffect(() => {
+    setImageError(false);
+  }, [currentUser?.filename]);
+
+  return (
+    <div className="flex-none p-4 border-t border-stone-800">
+      <div className="flex items-end gap-4">
+        <div
+          onClick={onUserSelect}
+          className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden"
+        >
+          {currentUser && !imageError ? (
+            <img
+              src={`/api/user-image/serve/${encodeURIComponent(currentUser.filename)}`}
+              alt={currentUser.name}
+              className="w-full h-full object-cover"
+              onError={() => {
+                console.error('User image load failed');
+                setImageError(true);
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-transparent border border-gray-700 rounded-lg flex items-center justify-center">
+              <User className="text-gray-400" size={24} />
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1">
+          <HighlightedTextArea
+            value={inputValue}
+            onChange={setInputValue}
+            className="bg-stone-950 border border-stone-800 rounded-lg h-24"
+            placeholder="Type your message..."
+            onKeyDown={handleKeyPress}
+          />
+        </div>
+
+        <button
+          onClick={() => {
+            if (inputValue.trim() && !isGenerating) {
+              onSend(inputValue.trim());
+              setInputValue('');
+            }
+          }}
+          disabled={!inputValue.trim() || isGenerating}
+          className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
+                   transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Send size={20} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Main ChatView component
 const ChatView: React.FC = () => {
   const { characterData } = useCharacter();
-  const [inputValue, setInputValue] = useState('');
   const [showUserSelect, setShowUserSelect] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -27,22 +104,9 @@ const ChatView: React.FC = () => {
     setCurrentUser
   } = useChatMessages(characterData);
 
-  const handleSend = () => {
-    if (!inputValue.trim() || !characterData || isGenerating) return;
-    generateResponse(inputValue.trim());
-    setInputValue('');
-  };
-
   const handleNewChat = async () => {
     if (!characterData?.data?.first_mes) return;
     generateResponse('/new'); // Special command to start new chat
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   // Early return while loading
@@ -101,52 +165,20 @@ const ChatView: React.FC = () => {
       </div>
 
       {/* Input Area */}
-      <div className="flex-none p-4 border-t border-stone-800">
-        <div className="flex items-end gap-4">
-          <div
-            onClick={() => setShowUserSelect(true)}
-            className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden"
-          >
-            {currentUser ? (
-              <img
-                src={`/api/user-image/${encodeURIComponent(currentUser.path)}`}
-                alt={currentUser.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-transparent border border-gray-700 rounded-lg flex items-center justify-center">
-                <User className="text-gray-400" size={24} />
-              </div>
-            )}
-          </div>
+      <InputArea
+        onSend={generateResponse}
+        isGenerating={isGenerating}
+        currentUser={currentUser}
+        onUserSelect={() => setShowUserSelect(true)}
+      />
 
-          <div className="flex-1">
-            <HighlightedTextArea
-              value={inputValue}
-              onChange={setInputValue}
-              className="bg-stone-950 border border-stone-800 rounded-lg h-24"
-              placeholder="Type your message..."
-              onKeyDown={handleKeyPress}
-            />
-          </div>
-
-          <button
-            onClick={handleSend}
-            disabled={!inputValue.trim() || isGenerating}
-            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
-                     transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send size={20} />
-          </button>
-        </div>
-      </div>
-
+      {/* User Select Modal */}
       <UserSelect
         isOpen={showUserSelect}
         onClose={() => setShowUserSelect(false)}
         onSelect={(user) => {
           setCurrentUser(user);
-          setShowUserSelect(false);  // Close the modal after selection
+          setShowUserSelect(false);
         }}
         currentUser={currentUser?.name}
       />

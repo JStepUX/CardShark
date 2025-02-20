@@ -15,7 +15,7 @@ export interface Message {
 
 export interface UserProfile {
   name: string;
-  path: string;
+  filename: string;  // Changed from path to filename
   size: number;
   modified: number;
 }
@@ -29,13 +29,19 @@ export interface ChatState {
 }
 
 export function useChatMessages(characterData: CharacterData | null) {
-  // Initialize with stored user if available
+  // Initialize with stored user
   const [state, setState] = useState<ChatState>(() => {
     let storedUser: UserProfile | null = null;
     try {
       const stored = localStorage.getItem('cardshark_current_user');
       if (stored) {
-        storedUser = JSON.parse(stored);
+        const userData = JSON.parse(stored);
+        // Validate stored user has all required fields
+        if (userData.name && userData.filename && 
+            typeof userData.size === 'number' && 
+            typeof userData.modified === 'number') {
+          storedUser = userData;
+        }
       }
     } catch (err) {
       console.error('Error loading stored user:', err);
@@ -426,6 +432,22 @@ export function useChatMessages(characterData: CharacterData | null) {
     }
   };
 
+  const setCurrentUser = (user: UserProfile | null) => {
+    if (user) {
+      // Store complete user profile
+      const userToStore = {
+        name: user.name,
+        filename: user.filename,
+        size: user.size,
+        modified: user.modified
+      };
+      localStorage.setItem('cardshark_current_user', JSON.stringify(userToStore));
+    } else {
+      localStorage.removeItem('cardshark_current_user');
+    }
+    setState(prev => ({ ...prev, currentUser: user }));
+  };
+
   return {
     ...state,
     updateMessage,
@@ -435,14 +457,6 @@ export function useChatMessages(characterData: CharacterData | null) {
     regenerateMessage,
     cycleVariation,
     stopGeneration,
-    setCurrentUser: (user: UserProfile | null) => {
-      // Store user in localStorage
-      if (user) {
-        localStorage.setItem('cardshark_current_user', JSON.stringify(user));
-      } else {
-        localStorage.removeItem('cardshark_current_user');
-      }
-      setState(prev => ({ ...prev, currentUser: user }));
-    }
+    setCurrentUser
   };
 }

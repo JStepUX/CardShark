@@ -5,9 +5,9 @@ import { createEmptyCharacterCard } from '../types/schema';
 
 interface UserProfile {
   name: string;
-  path: string;
-  size: number;
-  modified: number;
+  filename: string;  // For image loading
+  size: number;      // Keep for file info display
+  modified: number;  // Keep for sorting/display
 }
 
 interface UserSelectProps {
@@ -47,13 +47,20 @@ const UserSelect: React.FC<UserSelectProps> = ({
     try {
       setIsLoading(true);
       setError(null);
-
+  
       const response = await fetch('/api/users');
       if (!response.ok) throw new Error('Failed to load users');
       
       const data = await response.json();
-      if (data.success) {
-        setUsers(data.users);
+      console.log('Loaded users data:', data); // Debug log
+  
+      if (data.success && Array.isArray(data.users)) {
+        setUsers(data.users.map((user: any) => ({
+          name: user.name,
+          filename: user.filename || user.path, // Handle both filename and path
+          size: user.size,
+          modified: user.modified
+        })));
       } else {
         throw new Error(data.message || 'Failed to load users');
       }
@@ -103,8 +110,8 @@ const UserSelect: React.FC<UserSelectProps> = ({
       formData.append('file', newUserImage);
       formData.append('metadata', JSON.stringify(userCard));
   
-      // Upload to users directory using new endpoint
-      const response = await fetch('/api/user-image/create', {  // Updated endpoint
+      // Upload to users directory
+      const response = await fetch('/api/user-image/create', {
         method: 'POST',
         body: formData
       });
@@ -113,11 +120,25 @@ const UserSelect: React.FC<UserSelectProps> = ({
         const data = await response.json();
         throw new Error(data.message || 'Failed to create user');
       }
-  
-      // Reset form and refresh users
-      resetNewUserForm();
-      loadUsers();
-      setShowNewUserDialog(false);
+
+      const data = await response.json();
+      if (data.success) {
+        // Create new user profile with the returned data
+        const newUser: UserProfile = {
+          name: newUserName.trim(),
+          filename: data.filename,
+          size: newUserImage.size,
+          modified: Date.now()
+        };
+        
+        // Reset form and refresh users
+        resetNewUserForm();
+        await loadUsers();
+        setShowNewUserDialog(false);
+        
+        // Automatically select the new user
+        onSelect(newUser);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user');
     } finally {
@@ -175,11 +196,12 @@ const UserSelect: React.FC<UserSelectProps> = ({
           ) : (
             <div className="grid grid-cols-3 gap-4">
               {/* Create New User Card */}
-              <div 
+              <div
+                key="new-user-card"
                 className="aspect-square bg-stone-950 rounded-lg border-2 border-dashed 
-                         border-stone-800 hover:border-stone-700 transition-colors
-                         flex flex-col items-center justify-center cursor-pointer
-                         text-gray-400 hover:text-gray-200"
+                          border-stone-800 hover:border-stone-700 transition-colors
+                          flex flex-col items-center justify-center cursor-pointer
+                          text-gray-400 hover:text-gray-200"
                 onClick={() => setShowNewUserDialog(true)}
               >
                 <UserPlus size={32} />
@@ -189,17 +211,21 @@ const UserSelect: React.FC<UserSelectProps> = ({
               {/* User Cards */}
               {filteredUsers.map((user) => (
                 <div
-                  key={user.path}
+                  key={user.filename}
                   className={`aspect-square relative group cursor-pointer 
-                           ${currentUser === user.name ? 'ring-2 ring-blue-500' : ''}`}
+                            ${currentUser === user.name ? 'ring-2 ring-blue-500' : ''}`}
                   onClick={() => onSelect(user)}
                 >
                   <div className="absolute inset-0 bg-stone-950 rounded-lg overflow-hidden">
-                  <img
-                    src={`/api/user-image/serve/${encodeURIComponent(user.path)}`}  // Updated path
-                    alt={user.name}
-                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform"
-                  />
+                    <img
+                      src={`/api/user-image/serve/${encodeURIComponent(user.filename)}`}
+                      alt={user.name}
+                      className="w-full h-full object-cover transform group-hover:scale-105 transition-transform"
+                      onError={() => {
+                        console.error(`Failed to load image for user: ${user.name}`);
+                        // Optionally set a placeholder
+                      }}
+                    />
                   </div>
                   <div className="absolute inset-x-0 bottom-0 bg-black/50 p-2">
                     <div className="text-white text-center truncate">{user.name}</div>
@@ -267,7 +293,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
             />
           </div>
 
-          {/* Name Field */}
+          {/* Form Fields */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Name
@@ -282,7 +308,6 @@ const UserSelect: React.FC<UserSelectProps> = ({
             />
           </div>
 
-          {/* Description Field */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Description (Optional)

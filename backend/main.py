@@ -105,10 +105,10 @@ async def get_users():
 
 # Add this to main.py after your imports but before your existing routes
 
-@app.post("/api/user-image/create")  # Changed from /api/user-image
+@app.post("/api/user-image/create")
 async def upload_user_image(
     file: UploadFile = File(...),
-    metadata: str = Form(...),
+    metadata: str = Form(...)
 ):
     """Save a user profile image with metadata."""
     try:
@@ -121,9 +121,13 @@ async def upload_user_image(
         
         # Get base directory for users
         base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        users_dir = base_dir / 'users'
+        users_dir = base_dir / 'frontend' / 'users'  # Single frontend folder
+        
+        # Ensure directory exists
         users_dir.mkdir(parents=True, exist_ok=True)
         
+        logger.log_step(f"Users directory: {users_dir}")  # Debug log
+
         # Generate safe filename from name
         name = validated_metadata.get("data", {}).get("name", "user")
         safe_name = re.sub(r'[<>:"/\\|?*]', '_', name)
@@ -153,10 +157,12 @@ async def upload_user_image(
                 
             logger.log_step("Successfully saved user profile")
             
+            # Return the filename and full path for debugging
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
+                    "filename": save_path.name,
                     "path": str(save_path),
                     "name": name
                 }
@@ -177,26 +183,44 @@ async def upload_user_image(
             detail=str(e)
         )
 
-@app.get("/api/user-image/serve/{path:path}")  # Changed from /api/user-image/{path:path}
-async def get_user_image(path: str):
-    """Serve user profile images."""
+@app.get("/api/user-image/serve/{filename}")
+async def get_user_image(filename: str):
+    """Serve user profile images by filename only."""
     try:
-        file_path = Path(path)
-        
+        # Get base directory
+        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        users_dir = base_dir / 'frontend' / 'users'
+        file_path = users_dir / filename
+
+        logger.log_step(f"Attempting to serve image: {file_path}")
+
+        if not filename or filename == 'undefined':
+            logger.log_error("Invalid filename requested")
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        # Validate the file exists and is within users directory
         if not file_path.exists():
-            raise HTTPException(
-                status_code=404, 
-                detail="Image not found"
-            )
+            logger.log_error(f"Image not found: {file_path}")
+            raise HTTPException(status_code=404, detail="Image not found")
             
-        return FileResponse(file_path)
+        if not file_path.is_file():
+            logger.log_error(f"Not a file: {file_path}")
+            raise HTTPException(status_code=404, detail="Not a file")
         
+        logger.log_step(f"Serving file: {file_path}")
+            
+        # Serve the file
+        return FileResponse(
+            file_path,
+            media_type="image/png",
+            filename=filename
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.log_error(f"Error serving user image: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=str(e)
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/append-chat-message")
 async def append_chat_message(request: Request):
