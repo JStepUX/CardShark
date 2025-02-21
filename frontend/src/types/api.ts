@@ -62,7 +62,7 @@ export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
     requiresApiKey: false
   },
   [APIProvider.OPENAI]: {
-    defaultUrl: 'https://api.openai.com',
+    defaultUrl: 'https://api.openai.com/v1',
     template: ChatTemplate.OPENAI,
     requiresApiKey: true,
     availableModels: Object.values(OpenAIModel),
@@ -83,7 +83,7 @@ export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
     defaultModel: GeminiModel.GEMINI_PRO
   },
   [APIProvider.OPENROUTER]: {
-    defaultUrl: 'https://openrouter.ai',
+    defaultUrl: 'https://openrouter.ai/api/v1',
     template: ChatTemplate.OPENAI,
     requiresApiKey: true
   }

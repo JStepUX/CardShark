@@ -52,7 +52,7 @@ const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
   return (
     <div className="h-full flex flex-col">
       {/* Fixed Header Section */}
-      <div className="p-8 pb-4 flex-shrink-0 bg-slate-900 border-b border-stone-800">
+      <div className="p-8 pb-16 flex-shrink-0 bg-stone-900 border-b border-stone-800">
         <h2 className="text-lg font-semibold mb-6">Settings</h2>
         
         {/* Directory Settings */}

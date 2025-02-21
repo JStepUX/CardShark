@@ -109,6 +109,15 @@ const ChatView: React.FC = () => {
     generateResponse('/new'); // Special command to start new chat
   };
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Scroll when new messages are added or during generation
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isGenerating]);
+
   // Early return while loading
   if (isLoading) {
     return (
