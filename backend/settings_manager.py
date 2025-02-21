@@ -33,12 +33,28 @@ class SettingsManager:
             "save_to_character_directory": False,
             "theme": "dark",
             "version": "1.2",
-            "api": {
-                "enabled": False,
-                "url": "http://localhost:5001",
-                "apiKey": "",
-                "template": "mistral-v3",
-                "lastConnectionStatus": None
+            "apis": {
+                "default_kobold": {
+                    "id": "default_kobold",
+                    "provider": "KoboldCPP",
+                    "url": "http://localhost:5001",
+                    "template": "mistral",
+                    "enabled": False,
+                    "generation_settings": {
+                        "max_length": 220,
+                        "max_context_length": 6144,
+                        "temperature": 1.05,
+                        "top_p": 0.92,
+                        "top_k": 100,
+                        "top_a": 0,
+                        "typical": 1,
+                        "tfs": 1,
+                        "rep_pen": 1.07,
+                        "rep_pen_range": 360,
+                        "rep_pen_slope": 0.7,
+                        "sampler_order": [6, 0, 1, 3, 4, 2, 5]
+                    }
+                }
             }
         }
         

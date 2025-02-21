@@ -4,7 +4,7 @@ import LoreView from "./LoreView";
 import MessagesView from "./MessagesView";
 import CharacterInfoView from "./CharacterInfoView";
 import JsonViewer from "./JsonViewer";
-import APISettingsView from "./APISettingsView";
+import SettingsView from "./SettingsView";
 import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
 import CharacterGallery from "./CharacterGallery";
@@ -248,7 +248,7 @@ const Layout: React.FC = () => {
         return <CharacterGallery settingsChangeCount={settingsChangeCount} />;
       case "settings":
         return (
-          <APISettingsView
+          <SettingsView
             settings={settings}
             onUpdate={handleSettingsUpdate}
           />

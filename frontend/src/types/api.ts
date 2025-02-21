@@ -16,6 +16,21 @@ export enum ChatTemplate {
   LLAMA2 = 'llama2'
 }
 
+export interface GenerationSettings {
+  max_length?: number;
+  max_context_length?: number;
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  top_a?: number;
+  typical?: number;
+  tfs?: number;
+  rep_pen?: number;
+  rep_pen_range?: number;
+  rep_pen_slope?: number;
+  sampler_order?: number[];
+}
+
 // Display names for templates
 export const TEMPLATE_NAMES: Record<ChatTemplate, string> = {
   [ChatTemplate.OPENAI]: 'OpenAI',
@@ -97,6 +112,7 @@ export interface APIConfig {
   model?: ModelType;
   template: ChatTemplate;
   enabled: boolean;
+  generation_settings?: GenerationSettings;  
   lastConnectionStatus?: {
     connected: boolean;
     timestamp: number;
