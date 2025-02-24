@@ -395,7 +395,7 @@ export function useChatMessages(characterData: CharacterData | null) {
 
       const response = await PromptHandler.generateChatResponse(
         characterData,
-        "Please regenerate your last response.",
+        "Provide a fresh response that builds on the existing story without repeating previous details verbatim.",
         contextMessages,
         apiConfig,
         currentGenerationRef.current?.signal
