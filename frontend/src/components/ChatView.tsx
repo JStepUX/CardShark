@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Send, User, Plus, RefreshCw } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import HighlightedTextArea from './HighlightedTextArea';
@@ -6,6 +6,46 @@ import ChatBubble from './ChatBubble';
 import UserSelect from './UserSelect';
 import ChatSelectorDialog from './ChatSelectorDialog';
 import { useChatMessages, UserProfile } from '../hooks/useChatMessages';
+
+// Separate hook for scroll management
+function useScrollToBottom() {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  
+  const scrollToBottom = useCallback(() => {
+    if (!messagesContainerRef.current || !messagesEndRef.current) return;
+    
+    // Option 1: Use scrollIntoView with specific options
+    messagesEndRef.current.scrollIntoView({ 
+      behavior: 'smooth', 
+      block: 'end',
+      inline: 'nearest'
+    });
+    
+    // Double-check scroll position with a slight delay to account for layout adjustments
+    setTimeout(() => {
+      const container = messagesContainerRef.current;
+      const endElement = messagesEndRef.current;
+      if (!container || !endElement) return;
+      
+      // Check if we're actually at the bottom
+      const containerRect = container.getBoundingClientRect();
+      const endElementRect = endElement.getBoundingClientRect();
+      
+      // If we're not close enough to the bottom, force direct scrolling
+      const scrollOffset = endElementRect.bottom - containerRect.bottom;
+      if (Math.abs(scrollOffset) > 20) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 100);
+  }, []);
+
+  return {
+    messagesEndRef,
+    messagesContainerRef,
+    scrollToBottom
+  };
+}
 
 // Separate InputArea component
 const InputArea: React.FC<{
@@ -89,7 +129,9 @@ const ChatView: React.FC = () => {
   const { characterData } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Use the custom scroll hook
+  const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
   const {
     messages,
@@ -104,8 +146,7 @@ const ChatView: React.FC = () => {
     deleteMessage,
     updateMessage,
     setCurrentUser,
-    loadExistingChat,
-    clearError
+    loadExistingChat
   } = useChatMessages(characterData);
 
   const handleNewChat = async () => {
@@ -119,14 +160,20 @@ const ChatView: React.FC = () => {
     setShowChatSelector(false);
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Scroll when new messages are added or during generation
+  // Scroll when messages change, generation status changes, or on sidenav toggling
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isGenerating]);
+  }, [messages, isGenerating, scrollToBottom]);
+
+  // Listen for potential layout changes
+  useEffect(() => {
+    const handleResize = () => {
+      scrollToBottom();
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [scrollToBottom]);
 
   // Early return while loading
   if (isLoading) {
@@ -165,22 +212,16 @@ const ChatView: React.FC = () => {
       </div>
 
       {error && (
-        <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200 flex justify-between items-center">
-          <div>{error}</div>
-          <button
-            onClick={clearError}
-            className="ml-2 p-1 text-red-200 hover:text-white rounded-full hover:bg-red-800 transition-colors"
-            aria-label="Dismiss error"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+        <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200">
+          {error}
         </div>
       )}
-      {/* Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth">
+
+      {/* Messages - IMPORTANT: Added ref to the container */}
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth"
+      >
         <div className="flex flex-col space-y-4">
           {messages.map((message) => (
             <ChatBubble
@@ -197,6 +238,7 @@ const ChatView: React.FC = () => {
               characterName={characterData?.data?.name}
             />
           ))}
+          {/* This empty div is used as the scroll target */}
           <div ref={messagesEndRef} className="h-px" />
         </div>
       </div>
