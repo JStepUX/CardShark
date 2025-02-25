@@ -6,7 +6,7 @@ export class PromptHandler {
   private static readonly DEFAULT_PARAMS = {
     n: 1,
     max_context_length: 6144,
-    max_length: 320,
+    max_length: 220,
     rep_pen: 1.07,
     temperature: 1.05,
     top_p: 0.92,
@@ -59,7 +59,7 @@ ${data.mes_example}
       .join('\n');
   }
 
-  // Generate chat response
+  // Generate chat response with enhanced context tracking
   static async generateChatResponse(
     character: CharacterCard,
     currentMessage: string,
@@ -76,6 +76,27 @@ ${data.mes_example}
     // Format chat history and current message
     const formattedHistory = this.formatChatHistory(history, character.data.name);
     const currentPrompt = `${formattedHistory}\n<|im_start|>user\n${currentMessage}<|im_end|>\n<|im_start|>assistant\n${character.data.name}:`;
+
+    // Capture raw context information for debugging
+    const contextInfo = {
+      characterName: character.data.name,
+      systemPrompt: character.data.system_prompt,
+      description: character.data.description,
+      personality: character.data.personality,
+      scenario: character.data.scenario,
+      memory,
+      historyLength: history.length,
+      currentMessage,
+      formattedPrompt: currentPrompt,
+      apiConfig: {
+        ...apiConfig,
+        // Don't include sensitive info like API keys in logs
+        apiKey: apiConfig.apiKey ? "[REDACTED]" : null
+      }
+    };
+    
+    // Log the context info for debugging
+    console.log('Context info:', JSON.stringify(contextInfo, null, 2));
 
     // Generate unique key
     const genkey = `CKSH${Date.now().toString().slice(-4)}`;

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, User, Plus, RefreshCw } from 'lucide-react';
+import { Send, User, Plus, RefreshCw, Eye } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
 import UserSelect from './UserSelect';
 import ChatSelectorDialog from './ChatSelectorDialog';
+import ContextWindowModal from './ContextWindowModal';
 import { useChatMessages, UserProfile } from '../hooks/useChatMessages';
 
 // Separate hook for scroll management
@@ -129,6 +130,7 @@ const ChatView: React.FC = () => {
   const { characterData } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
+  const [showContextWindow, setShowContextWindow] = useState(false);
   
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
@@ -139,6 +141,7 @@ const ChatView: React.FC = () => {
     isGenerating,
     error,
     currentUser,
+    lastContextWindow,
     generateResponse,
     regenerateMessage,
     cycleVariation,
@@ -194,6 +197,16 @@ const ChatView: React.FC = () => {
             : 'Chat'}
         </h2>
         <div className="flex items-center gap-2">
+          {/* Add Context Window button */}
+          <button
+            onClick={() => setShowContextWindow(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
+            title="View API Context Window"
+          >
+            <Eye size={18} />
+            View Context
+          </button>
+
           <button
             onClick={() => setShowChatSelector(true)}
             className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
@@ -217,7 +230,7 @@ const ChatView: React.FC = () => {
         </div>
       )}
 
-      {/* Messages - IMPORTANT: Added ref to the container */}
+      {/* Messages */}
       <div 
         ref={messagesContainerRef}
         className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth"
@@ -238,7 +251,6 @@ const ChatView: React.FC = () => {
               characterName={characterData?.data?.name}
             />
           ))}
-          {/* This empty div is used as the scroll target */}
           <div ref={messagesEndRef} className="h-px" />
         </div>
       </div>
@@ -268,6 +280,14 @@ const ChatView: React.FC = () => {
         onClose={() => setShowChatSelector(false)}
         onSelectChat={handleLoadChat}
         characterName={characterData?.data?.name || ''}
+      />
+
+      {/* Context Window Modal */}
+      <ContextWindowModal
+        isOpen={showContextWindow}
+        onClose={() => setShowContextWindow(false)}
+        contextData={lastContextWindow}
+        title="API Context Window"
       />
     </div>
   );

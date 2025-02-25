@@ -37,6 +37,7 @@ export interface ChatState {
   isGenerating: boolean;
   error: string | null;
   currentUser: UserProfile | null;
+  lastContextWindow: any | null;  // Added to track the context window
 }
 
 export function useChatMessages(characterData: CharacterData | null) {
@@ -66,7 +67,8 @@ export function useChatMessages(characterData: CharacterData | null) {
       isLoading: false,
       isGenerating: false,
       error: null,
-      currentUser: storedUser
+      currentUser: storedUser,
+      lastContextWindow: null  // Initialize as null
     };
   });
 
@@ -76,35 +78,34 @@ export function useChatMessages(characterData: CharacterData | null) {
   const autoSaveEnabled = useRef(true);
 
   // Generate a unique character ID for consistency
-  // Generate a unique character ID for consistency
-const getCharacterId = (character: CharacterData | null): string | null => {
-  if (!character?.data?.name) return null;
-  
-  try {
-    // Create a simple hash from character name and first few chars of description
-    const name = character.data.name;
-    const desc = character.data.description?.substring(0, 50) || '';
+  const getCharacterId = (character: CharacterData | null): string | null => {
+    if (!character?.data?.name) return null;
     
-    // Use a safer encoding method
-    // Instead of btoa, we'll use a simple hash function
-    const simpleHash = (text: string): string => {
-      let hash = 0;
-      for (let i = 0; i < text.length; i++) {
-        const char = text.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32bit integer
-      }
-      // Return a positive value as a hex string, limited to 8 chars
-      return Math.abs(hash).toString(16).substring(0, 8);
-    };
-    
-    return `${name.replace(/\s+/g, '_').toLowerCase()}-${simpleHash(name + desc)}`;
-  } catch (error) {
-    console.error('Error generating character ID:', error);
-    // Fallback to a timestamp-based ID if anything goes wrong
-    return `char-${Date.now().toString(36)}`;
-  }
-};
+    try {
+      // Create a simple hash from character name and first few chars of description
+      const name = character.data.name;
+      const desc = character.data.description?.substring(0, 50) || '';
+      
+      // Use a safer encoding method
+      // Instead of btoa, we'll use a simple hash function
+      const simpleHash = (text: string): string => {
+        let hash = 0;
+        for (let i = 0; i < text.length; i++) {
+          const char = text.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash; // Convert to 32bit integer
+        }
+        // Return a positive value as a hex string, limited to 8 chars
+        return Math.abs(hash).toString(16).substring(0, 8);
+      };
+      
+      return `${name.replace(/\s+/g, '_').toLowerCase()}-${simpleHash(name + desc)}`;
+    } catch (error) {
+      console.error('Error generating character ID:', error);
+      // Fallback to a timestamp-based ID if anything goes wrong
+      return `char-${Date.now().toString(36)}`;
+    }
+  };
 
   // Load chat whenever character data changes
   useEffect(() => {
@@ -134,7 +135,15 @@ const getCharacterId = (character: CharacterData | null): string | null => {
             setState(prev => ({
               ...prev,
               messages: data.messages.messages,
-              currentUser: data.messages.metadata?.chat_metadata?.lastUser || prev.currentUser
+              currentUser: data.messages.metadata?.chat_metadata?.lastUser || prev.currentUser,
+              // Set the context window data based on loaded chat
+              lastContextWindow: {
+                type: 'loaded_chat',
+                timestamp: new Date().toISOString(),
+                characterName: characterData.data.name,
+                chatId: data.messages.metadata?.chat_metadata?.chat_id || 'unknown',
+                messageCount: data.messages.messages.length
+              }
             }));
           } 
           // If no messages but we have a first message, use that
@@ -150,7 +159,14 @@ const getCharacterId = (character: CharacterData | null): string | null => {
             console.log('Setting initial first message:', firstMessage);
             setState(prev => ({
               ...prev,
-              messages: [firstMessage]
+              messages: [firstMessage],
+              // Set the context window for initial message
+              lastContextWindow: {
+                type: 'initial_message',
+                timestamp: new Date().toISOString(),
+                characterName: characterData.data.name,
+                firstMessage: characterData.data.first_mes
+              }
             }));
             // Save this initial state
             saveChat([firstMessage]);
@@ -168,7 +184,15 @@ const getCharacterId = (character: CharacterData | null): string | null => {
           console.log('Setting first message on error/no messages:', firstMessage);
           setState(prev => ({
             ...prev,
-            messages: [firstMessage]
+            messages: [firstMessage],
+            // Set the context window for initial message when load failed
+            lastContextWindow: {
+              type: 'initial_message_fallback',
+              timestamp: new Date().toISOString(),
+              characterName: characterData.data.name,
+              firstMessage: characterData.data.first_mes,
+              error: 'Failed to load existing chat'
+            }
           }));
           // Save this initial state
           saveChat([firstMessage]);
@@ -179,7 +203,14 @@ const getCharacterId = (character: CharacterData | null): string | null => {
         console.error('Chat loading error:', err);
         setState(prev => ({
           ...prev,
-          error: err instanceof Error ? err.message : 'Failed to load chat'
+          error: err instanceof Error ? err.message : 'Failed to load chat',
+          // Record error in context window
+          lastContextWindow: {
+            type: 'load_error',
+            timestamp: new Date().toISOString(),
+            characterName: characterData.data.name,
+            error: err instanceof Error ? err.message : 'Failed to load chat'
+          }
         }));
       } finally {
         setState(prev => ({ ...prev, isLoading: false }));
@@ -264,7 +295,21 @@ const getCharacterId = (character: CharacterData | null): string | null => {
     setState(prev => {
       const newMessages = prev.messages.filter(msg => msg.id !== messageId);
       saveChat(newMessages);
-      return { ...prev, messages: newMessages };
+      
+      // Update context window to show message was deleted
+      const updatedContextWindow = {
+        type: 'message_deleted',
+        timestamp: new Date().toISOString(),
+        messageId,
+        remainingMessages: newMessages.length,
+        characterName: characterData?.data?.name || 'Unknown'
+      };
+      
+      return { 
+        ...prev, 
+        messages: newMessages,
+        lastContextWindow: updatedContextWindow
+      };
     });
   };
 
@@ -279,8 +324,22 @@ const getCharacterId = (character: CharacterData | null): string | null => {
     
     setState(prev => {
       const newMessages = [...prev.messages, message];
-      // For manual adds, we'll save after state update
-      return { ...prev, messages: newMessages };
+      
+      // Update context window
+      const updatedContextWindow = {
+        type: 'message_added',
+        timestamp: new Date().toISOString(),
+        messageId: message.id,
+        messageRole: message.role,
+        totalMessages: newMessages.length,
+        characterName: characterData?.data?.name || 'Unknown'
+      };
+      
+      return { 
+        ...prev, 
+        messages: newMessages,
+        lastContextWindow: updatedContextWindow 
+      };
     });
     
     // We save after the state update to ensure we have the latest messages
@@ -296,52 +355,74 @@ const getCharacterId = (character: CharacterData | null): string | null => {
     console.log('Starting generation for prompt:', prompt);
 
     // Handle /new command for new chat
-    // Handle /new command for new chat
-if (prompt === '/new') {
-  console.log('Handling /new command - creating new chat');
-  
-  // First, clear all existing messages
-  setState(prev => ({ ...prev, messages: [] }));
-  
-  // Then create a new chat on the backend
-  try {
-    const response = await fetch('/api/create-new-chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ character_data: characterData }),
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to create new chat');
-    }
-    
-    // Now add the first message if available
-    if (characterData.data.first_mes) {
-      const firstMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: characterData.data.first_mes,
-        timestamp: Date.now(),
-        variations: [],
-        currentVariation: 0,
-      };
+    if (prompt === '/new') {
+      console.log('Handling /new command - creating new chat');
       
-      // Update state with just the first message
-      setState(prev => ({ ...prev, messages: [firstMessage] }));
+      // First, clear all existing messages
+      setState(prev => ({ 
+        ...prev, 
+        messages: [],
+        lastContextWindow: {
+          type: 'new_chat',
+          timestamp: new Date().toISOString(),
+          characterName: characterData.data?.name || 'Unknown'
+        }
+      }));
       
-      // Save the first message to the new chat
-      await appendMessage(firstMessage);
+      // Then create a new chat on the backend
+      try {
+        const response = await fetch('/api/create-new-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ character_data: characterData }),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to create new chat');
+        }
+        
+        // Now add the first message if available
+        if (characterData.data.first_mes) {
+          const firstMessage: Message = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: characterData.data.first_mes,
+            timestamp: Date.now(),
+            variations: [],
+            currentVariation: 0,
+          };
+          
+          // Update state with just the first message
+          setState(prev => ({ 
+            ...prev, 
+            messages: [firstMessage],
+            lastContextWindow: {
+              type: 'new_chat_first_message',
+              timestamp: new Date().toISOString(),
+              characterName: characterData.data?.name || 'Unknown',
+              firstMessage: characterData.data.first_mes
+            }
+          }));
+          
+          // Save the first message to the new chat
+          await appendMessage(firstMessage);
+        }
+      } catch (err) {
+        console.error('Error creating new chat:', err);
+        setState(prev => ({ 
+          ...prev, 
+          error: err instanceof Error ? err.message : 'Failed to create new chat',
+          lastContextWindow: {
+            type: 'new_chat_error',
+            timestamp: new Date().toISOString(),
+            characterName: characterData.data?.name || 'Unknown',
+            error: err instanceof Error ? err.message : 'Failed to create new chat'
+          }
+        }));
+      }
+      
+      return;
     }
-  } catch (err) {
-    console.error('Error creating new chat:', err);
-    setState(prev => ({ 
-      ...prev, 
-      error: err instanceof Error ? err.message : 'Failed to create new chat'
-    }));
-  }
-  
-  return;
-}
 
     const userMessage: Message = {
       id: generateUUID(), // Properly use UUID
@@ -362,8 +443,6 @@ if (prompt === '/new') {
 
     console.log('Created messages:', { userMessage, assistantMessage });
 
-    console.log('Created messages:', { userMessage, assistantMessage });
-
     // Add messages to state
     setState(prev => ({ 
       ...prev, 
@@ -380,10 +459,36 @@ if (prompt === '/new') {
 
     try {
       console.log('Making API request');
+      
+      // Prepare context messages
+      const contextMessages = state.messages.map(({ role, content }) => ({ role, content }));
+      
+      // Create context window object for tracking
+      const contextWindow = {
+        type: 'generation',
+        timestamp: new Date().toISOString(),
+        prompt,
+        characterName: characterData.data?.name || 'Unknown',
+        messageHistory: contextMessages,
+        userMessage: userMessage,
+        assistantMessageId: assistantMessage.id,
+        config: apiConfig || defaultApiConfig,
+        systemPrompt: characterData.data?.system_prompt || '',
+        firstMes: characterData.data?.first_mes || '',
+        personality: characterData.data?.personality || '',
+        scenario: characterData.data?.scenario || ''
+      };
+      
+      // Update state with context window
+      setState(prev => ({
+        ...prev,
+        lastContextWindow: contextWindow
+      }));
+      
       const response = await PromptHandler.generateChatResponse(
         characterData,
         prompt,
-        state.messages.map(({ role, content }) => ({ role, content })),
+        contextMessages,
         apiConfig || defaultApiConfig,
         abortController.signal
       );
@@ -420,12 +525,24 @@ if (prompt === '/new') {
             ? { ...msg, content: newContent, variations: [newContent], currentVariation: 0 }
             : msg
         );
+        
+        // Update context window with completion info
+        const updatedContextWindow = {
+          ...prev.lastContextWindow,
+          type: 'generation_complete',
+          finalResponse: newContent,
+          chunkCount,
+          completionTime: new Date().toISOString(),
+          totalTokens: newContent.split(/\s+/).length // Rough token estimation
+        };
+        
         // Save final state after completion
         setTimeout(() => saveChat(finalMessages), 100);
         return {
           ...prev,
           messages: finalMessages,
-          isGenerating: false
+          isGenerating: false,
+          lastContextWindow: updatedContextWindow
         };
       });
 
@@ -445,7 +562,13 @@ if (prompt === '/new') {
           messages: prev.messages.map(msg =>
             msg.id === assistantMessage.id ? { ...msg, aborted: true } : msg
           ),
-          isGenerating: false
+          isGenerating: false,
+          lastContextWindow: {
+            ...prev.lastContextWindow,
+            type: 'generation_aborted',
+            abortTime: new Date().toISOString(),
+            error: 'Generation was manually aborted'
+          }
         }));
       } else {
         setState(prev => ({
@@ -456,7 +579,13 @@ if (prompt === '/new') {
               ? { ...msg, content: "Generation Failed", aborted: true }
               : msg
           ),
-          isGenerating: false
+          isGenerating: false,
+          lastContextWindow: {
+            ...prev.lastContextWindow,
+            type: 'generation_error',
+            errorTime: new Date().toISOString(),
+            error: err instanceof Error ? err.message : 'Unknown error during generation'
+          }
         }));
       }
       
@@ -468,9 +597,7 @@ if (prompt === '/new') {
     }
   };
 
-  // Message variations with save hooks
-  // Replace the regenerateMessage function in useChatMessages.ts
-
+  // Regeneration function with context tracking
   const regenerateMessage = async (message: Message) => {
     if (!characterData || state.isGenerating || !apiConfig) {
       console.error("Cannot regenerate:", {
@@ -480,7 +607,13 @@ if (prompt === '/new') {
       });
       setState(prev => ({
         ...prev,
-        error: !apiConfig ? "API configuration not loaded" : "Cannot regenerate message"
+        error: !apiConfig ? "API configuration not loaded" : "Cannot regenerate message",
+        lastContextWindow: {
+          type: 'regeneration_error',
+          timestamp: new Date().toISOString(),
+          characterName: characterData?.data?.name || 'Unknown',
+          error: !apiConfig ? "API configuration not loaded" : "Cannot regenerate message"
+        }
       }));
       return;
     }
@@ -493,7 +626,11 @@ if (prompt === '/new') {
       return;
     }
     
-    setState(prev => ({ ...prev, isGenerating: true }));
+    setState(prev => ({ 
+      ...prev, 
+      isGenerating: true 
+    }));
+    
     console.log(`Regenerating message at index ${targetIndex}`);
   
     try {
@@ -504,12 +641,34 @@ if (prompt === '/new') {
         
       // Find the last user message to use as prompt
       let promptText = "Provide a fresh response that builds on the existing story without repeating previous details verbatim.";
+      let promptSource = "default";
       for (let i = targetIndex - 1; i >= 0; i--) {
         if (state.messages[i].role === 'user') {
           promptText = state.messages[i].content;
+          promptSource = `message_${i}`;
           break;
         }
       }
+      
+      // Create context window object for regeneration
+      const contextWindow = {
+        type: 'regeneration',
+        timestamp: new Date().toISOString(),
+        characterName: characterData.data?.name || 'Unknown',
+        messageId: message.id,
+        messageIndex: targetIndex,
+        contextMessageCount: contextMessages.length,
+        prompt: promptText,
+        promptSource: promptSource,
+        originalContent: message.content,
+        config: apiConfig
+      };
+      
+      // Update state with context window
+      setState(prev => ({
+        ...prev,
+        lastContextWindow: contextWindow
+      }));
   
       const response = await PromptHandler.generateChatResponse(
         characterData,
@@ -557,10 +716,20 @@ if (prompt === '/new') {
           currentVariation: variations.length - 1
         };
         
+        // Update context window with completion info
+        const updatedContextWindow = {
+          ...prev.lastContextWindow,
+          type: 'regeneration_complete',
+          finalResponse: newContent,
+          completionTime: new Date().toISOString(),
+          variationsCount: variations.length
+        };
+        
         return {
           ...prev,
           messages: updatedMessages,
-          isGenerating: false
+          isGenerating: false,
+          lastContextWindow: updatedContextWindow
         };
       });
   
@@ -572,7 +741,13 @@ if (prompt === '/new') {
       setState(prev => ({
         ...prev,
         error: err instanceof Error ? err.message : "Generation failed",
-        isGenerating: false
+        isGenerating: false,
+        lastContextWindow: {
+          ...prev.lastContextWindow,
+          type: 'regeneration_error',
+          errorTime: new Date().toISOString(),
+          error: err instanceof Error ? err.message : 'Unknown error during regeneration'
+        }
       }));
     } finally {
       currentGenerationRef.current = null;
@@ -598,18 +773,41 @@ if (prompt === '/new') {
         return msg;
       });
       
+      // Create context window info about variation cycling
+      const targetMessage = prev.messages.find(msg => msg.id === messageId);
+      const updatedContextWindow = {
+        type: 'cycle_variation',
+        timestamp: new Date().toISOString(),
+        messageId,
+        direction,
+        characterName: characterData?.data?.name || 'Unknown',
+        totalVariations: targetMessage?.variations?.length || 0,
+        previousIndex: targetMessage?.currentVariation || 0,
+        currentVariationContent: targetMessage?.variations?.[targetMessage?.currentVariation || 0] || ''
+      };
+      
       // Save the updated variation state
       saveChat(updatedMessages);
       
       return {
         ...prev,
-        messages: updatedMessages
+        messages: updatedMessages,
+        lastContextWindow: updatedContextWindow
       };
     });
   };
 
   const stopGeneration = () => {
     if (currentGenerationRef.current) {
+      setState(prev => ({
+        ...prev,
+        lastContextWindow: {
+          ...prev.lastContextWindow,
+          type: 'generation_stopping',
+          stopTime: new Date().toISOString()
+        }
+      }));
+      
       currentGenerationRef.current.abort();
     }
   };
@@ -629,7 +827,13 @@ if (prompt === '/new') {
     
     setState(prev => ({ 
       ...prev, 
-      currentUser: user 
+      currentUser: user,
+      lastContextWindow: {
+        type: 'user_changed',
+        timestamp: new Date().toISOString(),
+        userName: user?.name || 'null',
+        characterName: characterData?.data?.name || 'Unknown'
+      }
     }));
     
     // Save current chat with updated user info
@@ -641,7 +845,17 @@ if (prompt === '/new') {
     if (!characterData) return;
     
     try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: true, 
+        error: null,
+        lastContextWindow: {
+          type: 'loading_chat',
+          timestamp: new Date().toISOString(),
+          chatId,
+          characterName: characterData.data?.name || 'Unknown'
+        }
+      }));
       
       const response = await fetch('/api/load-chat', {
         method: 'POST',
@@ -665,7 +879,15 @@ if (prompt === '/new') {
         setState(prev => ({
           ...prev,
           messages: data.messages.messages || [],
-          currentUser: userFromChat || prev.currentUser
+          currentUser: userFromChat || prev.currentUser,
+          lastContextWindow: {
+            type: 'chat_loaded',
+            timestamp: new Date().toISOString(),
+            chatId,
+            messageCount: (data.messages.messages || []).length,
+            user: userFromChat?.name || 'Not specified',
+            characterName: characterData.data?.name || 'Unknown'
+          }
         }));
         
         // Update lastCharacterId to prevent automatic reloading
@@ -676,7 +898,14 @@ if (prompt === '/new') {
     } catch (err) {
       setState(prev => ({
         ...prev, 
-        error: err instanceof Error ? err.message : 'Failed to load chat'
+        error: err instanceof Error ? err.message : 'Failed to load chat',
+        lastContextWindow: {
+          type: 'chat_load_error',
+          timestamp: new Date().toISOString(),
+          chatId,
+          error: err instanceof Error ? err.message : 'Failed to load chat',
+          characterName: characterData?.data?.name || 'Unknown'
+        }
       }));
       console.error('Error loading chat:', err);
     } finally {
