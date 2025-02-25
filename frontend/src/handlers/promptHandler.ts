@@ -32,6 +32,73 @@ export class PromptHandler {
     bypass_eos: false
   } as const;
 
+  // Template definitions
+  static readonly TEMPLATES: Record<string, any> = {
+    // ChatML format (GPT-like)
+    'openai': {
+      type: 'chatml',
+      system_start: "<|im_start|>system\n",
+      system_end: "<|im_end|>\n",
+      user_start: "<|im_start|>user\n",
+      user_end: "<|im_end|>\n",
+      assistant_start: "<|im_start|>assistant\n",
+      assistant_end: "<|im_end|>\n"
+    },
+    
+    // ChatML format (generic)
+    'chatml': {
+      type: 'chatml',
+      system_start: "<|im_start|>system\n",
+      system_end: "<|im_end|>\n",
+      user_start: "<|im_start|>user\n",
+      user_end: "<|im_end|>\n",
+      assistant_start: "<|im_start|>assistant\n",
+      assistant_end: "<|im_end|>\n"
+    },
+    
+    // Mistral format
+    'mistral': {
+      type: 'mistral',
+      system_start: "[INST] ",
+      system_end: " [/INST]",
+      user_start: "[INST] ",
+      user_end: " [/INST]",
+      assistant_start: "",
+      assistant_end: "</s>"
+    },
+    
+    // Llama format
+    'llama2': {
+      type: 'llama',
+      system_start: "<|start_header_id|>system<|end_header_id|>\n\n",
+      system_end: "<|eot_id|>\n\n",
+      user_start: "<|start_header_id|>user<|end_header_id|>\n\n",
+      user_end: "<|eot_id|>\n\n",
+      assistant_start: "<|start_header_id|>assistant<|end_header_id|>\n\n",
+      assistant_end: "<|eot_id|>\n\n"
+    },
+    
+    // Claude format
+    'claude': {
+      type: 'claude',
+      system_start: "\n\nSystem: ",
+      system_end: "\n\n",
+      user_start: "\n\nHuman: ",
+      user_end: "\n\n",
+      assistant_start: "Assistant: ",
+      assistant_end: "\n\n"
+    },
+    
+    // Gemini format
+    'gemini': {
+      type: 'gemini',
+      user_start: "User: ",
+      user_end: "\n",
+      assistant_start: "Assistant: ",
+      assistant_end: "\n"
+    }
+  };
+
   // Create memory context from character data
   private static createMemoryContext(character: CharacterCard): string {
     const { data } = character;
@@ -43,17 +110,59 @@ ${data.mes_example}
 ***`;
   }
 
-  // Format chat history into proper template format
-  private static formatChatHistory(
-    messages: Array<{ role: 'user' | 'assistant', content: string }>,
-    characterName: string
+  // Get template format based on template name
+  static getTemplateFormat(templateName: string): any {
+    // Default to Mistral format if template is not specified
+    if (!templateName) return this.TEMPLATES.mistral;
+    
+    const template = this.TEMPLATES[templateName.toLowerCase()];
+    return template || this.TEMPLATES.mistral;
+  }
+
+  // Format prompt using the specified template
+  static formatPromptWithTemplate(
+    history: string,
+    currentMessage: string,
+    characterName: string,
+    template: any
   ): string {
+    // Different formatting based on template type
+    switch (template.type) {
+      case 'chatml':
+        return `${history}\n<|im_start|>user\n${currentMessage}<|im_end|>\n<|im_start|>assistant\n${characterName}:`;
+        
+      case 'mistral':
+        return `${history}\n[INST] ${currentMessage} [/INST]\n${characterName}:`;
+        
+      case 'llama':
+        return `${history}\n<|start_header_id|>user<|end_header_id|>\n\n${currentMessage}<|eot_id|>\n\n<|start_header_id|>assistant<|end_header_id|>\n\n${characterName}:`;
+        
+      case 'claude':
+        return `${history}\n\nHuman: ${currentMessage}\n\nAssistant: ${characterName}:`;
+        
+      default:
+        // Default to Mistral format
+        return `${history}\n[INST] ${currentMessage} [/INST]\n${characterName}:`;
+    }
+  }
+
+  // Format chat history into proper template format
+  static formatChatHistory(
+    messages: Array<{ role: 'user' | 'assistant', content: string }>,
+    characterName: string,
+    template: any = this.TEMPLATES.mistral
+  ): string {
+    if (!messages || messages.length === 0) return '';
+    
     return messages
       .map(msg => {
-        if (msg.role === 'assistant') {
-          return `<|im_start|>assistant\n${characterName}: ${msg.content}<|im_end|>`;
+        const { role, content } = msg;
+        
+        // Format based on template type
+        if (role === 'assistant') {
+          return `${template.assistant_start}${characterName}: ${content}${template.assistant_end}`;
         } else {
-          return `<|im_start|>user\n${msg.content}<|im_end|>`;
+          return `${template.user_start}${content}${template.user_end}`;
         }
       })
       .join('\n');
@@ -73,12 +182,24 @@ ${data.mes_example}
     // Create memory context
     const memory = this.createMemoryContext(character);
 
-    // Format chat history and current message
-    const formattedHistory = this.formatChatHistory(history, character.data.name);
-    const currentPrompt = `${formattedHistory}\n<|im_start|>user\n${currentMessage}<|im_end|>\n<|im_start|>assistant\n${character.data.name}:`;
+    // Get the appropriate template format based on apiConfig.template
+    const templateInfo = this.getTemplateFormat(apiConfig.template);
+    
+    // Format chat history using the template
+    const formattedHistory = this.formatChatHistory(history, character.data.name, templateInfo);
+    
+    // Create the final prompt using the template
+    const currentPrompt = this.formatPromptWithTemplate(
+      formattedHistory,
+      currentMessage,
+      character.data.name,
+      templateInfo
+    );
 
-    // Capture raw context information for debugging
+    // Capture raw context information for debugging, now including template info
     const contextInfo = {
+      timestamp: new Date().toISOString(),
+      type: 'generation',
       characterName: character.data.name,
       systemPrompt: character.data.system_prompt,
       description: character.data.description,
@@ -88,10 +209,19 @@ ${data.mes_example}
       historyLength: history.length,
       currentMessage,
       formattedPrompt: currentPrompt,
-      apiConfig: {
+      template: {
+        name: apiConfig.template,
+        format: templateInfo
+      },
+      config: {
         ...apiConfig,
         // Don't include sensitive info like API keys in logs
-        apiKey: apiConfig.apiKey ? "[REDACTED]" : null
+        apiKey: apiConfig.apiKey ? "[REDACTED]" : null,
+        provider: apiConfig.provider,
+        url: apiConfig.url,
+        model: apiConfig.model,
+        max_context_length: this.DEFAULT_PARAMS.max_context_length,
+        max_length: this.DEFAULT_PARAMS.max_length
       }
     };
     

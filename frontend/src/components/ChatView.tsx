@@ -7,6 +7,7 @@ import UserSelect from './UserSelect';
 import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
 import { useChatMessages, UserProfile } from '../hooks/useChatMessages';
+import { apiService } from '../services/apiService';
 
 // Separate hook for scroll management
 function useScrollToBottom() {
@@ -154,6 +155,14 @@ const ChatView: React.FC = () => {
 
   const handleNewChat = async () => {
     if (!characterData?.data?.first_mes) return;
+    
+    // Clear persisted context window
+    try {
+      await apiService.clearContextWindow();
+    } catch (err) {
+      console.error('Error clearing context window:', err);
+    }
+    
     generateResponse('/new'); // Special command to start new chat
   };
 

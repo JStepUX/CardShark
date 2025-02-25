@@ -248,6 +248,32 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           </div>
         )}
         
+        {/* Template Information */}
+        {contextData.template && (
+          <div className="bg-stone-800 p-4 rounded-lg">
+            <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+              <FileText size={16} />
+              <span>Template Information</span>
+            </h3>
+            
+            <div className="mb-2">
+              <div className="text-xs text-gray-400">Template Name</div>
+              <div>{contextData.template.name || 'Unknown'}</div>
+            </div>
+            
+            {contextData.template.format && (
+              <div>
+                <div className="text-xs text-gray-400">Format</div>
+                <code className="block mt-1 p-2 bg-stone-950 rounded text-xs overflow-x-auto">
+                  System: <span className="text-blue-400">{contextData.template.format.system_start || ''}</span>...<span className="text-blue-400">{contextData.template.format.system_end || ''}</span><br />
+                  User: <span className="text-green-400">{contextData.template.format.user_start || ''}</span>...<span className="text-green-400">{contextData.template.format.user_end || ''}</span><br />
+                  Assistant: <span className="text-purple-400">{contextData.template.format.assistant_start || ''}</span>...<span className="text-purple-400">{contextData.template.format.assistant_end || ''}</span>
+                </code>
+              </div>
+            )}
+          </div>
+        )}
+        
         {/* Character Info */}
         {contextData.characterName && (
           <div className="bg-stone-800 p-4 rounded-lg">

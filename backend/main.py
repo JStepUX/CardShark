@@ -62,6 +62,130 @@ api_handler = ApiHandler(logger)
 chat_handler = ChatHandler(logger) 
 
 # API Endpoints
+@app.get("/api/context-window")
+async def get_context_window():
+    """Get the saved context window data."""
+    try:
+        # Get base directory
+        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        
+        # Create context directory if it doesn't exist
+        context_dir = base_dir / 'context'
+        context_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Context file path
+        context_file = context_dir / 'latest_context.json'
+        
+        if not context_file.exists():
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "context": None
+                }
+            )
+        
+        # Read and return the context data
+        with open(context_file, 'r', encoding='utf-8') as f:
+            context_data = json.load(f)
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "context": context_data
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error reading context window: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.post("/api/context-window")
+async def save_context_window(request: Request):
+    """Save context window data."""
+    try:
+        data = await request.json()
+        context_data = data.get('context')
+        
+        if context_data is None:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "No context data provided"
+                }
+            )
+        
+        # Get base directory
+        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        
+        # Create context directory if it doesn't exist
+        context_dir = base_dir / 'context'
+        context_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Context file path
+        context_file = context_dir / 'latest_context.json'
+        
+        # Write the context data
+        with open(context_file, 'w', encoding='utf-8') as f:
+            json.dump(context_data, f, indent=2)
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": "Context saved successfully"
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error saving context window: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.delete("/api/context-window")
+async def delete_context_window():
+    """Delete saved context window data."""
+    try:
+        # Get base directory
+        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        
+        # Context file path
+        context_file = base_dir / 'context' / 'latest_context.json'
+        
+        if context_file.exists():
+            context_file.unlink()
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": "Context deleted successfully"
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error deleting context window: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
 @app.get("/api/users")
 async def get_users():
     """List user profiles from the users directory."""

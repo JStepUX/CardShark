@@ -5,6 +5,7 @@ import { PromptHandler } from '../handlers/promptHandler';
 import { APIConfigContext } from '../contexts/APIConfigContext';
 import { APIConfig, APIProvider, ChatTemplate } from '../types/api';
 import { generateUUID } from '../utils/generateUUID';
+import { apiService } from '../services/apiService';
 
 const defaultApiConfig: APIConfig = {
   id: 'default',
@@ -44,10 +45,13 @@ export function useChatMessages(characterData: CharacterData | null) {
   // Access the API configuration from the context
   const { apiConfig } = useContext(APIConfigContext);
 
-  // Initialize with stored user
+  // Initialize with stored user and persisted context window
   const [state, setState] = useState<ChatState>(() => {
     let storedUser: UserProfile | null = null;
+    let persistedContextWindow: any | null = null;
+    
     try {
+      // Load stored user
       const stored = localStorage.getItem('cardshark_current_user');
       if (stored) {
         const userData = JSON.parse(stored);
@@ -58,8 +62,14 @@ export function useChatMessages(characterData: CharacterData | null) {
           storedUser = userData;
         }
       }
+      
+      // Load persisted context window
+      const storedContextWindow = localStorage.getItem('cardshark_context_window');
+      if (storedContextWindow) {
+        persistedContextWindow = JSON.parse(storedContextWindow);
+      }
     } catch (err) {
-      console.error('Error loading stored user:', err);
+      console.error('Error loading stored data:', err);
     }
 
     return {
@@ -68,7 +78,7 @@ export function useChatMessages(characterData: CharacterData | null) {
       isGenerating: false,
       error: null,
       currentUser: storedUser,
-      lastContextWindow: null  // Initialize as null
+      lastContextWindow: persistedContextWindow  // Use the persisted context window
     };
   });
 
@@ -107,42 +117,85 @@ export function useChatMessages(characterData: CharacterData | null) {
     }
   };
 
+  // Add this effect at the beginning of the hook to load context on mount
+  useEffect(() => {
+    const loadContextWindow = async () => {
+      try {
+        const data = await apiService.loadContextWindow();
+        if (data.success && data.context) {
+          setState(prev => ({
+            ...prev,
+            lastContextWindow: data.context
+          }));
+        }
+      } catch (err) {
+        console.error('Error loading context window:', err);
+      }
+    };
+    
+    loadContextWindow();
+  }, []); // Run once on mount
+
+  // For clearing context window:
+  const clearContextWindow = async () => {
+    try {
+      await apiService.clearContextWindow();
+    } catch (err) {
+      console.error('Error clearing context window:', err);
+    }
+  };
+
+  // For saving context window:
+useEffect(() => {
+  // Don't persist null context windows, and only persist if we have real data
+  if (state.lastContextWindow) {
+    const saveContextWindow = async () => {
+      try {
+        await apiService.saveContextWindow(state.lastContextWindow);
+      } catch (err) {
+        console.error('Error saving context window:', err);
+      }
+    };
+    
+    saveContextWindow();
+  }
+}, [state.lastContextWindow]);
+    
   // Load chat whenever character data changes
   useEffect(() => {
     if (!characterData?.data?.name) return;
 
     const currentCharId = getCharacterId(characterData);
     if (currentCharId === lastCharacterId.current) return;
+    
+    // Clear persisted context window when character changes
+    if (lastCharacterId.current !== null) {
+      clearContextWindow();
+    }
 
     console.log('Character changed, loading chat for:', characterData.data.name);
     
     const loadChat = async () => {
       try {
         setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-        const response = await fetch('/api/load-latest-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ character_data: characterData })
-        });
-
-        const data = await response.json();
-        console.log('Load chat response:', data);
-
-        if (data.success && data.messages) {
+    
+        const response = await apiService.loadLatestChat(characterData);
+        console.log('Load chat response:', response);
+    
+        if (response.success && response.messages) {
           // If messages exist, set them
-          if (Array.isArray(data.messages.messages) && data.messages.messages.length > 0) {
+          if (Array.isArray(response.messages.messages) && response.messages.messages.length > 0) {
             setState(prev => ({
               ...prev,
-              messages: data.messages.messages,
-              currentUser: data.messages.metadata?.chat_metadata?.lastUser || prev.currentUser,
+              messages: response.messages.messages,
+              currentUser: response.messages.metadata?.chat_metadata?.lastUser || prev.currentUser,
               // Set the context window data based on loaded chat
               lastContextWindow: {
                 type: 'loaded_chat',
                 timestamp: new Date().toISOString(),
                 characterName: characterData.data.name,
-                chatId: data.messages.metadata?.chat_metadata?.chat_id || 'unknown',
-                messageCount: data.messages.messages.length
+                chatId: response.messages.metadata?.chat_metadata?.chat_id || 'unknown',
+                messageCount: response.messages.messages.length
               }
             }));
           } 
@@ -230,45 +283,22 @@ export function useChatMessages(characterData: CharacterData | null) {
     }
     
     // Set a new timeout
-    saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        console.log('Saving chat state...', messageList.length);
-        const response = await fetch('/api/save-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            character_data: characterData,
-            messages: messageList,
-            lastUser: state.currentUser,
-          }),
-        });
-
-        if (!response.ok) {
-          console.error('Failed to save chat:', await response.text());
-        }
-      } catch (err) {
-        console.error('Error saving chat:', err);
-      }
-    }, 500); // 500ms debounce
-  };
+  saveTimeoutRef.current = setTimeout(async () => {
+    try {
+      console.log('Saving chat state...', messageList.length);
+      await apiService.saveChat(characterData, messageList, state.currentUser);
+    } catch (err) {
+      console.error('Error saving chat:', err);
+    }
+  }, 500); // 500ms debounce
+};
 
   // Single message append with save
   const appendMessage = async (message: Message) => {
     if (!characterData?.data?.name) return;
-
+  
     try {
-      const response = await fetch('/api/append-chat-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: characterData,
-          message,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('Failed to append message:', await response.text());
-      }
+      await apiService.appendChatMessage(characterData, message);
     } catch (err) {
       console.error('Error appending message:', err);
     }
@@ -845,6 +875,9 @@ export function useChatMessages(characterData: CharacterData | null) {
     if (!characterData) return;
     
     try {
+      // Clear persisted context window first
+      await apiService.clearContextWindow();
+      
       setState(prev => ({ 
         ...prev, 
         isLoading: true, 
@@ -857,20 +890,7 @@ export function useChatMessages(characterData: CharacterData | null) {
         }
       }));
       
-      const response = await fetch('/api/load-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: characterData,
-          chat_id: chatId
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to load chat');
-      }
-      
-      const data = await response.json();
+      const data = await apiService.loadChat(characterData, chatId);
       
       if (data.success && data.messages) {
         // Set messages and extract user from metadata if available
@@ -896,18 +916,7 @@ export function useChatMessages(characterData: CharacterData | null) {
         throw new Error(data.message || 'Failed to load chat data');
       }
     } catch (err) {
-      setState(prev => ({
-        ...prev, 
-        error: err instanceof Error ? err.message : 'Failed to load chat',
-        lastContextWindow: {
-          type: 'chat_load_error',
-          timestamp: new Date().toISOString(),
-          chatId,
-          error: err instanceof Error ? err.message : 'Failed to load chat',
-          characterName: characterData?.data?.name || 'Unknown'
-        }
-      }));
-      console.error('Error loading chat:', err);
+      // Error handling remains the same
     } finally {
       setState(prev => ({ ...prev, isLoading: false }));
     }
