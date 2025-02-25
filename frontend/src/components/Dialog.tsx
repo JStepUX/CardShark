@@ -15,6 +15,7 @@ interface DialogProps {
   title?: string;
   buttons?: DialogButton[];
   showCloseButton?: boolean;
+  className?: string; // Added className prop
 }
 
 export function Dialog({ 
@@ -23,7 +24,8 @@ export function Dialog({
   children, 
   title,
   buttons = [],
-  showCloseButton = false 
+  showCloseButton = false,
+  className = "max-w-md" // Default max width
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +63,7 @@ export function Dialog({
         </div>
         <div
           ref={dialogRef}
-          className="inline-block w-full max-w-md p-6 my-8 text-left align-middle transition-all transform bg-stone-800 shadow-xl rounded-lg"
+          className={`inline-block w-full ${className} p-6 my-8 text-left align-middle transition-all transform bg-stone-800 shadow-xl rounded-lg`}
         >
           {title && (
             <h2 id="dialog-title" className="text-lg font-semibold text-white mb-4">
@@ -89,7 +91,7 @@ export function Dialog({
               {showCloseButton && (
                 <button
                   onClick={onClose}
-                  className="px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                  className="px-4 py-2 text-stone-300 hover:text-white hover:bg-stone-900 rounded-lg transition-colors"
                 >
                   Close
                 </button>

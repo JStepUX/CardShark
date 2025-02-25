@@ -9,7 +9,6 @@ import {
   FileText,
   MessageSquare,
   Book,
-  Code,
   MessageCircle,
   Settings as SettingsIcon
 } from 'lucide-react';
@@ -25,7 +24,6 @@ const NAV_ICONS = {
   info: FileText,
   messages: MessageSquare,
   lore: Book,
-  json: Code,
   chat: MessageCircle,
   settings: SettingsIcon
 } as const;
@@ -130,13 +128,6 @@ const SideNav: React.FC<SideNavProps> = ({
               <NavButton
                 isCollapsed={isCollapsed}
                 currentView={currentView}
-                view="json"
-                label="JSON View"
-                onClick={() => onViewChange("json")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
                 view="chat"
                 label="Chat"
                 onClick={() => onViewChange("chat")}
@@ -218,13 +209,6 @@ const SideNav: React.FC<SideNavProps> = ({
                 view="lore"
                 label="Lore Manager"
                 onClick={() => onViewChange("lore")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="json"
-                label="JSON View"
-                onClick={() => onViewChange("json")}
               />
               <NavButton
                 isCollapsed={isCollapsed}

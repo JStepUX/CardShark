@@ -3,7 +3,6 @@ import { useCharacter } from "../contexts/CharacterContext";
 import LoreView from "./LoreView";
 import MessagesView from "./MessagesView";
 import CharacterInfoView from "./CharacterInfoView";
-import JsonViewer from "./JsonViewer";
 import APISettingsView from "./APISettingsView";
 import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
@@ -238,8 +237,6 @@ const Layout: React.FC = () => {
     switch (currentView) {
       case "lore":
         return <LoreView />;
-      case "json":
-        return <JsonViewer />;
       case "messages":
         return <MessagesView />;
       case "chat":

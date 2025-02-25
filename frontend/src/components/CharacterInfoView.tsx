@@ -1,13 +1,79 @@
 import React, { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, FileJson } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { CharacterCard } from '../types/schema';
 import HighlightedTextArea from './HighlightedTextArea';
 import { FindReplaceDialog } from './FindReplaceDialog';
+import { Dialog } from './Dialog';
+
+// Dedicated modal version of JsonViewer without redundant title
+const JsonViewerModal: React.FC<{
+  characterData: CharacterCard | null;
+  setCharacterData: React.Dispatch<React.SetStateAction<CharacterCard | null>>;
+}> = ({ characterData, setCharacterData }) => {
+  const [editableJson, setEditableJson] = useState(() => {
+    try {
+      return characterData ? JSON.stringify(characterData, null, 2) : 'No character data loaded';
+    } catch (e) {
+      return 'Invalid JSON data';
+    }
+  });
+  const [error, setError] = useState<string | null>(null);
+
+  // Update content when character data changes
+  React.useEffect(() => {
+    if (characterData) {
+      try {
+        setEditableJson(JSON.stringify(characterData, null, 2));
+        setError(null);
+      } catch (e) {
+        setEditableJson('Invalid JSON data');
+        setError('Invalid JSON data');
+      }
+    } else {
+      setEditableJson('No character data loaded');
+      setError('No character data loaded');
+    }
+  }, [characterData]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditableJson(e.target.value);
+  };
+
+  const handleSave = () => {
+    try {
+      const parsedData = JSON.parse(editableJson);
+      setCharacterData(parsedData);
+      setError(null);
+    } catch (e: any) {
+      setError(`Invalid JSON: ${e.message}`);
+    }
+  };
+
+  return (
+    <div className="h-full w-full flex flex-col">
+      {error && <div className="text-red-500 mb-2">{error}</div>}
+      <textarea
+        className="w-full flex-1 bg-stone-900 text-white font-mono text-sm
+                  rounded-lg p-4 overflow-auto
+                  whitespace-pre-wrap break-words resize-none"
+        value={editableJson}
+        onChange={handleChange}
+      />
+      <button
+        className="mt-4 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded"
+        onClick={handleSave}
+      >
+        Save Changes
+      </button>
+    </div>
+  );
+};
 
 const CharacterInfoView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
   const [showFindReplace, setShowFindReplace] = useState(false);
+  const [showJsonModal, setShowJsonModal] = useState(false); // New state for JSON modal
 
   const handleFieldChange = (field: keyof CharacterCard['data'], value: string | string[]): void => {
     try {
@@ -49,13 +115,23 @@ const CharacterInfoView: React.FC = () => {
     <>
       <div className="p-8 pb-4 flex justify-between items-center">
         <h2 className="text-lg font-semibold">Primary Character Info</h2>
-        <button
-          onClick={() => setShowFindReplace(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
-        >
-          <Search className="w-4 h-4" />
-          Find & Replace
-        </button>
+        <div className="flex items-center gap-3">
+          {/* JSON Viewer Button */}
+          <button
+            onClick={() => setShowFindReplace(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
+          >
+            <Search className="w-4 h-4" />
+            Find & Replace
+          </button>
+          <button
+            onClick={() => setShowJsonModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
+            title="View JSON"
+          >
+            <FileJson className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -154,6 +230,24 @@ const CharacterInfoView: React.FC = () => {
         characterData={characterData}
         onReplace={setCharacterData}
       />
+
+      {/* JSON Modal Dialog */}
+      {showJsonModal && (
+        <Dialog
+          isOpen={showJsonModal}
+          onClose={() => setShowJsonModal(false)}
+          title="JSON View"
+          showCloseButton={true}
+          className="max-w-4xl w-2/3" // Added width control here
+        >
+          <div className="w-full h-[70vh]">
+            <JsonViewerModal 
+              characterData={characterData} 
+              setCharacterData={setCharacterData} 
+            />
+          </div>
+        </Dialog>
+      )}
     </>
   );
 };
