@@ -265,6 +265,14 @@ const getCharacterId = (character: CharacterData | null): string | null => {
   };
 
   const addMessage = (message: Message) => {
+    // Ensure message has a proper UUID
+    if (!message.id) {
+      message = {
+        ...message,
+        id: generateUUID()
+      };
+    }
+    
     setState(prev => {
       const newMessages = [...prev.messages, message];
       // For manual adds, we'll save after state update
@@ -332,14 +340,14 @@ if (prompt === '/new') {
 }
 
     const userMessage: Message = {
-      id: generateUUID(), // Use UUID instead of timestamp
+      id: generateUUID(), // Properly use UUID
       role: 'user',
       content: prompt,
       timestamp: Date.now()
     };
 
     const assistantMessage: Message = {
-      id: generateUUID(), // Use UUID instead of timestamp
+      id: generateUUID(), // Properly use UUID
       role: 'assistant',
       content: '',
       timestamp: Date.now() + 1,
@@ -347,6 +355,8 @@ if (prompt === '/new') {
       currentVariation: 0,
       aborted: false
     };
+
+    console.log('Created messages:', { userMessage, assistantMessage });
 
     console.log('Created messages:', { userMessage, assistantMessage });
 
@@ -455,6 +465,8 @@ if (prompt === '/new') {
   };
 
   // Message variations with save hooks
+  // Replace the regenerateMessage function in useChatMessages.ts
+
   const regenerateMessage = async (message: Message) => {
     if (!characterData || state.isGenerating || !apiConfig) {
       console.error("Cannot regenerate:", {
@@ -469,35 +481,35 @@ if (prompt === '/new') {
       return;
     }
   
-    // First, ensure we have a valid message to regenerate
-    if (!message || !message.id) {
-      console.error("Invalid message for regeneration");
+    // Find the exact message by ID
+    const targetIndex = state.messages.findIndex(msg => msg.id === message.id);
+    
+    if (targetIndex === -1) {
+      console.error(`Message with ID ${message.id} not found`);
       return;
     }
-  
+    
     setState(prev => ({ ...prev, isGenerating: true }));
-    console.log(`Attempting to regenerate message with ID: ${message.id}`);
+    console.log(`Regenerating message at index ${targetIndex}`);
   
     try {
-      // Get the exact index of the message to regenerate
-      const targetIndex = state.messages.findIndex(m => m.id === message.id);
-      if (targetIndex === -1) {
-        console.error(`Message with ID ${message.id} not found in messages array`);
-        throw new Error("Message not found");
-      }
-      
-      console.log(`Found message at index ${targetIndex} of ${state.messages.length}`);
-  
-      // Get context messages up to the message being regenerated
+      // Get all messages before the target as context
       const contextMessages = state.messages
         .slice(0, targetIndex)
         .map(({ role, content }) => ({ role, content }));
-  
-      console.log(`Using ${contextMessages.length} messages as context`);
+        
+      // Find the last user message to use as prompt
+      let promptText = "Please generate a new response.";
+      for (let i = targetIndex - 1; i >= 0; i--) {
+        if (state.messages[i].role === 'user') {
+          promptText = state.messages[i].content;
+          break;
+        }
+      }
   
       const response = await PromptHandler.generateChatResponse(
         characterData,
-        "Please generate a relevant but different response.",
+        promptText,
         contextMessages,
         apiConfig,
         currentGenerationRef.current?.signal
@@ -511,46 +523,35 @@ if (prompt === '/new') {
       for await (const chunk of PromptHandler.streamResponse(response)) {
         newContent += chunk;
         
-        // Use the targetIndex to update the specific message
         setState(prev => {
           const updatedMessages = [...prev.messages];
-          if (targetIndex >= 0 && targetIndex < updatedMessages.length) {
-            updatedMessages[targetIndex] = {
-              ...updatedMessages[targetIndex],
-              content: newContent
-            };
-          }
+          updatedMessages[targetIndex] = {
+            ...updatedMessages[targetIndex],
+            content: newContent
+          };
           return { ...prev, messages: updatedMessages };
         });
       }
   
-      // Update variations for the target message
+      // Update the message in state with the new content and add to variations
       setState(prev => {
         const updatedMessages = [...prev.messages];
-        if (targetIndex >= 0 && targetIndex < updatedMessages.length) {
-          const targetMsg = updatedMessages[targetIndex];
-          
-          // Create or update variations array
-          let variations = targetMsg.variations || [];
-          
-          // Add original content if not already in variations
-          if (targetMsg.content && !variations.includes(targetMsg.content)) {
-            variations = [...variations, targetMsg.content];
-          }
-          
-          // Add new content if not already in variations
-          if (!variations.includes(newContent)) {
-            variations = [...variations, newContent];
-          }
-          
-          // Update the message with new content and variations
-          updatedMessages[targetIndex] = {
-            ...targetMsg,
-            content: newContent,
-            variations: variations,
-            currentVariation: variations.length - 1
-          };
+        const targetMsg = updatedMessages[targetIndex];
+        
+        // Create or update variations array
+        const variations = [...(targetMsg.variations || [])];
+        
+        // Add original content if not already in variations
+        if (!variations.includes(targetMsg.content)) {
+          variations.push(targetMsg.content);
         }
+        
+        updatedMessages[targetIndex] = {
+          ...targetMsg,
+          content: newContent,
+          variations: variations,
+          currentVariation: variations.length - 1
+        };
         
         return {
           ...prev,
@@ -560,7 +561,7 @@ if (prompt === '/new') {
       });
   
       // Save the updated chat
-      await saveChat();
+      saveChat();
   
     } catch (err) {
       console.error("Regeneration error:", err);

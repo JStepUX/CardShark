@@ -90,7 +90,7 @@ export function ChatSelectorDialog({
               <button
                 key={chat.id}
                 onClick={() => onSelectChat(chat.id)}
-                className="w-full text-left p-4 bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors"
+                className="w-full text-left p-4 bg-stone-900 hover:bg-stone-950 rounded-lg transition-colors"
               >
                 <div className="flex justify-between items-start">
                   <div>
@@ -101,7 +101,7 @@ export function ChatSelectorDialog({
                       Last modified: {formatDate(chat.last_modified)}
                     </div>
                   </div>
-                  <div className="text-xs bg-blue-900 px-2 py-1 rounded-full text-gray-200">
+                  <div className="text-xs bg-stone-950 px-2 py-1 rounded-full text-gray-200">
                     {chat.message_count} messages
                   </div>
                 </div>

@@ -61,7 +61,7 @@ export function Dialog({
         </div>
         <div
           ref={dialogRef}
-          className="inline-block w-full max-w-md p-6 my-8 text-left align-middle transition-all transform bg-gray-800 shadow-xl rounded-lg"
+          className="inline-block w-full max-w-md p-6 my-8 text-left align-middle transition-all transform bg-stone-800 shadow-xl rounded-lg"
         >
           {title && (
             <h2 id="dialog-title" className="text-lg font-semibold text-white mb-4">
