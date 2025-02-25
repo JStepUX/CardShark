@@ -1,5 +1,5 @@
 // hooks/useChatMessages.ts
-import { useState, useRef, useEffect, useContext } from 'react';
+import { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { CharacterData } from '../contexts/CharacterContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import { APIConfigContext } from '../contexts/APIConfigContext';
@@ -256,6 +256,10 @@ const getCharacterId = (character: CharacterData | null): string | null => {
     });
   };
 
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null }));
+  }, []);
+
   const deleteMessage = (messageId: string) => {
     setState(prev => {
       const newMessages = prev.messages.filter(msg => msg.id !== messageId);
@@ -499,7 +503,7 @@ if (prompt === '/new') {
         .map(({ role, content }) => ({ role, content }));
         
       // Find the last user message to use as prompt
-      let promptText = "Please generate a new response.";
+      let promptText = "Provide a fresh response that builds on the existing story without repeating previous details verbatim.";
       for (let i = targetIndex - 1; i >= 0; i--) {
         if (state.messages[i].role === 'user') {
           promptText = state.messages[i].content;
@@ -690,6 +694,7 @@ if (prompt === '/new') {
     cycleVariation,
     stopGeneration,
     setCurrentUser,
-    loadExistingChat
+    loadExistingChat,
+    clearError  
   };
 }

@@ -104,7 +104,8 @@ const ChatView: React.FC = () => {
     deleteMessage,
     updateMessage,
     setCurrentUser,
-    loadExistingChat
+    loadExistingChat,
+    clearError
   } = useChatMessages(characterData);
 
   const handleNewChat = async () => {
@@ -164,11 +165,20 @@ const ChatView: React.FC = () => {
       </div>
 
       {error && (
-        <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200">
-          {error}
+        <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200 flex justify-between items-center">
+          <div>{error}</div>
+          <button
+            onClick={clearError}
+            className="ml-2 p-1 text-red-200 hover:text-white rounded-full hover:bg-red-800 transition-colors"
+            aria-label="Dismiss error"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
       )}
-
       {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth">
         <div className="flex flex-col space-y-4">
