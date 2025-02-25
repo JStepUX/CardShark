@@ -68,7 +68,7 @@ async def get_users():
     try:
         # Get base directory
         base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        users_dir = base_dir / 'users'
+        users_dir = base_dir / 'users'  # Corrected path to just users
         
         # Create users directory if it doesn't exist
         users_dir.mkdir(parents=True, exist_ok=True)
@@ -103,8 +103,6 @@ async def get_users():
             detail=f"Failed to scan users: {str(e)}"
         )
 
-# Add this to main.py after your imports but before your existing routes
-
 @app.post("/api/user-image/create")
 async def upload_user_image(
     file: UploadFile = File(...),
@@ -119,9 +117,9 @@ async def upload_user_image(
         # Validate metadata
         validated_metadata = validator.normalize(metadata_dict)
         
-        # Get base directory for users
+        # Get base directory 
         base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        users_dir = base_dir / 'frontend' / 'users'  # Single frontend folder
+        users_dir = base_dir / 'users'  # Corrected path to just users
         
         # Ensure directory exists
         users_dir.mkdir(parents=True, exist_ok=True)
@@ -189,7 +187,7 @@ async def get_user_image(filename: str):
     try:
         # Get base directory
         base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        users_dir = base_dir / 'frontend' / 'users'
+        users_dir = base_dir / 'users'  # Corrected path to just users
         file_path = users_dir / filename
 
         logger.log_step(f"Attempting to serve image: {file_path}")
