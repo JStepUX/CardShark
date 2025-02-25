@@ -8,6 +8,9 @@ interface ChatInfo {
   last_modified: string;
   message_count: number;
   character: string;
+  user_name?: string;
+  api_provider?: string;
+  api_model?: string;
 }
 
 interface ChatSelectorDialogProps {
@@ -60,9 +63,18 @@ export function ChatSelectorDialog({
     }
   };
 
+  // Format date in a more concise way (no seconds)
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleString();
+      const date = new Date(dateString);
+      return date.toLocaleString(undefined, {
+        year: 'numeric',
+        month: '2-digit', 
+        day: '2-digit',
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+      });
     } catch (e) {
       return dateString;
     }
@@ -90,19 +102,33 @@ export function ChatSelectorDialog({
               <button
                 key={chat.id}
                 onClick={() => onSelectChat(chat.id)}
-                className="w-full text-left p-4 bg-stone-900 hover:bg-stone-950 rounded-lg transition-colors"
+                className="w-full text-left p-4 bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors"
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-sm font-medium">
-                      Created: {formatDate(chat.created)}
+                <div className="flex justify-between">
+                  <div className="flex-1 space-y-1 min-w-0">
+                    {/* Row 1: Character | User */}
+                    <div className="text-sm font-semibold truncate">
+                      {chat.character || characterName} | {chat.user_name || 'User'}
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      Last modified: {formatDate(chat.last_modified)}
+                    
+                    {/* Row 2: Date/time */}
+                    <div className="text-xs text-gray-400">
+                      {formatDate(chat.created)}
                     </div>
+                    
+                    {/* Row 3: API Provider - API Model (if available) */}
+                    {(chat.api_provider || chat.api_model) && (
+                      <div className="text-xs text-gray-500 truncate">
+                        {chat.api_provider || 'Unknown API'}
+                        {chat.api_model ? ` - ${chat.api_model}` : ''}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs bg-stone-950 px-2 py-1 rounded-full text-gray-200">
-                    {chat.message_count} messages
+                  
+                  <div className="flex-shrink-0 self-start">
+                    <div className="text-xs bg-blue-900 px-2 py-1 rounded-full text-gray-200">
+                      {chat.message_count} messages
+                    </div>
                   </div>
                 </div>
               </button>

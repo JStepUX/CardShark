@@ -283,15 +283,27 @@ useEffect(() => {
     }
     
     // Set a new timeout
-  saveTimeoutRef.current = setTimeout(async () => {
-    try {
-      console.log('Saving chat state...', messageList.length);
-      await apiService.saveChat(characterData, messageList, state.currentUser);
-    } catch (err) {
-      console.error('Error saving chat:', err);
-    }
-  }, 500); // 500ms debounce
-};
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        console.log('Saving chat state...', messageList.length);
+        
+        // Get current API information from context
+        const apiInfo = apiConfig ? {
+          provider: apiConfig.provider,
+          model: apiConfig.model,
+          url: apiConfig.url,
+          // Don't include sensitive info like API keys
+          template: apiConfig.template,
+          enabled: apiConfig.enabled
+        } : null;
+        
+        // Save chat with API information
+        await apiService.saveChat(characterData, messageList, state.currentUser, apiInfo);
+      } catch (err) {
+        console.error('Error saving chat:', err);
+      }
+    }, 500); // 500ms debounce
+  };
 
   // Single message append with save
   const appendMessage = async (message: Message) => {
@@ -670,7 +682,7 @@ useEffect(() => {
         .map(({ role, content }) => ({ role, content }));
         
       // Find the last user message to use as prompt
-      let promptText = "Provide a fresh response that builds on the existing story without repeating previous details verbatim.";
+      let promptText = "Provide a fresh response that builds on the existing story without repeating previous details verbatim. ##!important:avoid acting,speaking, or thinking for {{user}}!##";
       let promptSource = "default";
       for (let i = targetIndex - 1; i >= 0; i--) {
         if (state.messages[i].role === 'user') {

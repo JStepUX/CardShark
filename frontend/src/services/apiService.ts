@@ -116,11 +116,12 @@ class ApiService {
   /**
    * Saves the current chat state
    */
-  async saveChat(characterData: any, messages: any[], lastUser?: any) {
+  async saveChat(characterData: any, messages: any[], lastUser?: any, apiInfo?: any) {
     return this.post('/api/save-chat', {
       character_data: characterData,
       messages,
-      lastUser
+      lastUser,
+      api_info: apiInfo
     });
   }
 

@@ -277,8 +277,8 @@ class ChatHandler:
             self.logger.log_error(f"Failed to append message: {str(e)}")
             return False
 
-    def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None) -> bool:
-        """Save complete chat state to a file."""
+    def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None) -> bool:
+        """Save complete chat state to a file with API information."""
         self.logger.log_step(f"Saving chat state for character: {character_data.get('data', {}).get('name')}")
         
         try:
@@ -305,6 +305,7 @@ class ChatHandler:
                 # Use existing chat_id or generate a new one
                 chat_id = current_chat_id if current_chat_id else f"{char_id}_{int(time.time())}"
                 
+                # Prepare metadata including API information
                 metadata = {
                     "user_name": "User",
                     "character_name": char_name,
@@ -317,7 +318,8 @@ class ChatHandler:
                             "sticky": {},
                             "cooldown": {}
                         },
-                        "lastUser": lastUser
+                        "lastUser": lastUser,
+                        "api_info": api_info or {}  # Add API information
                     }
                 }
                 
@@ -490,6 +492,15 @@ class ChatHandler:
                             chat_metadata = metadata.get('chat_metadata', {})
                             chat_id = chat_metadata.get('chat_id', str(chat_file.name))
                             
+                            # Get user information
+                            last_user = chat_metadata.get('lastUser', {})
+                            user_name = last_user.get('name') if last_user else None
+                            
+                            # Get API information
+                            api_info = chat_metadata.get('api_info', {})
+                            api_provider = api_info.get('provider')
+                            api_model = api_info.get('model')
+                            
                             # Add to chat list
                             chat_list.append({
                                 'id': chat_id,
@@ -497,7 +508,10 @@ class ChatHandler:
                                 'created': metadata.get('create_date'),
                                 'last_modified': datetime.fromtimestamp(chat_file.stat().st_mtime).isoformat(),
                                 'message_count': message_count,
-                                'character': metadata.get('character_name', character_data.get('data', {}).get('name', 'unknown'))
+                                'character': metadata.get('character_name', character_data.get('data', {}).get('name', 'unknown')),
+                                'user_name': user_name,
+                                'api_provider': api_provider,
+                                'api_model': api_model
                             })
                 except Exception as e:
                     self.logger.log_error(f"Error reading chat file {chat_file}: {str(e)}")

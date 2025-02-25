@@ -536,12 +536,14 @@ async def save_chat_state(request: Request):
         data = await request.json()
         character_data = data.get('character_data')  # Changed from character_name
         messages = data.get('messages', [])
-        force_new = data.get('force_new', False)
+        lastUser = data.get('lastUser')
+        api_info = data.get('api_info')  # Add API info parameter
         
         if not character_data:
             raise HTTPException(status_code=400, detail="Character data is required")
             
-        success = chat_handler.save_chat_state(character_data, messages)
+        # Pass API info to chat_handler
+        success = chat_handler.save_chat_state(character_data, messages, lastUser, api_info)
         
         return JSONResponse(
             status_code=200,
