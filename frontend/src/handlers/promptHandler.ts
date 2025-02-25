@@ -6,7 +6,7 @@ export class PromptHandler {
   private static readonly DEFAULT_PARAMS = {
     n: 1,
     max_context_length: 6144,
-    max_length: 220,
+    max_length: 320,
     rep_pen: 1.07,
     temperature: 1.05,
     top_p: 0.92,

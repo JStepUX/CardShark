@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, User, Plus } from 'lucide-react';
+import { Send, User, Plus, RefreshCw } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
 import UserSelect from './UserSelect';
+import ChatSelectorDialog from './ChatSelectorDialog';
 import { useChatMessages, UserProfile } from '../hooks/useChatMessages';
 
 // Separate InputArea component
@@ -87,6 +88,7 @@ const InputArea: React.FC<{
 const ChatView: React.FC = () => {
   const { characterData } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
+  const [showChatSelector, setShowChatSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -101,12 +103,19 @@ const ChatView: React.FC = () => {
     stopGeneration,
     deleteMessage,
     updateMessage,
-    setCurrentUser
+    setCurrentUser,
+    loadExistingChat
   } = useChatMessages(characterData);
 
   const handleNewChat = async () => {
     if (!characterData?.data?.first_mes) return;
     generateResponse('/new'); // Special command to start new chat
+  };
+
+  const handleLoadChat = (chatId: string) => {
+    if (!characterData) return;
+    loadExistingChat(chatId);
+    setShowChatSelector(false);
   };
 
   const scrollToBottom = () => {
@@ -136,13 +145,22 @@ const ChatView: React.FC = () => {
             ? `Chatting with ${characterData.data.name}`
             : 'Chat'}
         </h2>
-        <button
-          onClick={handleNewChat}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={18} />
-          New Chat
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowChatSelector(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            <RefreshCw size={18} />
+            Load Chat
+          </button>
+          <button
+            onClick={handleNewChat}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={18} />
+            New Chat
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -190,6 +208,14 @@ const ChatView: React.FC = () => {
           setShowUserSelect(false);
         }}
         currentUser={currentUser?.name}
+      />
+
+      {/* Chat Selector Dialog */}
+      <ChatSelectorDialog
+        isOpen={showChatSelector}
+        onClose={() => setShowChatSelector(false)}
+        onSelectChat={handleLoadChat}
+        characterName={characterData?.data?.name || ''}
       />
     </div>
   );

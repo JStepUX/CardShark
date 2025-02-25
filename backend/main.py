@@ -253,7 +253,9 @@ async def append_chat_message(request: Request):
             }
         )
 
-@app.post("/api/load-latest-chat")  # Changed to POST to accept character data
+# Add these API routes to your main.py file
+
+@app.post("/api/load-latest-chat")
 async def load_latest_chat(request: Request):
     """Load the most recent chat for a character."""
     try:
@@ -263,13 +265,65 @@ async def load_latest_chat(request: Request):
         if not character_data:
             raise HTTPException(status_code=400, detail="Character data is required")
             
-        messages = chat_handler.load_latest_chat(character_data)
+        result = chat_handler.load_latest_chat(character_data)
         
+        if not result:
+            # Return a successful response with empty messages if no chat exists
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "messages": {"messages": [], "metadata": None}
+                }
+            )
+            
         return JSONResponse(
             status_code=200,
             content={
                 "success": True,
-                "messages": messages
+                "messages": result
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Failed to load chat: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e),
+                "messages": None
+            }
+        )
+
+@app.post("/api/load-chat")
+async def load_specific_chat(request: Request):
+    """Load a specific chat by ID."""
+    try:
+        data = await request.json()
+        character_data = data.get('character_data')
+        chat_id = data.get('chat_id')
+        
+        if not character_data or not chat_id:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+            
+        result = chat_handler.load_chat(character_data, chat_id)
+        
+        if not result:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": "Chat not found"
+                }
+            )
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "messages": result
             }
         )
         
@@ -279,8 +333,77 @@ async def load_latest_chat(request: Request):
             status_code=500,
             content={
                 "success": False,
-                "message": str(e),
-                "messages": None
+                "message": str(e)
+            }
+        )
+
+@app.post("/api/create-new-chat")
+async def create_new_chat(request: Request):
+    """Create a new empty chat for a character."""
+    try:
+        data = await request.json()
+        character_data = data.get('character_data')
+        
+        if not character_data:
+            raise HTTPException(status_code=400, detail="Character data is required")
+            
+        result = chat_handler.create_new_chat(character_data)
+        
+        if not result:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": "Failed to create new chat"
+                }
+            )
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "messages": result
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error creating new chat: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to create new chat: {str(e)}"
+            }
+        )
+
+@app.get("/api/list-chats")
+async def list_chats(character_name: str):
+    """List all chat sessions for a character."""
+    try:
+        # Create minimal character data object
+        character_data = {
+            "data": {
+                "name": character_name
+            }
+        }
+        
+        chats = chat_handler.get_all_chats(character_data)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "chats": chats
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error listing chats: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to list chats: {str(e)}"
             }
         )
     
