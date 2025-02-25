@@ -12,3 +12,4 @@ settings.json
 users/
 node_modules/
 __tests__/
+context/
