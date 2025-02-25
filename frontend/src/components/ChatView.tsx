@@ -196,7 +196,7 @@ const ChatView: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowChatSelector(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
           >
             <RefreshCw size={18} />
             Load Chat
