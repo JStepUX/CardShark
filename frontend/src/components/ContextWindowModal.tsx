@@ -22,28 +22,37 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
   contextData,
   title = "API Context Window"
 }) => {
-  const [formattedData, setFormattedData] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'analysis' | 'raw'>('analysis');
+  
+  // State to store context history in reverse chronological order (newest first)
+  const [contextHistory, setContextHistory] = useState<any[]>([]);
 
-  // Format the context data for display
+  // Update context history when new data is received
   useEffect(() => {
     if (contextData) {
-      try {
-        const formatted = JSON.stringify(contextData, null, 2);
-        setFormattedData(formatted);
-      } catch (e) {
-        setFormattedData(`Error formatting data: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    } else {
-      setFormattedData('No context data available');
+      setContextHistory(prev => {
+        // Avoid duplicates by checking if identical context already exists
+        const exists = prev.some(ctx => 
+          JSON.stringify(ctx) === JSON.stringify(contextData)
+        );
+        
+        if (exists) return prev;
+        
+        // Add newest context at the beginning, keep up to 10 entries
+        return [contextData, ...prev].slice(0, 10);
+      });
     }
   }, [contextData]);
 
-  // Copy to clipboard functionality
+  // Copy to clipboard functionality - Copy the active context (first one)
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(formattedData);
+      const dataToCopy = contextHistory.length > 0 ? 
+        JSON.stringify(contextHistory[0], null, 2) : 
+        JSON.stringify(contextData, null, 2);
+        
+      await navigator.clipboard.writeText(dataToCopy);
       setCopySuccess(true);
       
       // Reset the "Copied!" message after 2 seconds
@@ -291,7 +300,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
       onClose={onClose}
       title={title}
       showCloseButton={true}
-      className="max-w-4xl w-2/3" // Added width like JSONView
+      className="max-w-4xl w-2/3"
     >
       <div className="w-full h-[70vh] flex flex-col">
         {/* Tab Controls */}
@@ -335,12 +344,23 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             {renderTokenAnalysis()}
           </div>
         ) : (
-          <div className="flex-1 relative">
-            <pre className="absolute inset-0 bg-stone-900 text-gray-300 font-mono text-sm
-                         rounded-lg p-4 overflow-auto whitespace-pre-wrap"
-            >
-              {formattedData}
-            </pre>
+          <div className="flex-1 overflow-auto">
+            {/* Display context history in reverse chronological order (newest first) */}
+            {contextHistory.length > 0 ? (
+              contextHistory.map((context, index) => (
+                <div key={index} className="mb-6">
+                  <pre className="bg-stone-900 text-gray-300 font-mono text-sm
+                              rounded-lg p-4 overflow-auto whitespace-pre-wrap">
+                    {JSON.stringify(context, null, 2)}
+                  </pre>
+                </div>
+              ))
+            ) : (
+              <pre className="bg-stone-900 text-gray-300 font-mono text-sm
+                           rounded-lg p-4 overflow-auto whitespace-pre-wrap">
+                {JSON.stringify(contextData, null, 2)}
+              </pre>
+            )}
           </div>
         )}
       </div>
