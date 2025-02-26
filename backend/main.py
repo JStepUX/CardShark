@@ -721,6 +721,7 @@ async def test_api_connection(request: Request):
         api_key = data.get('apiKey')
         provider = data.get('provider')
         model = data.get('model')
+        template_id = data.get('templateId')  # Added support for templateId
         
         if not url:
             logger.log_warning("No URL provided")
@@ -733,6 +734,7 @@ async def test_api_connection(request: Request):
         logger.log_step(f"Attempting connection to: {url}")
         logger.log_step(f"Provider: {provider}")
         logger.log_step(f"Model: {model}")
+        logger.log_step(f"Template ID: {template_id}")
         
         # Ensure URL has protocol
         if not url.startswith(('http://', 'https://')):
@@ -948,19 +950,19 @@ async def get_settings():
 
 @app.post("/api/settings")
 async def update_settings(request: Request):
-    """Update settings."""
+    """Update settings with special handling for APIs and templateId."""
     try:
         data = await request.json()
         logger.log_step(f"Received settings update request: {data}")
 
-        # Validate incoming settings - these are still valid settings we process directly
+        # Validate incoming settings for direct updates
         valid_settings = ["character_directory", "save_to_character_directory",
                          "last_export_directory", "theme"]
 
         # Filter out any unexpected settings for direct settings
         filtered_data = {k: v for k, v in data.items() if k in valid_settings}
 
-        # Handle character_directory setting specifically (your existing logic - keep it)
+        # Handle character_directory setting specifically (existing logic)
         if 'character_directory' in filtered_data:
             directory = filtered_data['character_directory']
             logger.log_step(f"Validating directory: {directory}")
@@ -980,48 +982,58 @@ async def update_settings(request: Request):
             logger.log_step("Directory validation passed")
 
         # --- API SETTINGS HANDLING ---
-        if 'apis' in data and isinstance(data['apis'], dict): # Check if 'apis' is in data and is a dictionary
-            api_configs = data['apis']
-            if api_configs: # Check if apis is not empty
-                # Get the first API config (assuming only one active API at a time for 'enabled' status)
-                first_api_key = next(iter(api_configs)) # Get the first key (e.g., 'api_1739993545209')
-                first_api_config = api_configs[first_api_key]
-                api_enabled_from_apis = first_api_config.get('enabled', False) # Extract 'enabled'
-
-                # Update the top-level 'api' settings, specifically 'enabled'
-                current_api_settings = settings_manager.settings.get('api', {}) # Get current 'api' settings, default to empty dict
-                updated_api_settings = {
-                    **current_api_settings, # Keep existing API settings (url, apiKey, etc.)
-                    'enabled': api_enabled_from_apis  # <--- UPDATE TOP-LEVEL 'api.enabled'
+        api_update_success = True
+        if 'apis' in data:
+            # Use the special handler for APIs directly from settings_manager
+            api_update_success = settings_manager.update_settings_with_apis(data)
+            
+            if not api_update_success:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "success": False,
+                        "message": "Failed to update API settings"
+                    }
+                )
+            
+            # Update api.enabled based on the first API's enabled state
+            if data.get('apis'):
+                first_api_key = next(iter(data['apis']))
+                first_api = data['apis'][first_api_key]
+                
+                # Get current API settings
+                current_api = settings_manager.settings.get('api', {})
+                
+                # Update enabled state while keeping other fields
+                updated_api = {
+                    **current_api,
+                    'enabled': first_api.get('enabled', False)
                 }
-                settings_manager.update_setting('api', updated_api_settings) # Update the 'api' settings group
-
-                logger.log_step(f"Updated top-level api.enabled to: {api_enabled_from_apis} based on 'apis' data")
-            else:
-                logger.log_warning("'apis' data is empty, not updating api.enabled")
+                
+                # Update the api settings directly
+                settings_manager.update_setting('api', updated_api)
         else:
-            logger.log_warning("'apis' key not found or not a dict in settings data, not updating api.enabled")
+            logger.log_warning("No 'apis' key in settings data")
 
-
-        # --- UPDATE OTHER VALIDATED SETTINGS (character_directory, theme etc.) ---
-        logger.log_step("Attempting to update other settings...")
-        success_other_settings = all(
+        # --- UPDATE OTHER VALIDATED SETTINGS ---
+        logger.log_step("Updating other settings...")
+        other_settings_success = all(
             settings_manager.update_setting(key, value)
             for key, value in filtered_data.items()
         )
 
-        # Overall success is based on other settings updates (API settings update is handled separately above)
-        success = success_other_settings
+        # Overall success based on API settings update and other settings updates
+        success = api_update_success and other_settings_success
 
         logger.log_step(f"Settings update success: {success}")
-        logger.log_step(f"**Current settings after update:** {settings_manager.settings}") # Debug log
+        logger.log_step(f"**Current settings after update:** {settings_manager.settings}")
         if success:
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Settings updated successfully",
-                    "settings": settings_manager.settings  # Return updated settings
+                    "settings": settings_manager.settings
                 }
             )
         else:
@@ -1035,6 +1047,7 @@ async def update_settings(request: Request):
 
     except Exception as e:
         logger.log_error(f"Error updating settings: {str(e)}")
+        logger.log_error(traceback.format_exc())
         return JSONResponse(
             status_code=500,
             content={

@@ -61,6 +61,79 @@ class SettingsManager:
             self.logger.log_error(f"Error loading settings: {str(e)}")
             return default_settings
 
+    def update_settings_with_apis(self, data):
+        """Special handler for API settings update to preserve templateId"""
+        if 'apis' in data:
+            try:
+                # Extract the APIs data
+                apis_data = data['apis']
+                self.logger.log_step(f"Processing APIs update: {apis_data}")
+                
+                # Get current settings
+                current_settings = self.settings
+                current_apis = current_settings.get('apis', {})
+                
+                # Initialize updated APIs dictionary
+                updated_apis = {}
+                
+                # Process each API
+                for api_id, api_config in apis_data.items():
+                    # Log the API config for debugging
+                    self.logger.log_step(f"API {api_id} configuration:")
+                    self.logger.log_step(f"  - Raw data: {api_config}")
+                    
+                    # Check if templateId is present
+                    if 'templateId' in api_config:
+                        self.logger.log_step(f"  - Found templateId: {api_config['templateId']}")
+                    
+                    # Merge with existing config if available
+                    if api_id in current_apis:
+                        # Start with existing config
+                        merged_config = dict(current_apis[api_id])
+                        
+                        # Update with new values, ensuring templateId is preserved
+                        for key, value in api_config.items():
+                            merged_config[key] = value
+                            self.logger.log_step(f"  - Updated {key}: {value}")
+                            
+                        updated_apis[api_id] = merged_config
+                    else:
+                        # Just use new config
+                        updated_apis[api_id] = api_config
+                    
+                    # Verify the final config has templateId if it was in the original data
+                    if 'templateId' in api_config and 'templateId' not in updated_apis[api_id]:
+                        self.logger.log_error(f"templateId lost during merge for {api_id}!")
+                    
+                    # Log the final API config
+                    self.logger.log_step(f"Final API {api_id} config: {updated_apis[api_id]}")
+                
+                # Update the settings directly
+                current_settings['apis'] = updated_apis
+                
+                # Save the updated settings
+                success = self._save_settings(current_settings)
+                self.logger.log_step(f"Settings save result: {success}")
+                
+                # Verify the settings were saved correctly
+                saved_settings = self.settings
+                self.logger.log_step("Verifying saved settings...")
+                
+                if 'apis' in saved_settings:
+                    for api_id, api_config in saved_settings['apis'].items():
+                        self.logger.log_step(f"Saved API {api_id}:")
+                        self.logger.log_step(f"  - templateId: {api_config.get('templateId')}")
+                
+                return success
+                
+            except Exception as e:
+                self.logger.log_error(f"Error updating API settings: {str(e)}")
+                import traceback
+                self.logger.log_error(traceback.format_exc())
+                return False
+        
+        return True  # No APIs to update
+    
     def update_setting(self, key: str, value: Any) -> bool:
         """Update a specific setting by key."""
         try:

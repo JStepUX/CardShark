@@ -467,14 +467,14 @@ useEffect(() => {
     }
 
     const userMessage: Message = {
-      id: generateUUID(), // Properly use UUID
+      id: generateUUID(),
       role: 'user',
       content: prompt,
       timestamp: Date.now()
     };
-
+  
     const assistantMessage: Message = {
-      id: generateUUID(), // Properly use UUID
+      id: generateUUID(),
       role: 'assistant',
       content: '',
       timestamp: Date.now() + 1,
@@ -482,28 +482,41 @@ useEffect(() => {
       currentVariation: 0,
       aborted: false
     };
-
+  
     console.log('Created messages:', { userMessage, assistantMessage });
-
+  
     // Add messages to state
     setState(prev => ({ 
       ...prev, 
       messages: [...prev.messages, userMessage, assistantMessage],
       isGenerating: true 
     }));
-
+  
     // Save the user message immediately
     await appendMessage(userMessage);
-
+  
     // Setup abort controller
     const abortController = new AbortController();
     currentGenerationRef.current = abortController;
-
+  
     try {
       console.log('Making API request');
       
       // Prepare context messages
       const contextMessages = state.messages.map(({ role, content }) => ({ role, content }));
+      
+      // Create a proper API config with required fields
+      const fullApiConfig: APIConfig = apiConfig || {
+        id: 'default',
+        provider: APIProvider.KOBOLD, 
+        url: 'http://localhost:5001',
+        enabled: false,
+        template: ChatTemplate.MISTRAL,
+        templateId: 'mistral'
+      };
+      
+      // Now use the templateId from the API config
+      console.log('Using template ID:', fullApiConfig.templateId);
       
       // Create context window object for tracking
       const contextWindow = {
@@ -514,7 +527,7 @@ useEffect(() => {
         messageHistory: contextMessages,
         userMessage: userMessage,
         assistantMessageId: assistantMessage.id,
-        config: apiConfig || defaultApiConfig,
+        config: fullApiConfig, // Use the full API config
         systemPrompt: characterData.data?.system_prompt || '',
         firstMes: characterData.data?.first_mes || '',
         personality: characterData.data?.personality || '',
@@ -531,7 +544,7 @@ useEffect(() => {
         characterData,
         prompt,
         contextMessages,
-        apiConfig || defaultApiConfig,
+        fullApiConfig, // Use the full API config
         abortController.signal
       );
 

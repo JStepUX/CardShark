@@ -1,5 +1,4 @@
-// types/api.ts
-
+// Updated types/api.ts with templateId support
 export enum APIProvider {
   KOBOLD = 'KoboldCPP',
   CLAUDE = 'Claude',
@@ -8,6 +7,7 @@ export enum APIProvider {
   OPENROUTER = 'OpenRouter'
 }
 
+// Keep this enum for backward compatibility
 export enum ChatTemplate {
   OPENAI = 'openai',
   CLAUDE = 'claude',
@@ -49,43 +49,49 @@ export type ModelType = OpenAIModel | ClaudeModel | GeminiModel | string;
 
 export interface ProviderConfig {
   defaultUrl: string;
-  template: ChatTemplate;
+  template: ChatTemplate;     // Default template (legacy)
   requiresApiKey: boolean;
   availableModels?: ModelType[];
   defaultModel?: ModelType;
+  defaultTemplateId?: string; // Default template ID for the new system
 }
 
 export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
   [APIProvider.KOBOLD]: {
     defaultUrl: 'http://localhost:5001',
     template: ChatTemplate.MISTRAL,
-    requiresApiKey: false
+    requiresApiKey: false,
+    defaultTemplateId: 'mistral'
   },
   [APIProvider.OPENAI]: {
     defaultUrl: 'https://api.openai.com/v1',
     template: ChatTemplate.OPENAI,
     requiresApiKey: true,
     availableModels: Object.values(OpenAIModel),
-    defaultModel: OpenAIModel.GPT35_TURBO
+    defaultModel: OpenAIModel.GPT35_TURBO,
+    defaultTemplateId: 'chatml'
   },
   [APIProvider.CLAUDE]: {
     defaultUrl: 'https://api.anthropic.com/v1/messages',
     template: ChatTemplate.CLAUDE,
     requiresApiKey: true,
     availableModels: Object.values(ClaudeModel),
-    defaultModel: ClaudeModel.CLAUDE_3_SONNET
+    defaultModel: ClaudeModel.CLAUDE_3_SONNET,
+    defaultTemplateId: 'claude'
   },
   [APIProvider.GEMINI]: {
     defaultUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
     template: ChatTemplate.GEMINI,
     requiresApiKey: true,
     availableModels: Object.values(GeminiModel),
-    defaultModel: GeminiModel.GEMINI_PRO
+    defaultModel: GeminiModel.GEMINI_PRO,
+    defaultTemplateId: 'gemini'
   },
   [APIProvider.OPENROUTER]: {
     defaultUrl: 'https://openrouter.ai/api/v1',
     template: ChatTemplate.OPENAI,
-    requiresApiKey: true
+    requiresApiKey: true,
+    defaultTemplateId: 'chatml'
   }
 };
 
@@ -95,7 +101,8 @@ export interface APIConfig {
   url: string;
   apiKey?: string;
   model?: ModelType;
-  template: ChatTemplate;
+  template?: ChatTemplate;   // Keep for backward compatibility
+  templateId?: string;       // New field for template ID
   enabled: boolean;
   lastConnectionStatus?: {
     connected: boolean;
@@ -116,6 +123,7 @@ export function createAPIConfig(provider: APIProvider): APIConfig {
     provider,
     url: config.defaultUrl,
     template: config.template,
+    templateId: config.defaultTemplateId,
     enabled: false,
     model: config.defaultModel
   };

@@ -1,13 +1,13 @@
-// APICard.tsx
-import React, { useState } from 'react';
+// APICard.tsx - Updated to use template service
+import React, { useState, useEffect } from 'react';
 import { Globe2, Key, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { 
   APIProvider, 
   APIConfig, 
-  PROVIDER_CONFIGS,
-  ChatTemplate,
-  TEMPLATE_NAMES
+  PROVIDER_CONFIGS
 } from '../types/api';
+import { templateService } from '../services/templateService';
+import { Template } from '../types/templateTypes';
 
 interface APICardProps {
   api: APIConfig;
@@ -24,7 +24,13 @@ export const APICard: React.FC<APICardProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [templates, setTemplates] = useState<Template[]>([]);
   const config = PROVIDER_CONFIGS[api.provider];
+
+  // Load available templates on component mount
+  useEffect(() => {
+    setTemplates(templateService.getAllTemplates());
+  }, []);
 
   const handleTest = async () => {
     try {
@@ -38,7 +44,8 @@ export const APICard: React.FC<APICardProps> = ({
           url: api.url,
           apiKey: api.apiKey,
           provider: api.provider,
-          model: api.model
+          model: api.model,
+          templateId: api.templateId
         })
       });
 
@@ -183,26 +190,25 @@ export const APICard: React.FC<APICardProps> = ({
         </div>
       )}
 
-      {/* Template Selection (for local models) */}
-      {api.provider === APIProvider.KOBOLD && (
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Chat Template
-          </label>
-          <select
-            value={api.template}
-            onChange={(e) => onUpdate({ template: e.target.value as ChatTemplate })}
-            className="w-full px-3 py-2 bg-stone-900 border border-stone-700 
-                     rounded-lg focus:ring-1 focus:ring-blue-500"
-          >
-            {Object.entries(TEMPLATE_NAMES).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Template Selection (use templates from templateService) */}
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Chat Template
+        </label>
+        <select
+          value={api.templateId || ''}
+          onChange={(e) => onUpdate({ templateId: e.target.value })}
+          className="w-full px-3 py-2 bg-stone-900 border border-stone-700 
+                   rounded-lg focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">-- Select Template --</option>
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Error Message */}
       {error && (
