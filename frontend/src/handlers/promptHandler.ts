@@ -1,5 +1,9 @@
+// src/handlers/promptHandler.ts
+
 import { CharacterCard } from '../types/schema';
 import { APIConfig } from '../types/api';
+import { Template } from '../types/templateTypes';
+import { templateService } from '../services/templateService';
 
 export class PromptHandler {
   // Default generation parameters matching KoboldCPP exactly
@@ -32,138 +36,117 @@ export class PromptHandler {
     bypass_eos: false
   } as const;
 
-  // Template definitions
-  static readonly TEMPLATES: Record<string, any> = {
-    // ChatML format (GPT-like)
-    'openai': {
-      type: 'chatml',
-      system_start: "<|im_start|>system\n",
-      system_end: "<|im_end|>\n",
-      user_start: "<|im_start|>user\n",
-      user_end: "<|im_end|>\n",
-      assistant_start: "<|im_start|>assistant\n",
-      assistant_end: "<|im_end|>\n"
-    },
-    
-    // ChatML format (generic)
-    'chatml': {
-      type: 'chatml',
-      system_start: "<|im_start|>system\n",
-      system_end: "<|im_end|>\n",
-      user_start: "<|im_start|>user\n",
-      user_end: "<|im_end|>\n",
-      assistant_start: "<|im_start|>assistant\n",
-      assistant_end: "<|im_end|>\n"
-    },
-    
-    // Mistral format
-    'mistral': {
-      type: 'mistral',
-      system_start: "[INST] ",
-      system_end: " [/INST]",
-      user_start: "[INST] ",
-      user_end: " [/INST]",
-      assistant_start: "",
-      assistant_end: "</s>"
-    },
-    
-    // Llama format
-    'llama2': {
-      type: 'llama',
-      system_start: "<|start_header_id|>system<|end_header_id|>\n\n",
-      system_end: "<|eot_id|>\n\n",
-      user_start: "<|start_header_id|>user<|end_header_id|>\n\n",
-      user_end: "<|eot_id|>\n\n",
-      assistant_start: "<|start_header_id|>assistant<|end_header_id|>\n\n",
-      assistant_end: "<|eot_id|>\n\n"
-    },
-    
-    // Claude format
-    'claude': {
-      type: 'claude',
-      system_start: "\n\nSystem: ",
-      system_end: "\n\n",
-      user_start: "\n\nHuman: ",
-      user_end: "\n\n",
-      assistant_start: "Assistant: ",
-      assistant_end: "\n\n"
-    },
-    
-    // Gemini format
-    'gemini': {
-      type: 'gemini',
-      user_start: "User: ",
-      user_end: "\n",
-      assistant_start: "Assistant: ",
-      assistant_end: "\n"
+  // Get template by ID or name or default to Mistral
+  static getTemplate(templateId: string | undefined): Template {
+    if (!templateId) {
+      // Default to Mistral if no template specified
+      return templateService.getTemplateById('mistral') || 
+             templateService.getTemplateByName('Mistral') || 
+             this.getFallbackTemplate();
     }
-  };
+    
+    // Try to find by ID first
+    const template = templateService.getTemplateById(templateId);
+    if (template) return template;
+    
+    // Then try by name
+    const templateByName = templateService.getTemplateByName(templateId);
+    if (templateByName) return templateByName;
+    
+    // Fallback to default if not found
+    console.warn(`Template '${templateId}' not found, using default`);
+    return this.getFallbackTemplate();
+  }
+  
+  // Fallback template in case of missing templates
+  private static getFallbackTemplate(): Template {
+    return {
+      id: 'mistral-fallback',
+      name: 'Mistral Fallback',
+      description: 'Default fallback template',
+      isBuiltIn: true,
+      isEditable: false,
+      systemFormat: '[INST] {{content}} [/INST]',
+      userFormat: '[INST] {{content}} [/INST]',
+      assistantFormat: '{{char}}: {{content}}',
+      memoryFormat: '{{#if system}}[INST] {{system}} [/INST]\n{{/if}}Persona: {{description}}\nPersonality: {{personality}}\n[Scenario: {{scenario}}]',
+      stopSequences: ['[INST]', 'User:', 'Assistant:', '{{char}}:'],
+    };
+  }
 
-  // Create memory context from character data
-  private static createMemoryContext(character: CharacterCard): string {
+  // Create memory context from character data using the template
+  private static createMemoryContext(character: CharacterCard, template: Template): string {
     const { data } = character;
-    return `${data.system_prompt}
+    
+    if (!template.memoryFormat) {
+      // Default memory format if not specified
+      return `${data.system_prompt}
 Persona: ${data.description}
 Personality: ${data.personality}
 [Scenario: ${data.scenario}]
-${data.mes_example}
+${data.mes_example || ''}
 ***`;
-  }
-
-  // Get template format based on template name
-  static getTemplateFormat(templateName: string): any {
-    // Default to Mistral format if template is not specified
-    if (!templateName) return this.TEMPLATES.mistral;
-    
-    const template = this.TEMPLATES[templateName.toLowerCase()];
-    return template || this.TEMPLATES.mistral;
-  }
-
-  // Format prompt using the specified template
-  static formatPromptWithTemplate(
-    history: string,
-    currentMessage: string,
-    characterName: string,
-    template: any
-  ): string {
-    // Different formatting based on template type
-    switch (template.type) {
-      case 'chatml':
-        return `${history}\n<|im_start|>user\n${currentMessage}<|im_end|>\n<|im_start|>assistant\n${characterName}:`;
-        
-      case 'mistral':
-        return `${history}\n[INST] ${currentMessage} [/INST]\n${characterName}:`;
-        
-      case 'llama':
-        return `${history}\n<|start_header_id|>user<|end_header_id|>\n\n${currentMessage}<|eot_id|>\n\n<|start_header_id|>assistant<|end_header_id|>\n\n${characterName}:`;
-        
-      case 'claude':
-        return `${history}\n\nHuman: ${currentMessage}\n\nAssistant: ${characterName}:`;
-        
-      default:
-        // Default to Mistral format
-        return `${history}\n[INST] ${currentMessage} [/INST]\n${characterName}:`;
     }
+    
+    // Process template with character data
+    let memoryText = template.memoryFormat;
+    
+    // Process conditional blocks - very simple implementation
+    if (memoryText.includes('{{#if')) {
+      // Handle system prompt conditional
+      if (data.system_prompt) {
+        memoryText = memoryText.replace(/{{#if system}}(.*?){{\/if}}/gs, '$1');
+      } else {
+        memoryText = memoryText.replace(/{{#if system}}.*?{{\/if}}/gs, '');
+      }
+    }
+    
+    // Replace variables
+    return memoryText
+      .replace(/{{system}}/g, data.system_prompt || '')
+      .replace(/{{description}}/g, data.description || '')
+      .replace(/{{personality}}/g, data.personality || '')
+      .replace(/{{scenario}}/g, data.scenario || '')
+      .replace(/{{example}}/g, data.mes_example || '');
+  }
+
+  // Format message with template
+  private static formatMessage(role: 'system' | 'user' | 'assistant', content: string, characterName: string, template: Template): string {
+    let format = '';
+    
+    switch (role) {
+      case 'system':
+        format = template.systemFormat || '';
+        break;
+      case 'user':
+        format = template.userFormat;
+        break;
+      case 'assistant':
+        format = template.assistantFormat;
+        break;
+    }
+    
+    return format
+      .replace(/{{content}}/g, content)
+      .replace(/{{char}}/g, characterName);
   }
 
   // Format chat history into proper template format
   static formatChatHistory(
     messages: Array<{ role: 'user' | 'assistant', content: string }>,
     characterName: string,
-    template: any = this.TEMPLATES.mistral
+    template: Template
   ): string {
     if (!messages || messages.length === 0) return '';
     
     return messages
       .map(msg => {
-        const { role, content } = msg;
-        
-        // Format based on template type
-        if (role === 'assistant') {
-          return `${template.assistant_start}${characterName}: ${content}${template.assistant_end}`;
-        } else {
-          return `${template.user_start}${content}${template.user_end}`;
-        }
+        return this.formatMessage(
+          msg.role, 
+          msg.content, 
+          characterName, 
+          template
+        );
       })
       .join('\n');
   }
@@ -179,24 +162,38 @@ ${data.mes_example}
     console.log('Starting generation...');
     console.log('API Config:', apiConfig);
 
+    // Get the template based on API config
+    const template = this.getTemplate(apiConfig.template);
+    console.log('Using template:', template.name);
+
     // Create memory context
-    const memory = this.createMemoryContext(character);
+    const memory = this.createMemoryContext(character, template);
 
-    // Get the appropriate template format based on apiConfig.template
-    const templateInfo = this.getTemplateFormat(apiConfig.template);
-    
-    // Format chat history using the template
-    const formattedHistory = this.formatChatHistory(history, character.data.name, templateInfo);
-    
-    // Create the final prompt using the template
-    const currentPrompt = this.formatPromptWithTemplate(
-      formattedHistory,
-      currentMessage,
-      character.data.name,
-      templateInfo
+    // Format chat history
+    const formattedHistory = this.formatChatHistory(
+      history, 
+      character.data.name, 
+      template
     );
+    
+    // Format current message
+    const userMessage = this.formatMessage(
+      'user', 
+      currentMessage, 
+      character.data.name, 
+      template
+    );
+    
+    // Combine into final prompt
+    const currentPrompt = `${formattedHistory}\n${userMessage}`;
+    
+    // Add a starting token for the assistant's response if needed
+    const assistantStartToken = template.assistantFormat.split('{{content}}')[0]
+                                  .replace(/{{char}}/g, character.data.name);
+    
+    const finalPrompt = `${currentPrompt}${assistantStartToken}`;
 
-    // Capture raw context information for debugging, now including template info
+    // Capture context information for debugging
     const contextInfo = {
       timestamp: new Date().toISOString(),
       type: 'generation',
@@ -208,10 +205,10 @@ ${data.mes_example}
       memory,
       historyLength: history.length,
       currentMessage,
-      formattedPrompt: currentPrompt,
+      formattedPrompt: finalPrompt,
       template: {
-        name: apiConfig.template,
-        format: templateInfo
+        name: template.name,
+        id: template.id
       },
       config: {
         ...apiConfig,
@@ -235,9 +232,9 @@ ${data.mes_example}
     const payload = {
       ...this.DEFAULT_PARAMS,
       memory,
-      prompt: currentPrompt,
+      prompt: finalPrompt,
       genkey,
-      stop_sequence: [
+      stop_sequence: template.stopSequences || [
         "<|im_end|>\\n<|im_start|>user",
         "<|im_end|>\\n<|im_start|>assistant",
         "User:",

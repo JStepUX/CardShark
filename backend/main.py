@@ -32,6 +32,7 @@ from backend.character_validator import CharacterValidator
 from backend.api_handler import ApiHandler
 from backend.chat_handler import ChatHandler
 from backend.network_server import run_server
+from backend.template_handler import TemplateHandler
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -60,8 +61,128 @@ validator = CharacterValidator(logger)
 png_debug = PngDebugHandler(logger)
 api_handler = ApiHandler(logger)
 chat_handler = ChatHandler(logger) 
+template_handler = TemplateHandler(logger)
 
 # API Endpoints
+@app.get("/api/templates")
+async def get_templates():
+    """Get all custom templates."""
+    try:
+        templates = template_handler.get_all_templates()
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "templates": templates
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error getting templates: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.post("/api/templates")
+async def save_templates(request: Request):
+    """Save templates to the file system."""
+    try:
+        data = await request.json()
+        templates = data.get('templates', [])
+        
+        if not templates:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "No templates provided"
+                }
+            )
+        
+        success = template_handler.save_templates(templates)
+        
+        return JSONResponse(
+            status_code=200 if success else 500,
+            content={
+                "success": success,
+                "message": "Templates saved successfully" if success else "Failed to save templates"
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error saving templates: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.delete("/api/templates/{template_id}")
+async def delete_template(template_id: str):
+    """Delete a template from the file system."""
+    try:
+        success = template_handler.delete_template(template_id)
+        
+        return JSONResponse(
+            status_code=200 if success else 404,
+            content={
+                "success": success,
+                "message": "Template deleted successfully" if success else "Template not found"
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error deleting template: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.post("/api/templates/{template_id}")
+async def save_template(template_id: str, request: Request):
+    """Save a specific template to the file system."""
+    try:
+        data = await request.json()
+        template = data.get('template')
+        
+        if not template:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "No template provided"
+                }
+            )
+        
+        # Ensure the template ID matches the URL parameter
+        template['id'] = template_id
+        
+        success = template_handler.save_template(template)
+        
+        return JSONResponse(
+            status_code=200 if success else 500,
+            content={
+                "success": success,
+                "message": "Template saved successfully" if success else "Failed to save template"
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error saving template: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+    
 @app.get("/api/context-window")
 async def get_context_window():
     """Get the saved context window data."""
