@@ -48,19 +48,40 @@ export class PromptHandler {
     return result;
   }
 
-  // Get template by ID or fallback to a default
-  private static getTemplate(templateId?: string): Template | null {
-    // If templateId is provided, try to get that template
-    if (templateId) {
-      const template = templateService.getTemplateById(templateId);
-      if (template) return template;
+  /**
+ * Get a template by ID from the template service
+ * @param templateId The ID of the template to retrieve
+ * @returns The template or null if not found
+ */
+private static getTemplate(templateId?: string): Template | null {
+  // If templateId is provided, try to get that template
+  if (templateId) {
+    console.log(`Looking up template with ID: ${templateId}`);
+    const template = templateService.getTemplateById(templateId);
+    if (template) {
+      console.log(`Found template: ${template.name}`);
+      return template;
+    } else {
+      console.warn(`Template not found for ID: ${templateId}`);
     }
-    
-    // Fallback to mistral template or first available
-    return templateService.getTemplateById('mistral') || 
-           templateService.getAllTemplates()[0] || 
-           null;
+  } else {
+    console.warn('No templateId provided');
   }
+   
+  // Fallback to mistral template or first available
+  console.log('Falling back to default template');
+  const defaultTemplate = templateService.getTemplateById('mistral') ||
+                         templateService.getAllTemplates()[0] ||
+                         null;
+  
+  if (defaultTemplate) {
+    console.log(`Using default template: ${defaultTemplate.name}`);
+  } else {
+    console.error('No templates available');
+  }
+  
+  return defaultTemplate;
+}
 
   // Create memory context from character data using template
   private static createMemoryContext(character: CharacterCard, template: Template | null): string {

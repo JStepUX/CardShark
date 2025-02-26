@@ -11,7 +11,7 @@ const defaultApiConfig: APIConfig = {
   id: 'default',
   provider: APIProvider.KOBOLD,
   url: 'http://localhost:5001',
-  template: ChatTemplate.MISTRAL,
+  templateId: ChatTemplate.MISTRAL,
   enabled: true
 };
 
@@ -293,7 +293,7 @@ useEffect(() => {
           model: apiConfig.model,
           url: apiConfig.url,
           // Don't include sensitive info like API keys
-          template: apiConfig.template,
+          template: apiConfig.templateId,
           enabled: apiConfig.enabled
         } : null;
         
@@ -511,7 +511,6 @@ useEffect(() => {
         provider: APIProvider.KOBOLD, 
         url: 'http://localhost:5001',
         enabled: false,
-        template: ChatTemplate.MISTRAL,
         templateId: 'mistral'
       };
       

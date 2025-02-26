@@ -37,7 +37,7 @@ class SettingsManager:
                 "enabled": False,
                 "url": "http://localhost:5001",
                 "apiKey": "",
-                "template": "mistral-v3",
+                "templateId": "mistral",  # Use templateId only
                 "lastConnectionStatus": None
             }
         }
@@ -46,11 +46,30 @@ class SettingsManager:
             if self.settings_file.exists():
                 with open(self.settings_file, 'r') as f:
                     stored_settings = json.load(f)
+                    
+                    # Convert any legacy template field to templateId
+                    if 'api' in stored_settings and isinstance(stored_settings['api'], dict):
+                        api_config = stored_settings['api']
+                        if 'template' in api_config:
+                            self.logger.log_step("Converting legacy 'template' to 'templateId'")
+                            api_config['templateId'] = api_config['template']
+                            api_config.pop('template')  # Remove the old field
+                    
+                    # Check all API configs in the 'apis' field
+                    if 'apis' in stored_settings and isinstance(stored_settings['apis'], dict):
+                        for api_id, api_config in stored_settings['apis'].items():
+                            if isinstance(api_config, dict) and 'template' in api_config:
+                                self.logger.log_step(f"Converting API {api_id} legacy 'template' to 'templateId'")
+                                api_config['templateId'] = api_config['template']
+                                api_config.pop('template')  # Remove the old field
+                    
                     # Merge with defaults in case new settings were added
                     merged = {**default_settings, **stored_settings}
+                    
                     # Ensure API settings exist with defaults
                     if 'api' not in merged:
                         merged['api'] = default_settings['api']
+                    
                     return merged
             
             # If no settings file exists, create one with defaults
@@ -134,49 +153,46 @@ class SettingsManager:
         
         return True  # No APIs to update
     
-    def update_setting(self, key: str, value: Any) -> bool:
-        """Update a specific setting by key."""
+    def update_api_settings(self, updates: Dict[str, Any]) -> bool:
+        """Update API settings and maintain connection state."""
         try:
-            self.logger.log_step(f"Updating setting {key} with value: {value}")
+            self.logger.log_step(f"Updating API settings: {updates}")
             
-            # Special handling for character_directory
-            if key == 'character_directory':
-                if not self._validate_directory(value):
-                    self.logger.log_warning(f"Invalid directory path: {value}")
-                    return False
+            # Convert any legacy template to templateId
+            if 'template' in updates:
+                self.logger.log_step(f"Converting legacy 'template' to 'templateId': {updates['template']}")
+                updates['templateId'] = updates['template']
+                updates.pop('template')  # Remove the old field
             
-            # Special handling for API settings to preserve state
-            if key == 'api' and isinstance(value, dict):
-                current_api = self.settings.get('api', {})
-                self.logger.log_step(f"Current API settings: {current_api}")
-                self.logger.log_step(f"New API settings: {value}")
+            current_api = self.settings.get('api', {})
+            
+            # Preserve connection status if not explicitly changed
+            if ('lastConnectionStatus' not in updates and 
+                'lastConnectionStatus' in current_api):
+                updates['lastConnectionStatus'] = current_api['lastConnectionStatus']
+                self.logger.log_step("Preserved existing connection status")
                 
-                # Ensure enabled state is preserved as a boolean
-                enabled = value.get('enabled')
-                if enabled is not None:
-                    enabled = bool(enabled)  # Explicitly convert to boolean
-                else:
-                    enabled = current_api.get('enabled', False)
-
-                # Deep merge the API settings
-                self.settings['api'] = {
-                    **current_api,  # Keep existing settings
-                    **value,        # Update with new values
-                    'enabled': enabled,  # Use our explicitly converted boolean
-                    'lastConnectionStatus': value.get('lastConnectionStatus', current_api.get('lastConnectionStatus'))
-                }
+            # Update API settings
+            updated_api = {**current_api, **updates}
+            
+            # Remove any legacy template field
+            if 'template' in updated_api:
+                updated_api.pop('template')
                 
-                self.logger.log_step(f"Merged API settings: {self.settings['api']}")
-                self.logger.log_step(f"API enabled state: {enabled}")
-                self.logger.log_step(f"API enabled type: {type(enabled)}")
+            self.settings['api'] = updated_api
+            
+            # Save settings
+            success = self._save_settings(self.settings)
+            if success:
+                self.logger.log_step("API settings saved successfully")
+                self.logger.log_step(f"Current API state: {json.dumps(updated_api, indent=2)}")
             else:
-                # Update the setting directly
-                self.settings[key] = value
-            
-            return self._save_settings(self.settings)
+                self.logger.log_warning("Failed to save API settings")
+                
+            return success
             
         except Exception as e:
-            self.logger.log_error(f"Error updating setting '{key}': {str(e)}")
+            self.logger.log_error(f"Error updating API settings: {str(e)}")
             return False
 
     def _save_settings(self, settings: Dict[str, Any]) -> bool:

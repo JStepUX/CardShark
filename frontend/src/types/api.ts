@@ -49,49 +49,43 @@ export type ModelType = OpenAIModel | ClaudeModel | GeminiModel | string;
 
 export interface ProviderConfig {
   defaultUrl: string;
-  template: ChatTemplate;     // Default template (legacy)
+  templateId: ChatTemplate;     // Use templateId instead of template
   requiresApiKey: boolean;
   availableModels?: ModelType[];
   defaultModel?: ModelType;
-  defaultTemplateId?: string; // Default template ID for the new system
 }
 
 export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
   [APIProvider.KOBOLD]: {
     defaultUrl: 'http://localhost:5001',
-    template: ChatTemplate.MISTRAL,
-    requiresApiKey: false,
-    defaultTemplateId: 'mistral'
+    templateId: ChatTemplate.MISTRAL,
+    requiresApiKey: false
   },
   [APIProvider.OPENAI]: {
     defaultUrl: 'https://api.openai.com/v1',
-    template: ChatTemplate.OPENAI,
+    templateId: ChatTemplate.OPENAI,
     requiresApiKey: true,
     availableModels: Object.values(OpenAIModel),
-    defaultModel: OpenAIModel.GPT35_TURBO,
-    defaultTemplateId: 'chatml'
+    defaultModel: OpenAIModel.GPT35_TURBO
   },
   [APIProvider.CLAUDE]: {
     defaultUrl: 'https://api.anthropic.com/v1/messages',
-    template: ChatTemplate.CLAUDE,
+    templateId: ChatTemplate.CLAUDE,
     requiresApiKey: true,
     availableModels: Object.values(ClaudeModel),
-    defaultModel: ClaudeModel.CLAUDE_3_SONNET,
-    defaultTemplateId: 'claude'
+    defaultModel: ClaudeModel.CLAUDE_3_SONNET
   },
   [APIProvider.GEMINI]: {
     defaultUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-    template: ChatTemplate.GEMINI,
+    templateId: ChatTemplate.GEMINI,
     requiresApiKey: true,
     availableModels: Object.values(GeminiModel),
-    defaultModel: GeminiModel.GEMINI_PRO,
-    defaultTemplateId: 'gemini'
+    defaultModel: GeminiModel.GEMINI_PRO
   },
   [APIProvider.OPENROUTER]: {
     defaultUrl: 'https://openrouter.ai/api/v1',
-    template: ChatTemplate.OPENAI,
-    requiresApiKey: true,
-    defaultTemplateId: 'chatml'
+    templateId: ChatTemplate.OPENAI,
+    requiresApiKey: true
   }
 };
 
@@ -101,8 +95,7 @@ export interface APIConfig {
   url: string;
   apiKey?: string;
   model?: ModelType;
-  template?: ChatTemplate;   // Keep for backward compatibility
-  templateId?: string;       // New field for template ID
+  templateId: string;          // Only templateId, no template
   enabled: boolean;
   lastConnectionStatus?: {
     connected: boolean;
@@ -116,14 +109,14 @@ export interface APIConfig {
   };
 }
 
+// Update createAPIConfig to use only templateId
 export function createAPIConfig(provider: APIProvider): APIConfig {
   const config = PROVIDER_CONFIGS[provider];
   return {
     id: `api_${Date.now()}`,
     provider,
     url: config.defaultUrl,
-    template: config.template,
-    templateId: config.defaultTemplateId,
+    templateId: config.templateId,   // Only use templateId
     enabled: false,
     model: config.defaultModel
   };
