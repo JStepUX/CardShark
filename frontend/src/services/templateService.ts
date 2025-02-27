@@ -102,35 +102,62 @@ class TemplateService {
    * Get all templates
    */
   getAllTemplates(): Template[] {
-    return [...this.templates];
+    // Ensure we're returning a safe copy of templates with valid properties
+    return this.templates.map(template => this.validateTemplate(template));
   }
   
   /**
    * Get built-in templates only
    */
   getBuiltInTemplates(): Template[] {
-    return this.templates.filter(t => t.isBuiltIn);
+    return this.templates
+      .filter(t => t.isBuiltIn)
+      .map(template => this.validateTemplate(template));
   }
   
   /**
    * Get custom templates only
    */
   getCustomTemplates(): Template[] {
-    return this.templates.filter(t => !t.isBuiltIn);
+    return this.templates
+      .filter(t => !t.isBuiltIn)
+      .map(template => this.validateTemplate(template));
   }
   
   /**
    * Get a template by ID
    */
   getTemplateById(id: string): Template | undefined {
-    return this.templates.find(t => t.id === id);
+    const template = this.templates.find(t => t.id === id);
+    return template ? this.validateTemplate(template) : undefined;
   }
   
   /**
    * Get a template by name
    */
   getTemplateByName(name: string): Template | undefined {
-    return this.templates.find(t => t.name === name);
+    const template = this.templates.find(t => t.name === name);
+    return template ? this.validateTemplate(template) : undefined;
+  }
+  
+  /**
+   * Validate and normalize a template
+   */
+  private validateTemplate(template: any): Template {
+    // Create a new validated template
+    return {
+      id: template.id || `template-${Date.now()}`,
+      name: template.name || 'Unnamed Template',
+      description: template.description || '',
+      isBuiltIn: Boolean(template.isBuiltIn),
+      isEditable: template.isBuiltIn ? false : Boolean(template.isEditable !== false),
+      systemFormat: template.systemFormat || undefined,
+      userFormat: template.userFormat || '[INST] {{content}} [/INST]',
+      assistantFormat: template.assistantFormat || '{{char}}: {{content}}',
+      memoryFormat: template.memoryFormat || undefined,
+      detectionPatterns: Array.isArray(template.detectionPatterns) ? template.detectionPatterns : [],
+      stopSequences: Array.isArray(template.stopSequences) ? template.stopSequences : []
+    };
   }
   
   /**
@@ -138,12 +165,16 @@ class TemplateService {
    * Returns true if added successfully, false if a template with the same ID already exists
    */
   addTemplate(template: Template): boolean {
+    // Validate the template
+    const validatedTemplate = this.validateTemplate(template);
+    
     // Check if a template with the same ID already exists
-    if (this.templates.some(t => t.id === template.id)) {
+    if (this.templates.some(t => t.id === validatedTemplate.id)) {
+      console.warn(`Template with ID ${validatedTemplate.id} already exists`);
       return false;
     }
     
-    this.templates.push(template);
+    this.templates.push(validatedTemplate);
     this.saveCustomTemplates();
     return true;
   }
@@ -155,15 +186,20 @@ class TemplateService {
   updateTemplate(template: Template): boolean {
     const index = this.templates.findIndex(t => t.id === template.id);
     if (index === -1) {
+      console.warn(`Template with ID ${template.id} not found`);
       return false;
     }
     
     // Don't allow editing built-in templates
     if (this.templates[index].isBuiltIn && !template.isBuiltIn) {
+      console.warn(`Cannot modify built-in template: ${template.id}`);
       return false;
     }
     
-    this.templates[index] = template;
+    // Validate the template
+    const validatedTemplate = this.validateTemplate(template);
+    
+    this.templates[index] = validatedTemplate;
     this.saveCustomTemplates();
     return true;
   }
@@ -175,11 +211,13 @@ class TemplateService {
   deleteTemplate(id: string): boolean {
     const index = this.templates.findIndex(t => t.id === id);
     if (index === -1) {
+      console.warn(`Template with ID ${id} not found`);
       return false;
     }
     
     // Don't allow deleting built-in templates
     if (this.templates[index].isBuiltIn) {
+      console.warn(`Cannot delete built-in template: ${id}`);
       return false;
     }
     
@@ -194,6 +232,7 @@ class TemplateService {
   duplicateTemplate(id: string): Template | undefined {
     const template = this.getTemplateById(id);
     if (!template) {
+      console.warn(`Template with ID ${id} not found for duplication`);
       return undefined;
     }
     
@@ -217,8 +256,11 @@ class TemplateService {
       ? this.templates 
       : this.templates.filter(t => !t.isBuiltIn);
       
+    // Validate each template before export
+    const validatedTemplates = templatesToExport.map(t => this.validateTemplate(t));
+    
     return {
-      templates: templatesToExport,
+      templates: validatedTemplates,
       version: '1.0',
       exportedAt: new Date().toISOString()
     };
@@ -230,6 +272,7 @@ class TemplateService {
    */
   importTemplates(exportData: TemplateExport): number {
     if (!exportData || !exportData.templates || !Array.isArray(exportData.templates)) {
+      console.warn('Invalid export data format');
       return 0;
     }
     
@@ -241,16 +284,23 @@ class TemplateService {
         continue;
       }
       
-      // Create a new template with a fresh ID to avoid conflicts
-      const newTemplate: Template = {
-        ...template,
-        id: `${template.id}-imported-${Date.now()}`,
-        isBuiltIn: false,
-        isEditable: true
-      };
-      
-      if (this.addTemplate(newTemplate)) {
-        importCount++;
+      try {
+        // Validate template before import
+        const validatedTemplate = this.validateTemplate(template);
+        
+        // Create a new template with a fresh ID to avoid conflicts
+        const newTemplate: Template = {
+          ...validatedTemplate,
+          id: `${validatedTemplate.id}-imported-${Date.now()}`,
+          isBuiltIn: false,
+          isEditable: true
+        };
+        
+        if (this.addTemplate(newTemplate)) {
+          importCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to import template: ${template.id || 'unknown'}`, error);
       }
     }
     
@@ -276,12 +326,38 @@ class TemplateService {
     try {
       const savedTemplates = localStorage.getItem(this.localStorageKey);
       if (savedTemplates) {
-        const customTemplates = JSON.parse(savedTemplates) as Template[];
+        let customTemplates: Template[] = [];
+        
+        try {
+          customTemplates = JSON.parse(savedTemplates);
+        } catch (error) {
+          console.error('Failed to parse stored templates:', error);
+          return;
+        }
+        
+        // Validate custom templates
+        if (!Array.isArray(customTemplates)) {
+          console.warn('Stored templates is not an array');
+          return;
+        }
         
         // Add custom templates, preserving built-in ones
         for (const template of customTemplates) {
-          if (!this.templates.some(t => t.id === template.id)) {
-            this.templates.push(template);
+          try {
+            // Skip if template is invalid or doesn't have an ID
+            if (!template || !template.id) continue;
+            
+            // Skip if this template ID already exists
+            if (this.templates.some(t => t.id === template.id)) continue;
+            
+            // Add the template (it will be validated on access)
+            this.templates.push({
+              ...template,
+              isBuiltIn: false,  // Force custom templates to not be built-in
+              isEditable: true   // Force custom templates to be editable
+            });
+          } catch (error) {
+            console.error(`Failed to load custom template: ${template?.id || 'unknown'}`, error);
           }
         }
       }
@@ -309,23 +385,40 @@ class TemplateService {
   async loadFromFileSystem(): Promise<void> {
     try {
       const response = await fetch('/api/templates');
+      if (!response.ok) {
+        throw new Error(`Failed to load templates: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       
-      if (data.success && data.templates) {
+      if (data.success && Array.isArray(data.templates)) {
         // Merge with built-in templates
         const customTemplates = data.templates.filter(
-          (t: Template) => !this.templates.some(bt => bt.id === t.id && bt.isBuiltIn)
+          (t: Template) => t && t.id && !this.templates.some(bt => bt.id === t.id && bt.isBuiltIn)
         );
         
         // Add custom templates
         for (const template of customTemplates) {
-          if (!this.templates.some(t => t.id === template.id)) {
-            this.templates.push({...template, isBuiltIn: false, isEditable: true});
+          try {
+            if (!template || !template.id) continue;
+            
+            if (!this.templates.some(t => t.id === template.id)) {
+              this.templates.push({
+                ...template,
+                isBuiltIn: false,
+                isEditable: true
+              });
+            }
+          } catch (error) {
+            console.error(`Failed to load template from server: ${template?.id || 'unknown'}`, error);
           }
         }
+      } else {
+        console.warn('Invalid response format from server', data);
       }
     } catch (error) {
       console.error('Failed to load templates from file system:', error);
+      throw error; // Re-throw to allow caller to handle
     }
   }
   
@@ -335,7 +428,9 @@ class TemplateService {
    */
   async saveToFileSystem(): Promise<boolean> {
     try {
-      const customTemplates = this.templates.filter(t => !t.isBuiltIn);
+      const customTemplates = this.templates
+        .filter(t => !t.isBuiltIn)
+        .map(t => this.validateTemplate(t));
       
       const response = await fetch('/api/templates', {
         method: 'POST',
@@ -345,8 +440,12 @@ class TemplateService {
         body: JSON.stringify({ templates: customTemplates })
       });
       
+      if (!response.ok) {
+        throw new Error(`Failed to save templates: ${response.statusText}`);
+      }
+      
       const data = await response.json();
-      return data.success;
+      return data.success === true;
     } catch (error) {
       console.error('Failed to save templates to file system:', error);
       return false;

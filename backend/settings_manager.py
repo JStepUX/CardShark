@@ -81,7 +81,7 @@ class SettingsManager:
             return default_settings
 
     def update_settings_with_apis(self, data):
-        """Special handler for API settings update to preserve templateId"""
+        """Special handler for API settings update to preserve templateId and generation_settings"""
         if 'apis' in data:
             try:
                 # Extract the APIs data
@@ -105,13 +105,37 @@ class SettingsManager:
                     if 'templateId' in api_config:
                         self.logger.log_step(f"  - Found templateId: {api_config['templateId']}")
                     
+                    # Check if generation_settings is present
+                    if 'generation_settings' in api_config:
+                        self.logger.log_step(f"  - Found generation_settings: {api_config['generation_settings']}")
+                    
                     # Merge with existing config if available
                     if api_id in current_apis:
                         # Start with existing config
                         merged_config = dict(current_apis[api_id])
                         
-                        # Update with new values, ensuring templateId is preserved
-                        for key, value in api_config.items():
+                        # Special handling for generation_settings (deep merge)
+                        if 'generation_settings' in api_config and 'generation_settings' in merged_config:
+                            # Start with existing settings
+                            merged_gen_settings = dict(merged_config['generation_settings'])
+                            # Update with new values
+                            if isinstance(api_config['generation_settings'], dict):
+                                for key, value in api_config['generation_settings'].items():
+                                    merged_gen_settings[key] = value
+                                    self.logger.log_step(f"  - Updated generation setting {key}: {value}")
+                            # Set the merged settings back
+                            merged_config['generation_settings'] = merged_gen_settings
+                            # Remove from api_config to prevent double-updating
+                            api_config_sans_gen = {k:v for k,v in api_config.items() if k != 'generation_settings'}
+                        else:
+                            # If only one side has generation_settings, use that
+                            api_config_sans_gen = api_config
+                            if 'generation_settings' in api_config:
+                                merged_config['generation_settings'] = api_config['generation_settings']
+                                api_config_sans_gen = {k:v for k,v in api_config.items() if k != 'generation_settings'}
+                        
+                        # Update other values
+                        for key, value in api_config_sans_gen.items():
                             merged_config[key] = value
                             self.logger.log_step(f"  - Updated {key}: {value}")
                             
@@ -142,6 +166,8 @@ class SettingsManager:
                     for api_id, api_config in saved_settings['apis'].items():
                         self.logger.log_step(f"Saved API {api_id}:")
                         self.logger.log_step(f"  - templateId: {api_config.get('templateId')}")
+                        if 'generation_settings' in api_config:
+                            self.logger.log_step(f"  - generation_settings present")
                 
                 return success
                 

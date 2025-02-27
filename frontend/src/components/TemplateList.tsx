@@ -23,10 +23,18 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onNewTempla
   const [searchTerm, setSearchTerm] = useState('');
   
   // Filter templates based on search term
-  const filteredTemplates = templates.filter(template => 
-    template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    template.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTemplates = templates.filter(template => {
+    // Ensure template is valid and has required properties
+    if (!template || typeof template !== 'object') return false;
+    
+    const templateName = template.name || '';
+    const templateDescription = template.description || '';
+    
+    // Check if search term is included in name or description
+    return searchTerm === '' || 
+      templateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      templateDescription.toLowerCase().includes(searchTerm.toLowerCase());
+  });
   
   // Group templates by built-in vs custom
   const builtInTemplates = filteredTemplates.filter(t => t.isBuiltIn);
@@ -238,8 +246,8 @@ const TemplateItem: React.FC<TemplateItemProps> = ({
     >
       <div className="flex justify-between items-start">
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium truncate">{template.name}</h4>
-          <p className="text-sm text-gray-400 truncate">{template.description}</p>
+          <h4 className="font-medium truncate">{template.name || 'Unnamed Template'}</h4>
+          <p className="text-sm text-gray-400 truncate">{template.description || 'No description'}</p>
         </div>
         <div className="flex items-center space-x-1 ml-4">
           <button

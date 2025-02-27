@@ -202,7 +202,7 @@ useEffect(() => {
           // If no messages but we have a first message, use that
           else if (characterData.data.first_mes) {
             const firstMessage: Message = {
-              id: Date.now().toString(),
+              id: generateUUID(),
               role: 'assistant',
               content: characterData.data.first_mes,
               timestamp: Date.now(),
@@ -227,7 +227,7 @@ useEffect(() => {
         } else if (characterData.data.first_mes) {
           // If chat loading failed but we have a first message, start with that
           const firstMessage: Message = {
-            id: Date.now().toString(),
+            id: generateUUID(),
             role: 'assistant',
             content: characterData.data.first_mes,
             timestamp: Date.now(),
@@ -426,7 +426,7 @@ useEffect(() => {
         // Now add the first message if available
         if (characterData.data.first_mes) {
           const firstMessage: Message = {
-            id: Date.now().toString(),
+            id: generateUUID(),
             role: 'assistant',
             content: characterData.data.first_mes,
             timestamp: Date.now(),
@@ -511,8 +511,23 @@ useEffect(() => {
         provider: APIProvider.KOBOLD, 
         url: 'http://localhost:5001',
         enabled: false,
-        templateId: 'mistral'
+        templateId: 'mistral',
+        generation_settings: {
+          max_length: 220,
+          max_context_length: 6144,
+          temperature: 1.05,
+          top_p: 0.92,
+          top_k: 100,
+          top_a: 0,
+          typical: 1,
+          tfs: 1,
+          rep_pen: 1.07,
+          rep_pen_range: 360,
+          rep_pen_slope: 0.7,
+          sampler_order: [6, 0, 1, 3, 4, 2, 5]
+        }
       };
+      
       
       // Now use the templateId from the API config
       console.log('Using template ID:', fullApiConfig.templateId);

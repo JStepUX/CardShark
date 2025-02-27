@@ -39,8 +39,16 @@ class TemplateHandler:
             for file_path in self.templates_dir.glob('*.json'):
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
-                        template = json.load(f)
-                        templates.append(template)
+                        try:
+                            template_data = json.load(f)
+                            # Validate template has required fields
+                            if self._validate_template_data(template_data, file_path):
+                                templates.append(template_data)
+                            else:
+                                self.logger.log_warning(f"Invalid template data in {file_path}")
+                        except json.JSONDecodeError as e:
+                            self.logger.log_error(f"Invalid JSON in template {file_path}: {str(e)}")
+                            continue
                 except Exception as e:
                     self.logger.log_error(f"Error loading template {file_path}: {str(e)}")
                     continue
@@ -52,12 +60,64 @@ class TemplateHandler:
             self.logger.log_error(f"Error getting templates: {str(e)}")
             self.logger.log_error(traceback.format_exc())
             return []
+    
+    def _validate_template_data(self, data: Any, file_path: Path) -> bool:
+        """Validate template data has required fields"""
+        # Check if data is a dictionary
+        if not isinstance(data, dict):
+            self.logger.log_warning(f"Template data in {file_path} is not a dictionary")
+            return False
+            
+        # Check for required fields
+        required_fields = ['id', 'name', 'userFormat', 'assistantFormat']
+        for field in required_fields:
+            if field not in data:
+                self.logger.log_warning(f"Template in {file_path} missing required field: {field}")
+                return False
+                
+        # Provide default values for optional fields
+        
+    def _validate_template_data(self, data: Any, file_path: Path) -> bool:
+        """Validate template data has required fields"""
+        # Check if data is a dictionary
+        if not isinstance(data, dict):
+            self.logger.log_warning(f"Template data in {file_path} is not a dictionary")
+            return False
+            
+        # Check for required fields
+        required_fields = ['id', 'name', 'userFormat', 'assistantFormat']
+        for field in required_fields:
+            if field not in data:
+                self.logger.log_warning(f"Template in {file_path} missing required field: {field}")
+                return False
+                
+        # Provide default values for optional fields
+        if 'description' not in data:
+            data['description'] = ''
+            
+        if 'isBuiltIn' not in data:
+            data['isBuiltIn'] = False
+            
+        if 'isEditable' not in data:
+            data['isEditable'] = True
+            
+        if 'detectionPatterns' not in data or not isinstance(data['detectionPatterns'], list):
+            data['detectionPatterns'] = []
+            
+        if 'stopSequences' not in data or not isinstance(data['stopSequences'], list):
+            data['stopSequences'] = []
+            
+        return True
             
     def save_template(self, template: Dict[str, Any]) -> bool:
         """Save a template to the file system"""
         try:
             if not template.get('id'):
                 self.logger.log_error("Template ID is required")
+                return False
+                
+            # Validate the template
+            if not self._validate_template_data(template, Path("new_template")):
                 return False
                 
             # Sanitize ID for filename
@@ -106,11 +166,15 @@ class TemplateHandler:
         """Save multiple templates at once"""
         try:
             success = True
+            saved_count = 0
             
             for template in templates:
-                if not self.save_template(template):
+                if self.save_template(template):
+                    saved_count += 1
+                else:
                     success = False
                     
+            self.logger.log_step(f"Saved {saved_count}/{len(templates)} templates")
             return success
             
         except Exception as e:

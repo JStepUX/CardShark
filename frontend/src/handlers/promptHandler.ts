@@ -5,7 +5,6 @@ import { templateService } from '../services/templateService';
 import { Template } from '../types/templateTypes';
 
 export class PromptHandler {
-  // Default generation parameters matching KoboldCPP exactly
   private static readonly DEFAULT_PARAMS = {
     n: 1,
     max_context_length: 6144,
@@ -298,9 +297,15 @@ ${character.data.mes_example || ''}
     // Generate unique key
     const genkey = `CKSH${Date.now().toString().slice(-4)}`;
 
-    // Create payload
+    // Merge default parameters with API-specific generation settings
+    const generationSettings = apiConfig?.generation_settings || {};
+    
+    // Create payload by combining DEFAULT_PARAMS with user-defined generation settings
     const payload = {
       ...this.DEFAULT_PARAMS,
+      // Override with user-specific settings
+      ...generationSettings,
+      // These must be included regardless
       memory,
       prompt: currentPrompt,
       genkey,

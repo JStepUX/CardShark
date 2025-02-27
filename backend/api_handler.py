@@ -142,33 +142,9 @@ class ApiHandler:
             api_key = api_config.get('apiKey')
             template = api_config.get('template')
 
-            # Extract generation parameters with defaults
+            # Extract basic required parameters
             prompt = generation_params.get('prompt')
             memory = generation_params.get('memory')
-            n = generation_params.get('n', 1)
-            max_context_length = generation_params.get('max_context_length', 6144)
-            max_length = generation_params.get('max_length', 220)
-            temperature = generation_params.get('temperature', 1.05)
-            top_p = generation_params.get('top_p', 0.92)
-            top_k = generation_params.get('top_k', 100)
-            typical = generation_params.get('typical', 1)
-            tfs = generation_params.get('tfs', 1)
-            rep_pen = generation_params.get('rep_pen', 1.07)
-            rep_pen_range = generation_params.get('rep_pen_range', 360)
-            rep_pen_slope = generation_params.get('rep_pen_slope', 0.7)
-            sampler_order = generation_params.get('sampler_order', [6, 0, 1, 3, 4, 2, 5])
-            trim_stop = generation_params.get('trim_stop', True)
-            min_p = generation_params.get('min_p', 0)
-            dynatemp_range = generation_params.get('dynatemp_range', 0.45)
-            dynatemp_exponent = generation_params.get('dynatemp_exponent', 1)
-            smoothing_factor = generation_params.get('smoothing_factor', 0)
-            banned_tokens = generation_params.get('banned_tokens', [])
-            logit_bias = generation_params.get('logit_bias', {})
-            presence_penalty = generation_params.get('presence_penalty', 0)
-            render_special = generation_params.get('render_special', False)
-            logprobs = generation_params.get('logprobs', False)
-            use_default_badwordsids = generation_params.get('use_default_badwordsids', False)
-            bypass_eos = generation_params.get('bypass_eos', False)
             stop_sequence = generation_params.get('stop_sequence', [
                 "<|im_end|>\n<|im_start|>user",
                 "<|im_end|>\n<|im_start|>assistant",
@@ -176,6 +152,41 @@ class ApiHandler:
                 "Assistant:"
             ])
             quiet = generation_params.get('quiet', True)
+            
+            # Default parameter values for generation settings
+            # These will be used if specific values are not provided
+            default_params = {
+                'n': 1,
+                'max_context_length': 6144,
+                'max_length': 220,
+                'temperature': 1.05,
+                'top_p': 0.92,
+                'top_k': 100,
+                'top_a': 0,
+                'typical': 1,
+                'tfs': 1,
+                'rep_pen': 1.07,
+                'rep_pen_range': 360,
+                'rep_pen_slope': 0.7,
+                'sampler_order': [6, 0, 1, 3, 4, 2, 5],
+                'trim_stop': True,
+                'min_p': 0,
+                'dynatemp_range': 0.45,
+                'dynatemp_exponent': 1,
+                'smoothing_factor': 0,
+                'banned_tokens': [],
+                'logit_bias': {},
+                'presence_penalty': 0,
+                'render_special': False,
+                'logprobs': False,
+                'use_default_badwordsids': False,
+                'bypass_eos': False
+            }
+            
+            # Extract all generation parameters from the request, using defaults if not provided
+            generation_settings = {}
+            for key, default_value in default_params.items():
+                generation_settings[key] = generation_params.get(key, default_value)
 
             # Validate required fields
             if not url:
@@ -191,37 +202,20 @@ class ApiHandler:
             if api_key:
                 headers['Authorization'] = f'Bearer {api_key}'
 
-            # Prepare request data
+            # Prepare request data by combining generation settings with required fields
             data = {
+                **generation_settings,
                 "prompt": prompt,
                 "memory": memory,
-                "n": n,
-                "max_context_length": max_context_length,
-                "max_length": max_length,
-                "temperature": temperature,
-                "top_p": top_p,
-                "top_k": top_k,
-                "typical": typical,
-                "tfs": tfs,
-                "rep_pen": rep_pen,
-                "rep_pen_range": rep_pen_range,
-                "rep_pen_slope": rep_pen_slope,
-                "sampler_order": sampler_order,
-                "trim_stop": trim_stop,
-                "min_p": min_p,
-                "dynatemp_range": dynatemp_range,
-                "dynatemp_exponent": dynatemp_exponent,
-                "smoothing_factor": smoothing_factor,
-                "banned_tokens": banned_tokens,
-                "logit_bias": logit_bias,
-                "presence_penalty": presence_penalty,
-                "render_special": render_special,
-                "logprobs": logprobs,
-                "use_default_badwordsids": use_default_badwordsids,
-                "bypass_eos": bypass_eos,
                 "stop_sequence": stop_sequence,
                 "quiet": quiet
             }
+            
+            # Log the request data for debugging
+            self.logger.log_step("Request data prepared with generation settings")
+            self.logger.log_step(f"Prompt length: {len(prompt) if prompt else 0} chars")
+            self.logger.log_step(f"Memory length: {len(memory) if memory else 0} chars")
+            self.logger.log_step(f"Using settings: max_length={data.get('max_length')}, temperature={data.get('temperature')}, top_p={data.get('top_p')}")
 
             self.logger.log_step("Starting streaming request with new payload format")
             

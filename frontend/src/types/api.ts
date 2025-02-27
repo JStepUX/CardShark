@@ -89,6 +89,27 @@ export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
   }
 };
 
+export interface GenerationSettings {
+  max_length?: number;
+  max_context_length?: number;
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  top_a?: number;
+  typical?: number;
+  tfs?: number;
+  rep_pen?: number;
+  rep_pen_range?: number;
+  rep_pen_slope?: number;
+  sampler_order?: number[];
+  trim_stop?: boolean;
+  min_p?: number;
+  dynatemp_range?: number;
+  dynatemp_exponent?: number;
+  smoothing_factor?: number;
+  presence_penalty?: number;
+}
+
 export interface APIConfig {
   id: string;
   provider: APIProvider;
@@ -97,6 +118,7 @@ export interface APIConfig {
   model?: ModelType;
   templateId: string;          // Only templateId, no template
   enabled: boolean;
+  generation_settings?: GenerationSettings;
   lastConnectionStatus?: {
     connected: boolean;
     timestamp: number;
@@ -109,7 +131,29 @@ export interface APIConfig {
   };
 }
 
-// Update createAPIConfig to use only templateId
+// Default generation settings for KoboldCPP
+export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
+  max_length: 220,
+  max_context_length: 6144,
+  temperature: 1.05,
+  top_p: 0.92,
+  top_k: 100,
+  top_a: 0,
+  typical: 1,
+  tfs: 1,
+  rep_pen: 1.07,
+  rep_pen_range: 360,
+  rep_pen_slope: 0.7,
+  sampler_order: [6, 0, 1, 3, 4, 2, 5],
+  trim_stop: true,
+  min_p: 0,
+  dynatemp_range: 0.45,
+  dynatemp_exponent: 1,
+  smoothing_factor: 0,
+  presence_penalty: 0
+};
+
+// Update createAPIConfig to use only templateId and include generation settings
 export function createAPIConfig(provider: APIProvider): APIConfig {
   const config = PROVIDER_CONFIGS[provider];
   return {
@@ -118,6 +162,7 @@ export function createAPIConfig(provider: APIProvider): APIConfig {
     url: config.defaultUrl,
     templateId: config.templateId,   // Only use templateId
     enabled: false,
-    model: config.defaultModel
+    model: config.defaultModel,
+    generation_settings: { ...DEFAULT_GENERATION_SETTINGS } // Include default generation settings
   };
 }

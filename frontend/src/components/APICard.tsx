@@ -1,13 +1,13 @@
-// APICard.tsx - Updated to use template service
 import React, { useState, useEffect } from 'react';
 import { Globe2, Key, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { 
   APIProvider, 
   APIConfig, 
-  PROVIDER_CONFIGS
+  PROVIDER_CONFIGS,
 } from '../types/api';
-import { templateService } from '../services/templateService';
 import { Template } from '../types/templateTypes';
+import { templateService } from '../services/templateService';
+import APIConfigurationPanel from './APIConfigurationPanel';
 
 interface APICardProps {
   api: APIConfig;
@@ -230,6 +230,14 @@ export const APICard: React.FC<APICardProps> = ({
             )}
           </div>
         </div>
+      )}
+      
+      {/* Generation Settings Panel */}
+      {api.provider === APIProvider.KOBOLD && (
+        <APIConfigurationPanel 
+          config={api}
+          onUpdate={onUpdate}
+        />
       )}
 
       {/* Action Buttons */}
