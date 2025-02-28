@@ -164,6 +164,29 @@ async def get_backgrounds():
 async def upload_background(file: UploadFile = File(...)):
     """Upload a new background image."""
     try:
+        # Verify the file is an image including GIF
+        content_type = file.content_type.lower()
+        if not content_type.startswith('image/'):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "File must be an image"
+                }
+            )
+            
+        # Check against allowed image types
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+        if content_type not in allowed_types:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": f"Unsupported image format. Allowed formats: {', '.join(t.split('/')[1] for t in allowed_types)}"
+                }
+            )
+        
+        # Read file content
         content = await file.read()
         result = background_handler.save_background(content, file.filename)
         
@@ -175,8 +198,11 @@ async def upload_background(file: UploadFile = File(...)):
                     "message": "Invalid image file"
                 }
             )
-        print(f"Uploaded Filename: {result['filename']}")
-        print(f"Uploaded path: {result['path']}")
+        
+        # For GIFs, add an isAnimated flag in the response
+        if file.filename.lower().endswith('.gif'):
+            result["isAnimated"] = True
+        
         return JSONResponse(
             status_code=200,
             content={

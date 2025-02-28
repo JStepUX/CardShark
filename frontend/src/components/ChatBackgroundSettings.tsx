@@ -6,6 +6,7 @@ export interface BackgroundSettings {
   background: Background | null;
   transparency: number; // 0-100
   fadeLevel: number; // 0-100
+  disableAnimation?: boolean; // New option to disable animation for GIFs
 }
 
 interface ChatBackgroundSettingsProps {
@@ -56,19 +57,23 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
     updateSettings({
       background: null,
       transparency: 85,
-      fadeLevel: 30
+      fadeLevel: 30,
+      disableAnimation: false
     });
   };
   
+  // Determine if current background is a GIF
+  const isAnimatedGif = localSettings.background?.isAnimated || false;
+  
   return (
-    <div className="p-6 bg-stone-900 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-      <h2 className="text-lg font-medium flex items-center gap-2 sticky top-0 bg-stone-900 pb-2 z-10">
+    <div className="p-6 bg-stone-900 rounded-lg space-y-6 w-full max-w-2xl">
+      <h2 className="text-lg font-medium flex items-center gap-2">
         <Image size={20} />
         Background Settings
       </h2>
       
-      {/* Preview with responsive design */}
-      <div className="space-y-2 my-4">
+      {/* Preview */}
+      <div className="space-y-2">
         <div className="flex justify-between items-center">
           <h3 className="text-sm font-medium">Preview</h3>
           <div className="flex gap-2">
@@ -88,12 +93,8 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
           </div>
         </div>
         
-        {/* Make the preview responsive and reasonable sized */}
         <div className="rounded-lg overflow-hidden border border-stone-700" 
-             style={{ 
-               aspectRatio: `${previewRatio}`,
-               maxHeight: '200px' // Limit preview height
-             }}>
+             style={{ aspectRatio: `${previewRatio}` }}>
           <div 
             className="relative w-full h-full"
             style={{
@@ -101,6 +102,8 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
               backgroundImage: localSettings.background?.url ? `url(${localSettings.background.url})` : 'none',
               backgroundSize: 'cover',
               backgroundPosition: 'center',
+              // If it's a GIF and animations are disabled, prevent animation
+              animationPlayState: isAnimatedGif && localSettings.disableAnimation ? 'paused' : 'running'
             }}
           >
             {/* Chat UI preview with transparency */}
@@ -124,16 +127,14 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
         </div>
       </div>
       
-      {/* Background Selection with scroll */}
-      <div className="max-h-[300px] overflow-y-auto my-4 pr-1">
-        <BackgroundSelector
-          selected={localSettings.background}
-          onSelect={handleBackgroundSelect}
-        />
-      </div>
+      {/* Background Selection */}
+      <BackgroundSelector
+        selected={localSettings.background}
+        onSelect={handleBackgroundSelect}
+      />
       
       {/* Transparency Slider */}
-      <div className="space-y-2 my-4">
+      <div className="space-y-2">
         <label className="flex justify-between">
           <span className="text-sm font-medium">UI Transparency</span>
           <span className="text-sm text-gray-400">{localSettings.transparency}%</span>
@@ -153,7 +154,7 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
       </div>
       
       {/* Fade Level Slider */}
-      <div className="space-y-2 my-4">
+      <div className="space-y-2">
         <label className="flex justify-between">
           <span className="text-sm font-medium">Background Blur</span>
           <span className="text-sm text-gray-400">{localSettings.fadeLevel}%</span>
@@ -172,8 +173,23 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
         </div>
       </div>
       
-      {/* Action Buttons - make sticky to bottom */}
-      <div className="flex justify-between pt-2 border-t border-stone-800 mt-4 sticky bottom-0 bg-stone-900 pb-1">
+      {/* Animation Control for GIFs */}
+      {isAnimatedGif && (
+        <div className="pt-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!localSettings.disableAnimation}
+              onChange={(e) => updateSettings({ disableAnimation: e.target.checked })}
+              className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm">Pause GIF animation</span>
+          </label>
+        </div>
+      )}
+      
+      {/* Action Buttons */}
+      <div className="flex justify-between pt-2 border-t border-stone-800">
         <button
           onClick={handleReset}
           className="flex items-center gap-1 px-3 py-2 bg-stone-800 hover:bg-stone-700 rounded"
@@ -200,6 +216,5 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
     </div>
   );
 };
-
 
 export default ChatBackgroundSettings;

@@ -34,8 +34,8 @@ class BackgroundHandler:
             self.logger.log_step("Listing background images")
             backgrounds = []
             
-            # Find all image files
-            image_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+            # Find all image files - now including .gif
+            image_extensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
             for file_path in self.backgrounds_dir.glob('*'):
                 if file_path.suffix.lower() in image_extensions:
                     try:
@@ -69,7 +69,8 @@ class BackgroundHandler:
             original_name = Path(original_filename).stem
             extension = Path(original_filename).suffix.lower()
             
-            if extension not in ['.jpg', '.jpeg', '.png', '.webp']:
+            # Check if it's a valid image format, now including .gif
+            if extension not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
                 self.logger.log_warning(f"Invalid image format: {extension}")
                 return None
             
@@ -83,10 +84,23 @@ class BackgroundHandler:
             with open(file_path, 'wb') as f:
                 f.write(file_content)
             
-            # Validate it's a valid image
+            # Validate it's a valid image - special handling for GIFs
             try:
-                with Image.open(file_path) as img:
-                    img.verify()
+                if extension.lower() == '.gif':
+                    # Just try to open the file to validate without calling verify()
+                    with Image.open(file_path) as img:
+                        # Check if it's animated by trying to seek to the second frame
+                        try:
+                            img.seek(1)
+                            is_animated = True
+                        except EOFError:
+                            is_animated = False
+                        
+                        self.logger.log_step(f"Validated GIF. Animated: {is_animated}")
+                else:
+                    # For non-GIFs, use verify()
+                    with Image.open(file_path) as img:
+                        img.verify()
             except Exception as e:
                 self.logger.log_error(f"Invalid image file: {str(e)}")
                 if file_path.exists():
@@ -143,8 +157,9 @@ class BackgroundHandler:
                 return
             
             # Copy default backgrounds if they don't already exist
+            # Now including .gif in the extensions
             for file_path in assets_dir.glob('*'):
-                if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.webp']:
+                if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
                     target_path = self.backgrounds_dir / file_path.name
                     
                     if not target_path.exists():

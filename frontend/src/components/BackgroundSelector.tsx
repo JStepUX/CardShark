@@ -9,6 +9,7 @@ export interface Background {
     filename: string;
     thumbnail?: string;
     isDefault?: boolean;
+    isAnimated?: boolean; // New property to identify GIFs
   }
   
   export interface BackgroundSelectorProps {
@@ -29,17 +30,6 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
   useEffect(() => {
     fetchBackgrounds();
   }, []);
-
-  // Add debugging useEffect
-  useEffect(() => {
-    if (backgrounds.length > 0) {
-      console.log('Background URLs:', backgrounds.map(bg => ({
-        id: bg.id,
-        name: bg.name,
-        url: bg.url
-      })));
-    }
-  }, [backgrounds]);
 
   const fetchBackgrounds = async () => {
     try {
@@ -66,7 +56,8 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             id: generateUUID(),
             name: bg.name,
             filename: bg.filename,
-            url: `/api/backgrounds/${encodeURIComponent(bg.filename)}`
+            url: `/api/backgrounds/${encodeURIComponent(bg.filename)}`,
+            isAnimated: bg.filename.toLowerCase().endsWith('.gif') // Check if it's a GIF
           }))
         ];
         
@@ -85,7 +76,7 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
+    // Validate file type - now including GIF
     if (!file.type.startsWith('image/')) {
       setError('Please select an image file');
       return;
@@ -115,7 +106,8 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
           id: generateUUID(),
           name: data.background.name,
           filename: data.background.filename,
-          url: `/api/backgrounds/${encodeURIComponent(data.background.filename)}`
+          url: `/api/backgrounds/${encodeURIComponent(data.background.filename)}`,
+          isAnimated: data.background.filename.toLowerCase().endsWith('.gif') // Check if it's a GIF
         };
 
         // Add to backgrounds list
@@ -181,7 +173,7 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
         <label className="cursor-pointer">
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/gif" // Added image/gif
             onChange={handleFileUpload}
             className="hidden"
           />
@@ -219,12 +211,15 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             {background.url ? (
               <div 
                 className="w-full h-full bg-cover bg-center"
-                style={{ 
-                  backgroundImage: `url(${background.url})`,
-                  // Add debug border
-                  border: '1px solid red' 
-                }}
-              />
+                style={{ backgroundImage: `url(${background.url})` }}
+              >
+                {/* Indicator for GIFs */}
+                {background.isAnimated && (
+                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded">
+                    GIF
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-stone-800">
                 <span className="text-gray-400">None</span>
