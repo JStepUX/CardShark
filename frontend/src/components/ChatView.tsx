@@ -7,10 +7,8 @@ import UserSelect from './UserSelect';
 import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
 import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSettings';
-import { Background } from './BackgroundSelector';
 import { useChatMessages, UserProfile } from '../hooks/useChatMessages';
 import { apiService } from '../services/apiService';
-import { generateUUID } from '../utils/generateUUID';
 
 // Default background settings
 const DEFAULT_BACKGROUND_SETTINGS: BackgroundSettings = {
