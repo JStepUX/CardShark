@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   RotateCw,
   ArrowRight,
@@ -19,10 +19,10 @@ interface Message {
 
 interface ChatBubbleProps {
   message: Message;
-  isGenerating: boolean; // Keep this for disabling buttons
+  isGenerating: boolean;
   onContentChange: (content: string) => void;
   onDelete: () => void;
-  onStop?: () => void;  // Keep for aborting
+  onStop?: () => void;
   onTryAgain: () => void;
   onNextVariation: () => void;
   onPrevVariation: () => void;
@@ -43,80 +43,133 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
   characterName,
 }) => {
   const contentRef = useRef<HTMLDivElement>(null);
-  const isMounted = useRef(true); // Keep for safety
+  const isMounted = useRef(true);
+  const previousContent = useRef<string>(message.content);
 
-    useEffect(() => {
-        return () => {
-            isMounted.current = false
-        }
-    }, [])
+  useEffect(() => {
+    return () => {
+      isMounted.current = false
+    }
+  }, []);
 
-  // Use useCallback for event handlers (good practice)
+  // Update previousContent when message content changes from external sources
+  useEffect(() => {
+    previousContent.current = message.content;
+  }, [message.content]);
+
+  // Track if user is currently editing (for debounced saves)
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // Use a timer for debounced saves during continuous editing
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Improved handler that tracks and detects actual changes
   const handleInput = useCallback(() => {
     if (contentRef.current && isMounted.current) {
       const newContent = contentRef.current.textContent || '';
-      onContentChange(newContent);
+      
+      // Only update if content has actually changed
+      if (newContent !== previousContent.current) {
+        // Update our tracking ref
+        previousContent.current = newContent;
+        
+        // Update UI immediately
+        onContentChange(newContent);
+        
+        // Set editing state if not already set
+        if (!isEditing) {
+          setIsEditing(true);
+        }
+        
+        // Clear any existing timer
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+        }
+        
+        // Set a debounced save timer
+        saveTimerRef.current = setTimeout(() => {
+          console.log(`Debounced content update for message ${message.id}`);
+          // This will trigger the actual save
+          onContentChange(newContent);
+          saveTimerRef.current = null;
+        }, 1500); // 1.5 second debounce
+        
+        // Log that we're updating context due to user edit
+        console.log(`Content updated for message ${message.id}. Updating context...`);
+      }
     }
-  }, [onContentChange, isMounted]);
+  }, [onContentChange, message.id, isEditing]);
 
-//   const handleFocus = useCallback(() => {
-//     setIsEditing(true); //Might not need
-//   }, []);
+  // Process content to highlight special formatting
+  const processContent = (text: string): React.ReactNode[] => {
+    const segments = text
+      .split(/(".*?"|\*.*?\*|`.*?`|\{\{.*?\}\})/g)
+      .filter(Boolean);
 
-//   const handleBlur = useCallback(() => {
-//     setIsEditing(false); //Might not need.
-//     if (contentRef.current && isMounted.current) {
-//         onContentChange(contentRef.current.textContent || '');
-//     }
-//   }, [onContentChange, isMounted]);
+    return segments.map((segment, index) => {
+      const processedSegment = segment
+        .replace(/{{user}}/gi, currentUser || 'User')
+        .replace(/{{char}}/gi, characterName || 'Character');
 
-  // Simplified processContent (for basic highlighting)
-    const processContent = (text: string): React.ReactNode[] => {
-        const segments = text
-        .split(/(".*?"|\*.*?\*|`.*?`|\{\{.*?\}\})/g)
-        .filter(Boolean);
-
-        return segments.map((segment, index) => {
-        const processedSegment = segment
-            .replace(/{{user}}/gi, currentUser || 'User')
-            .replace(/{{char}}/gi, characterName || 'Character');
-
-        if (segment.match(/^".*"$/)) {
-            return (
-            <span key={index} style={{ color: '#FFB86C' }}>
-                {processedSegment}
-            </span>
-            );
-        }
-        if (segment.match(/^\*.*\*$/)) {
-            return (
-            <span key={index} style={{ color: '#8BE9FD' }}>
-                {processedSegment}
-            </span>
-            );
-        }
-        if (segment.match(/^`.*`$/)) {
-            return (
-            <span key={index} style={{ color: '#F1FA8C' }}>
-                {processedSegment}
-            </span>
-            );
-        }
-        if (segment.match(/^\{\{.*\}\}$/)) {
-            return (
-            <span key={index} style={{ color: '#FF79C6' }}>
-                {processedSegment}
-            </span>
-            );
-        }
-        return processedSegment;
-        });
-    };
+      if (segment.match(/^".*"$/)) {
+        return (
+          <span key={index} style={{ color: '#FFB86C' }}>
+            {processedSegment}
+          </span>
+        );
+      }
+      if (segment.match(/^\*.*\*$/)) {
+        return (
+          <span key={index} style={{ color: '#8BE9FD' }}>
+            {processedSegment}
+          </span>
+        );
+      }
+      if (segment.match(/^`.*`$/)) {
+        return (
+          <span key={index} style={{ color: '#F1FA8C' }}>
+            {processedSegment}
+          </span>
+        );
+      }
+      if (segment.match(/^\{\{.*\}\}$/)) {
+        return (
+          <span key={index} style={{ color: '#FF79C6' }}>
+            {processedSegment}
+          </span>
+        );
+      }
+      return processedSegment;
+    });
+  };
 
   const bubbleClass =
     message.role === 'user'
       ? 'bg-stone-900 text-white self-end'
       : 'bg-stone-900 text-gray-300 self-start';
+
+  // Handle blur events to ensure we save when focus leaves the element
+  const handleBlur = useCallback(() => {
+    // When user stops editing (blur), clear any pending save timer
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    
+    // Only process the blur if we were editing
+    if (isEditing) {
+      setIsEditing(false);
+      
+      // Get the final content
+      const finalContent = contentRef.current?.textContent || '';
+      
+      // Only save if content actually changed
+      if (finalContent !== message.content) {
+        console.log(`Saving content on blur for message ${message.id}`);
+        onContentChange(finalContent);
+      }
+    }
+  }, [isEditing, message.id, message.content, onContentChange]);
 
   return (
     <div className={`w-full rounded-lg transition-colors ${bubbleClass}`}>
@@ -185,11 +238,10 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
       <div className="p-4">
         <div
           ref={contentRef}
-          contentEditable={!isGenerating} // Always editable unless generating
+          contentEditable={!isGenerating}
           suppressContentEditableWarning
           onInput={handleInput}
-        //   onFocus={handleFocus}
-        //   onBlur={handleBlur}
+          onBlur={handleBlur}  
           onPaste={(e) => {
             e.preventDefault();
             const text = e.clipboardData.getData('text/plain');
@@ -200,7 +252,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
         >
             {message.aborted
               ? <span className="text-red-400">Generation aborted.</span>
-              :  processContent(message.content)
+              : processContent(message.content)
             }
         </div>
       </div>

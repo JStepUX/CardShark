@@ -1,5 +1,6 @@
 import requests # type: ignore
 import json
+import re
 from typing import Dict, Optional, Tuple, Generator
 
 class ApiHandler:
@@ -44,7 +45,7 @@ class ApiHandler:
                     response_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
                     self.logger.log_step(f"Got response text: {response_text}")
                     
-                    # Detect template from response (this is handled elsewhere)
+                    # Detect template from response
                     template = self._detect_template(response_text)
                     template_name = template['name'] if template else 'Unknown'
                     self.logger.log_step(f"Detected template: {template_name}")
@@ -78,6 +79,21 @@ class ApiHandler:
             error = f"Unexpected error: {str(e)}"
             self.logger.log_error(error)
             return False, error, None
+    
+    def _detect_template(self, response_text: str) -> Optional[Dict]:
+        """Simple template detection from response text."""
+        try:
+            if '<|im_start|>' in response_text or '<|im_end|>' in response_text:
+                return {'name': 'ChatML', 'id': 'chatml'}
+            elif '[/INST]' in response_text:
+                return {'name': 'Mistral', 'id': 'mistral'}
+            elif '</s>' in response_text:
+                return {'name': 'Mistral', 'id': 'mistral'}
+            else:
+                return None
+        except Exception as e:
+            self.logger.log_error(f"Template detection error: {str(e)}")
+            return None
         
     def wake_api(self, url: str, api_key: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         """Light-weight check to wake up API if sleeping."""
@@ -132,15 +148,41 @@ class ApiHandler:
             self.logger.log_error(error)
             return False, error
 
+    # This function is removed as we want to pass through API responses unmodified
+    # The templates and stop sequences should handle this instead
+    # def clean_response_text(self, text: str) -> str:
+    #    """Clean response text from artifacts and special characters."""
+    #    # Remove any non-ascii characters at the end (like "ρκε" in the example)
+    #    text = re.sub(r'[^\x00-\x7F]+$', '', text)
+    #    
+    #    # Remove any trailing special tokens like </s>
+    #    text = re.sub(r'</s>$', '', text)
+    #    
+    #    # Trim whitespace
+    #    text = text.strip()
+    #    
+    #    return text
+
     def stream_generate(self, request_data: Dict) -> Generator[bytes, None, None]:
         """Stream generate tokens from the API."""
         try:
+            # Extract API config and generation params from the request
             api_config = request_data.get('api_config', {})
             generation_params = request_data.get('generation_params', {})
 
+            # Extract from API config - using templateId consistently
             url = api_config.get('url')
             api_key = api_config.get('apiKey')
-            template = api_config.get('template')
+            templateId = api_config.get('templateId')  # Use templateId, not template
+            template_format = api_config.get('template_format')  # Get template format information
+            generation_settings = api_config.get('generation_settings', {})
+
+            # Log what we're using
+            self.logger.log_step(f"Using API URL: {url}")
+            self.logger.log_step(f"Using templateId: {templateId}")
+            if template_format:
+                self.logger.log_step(f"Using template: {template_format.get('name', 'Unknown')}")
+                self.logger.log_step(f"Template format: {template_format}")
 
             # Extract basic required parameters
             prompt = generation_params.get('prompt')
@@ -148,46 +190,42 @@ class ApiHandler:
             stop_sequence = generation_params.get('stop_sequence', [
                 "<|im_end|>\n<|im_start|>user",
                 "<|im_end|>\n<|im_start|>assistant",
+                "</s>",
                 "User:",
                 "Assistant:"
             ])
             quiet = generation_params.get('quiet', True)
             
-            # Default parameter values for generation settings
-            # These will be used if specific values are not provided
-            default_params = {
-                'n': 1,
-                'max_context_length': 6144,
-                'max_length': 220,
-                'temperature': 1.05,
-                'top_p': 0.92,
-                'top_k': 100,
-                'top_a': 0,
-                'typical': 1,
-                'tfs': 1,
-                'rep_pen': 1.07,
-                'rep_pen_range': 360,
-                'rep_pen_slope': 0.7,
-                'sampler_order': [6, 0, 1, 3, 4, 2, 5],
-                'trim_stop': True,
-                'min_p': 0,
-                'dynatemp_range': 0.45,
-                'dynatemp_exponent': 1,
-                'smoothing_factor': 0,
-                'banned_tokens': [],
-                'logit_bias': {},
-                'presence_penalty': 0,
-                'render_special': False,
-                'logprobs': False,
-                'use_default_badwordsids': False,
-                'bypass_eos': False
-            }
+            # Add </s> to stop sequences if not already present
+            if "</s>" not in stop_sequence:
+                stop_sequence.append("</s>")
             
-            # Extract all generation parameters from the request, using defaults if not provided
-            generation_settings = {}
-            for key, default_value in default_params.items():
-                generation_settings[key] = generation_params.get(key, default_value)
+            # Save context window for debugging if provided
+            context_window = generation_params.get('context_window')
+            if context_window:
+                self.logger.log_step("Saving context window for debugging")
+                try:
+                    # Get base directory
+                    import sys
+                    import os
+                    from pathlib import Path
+                    
+                    base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+                    
+                    # Create context directory if it doesn't exist
+                    context_dir = base_dir / 'context'
+                    context_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Context file path
+                    context_file = context_dir / 'latest_context.json'
+                    
+                    # Write the context data
+                    with open(context_file, 'w', encoding='utf-8') as f:
+                        json.dump(context_window, f, indent=2)
 
+                except Exception as e:
+                    self.logger.log_error(f"Error saving context window: {str(e)}")
+            
             # Validate required fields
             if not url:
                 raise ValueError("API URL is missing in api_config")
@@ -202,13 +240,26 @@ class ApiHandler:
             if api_key:
                 headers['Authorization'] = f'Bearer {api_key}'
 
+            # Ensure URL has protocol and correct endpoint
+            if not url.startswith(('http://', 'https://')):
+                url = f'http://{url}'
+                
+            # Different endpoints for different APIs
+            if '/api/extra/generate/stream' not in url and '/api/generate' not in url:
+                # Append the appropriate endpoint if not already there
+                url = url.rstrip('/') + '/api/extra/generate/stream'
+
             # Prepare request data by combining generation settings with required fields
+            # Get generation settings from api_config or use defaults from generation_params
+            combined_settings = {**generation_settings}
+            # Add required parameters
             data = {
-                **generation_settings,
+                **combined_settings,
                 "prompt": prompt,
                 "memory": memory,
                 "stop_sequence": stop_sequence,
-                "quiet": quiet
+                "quiet": quiet,
+                "trim_stop": True  # Add trim_stop parameter to ensure clean output
             }
             
             # Log the request data for debugging
@@ -216,14 +267,20 @@ class ApiHandler:
             self.logger.log_step(f"Prompt length: {len(prompt) if prompt else 0} chars")
             self.logger.log_step(f"Memory length: {len(memory) if memory else 0} chars")
             self.logger.log_step(f"Using settings: max_length={data.get('max_length')}, temperature={data.get('temperature')}, top_p={data.get('top_p')}")
-
-            self.logger.log_step("Starting streaming request with new payload format")
+            self.logger.log_step(f"API URL: {url}")
+            self.logger.log_step(f"Streaming to URL: {url}")
             
             # Make the streaming request
             with requests.post(url, headers=headers, json=data, stream=True) as response:
                 if response.status_code != 200:
                     error_msg = f"Generation failed with status {response.status_code}"
                     yield f"data: {json.dumps({'error': {'message': error_msg}})}\n\n".encode('utf-8')
+                    self.logger.log_error(error_msg)
+                    try:
+                        error_body = response.text
+                        self.logger.log_error(f"Error response: {error_body}")
+                    except:
+                        pass
                     return
 
                 for line in response.iter_lines():
@@ -233,20 +290,29 @@ class ApiHandler:
                     try:
                         line_text = line.decode('utf-8')
                         if line_text.startswith('data: '):
-                            # Parse the response to ensure it's valid JSON
-                            content = json.loads(line_text[6:])
-                            # Format it consistently
-                            if isinstance(content, str):
-                                formatted_content = {'content': content}
-                            else:
-                                formatted_content = content
-                                
-                            # Send properly formatted SSE
-                            yield f"data: {json.dumps(formatted_content)}\n\n".encode('utf-8')
+                            # Extract the data portion (after "data: ")
+                            data_portion = line_text[6:]
                             
-                    except json.JSONDecodeError as e:
-                        self.logger.log_error(f"JSON decode error on line: {line_text}")
-                        continue
+                            # Parse the response to ensure it's valid JSON
+                            try:
+                                content = json.loads(data_portion)
+                                
+                                # Pass through the content directly without cleaning
+                                # This prevents slowdowns from unnecessary text processing
+                                if isinstance(content, str):
+                                    formatted_content = {'content': content}
+                                else:
+                                    formatted_content = content
+                                    
+                                # Send properly formatted SSE without any extra processing
+                                yield f"data: {json.dumps(formatted_content)}\n\n".encode('utf-8')
+                                
+                            except json.JSONDecodeError:
+                                # If not valid JSON, just pass through the raw content
+                                # This is probably plain text from KoboldCPP
+                                formatted_content = {'content': data_portion}
+                                yield f"data: {json.dumps(formatted_content)}\n\n".encode('utf-8')
+                            
                     except Exception as e:
                         self.logger.log_error(f"Error processing line: {e}")
                         continue

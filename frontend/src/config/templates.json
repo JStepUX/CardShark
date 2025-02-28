@@ -1,124 +1,217 @@
 [
-{
-    "search": ["<|im_start|>assistant", "<|im_end|>", "<|im_sep|>"],
-    "name": "ChatML (Phi 4)",
-    "adapter": {
-        "system_start": "<|im_start|>system<|im_sep|>",
-        "system_end": "<|im_end|>",
-        "user_start": "<|im_start|>user<|im_sep|>",
-        "user_end": "<|im_end|>",
-        "assistant_start": "<|im_start|>assistant<|im_sep|>",
-        "assistant_end": "<|im_end|>"
+    {
+      "search": ["<|im_start|>assistant", "<|im_end|>", "<|im_sep|>"],
+      "name": "ChatML (Phi 4)",
+      "id": "chatml-phi4",
+      "description": "Modern ChatML format used by Phi-4 models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|im_start|>system<|im_sep|>{{content}}<|im_end|>",
+      "userFormat": "<|im_start|>user<|im_sep|>{{content}}<|im_end|>",
+      "assistantFormat": "<|im_start|>assistant<|im_sep|>{{char}}: {{content}}<|im_end|>",
+      "memoryFormat": "<|im_start|>system<|im_sep|>{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>",
+      "detectionPatterns": ["<|im_start|>", "<|im_end|>", "<|im_sep|>"],
+      "stopSequences": [
+        "<|im_end|>\\n<|im_start|>user",
+        "<|im_end|>\\n<|im_start|>assistant",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["<|im_start|>assistant", "<|im_end|>", "You are provided with function signatures within <tools>"],
+      "name": "ChatML (Qwen 2.5 based)",
+      "id": "chatml-qwen",
+      "description": "ChatML format used by Qwen models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|im_start|>system\n\n{{content}}<|im_end|>\n\n",
+      "userFormat": "<|im_start|>user\n\n{{content}}<|im_end|>\n\n",
+      "assistantFormat": "<|im_start|>assistant\n\n{{char}}: {{content}}<|im_end|>\n\n",
+      "memoryFormat": "<|im_start|>system\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>\n\n",
+      "tools_start": "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n\n<tools>\n",
+      "tools_end": "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n",
+      "detectionPatterns": ["<|im_start|>", "<|im_end|>"],
+      "stopSequences": [
+        "<|im_end|>\\n<|im_start|>user",
+        "<|im_end|>\\n<|im_start|>assistant",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["<|im_start|>assistant", "<|im_end|>"],
+      "name": "ChatML (Generic)",
+      "id": "chatml",
+      "description": "Generic ChatML format commonly used by many models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|im_start|>system\n\n{{content}}<|im_end|>\n\n",
+      "userFormat": "<|im_start|>user\n\n{{content}}<|im_end|>\n\n",
+      "assistantFormat": "<|im_start|>assistant\n\n{{char}}: {{content}}<|im_end|>\n\n",
+      "memoryFormat": "<|im_start|>system\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>\n\n",
+      "detectionPatterns": ["<|im_start|>", "<|im_end|>"],
+      "stopSequences": [
+        "<|im_end|>\\n<|im_start|>user",
+        "<|im_end|>\\n<|im_start|>assistant",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["System role not supported", "<start_of_turn>"],
+      "name": "Google Gemma 2",
+      "id": "gemma2",
+      "description": "Format for Google Gemma 2 models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": null,
+      "userFormat": "<start_of_turn>user\n{{content}}<end_of_turn>\n",
+      "assistantFormat": "<start_of_turn>model\n{{char}}: {{content}}<end_of_turn>\n",
+      "memoryFormat": "Persona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}",
+      "detectionPatterns": ["<start_of_turn>", "<end_of_turn>"],
+      "stopSequences": [
+        "<start_of_turn>",
+        "<end_of_turn>",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["<|start_header_id|>system"],
+      "name": "Llama 3.x",
+      "id": "llama3",
+      "description": "Format for Llama 3 models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|start_header_id|>system<|end_header_id|>\n\n{{content}}<|eot_id|>\n\n",
+      "userFormat": "<|start_header_id|>user<|end_header_id|>\n\n{{content}}<|eot_id|>\n\n",
+      "assistantFormat": "<|start_header_id|>assistant<|end_header_id|>\n\n{{char}}: {{content}}<|eot_id|>\n\n",
+      "memoryFormat": "<|start_header_id|>system<|end_header_id|>\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|eot_id|>\n\n",
+      "detectionPatterns": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
+      "stopSequences": [
+        "<|eot_id|>",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["[/INST]", "[SYSTEM_PROMPT]"],
+      "name": "Mistral V7 (with system prompt)",
+      "id": "mistral-v7",
+      "description": "Format for Mistral V7 models with system prompt support",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "[SYSTEM_PROMPT] {{content}} [/SYSTEM_PROMPT]",
+      "userFormat": "[INST] {{content}} [/INST]",
+      "assistantFormat": " {{char}}: {{content}}</s>",
+      "memoryFormat": "[SYSTEM_PROMPT] {{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}} [/SYSTEM_PROMPT]",
+      "detectionPatterns": ["[/INST]", "[SYSTEM_PROMPT]"],
+      "stopSequences": [
+        "[/INST]",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["[/INST]", "\"[INST] \" + system_message"],
+      "name": "Mistral V3",
+      "id": "mistral-v3",
+      "description": "Format for Mistral V3 models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "[INST] {{content}} [/INST] ",
+      "userFormat": "[INST] {{content}} [/INST] ",
+      "assistantFormat": "{{char}}: {{content}}</s>",
+      "memoryFormat": "[INST] {{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}} [/INST] ",
+      "detectionPatterns": ["[/INST]"],
+      "stopSequences": [
+        "[/INST]",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["[/INST]"],
+      "name": "Mistral (Generic)",
+      "id": "mistral",
+      "description": "Format for Mistral models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "[INST]{{content}}[/INST]\n",
+      "userFormat": "[INST]{{content}}[/INST]\n",
+      "assistantFormat": "{{char}}: {{content}}</s>",
+      "memoryFormat": "[INST]{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}[/INST]\n",
+      "detectionPatterns": ["[/INST]"],
+      "stopSequences": [
+        "[INST]",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["<|system|>", "<|user|>"],
+      "name": "Phi 3.5",
+      "id": "phi-3.5",
+      "description": "Format for Phi 3.5 models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|system|>\n{{content}}<|end|>\n",
+      "userFormat": "<|user|>\n{{content}}<|end|>\n",
+      "assistantFormat": "<|assistant|>\n{{char}}: {{content}}<|end|>\n",
+      "memoryFormat": "<|system|>\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|end|>\n",
+      "detectionPatterns": ["<|system|>", "<|user|>"],
+      "stopSequences": [
+        "<|end|>",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["<|START_OF_TURN_TOKEN|>"],
+      "name": "Cohere (Aya Expanse 32B based)",
+      "id": "cohere",
+      "description": "Format for Cohere models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{content}}<|END_OF_TURN_TOKEN|>",
+      "userFormat": "<|START_OF_TURN_TOKEN|><|USER_TOKEN|>{{content}}<|END_OF_TURN_TOKEN|>",
+      "assistantFormat": "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{{char}}: {{content}}<|END_OF_TURN_TOKEN|>",
+      "memoryFormat": "<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|END_OF_TURN_TOKEN|>",
+      "detectionPatterns": ["<|START_OF_TURN_TOKEN|>"],
+      "stopSequences": [
+        "<|END_OF_TURN_TOKEN|>",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
+    },
+    {
+      "search": ["<｜User｜>"],
+      "name": "DeepSeek V2.5",
+      "id": "deepseek",
+      "description": "Format for DeepSeek V2.5 models",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "",
+      "userFormat": "<｜User｜>{{content}}",
+      "assistantFormat": "<｜Assistant｜>{{char}}: {{content}}<｜end▁of▁sentence｜>",
+      "memoryFormat": "Persona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}",
+      "detectionPatterns": ["<｜User｜>"],
+      "stopSequences": [
+        "<｜end▁of▁sentence｜>",
+        "User:",
+        "Assistant:",
+        "{{char}}:"
+      ]
     }
-}, {
-    "search": ["<|im_start|>assistant", "<|im_end|>", "You are provided with function signatures within <tools>"],
-    "name": "ChatML (Qwen 2.5 based).",
-    "adapter": {
-        "system_start": "<|im_start|>system\n\n",
-        "system_end": "<|im_end|>\n\n",
-        "user_start": "<|im_start|>user\n\n",
-        "user_end": "<|im_end|>\n\n",
-        "assistant_start": "<|im_start|>assistant\n\n",
-        "assistant_end": "<|im_end|>\n\n",
-        "tools_start": "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n\n<tools>\n",
-        "tools_end": "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n"
-    }
-}, {
-    "search": ["<|im_start|>assistant", "<|im_end|>"],
-    "name": "ChatML (Generic).",
-    "adapter": {
-        "system_start": "<|im_start|>system\n\n",
-        "system_end": "<|im_end|>\n\n",
-        "user_start": "<|im_start|>user\n\n",
-        "user_end": "<|im_end|>\n\n",
-        "assistant_start": "<|im_start|>assistant\n\n",
-        "assistant_end": "<|im_end|>\n\n"
-    }
-}, {
-    "search": ["System role not supported", "<start_of_turn>"],
-    "name": "Google Gemma 2.",
-    "adapter": {
-        "user_start": "<start_of_turn>user\n",
-        "user_end": "<end_of_turn>\n",
-        "assistant_start": "<start_of_turn>model\n",
-        "assistant_end": "<end_of_turn>\n"
-    }
-}, {
-    "search": ["<|start_header_id|>system"],
-    "name": "Llama 3.x.",
-    "adapter": {
-        "system_start": "<|start_header_id|>system<|end_header_id|>\n\n",
-        "system_end": "<|eot_id|>\n\n",
-        "user_start": "<|start_header_id|>user<|end_header_id|>\n\n",
-        "user_end": "<|eot_id|>\n\n",
-        "assistant_start": "<|start_header_id|>assistant<|end_header_id|>\n\n",
-        "assistant_end": "<|eot_id|>\n\n"
-    }
-}, {
-    "search": ["[/INST]", "[SYSTEM_PROMPT]"],
-    "name": "Mistral V7 (with system prompt)",
-    "adapter": {
-        "system_start": "[SYSTEM_PROMPT] ",
-        "system_end": "[/SYSTEM_PROMPT]",
-        "user_start": "[INST] ",
-        "user_end": "[/INST]",
-        "assistant_start": " ",
-        "assistant_end": "</s>"
-    }
-}, {
-    "search": ["[/INST]", "\"[INST] \" + system_message"],
-    "name": "Mistral V3",
-    "adapter": {
-        "system_start": "[INST] ",
-        "system_end": "[/INST] ",
-        "user_start": "[INST] ",
-        "user_end": "[/INST] ",
-        "assistant_start": "",
-        "assistant_end": "</s>"
-    }
-}, {
-    "search": ["[/INST]"],
-    "name": "Mistral (Generic)",
-    "adapter": {
-        "system_start": "[INST]",
-        "system_end": "[/INST]\n",
-        "user_start": "[INST]",
-        "user_end": "[/INST]\n",
-        "assistant_start": "",
-        "assistant_end": "</s>"
-    }
-}, {
-    "search": ["<|system|>", "<|user|>"],
-    "name": "Phi 3.5",
-    "adapter": {
-        "system_start": "<|system|>\n",
-        "system_end": "<|end|>\n",
-        "user_start": "<|user|>\n",
-        "user_end": "<|end|>\n",
-        "assistant_start": "<|assistant|>\n",
-        "assistant_end": "<|end|>\n"
-    }
-}, {
-    "search": ["<|START_OF_TURN_TOKEN|>"],
-    "name": "Cohere (Aya Expanse 32B based)",
-    "adapter": {
-        "system_start": "<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>",
-        "system_end": "<|END_OF_TURN_TOKEN|>",
-        "user_start": "<|START_OF_TURN_TOKEN|><|USER_TOKEN|>",
-        "user_end": "<|END_OF_TURN_TOKEN|>",
-        "assistant_start": "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>",
-        "assistant_end": "<|END_OF_TURN_TOKEN|>"
-    }
-}, {
-    "search": ["<｜User｜>"],
-    "name": "DeepSeek V2.5",
-    "adapter": {
-        "system_start": "",
-        "system_end": "",
-        "user_start": "<｜User｜>",
-        "user_end": "",
-        "assistant_start": "<｜Assistant｜>",
-        "assistant_end": "<｜end▁of▁sentence｜>"
-    }
-}
-]
+  ]

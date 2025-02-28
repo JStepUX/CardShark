@@ -683,20 +683,60 @@ async def save_chat_state(request: Request):
                 "message": f"Failed to save chat: {str(e)}"
             }
         )
-
     
 @app.post("/api/generate")
 async def generate_message(request: Request):
     """Handle streaming message generation request."""
     try:
-        data = await request.json() # Get the full request body as JSON
-        logger.log_step("Received generation request with new payload format")
+        data = await request.json()  # Get the full request body as JSON
+        logger.log_step("Received generation request")
 
-        # ... (API settings check remains the same) ...
+        # Extract API config and generation params
+        api_config = data.get('api_config', {})
+        generation_params = data.get('generation_params', {})
+        
+        # Log important configuration details
+        logger.log_step(f"API Config Provider: {api_config.get('provider')}")
+        logger.log_step(f"API URL: {api_config.get('url')}")
+        logger.log_step(f"Using templateId: {api_config.get('templateId')}")
+        
+        # Log generation settings if present
+        generation_settings = api_config.get('generation_settings', {})
+        if generation_settings:
+            logger.log_step(f"Generation settings received: {generation_settings}")
+        
+        # Validate API configuration
+        if not api_config.get('url'):
+            raise HTTPException(
+                status_code=400,
+                detail="API URL is required in the configuration"
+            )
+            
+        # Check if API is enabled
+        if not api_config.get('enabled', False):
+            logger.log_warning("API not enabled in configuration, but attempting generation anyway")
+        
+        # Get template information if available
+        if 'template' in api_config:
+            # Handle legacy template field by converting to templateId
+            logger.log_step("Converting legacy template field to templateId")
+            api_config['templateId'] = api_config.pop('template')
+        
+        # Always prioritize templateId over template
+        if not api_config.get('templateId'):
+            logger.log_warning("No templateId found, defaulting to 'mistral'")
+            api_config['templateId'] = 'mistral'  # Default template
 
-        # Pass the entire request data to api_handler.stream_generate
+        # Ensure generation_settings is passed correctly
+        # Create a deep copy to avoid modifying the original
+        processed_data = {
+            'api_config': dict(api_config),
+            'generation_params': dict(generation_params)
+        }
+        
+        # Pass the processed request data to api_handler.stream_generate
         return StreamingResponse(
-            api_handler.stream_generate(data), # Pass the data here
+            api_handler.stream_generate(processed_data),
             media_type='text/event-stream',
             headers={
                 'Cache-Control': 'no-cache',
@@ -707,11 +747,12 @@ async def generate_message(request: Request):
 
     except Exception as e:
         logger.log_error(f"Error in stream generation: {str(e)}")
+        logger.log_error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/test-connection")
 async def test_api_connection(request: Request):
-    """Test connection to an API endpoint."""
+    """Test connection to an API endpoint with improved template handling."""
     try:
         # Get request data and log it
         data = await request.json()
@@ -721,7 +762,7 @@ async def test_api_connection(request: Request):
         api_key = data.get('apiKey')
         provider = data.get('provider')
         model = data.get('model')
-        template_id = data.get('templateId')  # Added support for templateId
+        template_id = data.get('templateId')  # Now properly using templateId
         
         if not url:
             logger.log_warning("No URL provided")
@@ -785,7 +826,6 @@ async def test_api_connection(request: Request):
         )
         
         logger.log_step(f"Response status: {response.status_code}")
-        logger.log_step(f"Response headers: {dict(response.headers)}")
         
         try:
             response_data = response.json()
@@ -796,12 +836,36 @@ async def test_api_connection(request: Request):
         
         if response.status_code == 200:
             logger.log_step("Connection test successful")
+            
+            # Get model info
+            model_info = {
+                "id": response_data.get("model") or response_data.get("id") or model or "unknown",
+                "name": response_data.get("model_name") or response_data.get("name") or response_data.get("model") or provider
+            }
+            
+            # Try to detect template from response content
+            detected_template = None
+            if response_data and response_data.get("choices") and len(response_data["choices"]) > 0:
+                choice = response_data["choices"][0]
+                content = choice.get("message", {}).get("content") or choice.get("text", "")
+                
+                # Super simple detection - look for common template markers
+                if "<|im_start|>" in content or "<|im_end|>" in content:
+                    detected_template = "chatml"
+                elif "[/INST]" in content:
+                    detected_template = "mistral"
+                elif "<|start_header_id|>" in content:
+                    detected_template = "llama3"
+                
+                logger.log_step(f"Detected template: {detected_template}")
+            
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Connection successful",
-                    "model": response_data.get('model') if response_data else None,
+                    "model": model_info,
+                    "detected_template": detected_template,
                     "timestamp": time.time()
                 }
             )

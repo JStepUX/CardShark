@@ -11,7 +11,7 @@ export interface Template {
   isEditable: boolean;  // Whether user can edit this template
   
   // Template formatting fields
-  systemFormat?: string;   // Format for system messages
+  systemFormat?: string | null | undefined;   // Format for system messages
   userFormat: string;      // Format for user messages
   assistantFormat: string; // Format for assistant messages
   memoryFormat?: string;   // Format for memory/context section
@@ -21,6 +21,13 @@ export interface Template {
   
   // Default stop sequences
   stopSequences?: string[];  // Default stop sequences for this template
+  
+  // Optional fields for tool support etc.
+  tools_start?: string;    // Format for tool definitions start
+  tools_end?: string;      // Format for tool definitions end
+  
+  // Field for backwards compatibility with search patterns
+  search?: string[];       // Patterns used to identify this template
 }
 
 /**
@@ -48,6 +55,7 @@ export enum TokenType {
   DESCRIPTION = '{{description}}',   // Character description 
   PERSONALITY = '{{personality}}',   // Character personality
   SCENARIO = '{{scenario}}',         // Character scenario
+  EXAMPLES = '{{examples}}',         // Example messages/dialogues
   
   // Conditional tokens
   IF_SYSTEM = '{{#if system}}',      // If system prompt exists

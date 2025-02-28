@@ -4,12 +4,6 @@ import sys
 from pathlib import Path
 from typing import Dict, Any
 
-import json
-import os
-import sys
-from pathlib import Path
-from typing import Dict, Any
-
 class SettingsManager:
     def __init__(self, logger):
         self.logger = logger
@@ -47,28 +41,39 @@ class SettingsManager:
                 with open(self.settings_file, 'r') as f:
                     stored_settings = json.load(f)
                     
-                    # Convert any legacy template field to templateId
-                    if 'api' in stored_settings and isinstance(stored_settings['api'], dict):
-                        api_config = stored_settings['api']
-                        if 'template' in api_config:
-                            self.logger.log_step("Converting legacy 'template' to 'templateId'")
-                            api_config['templateId'] = api_config['template']
-                            api_config.pop('template')  # Remove the old field
-                    
-                    # Check all API configs in the 'apis' field
-                    if 'apis' in stored_settings and isinstance(stored_settings['apis'], dict):
-                        for api_id, api_config in stored_settings['apis'].items():
-                            if isinstance(api_config, dict) and 'template' in api_config:
-                                self.logger.log_step(f"Converting API {api_id} legacy 'template' to 'templateId'")
-                                api_config['templateId'] = api_config['template']
-                                api_config.pop('template')  # Remove the old field
-                    
                     # Merge with defaults in case new settings were added
                     merged = {**default_settings, **stored_settings}
                     
                     # Ensure API settings exist with defaults
                     if 'api' not in merged:
                         merged['api'] = default_settings['api']
+                    
+                    # Ensure the API config uses templateId
+                    if 'api' in merged and isinstance(merged['api'], dict):
+                        api_config = merged['api']
+                        # Remove any legacy template field
+                        if 'template' in api_config:
+                            self.logger.log_step("Removing legacy 'template' field from settings")
+                            api_config.pop('template')
+                        
+                        # Ensure templateId exists
+                        if 'templateId' not in api_config:
+                            self.logger.log_step("Adding missing 'templateId' field to settings")
+                            api_config['templateId'] = 'mistral'  # Default template
+                    
+                    # Check all API configs in the 'apis' field
+                    if 'apis' in merged and isinstance(merged['apis'], dict):
+                        for api_id, api_config in merged['apis'].items():
+                            if isinstance(api_config, dict):
+                                # Remove any legacy template field
+                                if 'template' in api_config:
+                                    self.logger.log_step(f"Removing legacy 'template' field from API {api_id}")
+                                    api_config.pop('template')
+                                
+                                # Ensure templateId exists
+                                if 'templateId' not in api_config:
+                                    self.logger.log_step(f"Adding missing 'templateId' field to API {api_id}")
+                                    api_config['templateId'] = 'mistral'  # Default template
                     
                     return merged
             
@@ -104,6 +109,10 @@ class SettingsManager:
                     # Check if templateId is present
                     if 'templateId' in api_config:
                         self.logger.log_step(f"  - Found templateId: {api_config['templateId']}")
+                    else:
+                        # Ensure templateId is set
+                        self.logger.log_step(f"  - No templateId found, setting default")
+                        api_config['templateId'] = 'mistral'  # Default template
                     
                     # Check if generation_settings is present
                     if 'generation_settings' in api_config:
@@ -144,9 +153,10 @@ class SettingsManager:
                         # Just use new config
                         updated_apis[api_id] = api_config
                     
-                    # Verify the final config has templateId if it was in the original data
-                    if 'templateId' in api_config and 'templateId' not in updated_apis[api_id]:
-                        self.logger.log_error(f"templateId lost during merge for {api_id}!")
+                    # Verify the final config has templateId
+                    if 'templateId' not in updated_apis[api_id]:
+                        self.logger.log_warning(f"templateId missing from final config for {api_id}, adding default")
+                        updated_apis[api_id]['templateId'] = 'mistral'
                     
                     # Log the final API config
                     self.logger.log_step(f"Final API {api_id} config: {updated_apis[api_id]}")
@@ -184,11 +194,15 @@ class SettingsManager:
         try:
             self.logger.log_step(f"Updating API settings: {updates}")
             
-            # Convert any legacy template to templateId
+            # Remove any legacy template field
             if 'template' in updates:
-                self.logger.log_step(f"Converting legacy 'template' to 'templateId': {updates['template']}")
-                updates['templateId'] = updates['template']
-                updates.pop('template')  # Remove the old field
+                self.logger.log_warning(f"Removing legacy 'template' field from updates")
+                updates.pop('template')
+            
+            # Ensure templateId exists
+            if 'templateId' not in updates:
+                self.logger.log_step("Adding missing 'templateId' field to updates")
+                updates['templateId'] = 'mistral'  # Default template
             
             current_api = self.settings.get('api', {})
             
@@ -201,10 +215,6 @@ class SettingsManager:
             # Update API settings
             updated_api = {**current_api, **updates}
             
-            # Remove any legacy template field
-            if 'template' in updated_api:
-                updated_api.pop('template')
-                
             self.settings['api'] = updated_api
             
             # Save settings
@@ -242,6 +252,28 @@ class SettingsManager:
                 api_settings = json_settings['api']
                 self.logger.log_step(f"Pre-save API enabled state: {api_settings.get('enabled')}")
                 self.logger.log_step(f"Pre-save API enabled type: {type(api_settings.get('enabled'))}")
+                
+                # Ensure templateId exists and no template field
+                if 'template' in api_settings:
+                    self.logger.log_warning("Removing legacy 'template' field before saving")
+                    api_settings.pop('template')
+                    
+                if 'templateId' not in api_settings:
+                    self.logger.log_step("Adding missing 'templateId' field before saving")
+                    api_settings['templateId'] = 'mistral'  # Default template
+            
+            # Check APIs field
+            if 'apis' in json_settings:
+                for api_id, api_config in json_settings['apis'].items():
+                    # Remove any legacy template field
+                    if 'template' in api_config:
+                        self.logger.log_warning(f"Removing legacy 'template' field from API {api_id} before saving")
+                        api_config.pop('template')
+                    
+                    # Ensure templateId exists
+                    if 'templateId' not in api_config:
+                        self.logger.log_step(f"Adding missing 'templateId' field to API {api_id} before saving")
+                        api_config['templateId'] = 'mistral'  # Default template
             
             # Save to file
             with open(self.settings_file, 'w') as f:
@@ -256,6 +288,7 @@ class SettingsManager:
             if 'api' in saved_content:
                 self.logger.log_step(f"Post-save API enabled state: {saved_content['api'].get('enabled')}")
                 self.logger.log_step(f"Post-save API enabled type: {type(saved_content['api'].get('enabled'))}")
+                self.logger.log_step(f"Post-save API templateId: {saved_content['api'].get('templateId')}")
             
             return True
             
@@ -314,6 +347,16 @@ class SettingsManager:
             # Special handling for API settings
             if key == 'api':
                 if isinstance(value, dict):
+                    # Remove any legacy template field
+                    if 'template' in value:
+                        self.logger.log_warning("Removing legacy 'template' field from API settings")
+                        value.pop('template')
+                    
+                    # Ensure templateId exists
+                    if 'templateId' not in value:
+                        self.logger.log_step("Adding missing 'templateId' field to API settings")
+                        value['templateId'] = 'mistral'  # Default template
+                    
                     current_api = self.settings.get('api', {})
                     self.settings['api'] = {**current_api, **value}
                     return self._save_settings(self.settings)
@@ -324,34 +367,4 @@ class SettingsManager:
             
         except Exception as e:
             self.logger.log_error(f"Error updating setting '{key}': {str(e)}")
-            return False
-
-    def update_api_settings(self, updates: Dict[str, Any]) -> bool:
-        """Update API settings and maintain connection state."""
-        try:
-            self.logger.log_step(f"Updating API settings: {updates}")
-            current_api = self.settings.get('api', {})
-            
-            # Preserve connection status if not explicitly changed
-            if ('lastConnectionStatus' not in updates and 
-                'lastConnectionStatus' in current_api):
-                updates['lastConnectionStatus'] = current_api['lastConnectionStatus']
-                self.logger.log_step("Preserved existing connection status")
-                
-            # Update API settings
-            updated_api = {**current_api, **updates}
-            self.settings['api'] = updated_api
-            
-            # Save settings
-            success = self._save_settings(self.settings)
-            if success:
-                self.logger.log_step("API settings saved successfully")
-                self.logger.log_step(f"Current API state: {json.dumps(updated_api, indent=2)}")
-            else:
-                self.logger.log_warning("Failed to save API settings")
-                
-            return success
-            
-        except Exception as e:
-            self.logger.log_error(f"Error updating API settings: {str(e)}")
             return False

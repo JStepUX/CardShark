@@ -3,17 +3,9 @@ import { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { CharacterData } from '../contexts/CharacterContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import { APIConfigContext } from '../contexts/APIConfigContext';
-import { APIConfig, APIProvider, ChatTemplate } from '../types/api';
+import { APIConfig, APIProvider } from '../types/api';
 import { generateUUID } from '../utils/generateUUID';
 import { apiService } from '../services/apiService';
-
-const defaultApiConfig: APIConfig = {
-  id: 'default',
-  provider: APIProvider.KOBOLD,
-  url: 'http://localhost:5001',
-  templateId: ChatTemplate.MISTRAL,
-  enabled: true
-};
 
 export interface Message {
   id: string;
@@ -144,6 +136,36 @@ export function useChatMessages(characterData: CharacterData | null) {
       console.error('Error clearing context window:', err);
     }
   };
+
+  // Create debounced save function with closure to handle different message IDs
+  const createDebouncedSave = () => {
+    const timers: Record<string, NodeJS.Timeout> = {};
+    
+    return (messageId: string, messages: Message[]) => {
+      // Clear previous timer for this message if it exists
+      if (timers[messageId]) {
+        clearTimeout(timers[messageId]);
+      }
+      
+      // Set new timer
+      timers[messageId] = setTimeout(() => {
+        console.log(`Debounced save triggered for message ${messageId}`);
+        saveChat(messages);
+        
+        // Find the message to update in the backend
+        const message = messages.find(msg => msg.id === messageId);
+        if (message) {
+          appendMessage(message);
+        }
+        
+        // Clean up timer reference
+        delete timers[messageId];
+      }, 1500); // 1.5 second debounce
+    };
+  };
+  
+  // Initialize the debounced save function
+  const debouncedSave = createDebouncedSave();
 
   // For saving context window:
 useEffect(() => {
@@ -310,22 +332,83 @@ useEffect(() => {
     if (!characterData?.data?.name) return;
   
     try {
+      // Log the append/update operation
+      console.log(`Appending/updating message ${message.id} to chat`);
+      
       await apiService.appendChatMessage(characterData, message);
     } catch (err) {
-      console.error('Error appending message:', err);
+      console.error('Error appending/updating message:', err);
     }
   };
 
   // Message management with save hooks
   const updateMessage = (messageId: string, content: string) => {
     setState(prev => {
-      const newMessages = prev.messages.map(msg =>
-        msg.id === messageId
-          ? { ...msg, content, variations: [content], currentVariation: 0 }
-          : msg
-      );
-      saveChat(newMessages);
-      return { ...prev, messages: newMessages };
+      // Find the message to update
+      const msgIndex = prev.messages.findIndex(msg => msg.id === messageId);
+      if (msgIndex === -1) return prev; // Message not found
+      
+      const messageToUpdate = prev.messages[msgIndex];
+      
+      // Skip update if content hasn't changed
+      if (messageToUpdate.content === content) return prev;
+      
+      // Create new messages array with the updated message
+      const newMessages = [...prev.messages];
+      
+      // Update the message with new content and track variations
+      newMessages[msgIndex] = { 
+        ...messageToUpdate, 
+        content, 
+        // Update variations if they exist, otherwise create new array with original and edited
+        variations: messageToUpdate.variations 
+          ? [...messageToUpdate.variations, content] 
+          : [messageToUpdate.content, content],
+        // Set current variation to the last one (the new content)
+        currentVariation: messageToUpdate.variations 
+          ? messageToUpdate.variations.length 
+          : 1
+      };
+      
+      // Create context window update information to track the edit
+      const updatedContextWindow = {
+        type: 'message_edited',
+        timestamp: new Date().toISOString(),
+        messageId,
+        role: messageToUpdate.role,
+        previousContent: messageToUpdate.content,
+        newContent: content,
+        messageIndex: msgIndex,
+        characterName: characterData?.data?.name || 'Unknown'
+      };
+      
+      // Determine if this is a rapid edit (from typing) or a completed edit (from blur)
+      const isCompletedEdit = messageToUpdate.content !== content && 
+                            (!messageToUpdate.variations || 
+                             messageToUpdate.variations.indexOf(content) === -1);
+      
+      if (isCompletedEdit) {
+        // This appears to be a final edit - save immediately
+        console.log(`Completed edit detected for message ${messageId}, saving now`);
+        saveChat(newMessages);
+        
+        // Also specifically update this message in the backend
+        appendMessage({
+          ...newMessages[msgIndex],
+          timestamp: Date.now() // Update timestamp to show it was edited
+        });
+      } else {
+        // This might be a rapid edit during typing - use debounced save
+        console.log(`Potential ongoing edit for message ${messageId}, using debounced save`);
+        // Use the debounced save function we defined earlier
+        debouncedSave(messageId, newMessages);
+      }
+      
+      return { 
+        ...prev, 
+        messages: newMessages,
+        lastContextWindow: updatedContextWindow 
+      };
     });
   };
 
@@ -395,7 +478,7 @@ useEffect(() => {
   const generateResponse = async (prompt: string) => {
     if (!characterData || state.isGenerating) return;
     console.log('Starting generation for prompt:', prompt);
-
+  
     // Handle /new command for new chat
     if (prompt === '/new') {
       console.log('Handling /new command - creating new chat');
@@ -426,11 +509,11 @@ useEffect(() => {
         // Now add the first message if available
         if (characterData.data.first_mes) {
           const firstMessage: Message = {
-            id: generateUUID(),
+            id: generateUUID(), // Use generateUUID instead of timestamp
             role: 'assistant',
             content: characterData.data.first_mes,
             timestamp: Date.now(),
-            variations: [],
+            variations: [characterData.data.first_mes], // Initialize variations array
             currentVariation: 0,
           };
           
@@ -465,16 +548,18 @@ useEffect(() => {
       
       return;
     }
-
+  
     const userMessage: Message = {
-      id: generateUUID(),
+      id: generateUUID(), // Use generateUUID instead of timestamp
       role: 'user',
       content: prompt,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      variations: [prompt], // Initialize variations array
+      currentVariation: 0,
     };
   
     const assistantMessage: Message = {
-      id: generateUUID(),
+      id: generateUUID(), // Use generateUUID instead of timestamp
       role: 'assistant',
       content: '',
       timestamp: Date.now() + 1,
@@ -506,31 +591,71 @@ useEffect(() => {
       const contextMessages = state.messages.map(({ role, content }) => ({ role, content }));
       
       // Create a proper API config with required fields
-      const fullApiConfig: APIConfig = apiConfig || {
-        id: 'default',
-        provider: APIProvider.KOBOLD, 
-        url: 'http://localhost:5001',
-        enabled: false,
-        templateId: 'mistral',
-        generation_settings: {
-          max_length: 220,
-          max_context_length: 6144,
-          temperature: 1.05,
-          top_p: 0.92,
-          top_k: 100,
-          top_a: 0,
-          typical: 1,
-          tfs: 1,
-          rep_pen: 1.07,
-          rep_pen_range: 360,
-          rep_pen_slope: 0.7,
-          sampler_order: [6, 0, 1, 3, 4, 2, 5]
-        }
-      };
+      // Ensure we're preserving the original apiConfig structure and settings
+      let fullApiConfig: APIConfig;
       
+      if (apiConfig) {
+        // Make a deep copy to ensure we don't modify the original
+        fullApiConfig = JSON.parse(JSON.stringify(apiConfig));
+        
+        // Log the original API config
+        console.log('Original API config:', {
+          ...apiConfig,
+          apiKey: apiConfig.apiKey ? '[REDACTED]' : undefined
+        });
+        
+        // Ensure generation_settings exists
+        if (!fullApiConfig.generation_settings) {
+          console.warn('API config missing generation_settings, adding defaults');
+          fullApiConfig.generation_settings = {
+            max_length: 220,
+            max_context_length: 6144,
+            temperature: 1.05,
+            top_p: 0.92,
+            top_k: 100,
+            top_a: 0,
+            typical: 1,
+            tfs: 1,
+            rep_pen: 1.07,
+            rep_pen_range: 360,
+            rep_pen_slope: 0.7,
+            sampler_order: [6, 0, 1, 3, 4, 2, 5]
+          };
+        }
+      } else {
+        // If no API config provided, create a default one
+        console.warn('No API config provided, using defaults');
+        fullApiConfig = {
+          id: 'default',
+          provider: APIProvider.KOBOLD, 
+          url: 'http://localhost:5001',
+          enabled: false,
+          templateId: 'mistral',
+          generation_settings: {
+            max_length: 220,
+            max_context_length: 6144,
+            temperature: 1.05,
+            top_p: 0.92,
+            top_k: 100,
+            top_a: 0,
+            typical: 1,
+            tfs: 1,
+            rep_pen: 1.07,
+            rep_pen_range: 360,
+            rep_pen_slope: 0.7,
+            sampler_order: [6, 0, 1, 3, 4, 2, 5]
+          }
+        };
+      }
       
       // Now use the templateId from the API config
       console.log('Using template ID:', fullApiConfig.templateId);
+      
+      // Log generation settings to verify they're being passed correctly
+      console.log('Generation settings being passed:', fullApiConfig.generation_settings);
+      
+      // Log context message count for debugging
+      console.log(`Using ${contextMessages.length} messages for context, including edited versions`);
       
       // Create context window object for tracking
       const contextWindow = {
@@ -541,11 +666,23 @@ useEffect(() => {
         messageHistory: contextMessages,
         userMessage: userMessage,
         assistantMessageId: assistantMessage.id,
-        config: fullApiConfig, // Use the full API config
+        config: {
+          ...fullApiConfig,
+          apiKey: fullApiConfig.apiKey ? '[REDACTED]' : null // Don't log the actual API key
+        },
         systemPrompt: characterData.data?.system_prompt || '',
         firstMes: characterData.data?.first_mes || '',
         personality: characterData.data?.personality || '',
-        scenario: characterData.data?.scenario || ''
+        scenario: characterData.data?.scenario || '',
+        // Add information about edited messages
+        editedMessages: state.messages
+          .filter(msg => msg.variations && msg.variations.length > 1)
+          .map(msg => ({
+            id: msg.id,
+            role: msg.role,
+            variationCount: msg.variations?.length || 0,
+            currentVariation: msg.currentVariation || 0
+          }))
       };
       
       // Update state with context window
@@ -558,22 +695,22 @@ useEffect(() => {
         characterData,
         prompt,
         contextMessages,
-        fullApiConfig, // Use the full API config
+        fullApiConfig, // Use the full API config with proper generation settings
         abortController.signal
       );
-
+  
       if (!response.ok) {
         throw new Error('Generation failed - check API settings');
       }
-
+  
       console.log('Starting to process stream');
       let newContent = '';
       let chunkCount = 0;
-
+  
       for await (const chunk of PromptHandler.streamResponse(response)) {
         chunkCount++;
         newContent += chunk;
-
+  
         setState(prev => {
           const updatedMessages = prev.messages.map(msg =>
             msg.id === assistantMessage.id ? { ...msg, content: newContent } : msg
@@ -584,9 +721,9 @@ useEffect(() => {
           };
         });
       }
-
+  
       console.log('Stream complete, chunks:', chunkCount);
-
+  
       // Update with final content and variations
       setState(prev => {
         const finalMessages = prev.messages.map(msg =>
@@ -614,7 +751,7 @@ useEffect(() => {
           lastContextWindow: updatedContextWindow
         };
       });
-
+  
       // Save assistant message
       await appendMessage({
         ...assistantMessage,
@@ -622,7 +759,7 @@ useEffect(() => {
         variations: [newContent],
         currentVariation: 0
       });
-
+  
     } catch (err) {
       console.error('Error during generation:', err);
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -972,6 +1109,6 @@ useEffect(() => {
     stopGeneration,
     setCurrentUser,
     loadExistingChat,
-    clearError  
+    clearError
   };
 }

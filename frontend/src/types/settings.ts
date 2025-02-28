@@ -8,6 +8,24 @@ export interface Settings {
   theme: 'dark' | 'light';
   version: string;
   
+  // API Configuration - backwards compatibility
+  api?: {
+    enabled: boolean;
+    url: string;
+    apiKey: string | null;
+    templateId: string;
+    lastConnectionStatus?: {
+      connected: boolean;
+      timestamp: number;
+      error?: string;
+    };
+    model_info?: {
+      id: string;
+      name?: string;
+      provider?: string;
+    };
+  };
+  
   // API Configurations
   apis: Record<string, APIConfig>;
 }
@@ -24,15 +42,3 @@ export const DEFAULT_SETTINGS: Settings = {
     ['default_kobold']: createAPIConfig(APIProvider.KOBOLD)
   }
 };
-
-// Type guard to validate settings
-export function isValidSettings(settings: any): settings is Settings {
-  return (
-    settings &&
-    typeof settings.character_directory === 'string' &&
-    typeof settings.save_to_character_directory === 'boolean' &&
-    (settings.theme === 'dark' || settings.theme === 'light') &&
-    typeof settings.version === 'string' &&
-    typeof settings.apis === 'object'
-  );
-}

@@ -94,6 +94,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     top_a: config.generation_settings?.top_a ?? 0,
     typical: config.generation_settings?.typical ?? 1,
     tfs: config.generation_settings?.tfs ?? 1,
+    min_p: config.generation_settings?.min_p ?? 0,
     rep_pen: config.generation_settings?.rep_pen ?? 1.07,
     rep_pen_range: config.generation_settings?.rep_pen_range ?? 360,
     rep_pen_slope: config.generation_settings?.rep_pen_slope ?? 0.7,
@@ -112,6 +113,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
         top_a: config.generation_settings.top_a ?? 0,
         typical: config.generation_settings.typical ?? 1,
         tfs: config.generation_settings.tfs ?? 1,
+        min_p: config.generation_settings.min_p ?? 0,
         rep_pen: config.generation_settings.rep_pen ?? 1.07,
         rep_pen_range: config.generation_settings.rep_pen_range ?? 360,
         rep_pen_slope: config.generation_settings.rep_pen_slope ?? 0.7,
@@ -178,7 +180,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
                 label="Temperature"
                 value={settings.temperature}
                 onChange={val => handleSettingChange('temperature', val)}
-                min={0.1}
+                min={0.0}
                 max={2}
                 step={0.05}
                 tooltip="Controls randomness (higher = more random)"
@@ -239,6 +241,16 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
                 max={1}
                 step={0.01}
                 tooltip="Tail-free sampling parameter"
+                width="w-full"
+              />
+              <NumberField
+                label="Min P"
+                value={settings.min_p}
+                onChange={val => handleSettingChange('min_p', val)}
+                min={0}
+                max={1}
+                step={0.01}
+                tooltip="Minimum probability threshold for token selection"
                 width="w-full"
               />
             </div>

@@ -189,7 +189,7 @@ class ChatHandler:
             self.logger.log_error(f"Error initializing chat file: {str(e)}")
 
     def _format_message(self, msg: Dict, character_name: str) -> Dict:
-        """Format a message to match Silly Tavern format."""
+        """Enhanced format to store message ID and variations for proper syncing."""
         is_user = msg.get('role') == 'user'
         
         # Handle timestamp conversion
@@ -207,7 +207,11 @@ class ChatHandler:
             "is_system": False,
             "send_date": datetime.fromtimestamp(timestamp/1000).strftime("%B %d, %Y %I:%M%p"),
             "mes": msg.get('content', ''),
-            "extra": {}
+            "extra": {
+                # Store the unique message ID in the extra field
+                "id": msg.get('id', str(timestamp)),
+                "edited": 'variations' in msg and len(msg.get('variations', [])) > 1
+            }
         }
 
         # Add variations if present
@@ -219,15 +223,15 @@ class ChatHandler:
             if not is_user:
                 formatted['gen_started'] = datetime.fromtimestamp(timestamp/1000).isoformat() + "Z"
                 formatted['gen_finished'] = datetime.fromtimestamp((timestamp + 100)/1000).isoformat() + "Z"
-                formatted['extra'] = {
-                    "api": "koboldcpp",
-                    "model": "unknown"
-                }
+                formatted['extra']['api'] = "koboldcpp"
+                formatted['extra']['model'] = msg.get('model', "unknown")
 
         return formatted
 
     def _convert_to_internal_format(self, message: Dict) -> Optional[Dict]:
-        """Convert a Silly Tavern message to our internal format."""
+        """
+        Convert a saved message format to our internal format, preserving edits and variations.
+        """
         # Skip metadata object
         if "chat_metadata" in message:
             return None
@@ -241,9 +245,19 @@ class ChatHandler:
                     timestamp = int(dt.timestamp() * 1000)
                 except:
                     pass
-                                            
+                    
+            # Get unique message ID, preferring the one in extra.id
+            message_id = None
+            if "extra" in message and isinstance(message["extra"], dict):
+                message_id = message["extra"].get("id")
+                
+            if not message_id:
+                # Generate a new UUID if no ID found
+                from uuid import uuid4
+                message_id = str(uuid4())
+                                        
             converted = {
-                "id": message.get("id", str(timestamp)),
+                "id": message_id,
                 "role": "user" if message.get("is_user", False) else "assistant",
                 "content": message.get("mes", ""),
                 "timestamp": timestamp
@@ -252,29 +266,117 @@ class ChatHandler:
             # Handle variations if present
             if "swipes" in message:
                 converted["variations"] = message["swipes"]
-                converted["currentVariation"] = message.get("swipe_id", 0)
-                
+                # Use swipe_id as currentVariation index if available
+                if "swipe_id" in message:
+                    converted["currentVariation"] = message.get("swipe_id", 0)
+                else:
+                    # Default to the last variation (most recent edit)
+                    converted["currentVariation"] = len(message["swipes"]) - 1
+                    
+            # Preserve any additional metadata from extra field
+            if "extra" in message and isinstance(message["extra"], dict):
+                # Don't duplicate 'id' which we already handled
+                extra = {k: v for k, v in message["extra"].items() if k != 'id'}
+                if extra:
+                    converted["extra"] = extra
+                    
             return converted
         except Exception as e:
             self.logger.log_error(f"Error converting message: {str(e)}")
             return None
 
+    def _get_message_id(self, formatted_message: Dict) -> Optional[str]:
+        """
+        Extract unique message ID from formatted message.
+        
+        Since the actual message ID might be stored in different places depending on the format,
+        this helper ensures we can find and compare IDs consistently.
+        """
+        # Check for ID in extra field (this is where we'll store it)
+        if 'extra' in formatted_message and isinstance(formatted_message['extra'], dict):
+            message_id = formatted_message['extra'].get('id')
+            if message_id:
+                return message_id
+                
+        # If no ID in extra, check for 'id' at the root level
+        return formatted_message.get('id')
+    
     def append_message(self, character_data: Dict, message: Dict) -> bool:
-        """Append a single message to the current chat file."""
+        """
+        Append or update a single message in the current chat file.
+        If a message with the same ID already exists, it will be updated.
+        This enables proper saving of edited messages.
+        """
         try:
             char_name = character_data.get('data', {}).get('name', 'unknown')
             chat_file = self._get_or_create_chat_file(character_data, force_new=False)
             
-            with open(chat_file, 'a', encoding='utf-8') as f:
-                formatted_message = self._format_message(message, char_name)
-                json.dump(formatted_message, f)
-                f.write('\n')
+            # Check if the message has an ID (should always have one)
+            message_id = message.get('id')
+            if not message_id:
+                self.logger.log_warning("Attempted to append message without ID")
+                return False
                 
-            self.logger.log_step(f"Appended message to {chat_file}")
-            return True
+            # Read existing messages to check if this is an update
+            existing_messages = []
+            updated_existing = False
             
+            with open(chat_file, 'r', encoding='utf-8') as f:
+                # Skip the first line (metadata)
+                first_line = f.readline()
+                metadata = json.loads(first_line) if first_line.strip() else {}
+                
+                # Read all other messages
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    try:
+                        msg_data = json.loads(line)
+                        
+                        # Check if this is the message we're updating
+                        existing_id = self._get_message_id(msg_data)
+                        if existing_id and existing_id == message_id:
+                            # Found the message to update
+                            updated_existing = True
+                            formatted_message = self._format_message(message, char_name)
+                            existing_messages.append(formatted_message)
+                            self.logger.log_step(f"Updating existing message with ID {message_id}")
+                        else:
+                            # Keep the existing message
+                            existing_messages.append(msg_data)
+                    except json.JSONDecodeError:
+                        # Skip invalid lines
+                        self.logger.log_warning(f"Skipping invalid JSON line in chat file")
+                        continue
+            
+            if updated_existing:
+                # Rewrite the entire file with the updated message
+                with open(chat_file, 'w', encoding='utf-8') as f:
+                    # Write the metadata first
+                    json.dump(metadata, f)
+                    f.write('\n')
+                    
+                    # Write all messages
+                    for msg in existing_messages:
+                        json.dump(msg, f)
+                        f.write('\n')
+                        
+                self.logger.log_step(f"Updated message with ID {message_id}")
+                return True
+            else:
+                # It's a new message, append it normally
+                with open(chat_file, 'a', encoding='utf-8') as f:
+                    formatted_message = self._format_message(message, char_name)
+                    json.dump(formatted_message, f)
+                    f.write('\n')
+                    
+                self.logger.log_step(f"Appended new message with ID {message_id}")
+                return True
+                
         except Exception as e:
-            self.logger.log_error(f"Failed to append message: {str(e)}")
+            self.logger.log_error(f"Failed to append/update message: {str(e)}")
             return False
 
     def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None) -> bool:

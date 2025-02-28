@@ -29,8 +29,20 @@ export const APICard: React.FC<APICardProps> = ({
 
   // Load available templates on component mount
   useEffect(() => {
-    setTemplates(templateService.getAllTemplates());
-  }, []);
+    const allTemplates = templateService.getAllTemplates();
+    setTemplates(allTemplates);
+    console.log(`Loaded ${allTemplates.length} templates for selection`);
+    
+    // Check if the selected template exists
+    if (api.templateId) {
+      const selectedTemplate = templateService.getTemplateById(api.templateId);
+      if (!selectedTemplate) {
+        console.warn(`Template with ID "${api.templateId}" not found, using default template`);
+      } else {
+        console.log(`Selected template: ${selectedTemplate.name}`);
+      }
+    }
+  }, [api.templateId]);
 
   const handleTest = async () => {
     try {
@@ -190,7 +202,7 @@ export const APICard: React.FC<APICardProps> = ({
         </div>
       )}
 
-      {/* Template Selection (use templates from templateService) */}
+      {/* Template Selection */}
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-2">
           Chat Template
@@ -208,6 +220,15 @@ export const APICard: React.FC<APICardProps> = ({
             </option>
           ))}
         </select>
+        <div className="mt-1 text-xs text-gray-500">
+          {api.templateId ? (
+            templateService.getTemplateById(api.templateId) ? 
+              `Using ${templateService.getTemplateById(api.templateId)?.name} template` : 
+              `Template ID "${api.templateId}" not found`
+          ) : (
+            "No template selected, will use default"
+          )}
+        </div>
       </div>
 
       {/* Error Message */}

@@ -1,4 +1,3 @@
-// Updated handlers/promptHandler.ts to use templateService without Handlebars
 import { CharacterCard } from '../types/schema';
 import { APIConfig } from '../types/api';
 import { templateService } from '../services/templateService';
@@ -36,6 +35,8 @@ export class PromptHandler {
 
   // Simple variable replacement function
   private static replaceVariables(template: string, variables: Record<string, string>): string {
+    if (!template) return '';
+    
     let result = template;
     
     // Replace each variable in the template
@@ -48,50 +49,54 @@ export class PromptHandler {
   }
 
   /**
- * Get a template by ID from the template service
- * @param templateId The ID of the template to retrieve
- * @returns The template or null if not found
- */
-private static getTemplate(templateId?: string): Template | null {
-  // If templateId is provided, try to get that template
-  if (templateId) {
-    console.log(`Looking up template with ID: ${templateId}`);
-    const template = templateService.getTemplateById(templateId);
-    if (template) {
-      console.log(`Found template: ${template.name}`);
-      return template;
+   * Get a template by ID from the template service
+   * @param templateId The ID of the template to retrieve
+   * @returns The template or null if not found
+   */
+  private static getTemplate(templateId?: string): Template | null {
+    // If templateId is provided, try to get that template
+    if (templateId) {
+      console.log(`Looking up template with ID: ${templateId}`);
+      const template = templateService.getTemplateById(templateId);
+      if (template) {
+        console.log(`Found template: ${template.name}`);
+        return template;
+      } else {
+        console.warn(`Template not found for ID: ${templateId}`);
+      }
     } else {
-      console.warn(`Template not found for ID: ${templateId}`);
+      console.warn('No templateId provided');
     }
-  } else {
-    console.warn('No templateId provided');
+     
+    // Fallback to mistral template or first available
+    console.log('Falling back to default template');
+    const defaultTemplate = templateService.getTemplateById('mistral') ||
+                           templateService.getAllTemplates()[0] ||
+                           null;
+    
+    if (defaultTemplate) {
+      console.log(`Using default template: ${defaultTemplate.name}`);
+    } else {
+      console.error('No templates available');
+    }
+    
+    return defaultTemplate;
   }
-   
-  // Fallback to mistral template or first available
-  console.log('Falling back to default template');
-  const defaultTemplate = templateService.getTemplateById('mistral') ||
-                         templateService.getAllTemplates()[0] ||
-                         null;
-  
-  if (defaultTemplate) {
-    console.log(`Using default template: ${defaultTemplate.name}`);
-  } else {
-    console.error('No templates available');
-  }
-  
-  return defaultTemplate;
-}
 
   // Create memory context from character data using template
   private static createMemoryContext(character: CharacterCard, template: Template | null): string {
+    console.log('Creating memory context with template:', template?.name || 'No template');
+    
     if (!template || !template.memoryFormat) {
       // Default memory format if no template or template has no memoryFormat
-      return `${character.data.system_prompt || ''}
+      const defaultMemory = `${character.data.system_prompt || ''}
 Persona: ${character.data.description || ''}
 Personality: ${character.data.personality || ''}
 [Scenario: ${character.data.scenario || ''}]
 ${character.data.mes_example || ''}
 ***`;
+      console.log('Using default memory format:', defaultMemory);
+      return defaultMemory;
     }
 
     try {
@@ -104,7 +109,9 @@ ${character.data.mes_example || ''}
         examples: character.data.mes_example || ''
       };
 
-      return this.replaceVariables(template.memoryFormat, variables);
+      const formattedMemory = this.replaceVariables(template.memoryFormat, variables);
+      console.log('Formatted memory using template:', formattedMemory);
+      return formattedMemory.trim(); // Ensure clean formatting
     } catch (error) {
       console.error('Error formatting memory context:', error);
       // Fallback to default format
@@ -150,31 +157,52 @@ ${character.data.mes_example || ''}
     }
   }
 
-  // Format chat history into proper template format
+  /**
+   * Format chat history into proper template format, ensuring edited messages are used
+   */
   static formatChatHistory(
-    messages: Array<{ role: 'user' | 'assistant', content: string }>,
+    messages: Array<{ role: 'user' | 'assistant', content: string, variations?: string[], currentVariation?: number }>,
     characterName: string,
     templateId?: string
   ): string {
     if (!messages || messages.length === 0) return '';
     
     const template = this.getTemplate(templateId);
+    console.log('Formatting chat history with template:', template?.name || 'Default');
+    
+    // Process each message to ensure we use the latest edited version
+    const processedMessages = messages.map(msg => {
+      // If the message has variations and a currentVariation index, use that content
+      // This ensures we're using the edited version chosen by the user
+      let finalContent = msg.content;
+      if (msg.variations && msg.variations.length > 0 && 
+          typeof msg.currentVariation === 'number' && 
+          msg.variations[msg.currentVariation]) {
+        finalContent = msg.variations[msg.currentVariation];
+      }
+      
+      return {
+        role: msg.role,
+        content: finalContent
+      };
+    });
+    
     if (!template) {
       // Fallback formatting if no template found
-      return messages
+      return processedMessages
         .map(msg => {
           const { role, content } = msg;
           if (role === 'assistant') {
-            return `[INST] ${characterName}: ${content} [/INST]`;
+            return `${characterName}: ${content}`;
           } else {
-            return `[INST] ${content} [/INST]`;
+            return content;
           }
         })
-        .join('\n');
+        .join('\n\n');
     }
 
     try {
-      return messages
+      return processedMessages
         .map(msg => {
           const { role, content } = msg;
           
@@ -193,16 +221,16 @@ ${character.data.mes_example || ''}
     } catch (error) {
       console.error('Error formatting chat history:', error);
       // Fallback formatting
-      return messages
+      return processedMessages
         .map(msg => {
           const { role, content } = msg;
           if (role === 'assistant') {
-            return `[INST] ${characterName}: ${content} [/INST]`;
+            return `${characterName}: ${content}`;
           } else {
-            return `[INST] ${content} [/INST]`;
+            return content;
           }
         })
-        .join('\n');
+        .join('\n\n');
     }
   }
 
@@ -234,10 +262,10 @@ ${character.data.mes_example || ''}
     apiConfig: APIConfig,
     signal?: AbortSignal
   ): Promise<Response> {
-    console.log('Starting generation...');
-    console.log('API Config:', apiConfig);
+    console.log('Starting generation with API Config:', apiConfig);
+    console.log('Using templateId:', apiConfig.templateId);
 
-    // Get template based on templateId
+    // Get template based on templateId - must get this right
     const template = this.getTemplate(apiConfig.templateId);
     console.log('Using template:', template?.name || 'Default');
 
@@ -248,7 +276,7 @@ ${character.data.mes_example || ''}
     const formattedHistory = this.formatChatHistory(
       history, 
       character.data.name, 
-      apiConfig.templateId
+      apiConfig.templateId // Make sure we're passing templateId here
     );
     
     // Create the final prompt using the template
@@ -261,6 +289,28 @@ ${character.data.mes_example || ''}
 
     // Get stop sequences from template
     const stopSequences = this.getStopSequences(template, character.data.name);
+
+    // Extract template format properties for passing to the backend
+    let template_format = null;
+    if (template) {
+      // Split the templates to extract start/end parts
+      const userParts = template.userFormat.split('{{content}}');
+      const assistantParts = template.assistantFormat.split('{{content}}');
+      // Clean up the assistant start by removing character name placeholder
+      let assistantStart = assistantParts[0] || '';
+      assistantStart = assistantStart.replace('{{char}}:', '');
+
+      template_format = {
+        name: template.name,
+        id: template.id,
+        system_start: template.systemFormat?.split('{{content}}')[0] || '',
+        system_end: template.systemFormat?.split('{{content}}')[1] || '',
+        user_start: userParts[0] || '',
+        user_end: userParts[1] || '',
+        assistant_start: assistantStart,
+        assistant_end: assistantParts[1] || ''
+      };
+    }
 
     // Capture raw context information for debugging
     const contextInfo = {
@@ -286,48 +336,52 @@ ${character.data.mes_example || ''}
         provider: apiConfig.provider,
         url: apiConfig.url,
         model: apiConfig.model,
-        max_context_length: this.DEFAULT_PARAMS.max_context_length,
-        max_length: this.DEFAULT_PARAMS.max_length
+        templateId: apiConfig.templateId, // Make sure this is included
+        max_context_length: apiConfig.generation_settings?.max_context_length || this.DEFAULT_PARAMS.max_context_length,
+        max_length: apiConfig.generation_settings?.max_length || this.DEFAULT_PARAMS.max_length
       }
     };
     
     // Log the context info for debugging
     console.log('Context info:', JSON.stringify(contextInfo, null, 2));
 
-    // Generate unique key
-    const genkey = `CKSH${Date.now().toString().slice(-4)}`;
-
-    // Merge default parameters with API-specific generation settings
-    const generationSettings = apiConfig?.generation_settings || {};
-    
-    // Create payload by combining DEFAULT_PARAMS with user-defined generation settings
-    const payload = {
-      ...this.DEFAULT_PARAMS,
-      // Override with user-specific settings
-      ...generationSettings,
-      // These must be included regardless
-      memory,
-      prompt: currentPrompt,
-      genkey,
-      stop_sequence: stopSequences
+    // Create the API request payload with the full generation_settings object
+    const apiPayload = {
+      api_config: {
+        url: apiConfig.url,
+        apiKey: apiConfig.apiKey,
+        provider: apiConfig.provider,
+        model: apiConfig.model,
+        templateId: apiConfig.templateId, // Use templateId, not template
+        template_format: template_format, // Include template format info separately
+        generation_settings: apiConfig.generation_settings || {} // Pass full generation_settings
+      },
+      generation_params: {
+        memory,
+        prompt: currentPrompt,
+        stop_sequence: stopSequences,
+        context_window: contextInfo // Add the debugging context window
+      }
     };
 
-    // Get API URL from config or use default
-    const apiUrl = apiConfig?.url || 'http://localhost:5001';
-    const endpoint = apiUrl.endsWith('/') ? 'api/extra/generate/stream' : '/api/extra/generate/stream';
-    const fullUrl = apiUrl + endpoint;
+    // Log detailed information about generation settings
+    console.log('API payload with generation settings:', 
+      JSON.stringify({
+        ...apiPayload,
+        api_config: {
+          ...apiPayload.api_config,
+          apiKey: '[REDACTED]' // Don't log the API key
+        }
+      }, null, 2)
+    );
 
-    console.log('Making request to:', fullUrl);
-    console.log('With payload:', payload);
-
-    // Make the request
-    return fetch(fullUrl, {
+    // Make the request to our backend
+    return fetch('/api/generate', {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream'
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(apiPayload),
       signal
     });
   }
@@ -359,15 +413,29 @@ ${character.data.mes_example || ''}
           
           if (line.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6));  // Remove 'data: ' prefix
-              console.log('SSE data:', data);
+              const dataText = line.slice(6); // Remove 'data: ' prefix
+              
+              // Handle "[DONE]" specifically
+              if (dataText.includes('[DONE]')) {
+                console.log('Received [DONE] signal');
+                continue;
+              }
+              
+              const data = JSON.parse(dataText);
+              
+              if (data.error) {
+                console.error('Error from SSE stream:', data.error);
+                throw new Error(data.error.message || 'Error from generation API');
+              }
               
               if (data.token) {
-                console.log('Yielding token:', data.token);
                 yield data.token;
+              } else if (data.content) {
+                yield data.content;
               }
             } catch (e) {
-              console.error('Error parsing SSE data:', e);
+              console.error('Error parsing SSE data:', e, line);
+              // Continue processing other lines even if one fails
             }
           }
         }
