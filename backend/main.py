@@ -33,12 +33,79 @@ from backend.api_handler import ApiHandler
 from backend.chat_handler import ChatHandler
 from backend.network_server import run_server
 from backend.template_handler import TemplateHandler
+from backend.background_handler import BackgroundHandler
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
         return Path(sys._MEIPASS) / "frontend" / "dist"
     else:  # Running as normal Python script
         return Path(__file__).parent.parent / "frontend" / "dist"
+    
+class BackgroundHandler:
+    def __init__(self, logger):
+        self.backgrounds_dir = Path(__file__).parent / 'backgrounds'
+        self.backgrounds_dir.mkdir(exist_ok=True)
+        self.backgrounds = []
+
+    def initialize_default_backgrounds(self):
+        """
+        Initialize the backgrounds with any default backgrounds that may exist in the backgrounds directory.
+        """
+        for file in self.backgrounds_dir.iterdir():
+            self.backgrounds.append({"name": file.stem, "filename": file.name, "path": str(file), "size": file.stat().st_size, "modified": file.stat().st_mtime})
+    
+    def get_all_backgrounds(self):
+        # Create a list to hold the background details
+        backgrounds = []
+        
+        # Iterate through all files in the backgrounds directory
+        for file in self.backgrounds_dir.iterdir():
+            # Create a dictionary with details for each file
+            background_info = {
+                "name": file.stem,  # The name of the file without the extension
+                "filename": file.name,  # The full file name with extension
+                "path": str(file),  # The full path to the file as a string
+                "size": file.stat().st_size,  # The file size
+                "modified": file.stat().st_mtime  # The last modified timestamp
+            }
+            # Add the file information to the list
+            backgrounds.append(background_info)
+            
+        return backgrounds
+    
+    def save_background(self, content, filename):
+        # Construct the full path to save the background
+        file_path = self.backgrounds_dir / filename
+        
+        # Write the content to the file
+        with open(file_path, "wb") as file:
+            file.write(content)
+        
+        # Return the file name and path
+        background_info = {
+            "name": file_path.stem,  # The name of the file without the extension
+            "filename": file_path.name,  # The full file name with extension
+            "path": str(file_path),  # The full path to the file as a string
+            "size": file_path.stat().st_size,  # The file size
+            "modified": file_path.stat().st_mtime  # The last modified timestamp
+        }
+        self.backgrounds.append(background_info)
+        return background_info
+    
+    def delete_background(self, filename):
+        # Construct the full path to the background file
+        file_path = self.backgrounds_dir / filename
+        
+        # Check if the file exists
+        if file_path.exists():
+            # Delete the file
+            file_path.unlink()
+            
+            # Remove the file from the list of backgrounds
+            self.backgrounds = [b for b in self.backgrounds if b["filename"] != filename]
+            return True
+        else:
+            return False
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -62,8 +129,131 @@ png_debug = PngDebugHandler(logger)
 api_handler = ApiHandler(logger)
 chat_handler = ChatHandler(logger) 
 template_handler = TemplateHandler(logger)
+background_handler = BackgroundHandler(logger)
+background_handler.initialize_default_backgrounds()
 
 # API Endpoints
+@app.get("/api/backgrounds")
+async def get_backgrounds():
+    """List all background images."""
+    try:
+        backgrounds = background_handler.get_all_backgrounds()
+        modified_backgrounds = [
+            {**background}
+            for background in backgrounds
+        ]
+        print(f"Current backgrounds: {modified_backgrounds}")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "backgrounds": modified_backgrounds
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error listing backgrounds: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.post("/api/backgrounds/upload")
+async def upload_background(file: UploadFile = File(...)):
+    """Upload a new background image."""
+    try:
+        content = await file.read()
+        result = background_handler.save_background(content, file.filename)
+        
+        if not result:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Invalid image file"
+                }
+            )
+        print(f"Uploaded Filename: {result['filename']}")
+        print(f"Uploaded path: {result['path']}")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "background": result
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error uploading background: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.get("/api/backgrounds/{filename}")
+async def get_background_image(filename: str):
+    """Serve a background image."""
+    try:
+        print(f"Requested filename: {filename}")
+        # Determine base directory based on environment
+        if getattr(sys, 'frozen', False):
+            # Running as PyInstaller bundle
+            base_dir = Path(sys.executable).parent
+        else:
+            # Running from source
+            base_dir = Path(__file__).parent
+            
+        backgrounds_dir = base_dir / 'backgrounds'
+        file_path = backgrounds_dir / filename # Remove appending ".jpg"
+        
+        print(f"Looking for file at: {file_path}")
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+            
+        return FileResponse(file_path)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Error serving background image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/backgrounds/{filename}")
+async def delete_background(filename: str):
+    """Delete a background image."""
+    try:
+        success = background_handler.delete_background(filename)
+        
+        if not success:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "message": "Background not found"
+                }
+            )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": "Background deleted successfully"
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error deleting background: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
 @app.get("/api/templates")
 async def get_templates():
     """Get all custom templates."""

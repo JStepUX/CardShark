@@ -55,6 +55,7 @@ hidden_imports = [
     'backend.png_metadata_handler.py',
     'backend.settings_manager.py',
     'backend.test_module.py',
+    'backend.template_handler.py',
     
     # Important dependencies
     'email_validator',

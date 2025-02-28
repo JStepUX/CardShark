@@ -1,13 +1,26 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, User, Plus, RefreshCw, Eye } from 'lucide-react';
+import { Send, User, Plus, RefreshCw, Eye, Settings as SettingsIcon } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
 import UserSelect from './UserSelect';
 import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
+import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSettings';
+import { Background } from './BackgroundSelector';
 import { useChatMessages, UserProfile } from '../hooks/useChatMessages';
 import { apiService } from '../services/apiService';
+import { generateUUID } from '../utils/generateUUID';
+
+// Default background settings
+const DEFAULT_BACKGROUND_SETTINGS: BackgroundSettings = {
+  background: null,
+  transparency: 85,
+  fadeLevel: 30
+};
+
+// Local storage key for saving background settings
+const BACKGROUND_SETTINGS_KEY = 'cardshark_chat_background';
 
 // Separate hook for scroll management
 function useScrollToBottom() {
@@ -132,6 +145,8 @@ const ChatView: React.FC = () => {
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
+  const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
+  const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
   
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
@@ -152,6 +167,29 @@ const ChatView: React.FC = () => {
     setCurrentUser,
     loadExistingChat
   } = useChatMessages(characterData);
+
+  // Load saved background settings on mount
+  useEffect(() => {
+    try {
+      const savedSettings = localStorage.getItem(BACKGROUND_SETTINGS_KEY);
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        setBackgroundSettings(parsed);
+      }
+    } catch (err) {
+      console.error('Error loading background settings:', err);
+    }
+  }, []);
+
+  // Save background settings when changed
+  const handleBackgroundSettingsChange = (newSettings: BackgroundSettings) => {
+    setBackgroundSettings(newSettings);
+    try {
+      localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(newSettings));
+    } catch (err) {
+      console.error('Error saving background settings:', err);
+    }
+  };
 
   const handleNewChat = async () => {
     if (!characterData?.data?.first_mes) return;
@@ -197,15 +235,41 @@ const ChatView: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full relative flex flex-col overflow-hidden">
+      {/* Background Image */}
+      {backgroundSettings.background?.url && (
+        <div 
+          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+          style={{ 
+            backgroundImage: `url(${backgroundSettings.background.url})`,
+            filter: `blur(${backgroundSettings.fadeLevel / 3}px)`
+          }}
+        />
+      )}
+      
       {/* Header */}
-      <div className="flex-none p-8 pb-4 flex justify-between items-center">
+      <div className="flex-none p-8 pb-4 flex justify-between items-center relative z-10"
+           style={{ 
+             backgroundColor: backgroundSettings.background?.url 
+               ? `rgba(28, 25, 23, ${1 - backgroundSettings.transparency / 100})` 
+               : undefined 
+           }}>
         <h2 className="text-lg font-semibold">
           {characterData?.data?.name
             ? `Chatting with ${characterData.data.name}`
             : 'Chat'}
         </h2>
         <div className="flex items-center gap-2">
+          {/* Background Settings button */}
+          <button
+            onClick={() => setShowBackgroundSettings(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
+            title="Background Settings"
+          >
+            <SettingsIcon size={18} />
+            Background
+          </button>
+          
           {/* Add Context Window button */}
           <button
             onClick={() => setShowContextWindow(true)}
@@ -234,7 +298,7 @@ const ChatView: React.FC = () => {
       </div>
 
       {error && (
-        <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200">
+        <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200 relative z-10">
           {error}
         </div>
       )}
@@ -242,7 +306,12 @@ const ChatView: React.FC = () => {
       {/* Messages */}
       <div 
         ref={messagesContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth"
+        className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth relative z-10"
+        style={{ 
+          backgroundColor: backgroundSettings.background?.url 
+            ? `rgba(28, 25, 23, ${1 - backgroundSettings.transparency / 100})` 
+            : undefined 
+        }}
       >
         <div className="flex flex-col space-y-4">
           {messages.map((message) => (
@@ -265,12 +334,21 @@ const ChatView: React.FC = () => {
       </div>
 
       {/* Input Area */}
-      <InputArea
-        onSend={generateResponse}
-        isGenerating={isGenerating}
-        currentUser={currentUser}
-        onUserSelect={() => setShowUserSelect(true)}
-      />
+      <div 
+        className="relative z-10"
+        style={{ 
+          backgroundColor: backgroundSettings.background?.url 
+            ? `rgba(28, 25, 23, ${1 - backgroundSettings.transparency / 100})` 
+            : undefined 
+        }}
+      >
+        <InputArea
+          onSend={generateResponse}
+          isGenerating={isGenerating}
+          currentUser={currentUser}
+          onUserSelect={() => setShowUserSelect(true)}
+        />
+      </div>
 
       {/* User Select Modal */}
       <UserSelect
@@ -298,6 +376,17 @@ const ChatView: React.FC = () => {
         contextData={lastContextWindow}
         title="API Context Window"
       />
+
+      {/* Background Settings Dialog */}
+      {showBackgroundSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <ChatBackgroundSettings
+            settings={backgroundSettings}
+            onSettingsChange={handleBackgroundSettingsChange}
+            onClose={() => setShowBackgroundSettings(false)}
+          />
+        </div>
+      )}
     </div>
   );
 };
