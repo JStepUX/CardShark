@@ -5,7 +5,7 @@ import ImageCropperModal from './ImageCropperModal';
 interface ImagePreviewProps {
   imageUrl?: string;
   placeholderUrl?: string;
-  onImageChange?: (newImageData: string) => void;
+  onImageChange?: (newImageData: string | File) => void;
 }
 
 const ImagePreview: React.FC<ImagePreviewProps> = ({ 
@@ -18,6 +18,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
   const [isHovering, setIsHovering] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [tempImageUrl, setTempImageUrl] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -50,6 +51,9 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
       return;
     }
 
+    // Store the selected file
+    setSelectedFile(file);
+
     // Create a URL for the selected file
     const objectUrl = URL.createObjectURL(file);
     setTempImageUrl(objectUrl);
@@ -62,19 +66,49 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
   };
 
   const handleCropSave = (croppedImageData: string) => {
-    // Pass the cropped image data to the parent component
-    if (onImageChange) {
-      onImageChange(croppedImageData);
-    }
-    
     // Update the current image preview
     setCurrentImage(croppedImageData);
+    
+    // If an original file was selected, we need to convert the cropped image data
+    // back to a File object to maintain the original file type
+    if (selectedFile) {
+      // Convert base64 to blob
+      const base64Data = croppedImageData.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteArrays = [];
+      
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteArrays.push(byteCharacters.charCodeAt(i));
+      }
+      
+      const byteArray = new Uint8Array(byteArrays);
+      const blob = new Blob([byteArray], { type: selectedFile.type });
+      
+      // Create a new File object
+      const newFile = new File([blob], selectedFile.name, { 
+        type: selectedFile.type,
+        lastModified: new Date().getTime()
+      });
+      
+      // Pass the new file to the parent component
+      if (onImageChange) {
+        onImageChange(newFile);
+      }
+    } else {
+      // If no original file (just cropping), pass the image data
+      if (onImageChange) {
+        onImageChange(croppedImageData);
+      }
+    }
     
     // Clean up the temporary image URL
     if (tempImageUrl) {
       URL.revokeObjectURL(tempImageUrl);
       setTempImageUrl(null);
     }
+    
+    // Reset selected file
+    setSelectedFile(null);
   };
 
   return (

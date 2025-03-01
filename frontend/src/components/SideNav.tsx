@@ -36,6 +36,7 @@ interface SideNavProps {
   onSave: () => void;
   onShowAbout: () => void;
   backendStatus: 'running' | 'disconnected';
+  onImageChange?: (newImageData: string | File) => void;
 }
 
 const SideNav: React.FC<SideNavProps> = ({
@@ -45,7 +46,8 @@ const SideNav: React.FC<SideNavProps> = ({
   onUrlImport,
   onSave,
   onShowAbout,
-  backendStatus
+  backendStatus,
+  onImageChange
 }) => {
   const { characterData, imageUrl } = useCharacter();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -230,7 +232,10 @@ const SideNav: React.FC<SideNavProps> = ({
             <div className="mt-auto">
               <div className="flex flex-col h-[64vh]">
                 <div className="flex-1 min-h-0">
-                  <ImagePreview imageUrl={imageUrl} />
+                  <ImagePreview 
+                    imageUrl={imageUrl} 
+                    onImageChange={onImageChange}
+                  />
                 </div>
                 <TokenCounter characterData={characterData} />
               </div>

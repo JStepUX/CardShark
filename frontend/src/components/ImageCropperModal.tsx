@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Dialog } from './Dialog';
-import { ZoomIn, ZoomOut, RefreshCw, RotateCw, Check } from 'lucide-react';
+import { ZoomIn, ZoomOut, RefreshCw, RotateCw } from 'lucide-react';
 
 interface ImageCropperModalProps {
   isOpen: boolean;

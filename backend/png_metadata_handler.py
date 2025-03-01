@@ -196,34 +196,69 @@ class PngMetadataHandler:
             raise
 
     def write_metadata(self, image_data: bytes, metadata: Dict) -> bytes:
-        """Write character metadata to a PNG file."""
+        """Write character metadata to a PNG file with improved error handling and metadata preservation."""
         try:
             # Encode metadata to base64
             json_str = json.dumps(metadata)
             base64_str = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+            
+            # Log metadata size for debugging
+            self.logger.log_step(f"Encoding metadata: JSON size: {len(json_str)} bytes, Base64 size: {len(base64_str)} bytes")
             
             # Prepare PNG info
             png_info = PngImagePlugin.PngInfo()
             
             # Write metadata to image
             with Image.open(BytesIO(image_data)) as img:
-                # Preserve existing metadata (except 'chara')
+                # Log original image size and format for debugging
+                self.logger.log_step(f"Original image: {img.size}, format: {img.format}")
+                
+                # Preserve existing metadata (except character data)
+                preserved_keys = []
                 for key, value in img.info.items():
-                    if key not in ['chara', 'ccv3']:  # Don't copy existing character data
+                    if key not in ['chara', 'ccv3', 'exif']:  # Don't copy existing character data
                         try:
-                            str_value = str(value) if not isinstance(value, (bytes, str)) else value
-                            png_info.add_text(key, str_value)
-                        except:
-                            continue
+                            if isinstance(value, (str, bytes)):
+                                png_info.add_text(key, value)
+                                preserved_keys.append(key)
+                            elif hasattr(value, '__str__'):
+                                str_value = str(value)
+                                png_info.add_text(key, str_value)
+                                preserved_keys.append(key)
+                        except Exception as e:
+                            self.logger.log_warning(f"Could not preserve metadata key '{key}': {str(e)}")
+                
+                self.logger.log_step(f"Preserved {len(preserved_keys)} metadata keys: {preserved_keys}")
                 
                 # Add character metadata
                 png_info.add_text('chara', base64_str)
+                self.logger.log_step("Added 'chara' metadata to PNG")
                 
-                # Save image with metadata
+                # Save image with metadata, ensuring we maintain original format and quality
                 output = BytesIO()
+                
+                # Make sure we're saving as PNG
                 img.save(output, format="PNG", pnginfo=png_info, optimize=False)
-                return output.getvalue()
+                self.logger.log_step("Saved image with metadata")
+                
+                # Verify metadata was written correctly
+                output_bytes = output.getvalue()
+                self.logger.log_step(f"Output image size: {len(output_bytes)} bytes")
+                
+                # Sanity check - try to read back the metadata
+                try:
+                    verification = BytesIO(output_bytes)
+                    with Image.open(verification) as verify_img:
+                        if 'chara' in verify_img.info:
+                            self.logger.log_step("Metadata verification successful - 'chara' field present")
+                        else:
+                            self.logger.log_warning("Metadata verification failed - 'chara' field missing")
+                except Exception as e:
+                    self.logger.log_warning(f"Could not verify metadata: {str(e)}")
+                
+                return output_bytes
 
         except Exception as e:
             self.logger.log_error(f"Failed to write metadata: {str(e)}")
+            self.logger.log_error(f"Error type: {type(e).__name__}")
             raise

@@ -24,6 +24,7 @@ const Layout: React.FC = () => {
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
   const [backendStatus, setBackendStatus] = useState<"running" | "disconnected">("disconnected");
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [newImage, setNewImage] = useState<File | string | null>(null);
   
   // Character context
   const { 
@@ -69,7 +70,7 @@ const Layout: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle file upload handler
+  // File upload handler
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -94,6 +95,7 @@ const Layout: React.FC = () => {
       if (data.success && data.metadata) {
         setCharacterData(data.metadata);
         setImageUrl(URL.createObjectURL(file));
+        setNewImage(file); // Store the original file for saving later
       } else {
         throw new Error(data.message || "Failed to process character data");
       }
@@ -101,14 +103,32 @@ const Layout: React.FC = () => {
       setError(err instanceof Error ? err.message : "Failed to load character");
       setCharacterData(null);
       setImageUrl(undefined);
+      setNewImage(null);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Handle image change from ImagePreview component
+  const handleImageChange = (newImageData: File | string) => {
+    if (newImageData) {
+      // Update the new image state
+      setNewImage(newImageData);
+      
+      // If it's a File object, create an object URL for display
+      if (newImageData instanceof File) {
+        const objectUrl = URL.createObjectURL(newImageData);
+        setImageUrl(objectUrl);
+      } else {
+        // It's a string (data URL from cropping)
+        setImageUrl(newImageData);
+      }
+    }
+  };
+
   // Save handler
   const handleSave = async () => {
-    if (!characterData || !imageUrl) return;
+    if (!characterData) return;
     
     try {
       setIsLoading(true);
@@ -120,13 +140,31 @@ const Layout: React.FC = () => {
       const settings = settingsData.settings;
       
       // Prepare the file
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const file = new File([blob], "character.png", { type: "image/png" });
+      let fileToSave: File;
+      
+      if (newImage) {
+        // Use the new image from state
+        if (typeof newImage === 'string') {
+          // Convert data URL to Blob/File
+          const response = await fetch(newImage);
+          const blob = await response.blob();
+          fileToSave = new File([blob], "character.png", { type: "image/png" });
+        } else {
+          // It's already a File object
+          fileToSave = newImage;
+        }
+      } else if (imageUrl) {
+        // Fall back to current imageUrl
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        fileToSave = new File([blob], "character.png", { type: "image/png" });
+      } else {
+        throw new Error("No image available to save");
+      }
       
       // Create form data
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", fileToSave);
       formData.append("metadata", JSON.stringify(characterData));
       
       // Add save directory if enabled
@@ -151,6 +189,9 @@ const Layout: React.FC = () => {
       const savedBlob = await saveResponse.blob();
       const newImageUrl = URL.createObjectURL(savedBlob);
       setImageUrl(newImageUrl);
+      
+      // Reset newImage state after successful save
+      setNewImage(null);
       
       // Trigger download if not saving to directory
       if (!usingSaveDirectory) {
@@ -179,7 +220,7 @@ const Layout: React.FC = () => {
     try {
       setIsLoading(true);
       setError(null);
-      
+  
       const response = await fetch("/api/import-backyard", {
         method: "POST",
         headers: {
@@ -187,11 +228,11 @@ const Layout: React.FC = () => {
         },
         body: JSON.stringify({ url }),
       });
-      
+  
       if (!response.ok) {
         throw new Error(`Import failed: ${response.statusText}`);
       }
-      
+  
       const data = await response.json();
       if (data.success && data.metadata) {
         setCharacterData(data.metadata);
@@ -210,6 +251,7 @@ const Layout: React.FC = () => {
       setIsLoading(false);
     }
   };
+
 
   // Settings update handler
   const handleSettingsUpdate = async (updates: Partial<Settings>) => {
@@ -274,6 +316,7 @@ const Layout: React.FC = () => {
         onSave={handleSave}
         onShowAbout={() => setShowAboutDialog(true)}
         backendStatus={backendStatus}
+        onImageChange={handleImageChange}
       />
       
       {/* Main Content Area */}

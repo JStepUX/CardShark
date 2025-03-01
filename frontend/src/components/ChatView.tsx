@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, User, Plus, RefreshCw, Eye, Settings as SettingsIcon } from 'lucide-react';
+import { Send, User, Plus, RefreshCw, Eye, Wallpaper } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
@@ -264,8 +264,8 @@ const ChatView: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
             title="Background Settings"
           >
-            <SettingsIcon size={18} />
-            Background
+            <Wallpaper size={18} />
+            BG
           </button>
           
           {/* Add Context Window button */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Wand2, Loader2, Trash2 } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
+import { useAPIConfig } from '../contexts/APIConfigContext'; // Add this import
 import HighlightedTextArea from './HighlightedTextArea';
 
 // Types remain the same
@@ -48,6 +49,7 @@ MessageCard.displayName = 'MessageCard';
 
 const MessagesView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
+  const { apiConfig } = useAPIConfig(); // Get API configuration
   const [messages, setMessages] = useState<Message[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +88,11 @@ const MessagesView: React.FC = () => {
       setIsGenerating(true);
       setError(null);
 
+      // Check if API configuration exists
+      if (!apiConfig) {
+        throw new Error('API not configured. Please set up API in Settings first.');
+      }
+
       // Create new message first
       const messageId = crypto.randomUUID();
       const newMessage: Message = {
@@ -102,7 +109,9 @@ const MessagesView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `You are tasked with crafting a new, engaging first message for a character using the information provided below. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark.
+          api_config: apiConfig, // Pass API configuration
+          generation_params: {
+            prompt: `You are tasked with crafting a new, engaging first message for a character using the information provided below. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark.
 
 Character Name: "${characterData?.data?.name}"
 Description: ${characterData?.data?.description}
@@ -115,6 +124,7 @@ Example Messages:
 ${characterData?.data?.mes_example}
 
 Craft a new introductory message that starts the conversation in a fresh and engaging way, ensuring variety from the existing scenario.`
+          }
         })
       });
 
@@ -230,7 +240,7 @@ Craft a new introductory message that starts the conversation in a fresh and eng
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-semibold">Messages Manager</h2>
           <div className="flex items-center gap-2">
-            <button
+            {/*<button
                 onClick={handleGenerateMessage}
                 disabled={isGenerating}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
@@ -241,7 +251,7 @@ Craft a new introductory message that starts the conversation in a fresh and eng
                   <Wand2 size={18} />
                 )}
                 Generate Message
-              </button>
+              </button>*/}
             <button
               onClick={handleAddMessage}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

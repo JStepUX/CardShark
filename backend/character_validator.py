@@ -70,8 +70,8 @@ DEFAULT_LORE_ENTRY = {
 class CharacterValidator:
     """Validates and normalizes character card data to match TypeScript interfaces"""
     
-    def __init__(self, logger: logging.Logger):
-        self.logger = logging.getLogger(__name__)
+    def __init__(self, logger):
+        self.logger = logger
         self.next_uid = int(time.time() * 1000)
 
     def create_empty_character(self) -> Dict:
@@ -141,7 +141,7 @@ class CharacterValidator:
     def _normalize_lore_entry(self, entry: Dict) -> Dict:
         """Normalizes a single lore entry to match the new structure"""
         if not isinstance(entry, dict):
-            self.logger.log_warning(f"Invalid entry format: {type(entry)}")
+            self.logger.log_step(f"Invalid entry format: {type(entry)}")
             return DEFAULT_LORE_ENTRY.copy()
 
         normalized = DEFAULT_LORE_ENTRY.copy()
@@ -164,13 +164,13 @@ class CharacterValidator:
             return normalized
 
         except Exception as e:
-            self.logger.log_error(f"Error normalizing entry: {str(e)}")
+            self.logger.log_step(f"Error normalizing entry: {str(e)}")
             return DEFAULT_LORE_ENTRY.copy()
 
     def _normalize_character_book(self, book: Dict) -> Dict:
         """Normalizes character book to match TypeScript CharacterBook interface with array-based entries"""
         if not isinstance(book, dict):
-            self.logger.log_warning("Invalid character book format")
+            self.logger.log_step("Invalid character book format")
             book = {}
 
         # Initialize normalized entries list
@@ -189,7 +189,7 @@ class CharacterValidator:
             )
             raw_entries = [entry for _, entry in sorted_entries]
         elif not isinstance(raw_entries, list):
-            self.logger.log_warning(f"Unexpected entries format: {type(raw_entries)}")
+            self.logger.log_step(f"Unexpected entries format: {type(raw_entries)}")
             raw_entries = []
 
         # Normalize each entry and add to list
@@ -213,11 +213,11 @@ class CharacterValidator:
         """Normalizes character data to match the new JSON format"""
         try:
             if not isinstance(data, dict):
-                self.logger.log_warning("Invalid data format, creating empty character")
-                return self._create_empty_character()
+                self.logger.log_step("Invalid data format, creating empty character")
+                return self.create_empty_character()
 
             # Create a copy of the empty character and update it with the provided data
-            normalized = self._create_empty_character()
+            normalized = self.create_empty_character()
 
             # Update top-level fields
             normalized.update({
@@ -273,6 +273,9 @@ class CharacterValidator:
 
             # Normalize character book
             character_book = data_section.get("character_book", {})
+            if character_book is None:
+                character_book = {}
+                
             normalized["data"]["character_book"]["name"] = str(character_book.get("name", ""))
 
             # Normalize lore entries
@@ -286,9 +289,9 @@ class CharacterValidator:
             return normalized
 
         except Exception as e:
-            self.logger.log_error(f"Error normalizing character data: {str(e)}")
-            self.logger.log_error(traceback.format_exc())
-            return self._create_empty_character()
+            self.logger.log_step(f"Error normalizing character data: {str(e)}")
+            self.logger.log_step(traceback.format_exc())
+            return self.create_empty_character()
 
     def _create_empty_character(self) -> Dict:
         """Creates empty character structure matching the new JSON format"""

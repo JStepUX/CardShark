@@ -1,6 +1,6 @@
 // src/components/TemplateList.tsx
 import React, { useState } from 'react';
-import { Copy, Pencil, Trash2, Plus, Download, Upload } from 'lucide-react';
+import { Copy, Pencil, Trash2, Plus, FileDown as Download, FileInput as Upload } from 'lucide-react';
 import { Template } from '../types/templateTypes';
 import { useTemplates } from '../contexts/TemplateContext';
 
