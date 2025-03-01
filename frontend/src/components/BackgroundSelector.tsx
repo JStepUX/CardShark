@@ -1,21 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash, Image, Loader2 } from 'lucide-react';
+import { Plus, Trash, Edit, Image, Loader2 } from 'lucide-react';
 import { generateUUID } from '../utils/generateUUID';
+import BackgroundCropper from './BackgroundCropper'; // Import the cropper component
 
 export interface Background {
-    id: string;
-    name: string;
-    url: string;
-    filename: string;
-    thumbnail?: string;
-    isDefault?: boolean;
-    isAnimated?: boolean; // New property to identify GIFs
-  }
-  
-  export interface BackgroundSelectorProps {
-    selected: Background | null;
-    onSelect: (background: Background | null) => void;
-  }
+  id: string;
+  name: string;
+  url: string;
+  filename: string;
+  thumbnail?: string;
+  isDefault?: boolean;
+  isAnimated?: boolean; // New property to identify GIFs
+}
+
+export interface BackgroundSelectorProps {
+  selected: Background | null;
+  onSelect: (background: Background | null) => void;
+}
 
 const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
   selected,
@@ -25,6 +26,12 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // New state variables
+  const [showCropper, setShowCropper] = useState(false);
+  const [tempImageUrl, setTempImageUrl] = useState<string | null>(null);
+  const [tempImageFile, setTempImageFile] = useState<File | null>(null);
+  const [editingBackground, setEditingBackground] = useState<Background | null>(null);
 
   // Load backgrounds on component mount
   useEffect(() => {
@@ -82,12 +89,39 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
       return;
     }
 
+    // For GIFs, skip cropping and upload directly
+    if (file.type === 'image/gif') {
+      await uploadFile(file);
+    } else {
+      // For other image types, show the cropper
+      setTempImageFile(file);
+      setTempImageUrl(URL.createObjectURL(file));
+      setEditingBackground(null); // This is a new upload, not an edit
+      setShowCropper(true);
+    }
+    
+    // Reset the input
+    event.target.value = '';
+  };
+
+  const uploadFile = async (file: File, croppedImageData?: string) => {
     try {
       setIsUploading(true);
       setError(null);
 
       const formData = new FormData();
-      formData.append('file', file);
+      
+      if (croppedImageData) {
+        // Convert data URL to Blob
+        const response = await fetch(croppedImageData);
+        const blob = await response.blob();
+        
+        // Create a new file with the same name but from the cropped data
+        const croppedFile = new File([blob], file.name, { type: 'image/png' });
+        formData.append('file', croppedFile);
+      } else {
+        formData.append('file', file);
+      }
 
       const response = await fetch('/api/backgrounds/upload', {
         method: 'POST',
@@ -101,28 +135,89 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
 
       const data = await response.json();
       if (data.success && data.background) {
-        // Create a new background object
-        const newBackground: Background = {
-          id: generateUUID(),
-          name: data.background.name,
-          filename: data.background.filename,
-          url: `/api/backgrounds/${encodeURIComponent(data.background.filename)}`,
-          isAnimated: data.background.filename.toLowerCase().endsWith('.gif') // Check if it's a GIF
-        };
+        if (editingBackground) {
+          // Editing existing background - update it
+          // First delete the old one
+          try {
+            await fetch(`/api/backgrounds/${encodeURIComponent(editingBackground.filename)}`, {
+              method: 'DELETE'
+            });
+          } catch (err) {
+            console.warn('Could not delete old background:', err);
+            // Continue anyway as we're replacing it
+          }
+          
+          // Create an updated background object with the same ID
+          const updatedBackground: Background = {
+            id: editingBackground.id,
+            name: data.background.name,
+            filename: data.background.filename,
+            url: `/api/backgrounds/${encodeURIComponent(data.background.filename)}`,
+            isAnimated: data.background.filename.toLowerCase().endsWith('.gif')
+          };
+          
+          // Update the backgrounds list
+          setBackgrounds(prev => prev.map(bg => 
+            bg.id === editingBackground.id ? updatedBackground : bg
+          ));
+          
+          // Update selection if needed
+          if (selected?.id === editingBackground.id) {
+            onSelect(updatedBackground);
+          }
+          
+          // Reset editing state
+          setEditingBackground(null);
+        } else {
+          // Creating a new background
+          const newBackground: Background = {
+            id: generateUUID(),
+            name: data.background.name,
+            filename: data.background.filename,
+            url: `/api/backgrounds/${encodeURIComponent(data.background.filename)}`,
+            isAnimated: data.background.filename.toLowerCase().endsWith('.gif')
+          };
 
-        // Add to backgrounds list
-        setBackgrounds(prev => [...prev, newBackground]);
-        
-        // Automatically select the new background
-        onSelect(newBackground);
+          // Add to backgrounds list
+          setBackgrounds(prev => [...prev, newBackground]);
+          
+          // Automatically select the new background
+          onSelect(newBackground);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setIsUploading(false);
-      // Reset the input
-      event.target.value = '';
+      
+      // Clean up temporary URL
+      if (tempImageUrl) {
+        URL.revokeObjectURL(tempImageUrl);
+        setTempImageUrl(null);
+      }
+      
+      setTempImageFile(null);
     }
+  };
+  
+  const handleCropSave = (croppedImageData: string) => {
+    if (tempImageFile) {
+      uploadFile(tempImageFile, croppedImageData);
+    }
+    setShowCropper(false);
+  };
+
+  const handleEditBackground = (background: Background) => {
+    setEditingBackground(background);
+    setTempImageUrl(background.url);
+    setShowCropper(true);
+  };
+
+  const handleCloseCropper = () => {
+    setShowCropper(false);
+    setTempImageUrl(null);
+    setTempImageFile(null);
+    setEditingBackground(null);
   };
 
   const handleDeleteBackground = async (background: Background) => {
@@ -212,14 +307,7 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
               <div 
                 className="w-full h-full bg-cover bg-center"
                 style={{ backgroundImage: `url(${background.url})` }}
-              >
-                {/* Indicator for GIFs */}
-                {background.isAnimated && (
-                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded">
-                    GIF
-                  </div>
-                )}
-              </div>
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-stone-800">
                 <span className="text-gray-400">None</span>
@@ -232,19 +320,40 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             
             {/* Delete button - not for default/None */}
             {!background.isDefault && (
-              <button
-                className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteBackground(background);
-                }}
-              >
-                <Trash size={14} />
-              </button>
+              <div className="absolute top-2 right-2 flex flex-col items-center">
+                <button
+                  className="p-1.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteBackground(background);
+                  }}
+                >
+                  <Trash size={14} />
+                </button>
+                <button
+                  className="p-1.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600 mt-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditBackground(background);
+                  }}
+                >
+                  <Edit size={14} />
+                </button>
+              </div>
             )}
           </div>
         ))}
       </div>
+
+      {/* Image Cropper Modal */}
+      {showCropper && tempImageUrl && (
+        <BackgroundCropper
+          isOpen={showCropper}
+          onClose={handleCloseCropper}
+          imageUrl={tempImageUrl}
+          onSaveCropped={handleCropSave}
+        />
+      )}
     </div>
   );
 };

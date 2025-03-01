@@ -69,7 +69,7 @@ const Layout: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // File upload handler
+  // Handle file upload handler
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;

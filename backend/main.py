@@ -1416,16 +1416,32 @@ async def health_check():
 async def upload_png(file: UploadFile = File(...)):
     """Handle PNG upload with metadata extraction."""
     try:
+        logger.log_step(f"Processing uploaded file: {file.filename}")
         content = await file.read()
+        logger.log_step(f"File size: {len(content)} bytes")
+        
+        # Add temporary diagnostic for debugging specific PNGs
+        logger.log_step("Using improved PNG metadata handler")
+        
+        # Extract metadata
         logger.log_step("Reading PNG metadata")
         raw_metadata = png_handler.read_metadata(content)
+        
+        # Add better debugging to see what's happening
+        logger.log_step(f"Extracted metadata type: {type(raw_metadata)}")
+        if raw_metadata:
+            logger.log_step(f"Metadata keys: {list(raw_metadata.keys()) if isinstance(raw_metadata, dict) else 'Not a dict'}")
+            if isinstance(raw_metadata, dict) and 'data' in raw_metadata:
+                logger.log_step(f"Found 'data' key, nested keys: {list(raw_metadata['data'].keys())}")
+        else:
+            logger.log_step("No metadata extracted (raw_metadata is empty)")
         
         if not raw_metadata:
             logger.log_step("No metadata found, creating empty character")
             raw_metadata = validator.create_empty_character()
         else:
             logger.log_step("Raw metadata structure:")
-            logger.log_step(json.dumps(raw_metadata, indent=2)[:500])
+            logger.log_step(json.dumps(raw_metadata, indent=2)[:500] + "..." if len(json.dumps(raw_metadata)) > 500 else json.dumps(raw_metadata))
             
             # If this is Backyard format (has 'character' field), pass directly to validator
             if 'character' in raw_metadata:
@@ -1458,10 +1474,26 @@ async def upload_png(file: UploadFile = File(...)):
                 }
                 raw_metadata = v2_data
                 logger.log_step("Converted to V2 structure:")
-                logger.log_step(json.dumps(raw_metadata, indent=2))
+                logger.log_step(json.dumps(raw_metadata, indent=2)[:500] + "..." if len(json.dumps(raw_metadata)) > 500 else json.dumps(raw_metadata))
         
         # Always validate with our V2 validator
+        logger.log_step("Running validator.normalize...")
         validated_metadata = validator.normalize(raw_metadata)
+        
+        # Check if metadata was correctly normalized
+        if validated_metadata:
+            logger.log_step("Successfully validated metadata")
+            char_name = validated_metadata.get('data', {}).get('name', 'Unknown')
+            logger.log_step(f"Validated character name: {char_name}")
+            
+            # Log structure of validated metadata
+            if 'data' in validated_metadata:
+                logger.log_step(f"Validated data keys: {list(validated_metadata['data'].keys())}")
+                if 'character_book' in validated_metadata['data']:
+                    num_entries = len(validated_metadata['data']['character_book'].get('entries', []))
+                    logger.log_step(f"Character book entries: {num_entries}")
+        else:
+            logger.log_step("Validation failed, returned empty result")
         
         return {
             "success": True,
@@ -1470,6 +1502,7 @@ async def upload_png(file: UploadFile = File(...)):
         
     except Exception as e:
         logger.log_error(f"Upload failed: {str(e)}")
+        logger.log_error(traceback.format_exc())  # Add stack trace for more info
         return {"success": False, "error": str(e)}
 
 @app.post("/api/save-png")

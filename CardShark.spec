@@ -44,6 +44,7 @@ hidden_imports = [
     # Backend modules - only include ones that exist
     'backend',
     'backend.api_handler.py',
+    'backend.background_handler.py',
     'backend.backyard_handler.py',
     'backend.character_validator.py',
     'backend.chat_handler.py',
@@ -56,6 +57,7 @@ hidden_imports = [
     'backend.settings_manager.py',
     'backend.test_module.py',
     'backend.template_handler.py',
+    
     
     # Important dependencies
     'email_validator',
