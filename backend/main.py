@@ -43,72 +43,6 @@ def get_frontend_path() -> Path:
     else:  # Running as normal Python script
         return Path(__file__).parent.parent / "frontend" / "dist"
     
-class BackgroundHandler:
-    def __init__(self, logger):
-        self.backgrounds_dir = Path(__file__).parent / 'backgrounds'
-        self.backgrounds_dir.mkdir(exist_ok=True)
-        self.backgrounds = []
-
-    def initialize_default_backgrounds(self):
-        """
-        Initialize the backgrounds with any default backgrounds that may exist in the backgrounds directory.
-        """
-        for file in self.backgrounds_dir.iterdir():
-            self.backgrounds.append({"name": file.stem, "filename": file.name, "path": str(file), "size": file.stat().st_size, "modified": file.stat().st_mtime})
-    
-    def get_all_backgrounds(self):
-        # Create a list to hold the background details
-        backgrounds = []
-        
-        # Iterate through all files in the backgrounds directory
-        for file in self.backgrounds_dir.iterdir():
-            # Create a dictionary with details for each file
-            background_info = {
-                "name": file.stem,  # The name of the file without the extension
-                "filename": file.name,  # The full file name with extension
-                "path": str(file),  # The full path to the file as a string
-                "size": file.stat().st_size,  # The file size
-                "modified": file.stat().st_mtime  # The last modified timestamp
-            }
-            # Add the file information to the list
-            backgrounds.append(background_info)
-            
-        return backgrounds
-    
-    def save_background(self, content, filename):
-        # Construct the full path to save the background
-        file_path = self.backgrounds_dir / filename
-        
-        # Write the content to the file
-        with open(file_path, "wb") as file:
-            file.write(content)
-        
-        # Return the file name and path
-        background_info = {
-            "name": file_path.stem,  # The name of the file without the extension
-            "filename": file_path.name,  # The full file name with extension
-            "path": str(file_path),  # The full path to the file as a string
-            "size": file_path.stat().st_size,  # The file size
-            "modified": file_path.stat().st_mtime  # The last modified timestamp
-        }
-        self.backgrounds.append(background_info)
-        return background_info
-    
-    def delete_background(self, filename):
-        # Construct the full path to the background file
-        file_path = self.backgrounds_dir / filename
-        
-        # Check if the file exists
-        if file_path.exists():
-            # Delete the file
-            file_path.unlink()
-            
-            # Remove the file from the list of backgrounds
-            self.backgrounds = [b for b in self.backgrounds if b["filename"] != filename]
-            return True
-        else:
-            return False
-
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -226,20 +160,14 @@ async def upload_background(file: UploadFile = File(...)):
 async def get_background_image(filename: str):
     """Serve a background image."""
     try:
-        print(f"Requested filename: {filename}")
-        # Determine base directory based on environment
-        if getattr(sys, 'frozen', False):
-            # Running as PyInstaller bundle
-            base_dir = Path(sys.executable).parent
-        else:
-            # Running from source
-            base_dir = Path(__file__).parent
-            
-        backgrounds_dir = base_dir / 'backgrounds'
-        file_path = backgrounds_dir / filename # Remove appending ".jpg"
+        logger.log_step(f"Requested background image: {filename}")
         
-        print(f"Looking for file at: {file_path}")
+        # Use the background_handler's directory path for consistency
+        file_path = background_handler.backgrounds_dir / filename
+        
+        logger.log_step(f"Looking for file at: {file_path}")
         if not file_path.exists():
+            logger.log_warning(f"Background image not found: {file_path}")
             raise HTTPException(status_code=404, detail="Image not found")
             
         return FileResponse(file_path)
