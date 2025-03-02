@@ -1,3 +1,5 @@
+# backend/api_handler.py
+# Description: API handler for interacting with LLM API endpoints
 import requests # type: ignore
 import json
 import re

@@ -1,3 +1,5 @@
+# backend/settings_manager.py
+# Description: Manages settings for the application, including loading, saving, and updating settings.
 import json
 import os
 import sys
@@ -278,12 +280,13 @@ class SettingsManager:
             # Save to file
             with open(self.settings_file, 'w') as f:
                 json.dump(json_settings, f, indent=2)
-            
-            # Verify what we just saved
+
+                        # --- Verification Logging ---
             with open(self.settings_file, 'r') as f:
                 saved_content = json.load(f)
-                self.logger.log_step(f"Verified saved settings: {json.dumps(saved_content, indent=2)}")
-            
+                self.logger.log_step(f"**Verified saved settings (immediately after save):** {json.dumps(saved_content, indent=2)}")
+            # --- End Verification Logging ---  
+
             # Verify API enabled state specifically
             if 'api' in saved_content:
                 self.logger.log_step(f"Post-save API enabled state: {saved_content['api'].get('enabled')}")

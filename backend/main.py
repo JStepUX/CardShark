@@ -1,3 +1,5 @@
+# backend/main.py
+# Main FastAPI application file for CardShark
 import sys
 import os
 from pathlib import Path

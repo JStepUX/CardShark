@@ -12,6 +12,7 @@ import { Settings } from '../types/settings';
 import { SettingsTabs, SettingsTab } from './SettingsTabs';
 import TemplateManager from './TemplateManager';
 import { TemplateProvider } from '../contexts/TemplateContext';
+import { useAPIConfig } from '../contexts/APIConfigContext';
 
 interface ViewProps {
   settings: Settings;
@@ -20,18 +21,46 @@ interface ViewProps {
 
 const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts'>('general');
-  
+  const { setAPIConfig } = useAPIConfig(); // **NEW: Get setAPIConfig from APIConfigContext**
+
   const handleAPIUpdate = (id: string, updates: Partial<APIConfig>) => {
-    onUpdate({
-      apis: {
-        ...settings.apis,
-        [id]: {
-          ...settings.apis[id],
-          ...updates
+    onUpdate({ // **Existing onUpdate call to update settings state**
+        apis: {
+            ...settings.apis,
+            [id]: {
+                ...settings.apis[id],
+                ...updates
+            }
         }
-      }
     });
-  };
+
+    // **NEW: Re-fetch settings from backend and update APIConfigContext**
+    const refetchSettingsAndUpdateContext = async () => {
+        try {
+            const response = await fetch("/api/settings"); // Re-fetch ALL settings
+            if (!response.ok) throw new Error("Failed to load settings after update");
+            const data = await response.json();
+            if (data.success && data.settings && data.settings.apis) {
+                const updatedApiConfig = data.settings.apis[id]; // Get updated API config by ID
+
+                if (updatedApiConfig) {
+                    // **Update APIConfigContext using setAPIConfig (now in scope)**
+                    setAPIConfig(updatedApiConfig); 
+                    console.log("APISettingsView - APIConfigContext updated with re-fetched API config:", {
+                        ...updatedApiConfig,
+                        apiKey: updatedApiConfig.apiKey ? '[REDACTED]' : undefined
+                    });
+                } else {
+                    console.warn(`Updated API config with ID "${id}" not found in re-fetched settings`);
+                }
+            }
+        } catch (error) {
+            console.error("Error re-fetching settings after API update:", error);
+        }
+    };
+
+    refetchSettingsAndUpdateContext();
+};
 
   const handleAddAPI = () => {
     const newConfig = createAPIConfig(APIProvider.KOBOLD);

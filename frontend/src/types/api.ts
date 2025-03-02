@@ -1,5 +1,5 @@
 // types/api.ts
-
+// Types for API configuration and generation settings
 // Define generation settings first since it's needed for createAPIConfig
 export interface GenerationSettings {
   max_length?: number;

@@ -1,3 +1,5 @@
+// components/APICard.tsx
+// This file contains the APICard component which is used to display and manage API configurations in the UI. The component allows users to configure API settings, test the connection, and disconnect from the API. It also displays information about the connected model and provides options for selecting templates and generation settings.
 import React, { useState, useEffect } from 'react';
 import { Globe2, Key, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { 

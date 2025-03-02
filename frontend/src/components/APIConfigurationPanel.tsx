@@ -1,3 +1,5 @@
+// components/APIConfigurationPanel.tsx
+// Component for displaying and updating API configuration settings
 import React, { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Sliders } from 'lucide-react';
 import { APIConfig } from '../types/api';

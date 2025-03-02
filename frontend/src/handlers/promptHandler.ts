@@ -1,3 +1,5 @@
+// handlers/promptHandler.ts
+// Handles prompt generation and formatting for chat messages
 import { CharacterCard } from '../types/schema';
 import { APIConfig } from '../types/api';
 import { templateService } from '../services/templateService';

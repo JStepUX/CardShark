@@ -37,6 +37,7 @@ export function useChatMessages(characterData: CharacterData | null) {
   // Access the API configuration from the context
   const { apiConfig } = useContext(APIConfigContext);
 
+  
   // Initialize with stored user and persisted context window
   const [state, setState] = useState<ChatState>(() => {
     let storedUser: UserProfile | null = null;

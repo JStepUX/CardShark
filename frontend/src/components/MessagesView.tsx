@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Wand2, Loader2, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useAPIConfig } from '../contexts/APIConfigContext'; // Add this import
 import HighlightedTextArea from './HighlightedTextArea';
