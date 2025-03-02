@@ -30,86 +30,7 @@ interface ChatBubbleProps {
   characterName?: string;
 }
 
-// Character-by-character animation component
-const AnimatedText: React.FC<{ 
-  text: string; 
-  isGenerating: boolean;
-  processContent: (text: string) => React.ReactNode[];
-}> = ({ text, isGenerating, processContent }) => {
-  const [displayedText, setDisplayedText] = useState(text);
-  const previousTextRef = useRef(text);
-  const animationRef = useRef<NodeJS.Timeout | null>(null);
-  
-  useEffect(() => {
-    // Only animate if we're generating and text has changed
-    if (isGenerating && text !== previousTextRef.current) {
-      // Get only the new part of the text
-      const commonPrefixLength = findCommonPrefixLength(previousTextRef.current, text);
-      const newContent = text.substring(commonPrefixLength);
-      
-      if (newContent.length > 0) {
-        let currentDisplayText = previousTextRef.current;
-        let charIndex = 0;
-        
-        // Clear any existing animation
-        if (animationRef.current) {
-          clearTimeout(animationRef.current);
-        }
-        
-        // Function to animate each character
-        const animateNextChar = () => {
-          if (charIndex < newContent.length) {
-            currentDisplayText += newContent[charIndex];
-            setDisplayedText(currentDisplayText);
-            charIndex++;
-            
-            // Schedule next character
-            animationRef.current = setTimeout(animateNextChar, 15); // 15ms for smooth but visible animation
-          } else {
-            animationRef.current = null;
-          }
-        };
-        
-        // Start animation
-        animateNextChar();
-      }
-    } else if (!isGenerating || text.length < previousTextRef.current.length) {
-      // Show full text immediately when not generating or if text gets shorter
-      setDisplayedText(text);
-      
-      // Clear any running animation
-      if (animationRef.current) {
-        clearTimeout(animationRef.current);
-        animationRef.current = null;
-      }
-    }
-    
-    // Update the reference text
-    previousTextRef.current = text;
-    
-    // Cleanup animation on unmount
-    return () => {
-      if (animationRef.current) {
-        clearTimeout(animationRef.current);
-      }
-    };
-  }, [text, isGenerating]);
-  
-  // Helper function to find common prefix length
-  function findCommonPrefixLength(a: string, b: string): number {
-    let i = 0;
-    const minLength = Math.min(a.length, b.length);
-    while (i < minLength && a[i] === b[i]) {
-      i++;
-    }
-    return i;
-  }
-  
-  // Return the processed content with syntax highlighting
-  return <>{processContent(displayedText)}</>;
-};
-
-const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
+const ChatBubble: React.FC<ChatBubbleProps> = ({
   message,
   isGenerating,
   onContentChange,
@@ -124,6 +45,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const contentRef = useRef<HTMLDivElement>(null);
   const isMounted = useRef(true);
   const previousContent = useRef<string>(message.content);
+  const [htmlContent, setHtmlContent] = useState<string>('');
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
@@ -133,10 +55,14 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     };
   }, []);
 
-  // Update previousContent when message content changes from external sources
+  // Update previousContent and generate html when message content changes from external sources
   useEffect(() => {
     previousContent.current = message.content;
-  }, [message.content]);
+    
+    // Generate HTML with syntax highlighting
+    const html = formatMessageWithSyntaxHighlighting(message.content);
+    setHtmlContent(html);
+  }, [message.content, currentUser, characterName]);
 
   // Track if user is currently editing (for debounced saves)
   const [isEditing, setIsEditing] = useState(false);
@@ -144,23 +70,56 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   // Use a timer for debounced saves during continuous editing
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Safely get the text content from contentRef
+  const getContentSafely = useCallback(() => {
+    if (!contentRef.current) return "";
+    
+    // Get the text content directly
+    return contentRef.current.textContent || "";
+  }, []);
+  
+  // Format message content with syntax highlighting
+  const formatMessageWithSyntaxHighlighting = (text: string): string => {
+    if (!text) return "";
+    
+    // Replace {{user}} and {{char}} variables with their values
+    let processedText = text
+      .replace(/{{user}}/gi, currentUser || 'User')
+      .replace(/{{char}}/gi, characterName || 'Character');
+      
+    // Add syntax highlighting by wrapping different patterns with colored spans
+    processedText = processedText
+      // Quoted text in orange
+      .replace(/"([^"\\]|\\.)*"/g, '<span style="color: #FFB86C;">$&</span>')
+      // Code blocks in green
+      .replace(/`([^`\\]|\\.)*`/g, '<span style="color: #A7FF78;">$&</span>')
+      // Bold text in cyan
+      .replace(/\*([^*\\\n]|\\.)*\*/g, '<span style="color: #80CBC4;">$&</span>')
+      // Italic text in purple
+      .replace(/_([^_\\\n]|\\.)*_/g, '<span style="color: #C381E6;">$&</span>');
+      
+    return processedText;
+  };
+  
   // Improved handler that tracks and detects actual changes
   const handleInput = useCallback(() => {
     if (contentRef.current && isMounted.current) {
-      const newContent = contentRef.current.textContent || '';
+      // Get content safely to avoid DOM mutation issues
+      const newContent = getContentSafely();
       
       // Only update if content has actually changed
       if (newContent !== previousContent.current) {
         // Update our tracking ref
         previousContent.current = newContent;
         
-        // Update UI immediately
-        onContentChange(newContent);
-        
         // Set editing state if not already set
         if (!isEditing) {
           setIsEditing(true);
         }
+        
+        // Update HTML content for live syntax highlighting while typing
+        const html = formatMessageWithSyntaxHighlighting(newContent);
+        setHtmlContent(html);
         
         // Clear any existing timer
         if (saveTimerRef.current) {
@@ -170,10 +129,12 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         // Set a debounced save timer
         saveTimerRef.current = setTimeout(() => {
           // Only proceed if component is still mounted
-          if (isMounted.current && contentRef.current) {
+          if (isMounted.current) {
+            // Get content again safely, in case it changed during the timeout
+            const finalContent = getContentSafely();
             console.log(`Debounced content update for message ${message.id}`);
             // This will trigger the actual save
-            onContentChange(newContent);
+            onContentChange(finalContent);
             saveTimerRef.current = null;
           }
         }, 1500); // 1.5 second debounce
@@ -182,50 +143,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         console.log(`Content updated for message ${message.id}. Updating context...`);
       }
     }
-  }, [onContentChange, message.id, isEditing]);
-
-  // Process content to highlight special formatting
-  const processContent = useCallback((text: string): React.ReactNode[] => {
-    const segments = text
-      .split(/(".*?"|\*.*?\*|`.*?`|\{\{.*?\}\})/g)
-      .filter(Boolean);
-
-    return segments.map((segment, index) => {
-      const processedSegment = segment
-        .replace(/{{user}}/gi, currentUser || 'User')
-        .replace(/{{char}}/gi, characterName || 'Character');
-
-      if (segment.match(/^".*"$/)) {
-        return (
-          <span key={index} style={{ color: '#FFB86C' }}>
-            {processedSegment}
-          </span>
-        );
-      }
-      if (segment.match(/^\*.*\*$/)) {
-        return (
-          <span key={index} style={{ color: '#8BE9FD' }}>
-            {processedSegment}
-          </span>
-        );
-      }
-      if (segment.match(/^`.*`$/)) {
-        return (
-          <span key={index} style={{ color: '#F1FA8C' }}>
-            {processedSegment}
-          </span>
-        );
-      }
-      if (segment.match(/^\{\{.*\}\}$/)) {
-        return (
-          <span key={index} style={{ color: '#FF79C6' }}>
-            {processedSegment}
-          </span>
-        );
-      }
-      return <span key={index}>{processedSegment}</span>;
-    });
-  }, [currentUser, characterName]);
+  }, [onContentChange, message.id, isEditing, getContentSafely, formatMessageWithSyntaxHighlighting]);
 
   const bubbleClass =
     message.role === 'user'
@@ -241,11 +159,11 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     }
     
     // Only process the blur if we were editing and component is still mounted
-    if (isEditing && isMounted.current && contentRef.current) {
+    if (isEditing && isMounted.current) {
       setIsEditing(false);
       
-      // Get the final content
-      const finalContent = contentRef.current.textContent || '';
+      // Get the final content safely
+      const finalContent = getContentSafely();
       
       // Only save if content actually changed
       if (finalContent !== message.content) {
@@ -253,7 +171,38 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         onContentChange(finalContent);
       }
     }
-  }, [isEditing, message.id, message.content, onContentChange]);
+  }, [isEditing, message.id, message.content, onContentChange, getContentSafely]);
+
+  // Handle paste events to ensure clean text
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    
+    // Use the safer insertText command instead of execCommand when possible
+    if (document.queryCommandSupported('insertText')) {
+      document.execCommand('insertText', false, text);
+    } else {
+      // Fallback to selection API
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(text));
+      }
+    }
+    
+    // Make sure to trigger the input handler for highlighting
+    handleInput();
+  }, [handleInput]);
+
+  // Get the final HTML content
+  const getFinalContent = (): string => {
+    if (message.aborted) {
+      return '<span style="color: #FF6B6B;">Generation aborted.</span>';
+    }
+    
+    return htmlContent || formatMessageWithSyntaxHighlighting(message.content);
+  };
 
   return (
     <div className={`w-full rounded-lg transition-colors ${bubbleClass}`}>
@@ -320,42 +269,20 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       </div>
 
       <div className="p-4">
-        {message.aborted ? (
-          <div className="whitespace-pre-wrap break-words" style={{ minHeight: '1em' }}>
-            <span className="text-red-400">Generation aborted.</span>
-          </div>
-        ) : (
-          <div
-            ref={contentRef}
-            contentEditable={!isGenerating}
-            suppressContentEditableWarning
-            onInput={handleInput}
-            onBlur={handleBlur}  
-            onPaste={(e) => {
-              e.preventDefault();
-              const text = e.clipboardData.getData('text/plain');
-              document.execCommand('insertText', false, text);
-            }}
-            className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
-            style={{ minHeight: '1em' }}
-          >
-            {isGenerating && message.role === 'assistant' ? (
-              <AnimatedText 
-                text={message.content} 
-                isGenerating={isGenerating} 
-                processContent={processContent} 
-              />
-            ) : (
-              processContent(message.content)
-            )}
-          </div>
-        )}
+        <div
+          ref={contentRef}
+          contentEditable={!isGenerating}
+          suppressContentEditableWarning
+          onInput={handleInput}
+          onBlur={handleBlur}
+          onPaste={handlePaste}
+          className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
+          style={{ minHeight: '1em' }}
+          dangerouslySetInnerHTML={{ __html: getFinalContent() }}
+        />
       </div>
     </div>
   );
-});
-
-// Add display name for React.memo
-ChatBubble.displayName = 'ChatBubble';
+};
 
 export default ChatBubble;
