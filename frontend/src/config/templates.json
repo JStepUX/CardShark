@@ -16,7 +16,7 @@
         "<|im_end|>\\n<|im_start|>assistant",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -38,7 +38,7 @@
         "<|im_end|>\\n<|im_start|>assistant",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -58,7 +58,7 @@
         "<|im_end|>\\n<|im_start|>assistant",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -78,7 +78,7 @@
         "<end_of_turn>",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -97,7 +97,7 @@
         "<|eot_id|>",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -116,7 +116,7 @@
         "[/INST]",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -135,7 +135,7 @@
         "[/INST]",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -154,7 +154,7 @@
         "[INST]",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -173,7 +173,7 @@
         "<|end|>",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -192,7 +192,7 @@
         "<|END_OF_TURN_TOKEN|>",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
       ]
     },
     {
@@ -211,7 +211,39 @@
         "<｜end▁of▁sentence｜>",
         "User:",
         "Assistant:",
-        "{{char}}:"
+        "{{user}}:"
+      ]
+    },
+    {
+      "search": ["### Instruction:"],
+      "name": "Alpaca",
+      "id": "alpaca",
+      "description": "Format based on the Alpaca template, featuring instruction/response/system sequences with forced name behavior and wrapping.",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "### Input: {{content}}\n\n",
+      "userFormat": "### Instruction: {{content}}\n\n",
+      "assistantFormat": "### Response: {{content}}\n\n",
+      "memoryFormat": "",
+      "detectionPatterns": ["### Instruction:", "### Response:", "### Input:"],
+      "stopSequences": [
+        "{{user}}:"
+      ]
+    },
+    {
+      "search": ["<|user|>"],
+      "name": "Metharme",
+      "id": "metharme",
+      "description": "Format based on the Metharme template, using <|user|> and <|model|> sequences with forced name behavior and macro support.",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|system|> {{content}}",
+      "userFormat": "<|user|> {{content}}",
+      "assistantFormat": "<|model|> {{content}}",
+      "memoryFormat": "",
+      "detectionPatterns": ["<|user|>", "<|model|>", "<|system|>"],
+      "stopSequences": [
+        "</s>"
       ]
     }
   ]
