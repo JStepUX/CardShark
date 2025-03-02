@@ -453,16 +453,31 @@ async def delete_context_window():
             }
         )
 
+@app.get("/api/users_dir")  # Define the route
+def get_users_dir() -> Path:  # Define the function
+    """Get the users directory path."""
+    # Determine base directory based on environment
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        base_dir = Path(sys.executable).parent
+    else:
+        # Running from source
+        base_dir = Path.cwd()
+
+    # Create users directory if it doesn't exist
+    users_dir = base_dir / 'users'
+    users_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.log_step(f"Users directory: {users_dir}")
+    return users_dir
+
+# Then update the user image routes to use this helper function
+
 @app.get("/api/users")
 async def get_users():
     """List user profiles from the users directory."""
     try:
-        # Get base directory
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        users_dir = base_dir / 'users'  # Corrected path to just users
-        
-        # Create users directory if it doesn't exist
-        users_dir.mkdir(parents=True, exist_ok=True)
+        users_dir = get_users_dir()
         
         logger.log_step(f"Scanning users directory: {users_dir}")
         
@@ -472,6 +487,7 @@ async def get_users():
             logger.log_step(f"Found user PNG: {file.name}")
             png_files.append({
                 "name": file.stem,
+                "filename": file.name,
                 "path": str(file),
                 "size": file.stat().st_size,
                 "modified": file.stat().st_mtime
@@ -508,12 +524,8 @@ async def upload_user_image(
         # Validate metadata
         validated_metadata = validator.normalize(metadata_dict)
         
-        # Get base directory 
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        users_dir = base_dir / 'users'  # Corrected path to just users
-        
-        # Ensure directory exists
-        users_dir.mkdir(parents=True, exist_ok=True)
+        # Get users directory
+        users_dir = get_users_dir()
         
         logger.log_step(f"Users directory: {users_dir}")  # Debug log
 
@@ -576,12 +588,11 @@ async def upload_user_image(
 async def get_user_image(filename: str):
     """Serve user profile images by filename only."""
     try:
-        # Get base directory
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        users_dir = base_dir / 'users'  # Corrected path to just users
+        # Get users directory
+        users_dir = get_users_dir()
         file_path = users_dir / filename
 
-        logger.log_step(f"Attempting to serve image: {file_path}")
+        logger.log_step(f"Attempting to serve user image: {file_path}")
 
         if not filename or filename == 'undefined':
             logger.log_error("Invalid filename requested")
@@ -589,14 +600,14 @@ async def get_user_image(filename: str):
 
         # Validate the file exists and is within users directory
         if not file_path.exists():
-            logger.log_error(f"Image not found: {file_path}")
+            logger.log_error(f"User image not found: {file_path}")
             raise HTTPException(status_code=404, detail="Image not found")
             
         if not file_path.is_file():
             logger.log_error(f"Not a file: {file_path}")
             raise HTTPException(status_code=404, detail="Not a file")
         
-        logger.log_step(f"Serving file: {file_path}")
+        logger.log_step(f"Serving user image file: {file_path}")
             
         # Serve the file
         return FileResponse(
