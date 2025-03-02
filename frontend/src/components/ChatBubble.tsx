@@ -30,7 +30,86 @@ interface ChatBubbleProps {
   characterName?: string;
 }
 
-const ChatBubble: React.FC<ChatBubbleProps> = ({
+// Character-by-character animation component
+const AnimatedText: React.FC<{ 
+  text: string; 
+  isGenerating: boolean;
+  processContent: (text: string) => React.ReactNode[];
+}> = ({ text, isGenerating, processContent }) => {
+  const [displayedText, setDisplayedText] = useState(text);
+  const previousTextRef = useRef(text);
+  const animationRef = useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    // Only animate if we're generating and text has changed
+    if (isGenerating && text !== previousTextRef.current) {
+      // Get only the new part of the text
+      const commonPrefixLength = findCommonPrefixLength(previousTextRef.current, text);
+      const newContent = text.substring(commonPrefixLength);
+      
+      if (newContent.length > 0) {
+        let currentDisplayText = previousTextRef.current;
+        let charIndex = 0;
+        
+        // Clear any existing animation
+        if (animationRef.current) {
+          clearTimeout(animationRef.current);
+        }
+        
+        // Function to animate each character
+        const animateNextChar = () => {
+          if (charIndex < newContent.length) {
+            currentDisplayText += newContent[charIndex];
+            setDisplayedText(currentDisplayText);
+            charIndex++;
+            
+            // Schedule next character
+            animationRef.current = setTimeout(animateNextChar, 15); // 15ms for smooth but visible animation
+          } else {
+            animationRef.current = null;
+          }
+        };
+        
+        // Start animation
+        animateNextChar();
+      }
+    } else if (!isGenerating || text.length < previousTextRef.current.length) {
+      // Show full text immediately when not generating or if text gets shorter
+      setDisplayedText(text);
+      
+      // Clear any running animation
+      if (animationRef.current) {
+        clearTimeout(animationRef.current);
+        animationRef.current = null;
+      }
+    }
+    
+    // Update the reference text
+    previousTextRef.current = text;
+    
+    // Cleanup animation on unmount
+    return () => {
+      if (animationRef.current) {
+        clearTimeout(animationRef.current);
+      }
+    };
+  }, [text, isGenerating]);
+  
+  // Helper function to find common prefix length
+  function findCommonPrefixLength(a: string, b: string): number {
+    let i = 0;
+    const minLength = Math.min(a.length, b.length);
+    while (i < minLength && a[i] === b[i]) {
+      i++;
+    }
+    return i;
+  }
+  
+  // Return the processed content with syntax highlighting
+  return <>{processContent(displayedText)}</>;
+};
+
+const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   message,
   isGenerating,
   onContentChange,
@@ -46,10 +125,12 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
   const isMounted = useRef(true);
   const previousContent = useRef<string>(message.content);
 
+  // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
+    isMounted.current = true;
     return () => {
-      isMounted.current = false
-    }
+      isMounted.current = false;
+    };
   }, []);
 
   // Update previousContent when message content changes from external sources
@@ -88,10 +169,13 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
         
         // Set a debounced save timer
         saveTimerRef.current = setTimeout(() => {
-          console.log(`Debounced content update for message ${message.id}`);
-          // This will trigger the actual save
-          onContentChange(newContent);
-          saveTimerRef.current = null;
+          // Only proceed if component is still mounted
+          if (isMounted.current && contentRef.current) {
+            console.log(`Debounced content update for message ${message.id}`);
+            // This will trigger the actual save
+            onContentChange(newContent);
+            saveTimerRef.current = null;
+          }
         }, 1500); // 1.5 second debounce
         
         // Log that we're updating context due to user edit
@@ -101,7 +185,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
   }, [onContentChange, message.id, isEditing]);
 
   // Process content to highlight special formatting
-  const processContent = (text: string): React.ReactNode[] => {
+  const processContent = useCallback((text: string): React.ReactNode[] => {
     const segments = text
       .split(/(".*?"|\*.*?\*|`.*?`|\{\{.*?\}\})/g)
       .filter(Boolean);
@@ -139,9 +223,9 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
           </span>
         );
       }
-      return processedSegment;
+      return <span key={index}>{processedSegment}</span>;
     });
-  };
+  }, [currentUser, characterName]);
 
   const bubbleClass =
     message.role === 'user'
@@ -156,12 +240,12 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
       saveTimerRef.current = null;
     }
     
-    // Only process the blur if we were editing
-    if (isEditing) {
+    // Only process the blur if we were editing and component is still mounted
+    if (isEditing && isMounted.current && contentRef.current) {
       setIsEditing(false);
       
       // Get the final content
-      const finalContent = contentRef.current?.textContent || '';
+      const finalContent = contentRef.current.textContent || '';
       
       // Only save if content actually changed
       if (finalContent !== message.content) {
@@ -236,28 +320,42 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
       </div>
 
       <div className="p-4">
-        <div
-          ref={contentRef}
-          contentEditable={!isGenerating}
-          suppressContentEditableWarning
-          onInput={handleInput}
-          onBlur={handleBlur}  
-          onPaste={(e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            document.execCommand('insertText', false, text);
-          }}
-          className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
-          style={{ minHeight: '1em' }}
-        >
-            {message.aborted
-              ? <span className="text-red-400">Generation aborted.</span>
-              : processContent(message.content)
-            }
-        </div>
+        {message.aborted ? (
+          <div className="whitespace-pre-wrap break-words" style={{ minHeight: '1em' }}>
+            <span className="text-red-400">Generation aborted.</span>
+          </div>
+        ) : (
+          <div
+            ref={contentRef}
+            contentEditable={!isGenerating}
+            suppressContentEditableWarning
+            onInput={handleInput}
+            onBlur={handleBlur}  
+            onPaste={(e) => {
+              e.preventDefault();
+              const text = e.clipboardData.getData('text/plain');
+              document.execCommand('insertText', false, text);
+            }}
+            className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
+            style={{ minHeight: '1em' }}
+          >
+            {isGenerating && message.role === 'assistant' ? (
+              <AnimatedText 
+                text={message.content} 
+                isGenerating={isGenerating} 
+                processContent={processContent} 
+              />
+            ) : (
+              processContent(message.content)
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
-};
+});
+
+// Add display name for React.memo
+ChatBubble.displayName = 'ChatBubble';
 
 export default ChatBubble;
