@@ -41,9 +41,9 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
           <div className="text-gray-300 space-y-1">
             <ul className="list-disc pl-5 space-y-1">
               <li>My lead developer, Claude</li>
+              <li>Backyard.ai</li>
               <li>Silly Tavern</li>
               <li>The KoboldCPP Team</li>
-              <li>Backyard.ai</li>
             </ul>
           </div>
         </section>
@@ -52,7 +52,6 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
           <h3 className="font-medium">Friends & Contributors</h3>
           <ul className="text-gray-300 list-disc pl-5 space-y-1">
             <li>The entire Garage community, for their support, ambition, kindness, and friendship.</li>
-            <li>Rabbit for being my Discord Daddy</li>
           </ul>
         </section>
 
@@ -67,7 +66,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
 
         <footer className="pt-2 border-t border-gray-700">
           <div className="flex items-center justify-between text-sm text-gray-400">
-            <span>Version 0.2</span>
+            <span>Version 2.0</span>
             <span>© 2024 CardShark Team</span>
           </div>
         </footer>

@@ -35,6 +35,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
   // Add this state
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [otherCount, setOtherCount] = useState(0);
+  const [tagsLoading, setTagsLoading] = useState(false);
 
   // Filter characters based on search term
   const filteredCharacters = useMemo(() => {
@@ -91,6 +92,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
   const loadFromDirectory = async (directory: string) => {
     try {
       setIsLoading(true);
+      setTagsLoading(true); // Start tags loading
       setError(null);
       setDisplayedCount(24); // Reset display count for new directory
 
@@ -112,6 +114,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
       setCharacters([]);
     } finally {
       setIsLoading(false);
+      // Note: We don't set tagsLoading to false here, as we'll do that after tags are processed
     }
   };
 
@@ -153,53 +156,59 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
   // Add this after we load characters
   useEffect(() => {
     if (characters.length > 0) {
-      // Create case-insensitive mapping
-      const tagMapping: Record<string, string> = {};
-      const counts: Record<string, number> = {};
-      let untaggedCount = 0;
-      
-      // First pass: establish preferred case for each tag
-      characters.forEach(char => {
-        if (char.tags && char.tags.length > 0) {
-          char.tags.forEach(tag => {
-            if (tag) {
-              const tagLower = tag.toLowerCase();
-              // First occurrence defines preferred case
-              if (!tagMapping[tagLower]) {
-                tagMapping[tagLower] = tag;
-              }
+      setTagsLoading(true);
+    
+      // Use setTimeout to allow UI update before heavy processing
+      setTimeout(() => {
+        try {
+          // Create case-insensitive mapping
+          const tagMapping: Record<string, string> = {};
+          const counts: Record<string, number> = {};
+          let untaggedCount = 0;
+          
+          // First pass: establish preferred case for each tag
+          characters.forEach(char => {
+            if (char.tags && char.tags.length > 0) {
+              char.tags.forEach(tag => {
+                if (tag) {
+                  const tagLower = tag.toLowerCase();
+                  // First occurrence defines preferred case
+                  if (!tagMapping[tagLower]) {
+                    tagMapping[tagLower] = tag;
+                  }
+                }
+              });
             }
           });
-        }
-      });
-      
-      // Second pass: count using normalized tags
-      characters.forEach(char => {
-        if (!char.tags || char.tags.length === 0) {
-          untaggedCount++;
-        } else {
-          char.tags.forEach(tag => {
-            if (tag) {
-              const tagLower = tag.toLowerCase();
-              // Use the preferred case from our mapping
-              const normalizedTag = tagMapping[tagLower];
-              counts[normalizedTag] = (counts[normalizedTag] || 0) + 1;
+          
+          // Second pass: count using normalized tags
+          characters.forEach(char => {
+            if (!char.tags || char.tags.length === 0) {
+              untaggedCount++;
+            } else {
+              char.tags.forEach(tag => {
+                if (tag) {
+                  const tagLower = tag.toLowerCase();
+                  // Use the preferred case from our mapping
+                  const normalizedTag = tagMapping[tagLower];
+                  counts[normalizedTag] = (counts[normalizedTag] || 0) + 1;
+                }
+              });
             }
           });
+          
+          // Convert to array and sort by count (descending)
+          const sortedTags = Object.keys(counts).map(tag => ({
+            tag,
+            count: counts[tag]
+          })).sort((a, b) => b.count - a.count);
+          
+          setTagCounts(sortedTags);
+          setOtherCount(untaggedCount);
+        } finally {
+          setTagsLoading(false); // Ensure this gets called even if there's an error
         }
-      });
-      
-      // Convert to array and sort by count (descending)
-      const sortedTags = Object.keys(counts).map(tag => ({
-        tag,
-        count: counts[tag]
-      })).sort((a, b) => b.count - a.count);
-      
-      setTagCounts(sortedTags);
-      setOtherCount(untaggedCount);
-      
-      // Also fetch from backend for any tags we might have missed
-      // ... rest of the code remains the same
+      }, 10); // Small timeout to ensure UI updates first
     }
   }, [characters]);
   
@@ -296,8 +305,16 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
             {error}
           </div>
         ) : isLoading ? (
-          <div className="p-8 text-center text-gray-400">
-            Loading characters...
+          // Loading skeleton for initial load
+          <div className="p-4">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {Array.from({ length: 24 }).map((_, index) => (
+                <div key={`skeleton-${index}`} className="relative">
+                  <div className="aspect-[3/5] bg-stone-800 rounded-lg animate-pulse"></div>
+                  <div className="absolute inset-x-0 bottom-0 bg-stone-700 h-8 rounded-b-lg animate-pulse"></div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : characters.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
@@ -345,6 +362,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        ) : tagsLoading ? (
+          // Show skeleton loading during tag processing
+          <div className="p-4">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {Array.from({ length: Math.min(24, characters.length) }).map((_, index) => (
+                <div key={`skeleton-${index}`} className="relative">
+                  <div className="aspect-[3/5] bg-stone-800 rounded-lg animate-pulse"></div>
+                  <div className="absolute inset-x-0 bottom-0 bg-stone-700 h-8 rounded-b-lg animate-pulse"></div>
+                </div>
+              ))}
             </div>
           </div>
         ) : (
