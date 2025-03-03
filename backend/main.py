@@ -2,6 +2,7 @@
 # Main FastAPI application file for CardShark
 import sys
 import os
+import argparse
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Response, Request # type: ignore
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse # type: ignore
@@ -1590,6 +1591,36 @@ async def extract_lore(file: UploadFile = File(...)):
         )
 
 if __name__ == "__main__":
+    # Check for command-line arguments
+    parser = argparse.ArgumentParser(description="CardShark Character Card Editor")
+    parser.add_argument("-batch", "--batch", action="store_true", help="Run in batch processing mode")
+    parser.add_argument("-b", "--backup-dir", type=str, help="Path to backup directory (required for batch mode)")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Run in quiet mode (minimal output)")
+    args, unknown = parser.parse_known_args()
+    
+    # If batch mode is enabled, run the batch processor instead
+    if args.batch:
+        try:
+            logger.log_step("Running in batch mode")
+            
+            # Import and run the batch converter
+            from backend.batch_converter import main as batch_main
+            batch_main()
+            
+            # Exit after batch processing completes
+            sys.exit(0)
+            
+        except ImportError:
+            print("Error: Batch converter module not found")
+            logger.log_error("Batch converter module not found")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error in batch mode: {str(e)}")
+            logger.log_error(f"Error in batch mode: {str(e)}")
+            logger.log_error(traceback.format_exc())
+            sys.exit(1)
+    
+    # Normal web server mode
     try:
         frontend_path = get_frontend_path()
         if (frontend_path.exists()):

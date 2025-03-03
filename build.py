@@ -285,6 +285,7 @@ hidden_imports = [
     'backend.settings_manager.py',
     'backend.test_module.py',
     'backend.template_handler.py',
+    'backend.batch_converter.py',
     
     
     # Important dependencies

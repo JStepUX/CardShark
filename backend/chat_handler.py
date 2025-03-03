@@ -1,3 +1,4 @@
+
 import os
 import sys
 import json
@@ -73,7 +74,13 @@ class ChatHandler:
         char_id = self._get_character_uuid(character_data)
         
         # Create base directory path
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+        if getattr(sys, 'frozen', False):
+            # Running as PyInstaller bundle
+            base_dir = Path(sys.executable).parent
+        else:
+            # Running from source
+            base_dir = Path.cwd()
+            
         chats_dir = base_dir / 'chats'
         chats_dir.mkdir(parents=True, exist_ok=True)
         
