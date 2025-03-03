@@ -1,15 +1,23 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
+import { Tag, Grid } from 'lucide-react'; // Use Lucide React icons
 
 interface CharacterFile {
   name: string;
   path: string;
   size: number;
   modified: number;
+  tags?: string[]; // Add this property
 }
 
 interface CharacterGalleryProps {
   settingsChangeCount?: number;
+}
+
+// Add this interface for tag counts
+interface TagCount {
+  tag: string;
+  count: number;
 }
 
 const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount = 0 }) => {
@@ -21,6 +29,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
   const [searchTerm, setSearchTerm] = useState('');
   const { setCharacterData, setImageUrl, setIsLoading: setAppLoading } = useCharacter();
   const containerRef = useRef<HTMLDivElement>(null);
+  const [showTagView, setShowTagView] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [] = useState<string[]>([]);
+  // Add this state
+  const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
+  const [otherCount, setOtherCount] = useState(0);
 
   // Filter characters based on search term
   const filteredCharacters = useMemo(() => {
@@ -134,20 +148,130 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
     }
   };
 
+  // Add this function to extract tags from characters
+  
+  // Add this after we load characters
+  useEffect(() => {
+    if (characters.length > 0) {
+      // Create case-insensitive mapping
+      const tagMapping: Record<string, string> = {};
+      const counts: Record<string, number> = {};
+      let untaggedCount = 0;
+      
+      // First pass: establish preferred case for each tag
+      characters.forEach(char => {
+        if (char.tags && char.tags.length > 0) {
+          char.tags.forEach(tag => {
+            if (tag) {
+              const tagLower = tag.toLowerCase();
+              // First occurrence defines preferred case
+              if (!tagMapping[tagLower]) {
+                tagMapping[tagLower] = tag;
+              }
+            }
+          });
+        }
+      });
+      
+      // Second pass: count using normalized tags
+      characters.forEach(char => {
+        if (!char.tags || char.tags.length === 0) {
+          untaggedCount++;
+        } else {
+          char.tags.forEach(tag => {
+            if (tag) {
+              const tagLower = tag.toLowerCase();
+              // Use the preferred case from our mapping
+              const normalizedTag = tagMapping[tagLower];
+              counts[normalizedTag] = (counts[normalizedTag] || 0) + 1;
+            }
+          });
+        }
+      });
+      
+      // Convert to array and sort by count (descending)
+      const sortedTags = Object.keys(counts).map(tag => ({
+        tag,
+        count: counts[tag]
+      })).sort((a, b) => b.count - a.count);
+      
+      setTagCounts(sortedTags);
+      setOtherCount(untaggedCount);
+      
+      // Also fetch from backend for any tags we might have missed
+      // ... rest of the code remains the same
+    }
+  }, [characters]);
+  
+  // Update the tag filtering logic for case insensitivity
+  const tagFilteredCharacters = useMemo(() => {
+    if (!selectedTag) return filteredCharacters;
+    
+    if (selectedTag === "Other") {
+      // Show characters with no tags
+      return filteredCharacters.filter(char => 
+        !char.tags || char.tags.length === 0
+      );
+    }
+    
+    // Show characters with the selected tag (case insensitive)
+    const selectedTagLower = selectedTag.toLowerCase();
+    return filteredCharacters.filter(char => 
+      char.tags && char.tags.some(tag => tag.toLowerCase() === selectedTagLower)
+    );
+  }, [filteredCharacters, selectedTag]);
+  
+  // Function to reset tag filter
+  const clearTagFilter = () => {
+    setSelectedTag(null);
+    setShowTagView(false);
+  };
+  
+  // Use tagFilteredCharacters instead of filteredCharacters for rendering
+
   return (
     <div className="h-full flex flex-col">
       {/* Fixed header section */}
       <div className="flex-none bg-stone-900 border-b border-stone-800">
-        <div className="p-4">
+        <div className="p-4 flex justify-between items-center">
           <h2 className="text-lg font-semibold">
-            Character Gallery {filteredCharacters.length ? `(${filteredCharacters.length})` : ''}
+            Character Gallery {tagFilteredCharacters.length ? `(${tagFilteredCharacters.length})` : ''}
           </h2>
-          {currentDirectory && (
-            <div className="mt-2 text-sm text-slate-500 truncate">
-              Directory: {currentDirectory}
-            </div>
-          )}
+          
+          {/* Add toggle button here */}
+          <button 
+            onClick={() => setShowTagView(prev => !prev)}
+            className={`p-2 rounded-lg transition-colors ${
+              showTagView ? 'bg-blue-600 text-white' : 'bg-stone-800 text-gray-300'
+            }`}
+            title={showTagView ? "Show character grid" : "Show tag folders"}
+          >
+            {showTagView ? 
+              <Grid className="w-5 h-5" /> : 
+              <Tag className="w-5 h-5" />
+            }
+          </button>
         </div>
+        
+        {selectedTag && (
+          <div className="px-4 pb-2 flex items-center">
+            <span className="bg-blue-600 text-white px-2 py-1 rounded-md text-sm flex items-center">
+              {selectedTag}
+              <button 
+                onClick={clearTagFilter}
+                className="ml-2 text-white hover:text-red-200"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+        )}
+        
+        {currentDirectory && (
+          <div className="px-4 pb-2 text-sm text-slate-500 truncate">
+            Directory: {currentDirectory}
+          </div>
+        )}
         
         {/* Search input in fixed header */}
         <div className="px-4 pb-4">
@@ -179,11 +303,55 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
           <div className="p-8 text-center text-gray-400">
             No characters found. Set your character directory in Settings.
           </div>
-        ) : (
+        ) : showTagView ? (
+          // Tag folders view
           <div className="p-4">
-
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {filteredCharacters.slice(0, displayedCount).map((character) => (
+              {tagCounts.map(({ tag, count }) => (
+                <div 
+                  key={tag}
+                  className="aspect-square bg-stone-800 rounded-lg cursor-pointer hover:bg-stone-700 transition-colors flex flex-col items-center justify-center shadow-md relative"
+                  onClick={() => {
+                    setSelectedTag(tag);
+                    setShowTagView(false);
+                  }}
+                >
+                  <Tag className="w-10 h-10 text-blue-400 mb-2" />
+                  <div className="text-center px-2 truncate w-full">
+                    <span className="text-sm font-medium">{tag}</span>
+                  </div>
+                  {count > 0 && (
+                    <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+                      {count}
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              {otherCount > 0 && (
+                <div 
+                  className="aspect-square bg-stone-800 rounded-lg cursor-pointer hover:bg-stone-700 transition-colors flex flex-col items-center justify-center shadow-md relative"
+                  onClick={() => {
+                    setSelectedTag("Other");
+                    setShowTagView(false);
+                  }}
+                >
+                  <Tag className="w-10 h-10 text-gray-400 mb-2" />
+                  <div className="text-center">
+                    <span className="text-sm font-medium">Untagged</span>
+                  </div>
+                  <div className="absolute top-2 right-2 bg-gray-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+                    {otherCount}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          // Normal character grid view
+          <div className="p-4">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {tagFilteredCharacters.slice(0, displayedCount).map((character) => (
                 <div 
                   key={character.path}
                   className="relative group cursor-pointer"
@@ -204,9 +372,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
               ))}
             </div>
             
-            {displayedCount < filteredCharacters.length && (
+            {displayedCount < tagFilteredCharacters.length && (
               <div className="h-20 flex items-center justify-center text-gray-400">
-                Loading more characters... ({displayedCount} / {filteredCharacters.length})
+                Loading more characters... ({displayedCount} / {tagFilteredCharacters.length})
               </div>
             )}
           </div>

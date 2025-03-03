@@ -70,6 +70,118 @@ background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds()
 
 # API Endpoints
+# Add this as a global variable or in your class
+tag_cache = {
+    "last_updated": 0,
+    "directory": None,
+    "tags": [],
+    "character_tags": {}  # Map of character path to list of tags
+}
+
+@app.get("/api/characters")
+async def get_characters(directory: Optional[str] = None):
+    """List characters from the provided directory."""
+    try:
+        # Use settings directory if none provided
+        if not directory:
+            settings = settings_manager.get_settings()
+            directory = settings.get('character_directory')
+            
+        if not directory:
+            return JSONResponse(content={
+                "exists": False,
+                "message": "No character directory configured. Please set it in Settings.",
+                "files": []
+            })
+        
+        # Replace backslashes with forward slashes for consistent path handling
+        directory = directory.replace('\\', '/')
+        
+        # Check if directory exists
+        if not os.path.isdir(directory):
+            return JSONResponse(content={
+                "exists": False,
+                "directory": directory,
+                "message": f"Directory not found: {directory}",
+                "files": []
+            })
+        
+        # Check if tags cache is valid for this directory
+        cache_valid = (
+            tag_cache["directory"] == directory and
+            tag_cache["last_updated"] > 0
+        )
+        
+        # Get all PNG files in directory and subdirectories
+        files_info = []
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.lower().endswith('.png'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        # Get basic file info
+                        stats = os.stat(file_path)
+                        
+                        # Get character name
+                        char_name = os.path.splitext(file)[0]
+                        tags = []
+                        
+                        # Use cached tags if available, otherwise extract from file
+                        if cache_valid and file_path in tag_cache["character_tags"]:
+                            tags = tag_cache["character_tags"][file_path]
+                            # Also try to get better name from cache
+                            metadata = png_handler.get_cached_metadata(file_path)
+                            if metadata and metadata.get('data', {}).get('name'):
+                                char_name = metadata.get('data', {}).get('name')
+                        else:
+                            try:
+                                with open(file_path, 'rb') as f:
+                                    file_content = f.read()
+                                    
+                                metadata = png_handler.read_metadata(file_content)
+                                
+                                # Get character name
+                                if metadata.get('data', {}).get('name'):
+                                    char_name = metadata.get('data', {}).get('name')
+                                
+                                # Get tags
+                                tags = metadata.get('data', {}).get('tags', [])
+                                if not isinstance(tags, list):
+                                    tags = []
+                            except Exception as e:
+                                logger.log_warning(f"Failed to extract metadata from {file_path}: {str(e)}")
+                                
+                        # Add to files info
+                        files_info.append({
+                            "name": char_name,
+                            "path": file_path,
+                            "size": stats.st_size,
+                            "modified": stats.st_mtime,
+                            "tags": tags
+                        })
+                    except Exception as e:
+                        logger.log_warning(f"Failed to process {file_path}: {str(e)}")
+        
+        # Sort by name (case-insensitive)
+        files_info.sort(key=lambda x: x["name"].lower())
+        
+        return JSONResponse(content={
+            "exists": True,
+            "directory": directory,
+            "files": files_info
+        })
+        
+    except Exception as e:
+        logger.log_error(f"Failed to list characters: {str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={
+                "exists": False,
+                "message": f"Error listing characters: {str(e)}",
+                "files": []
+            }
+        )
+
 @app.get("/api/backgrounds")
 async def get_backgrounds():
     """List all background images."""
@@ -1295,58 +1407,107 @@ async def get_character_image(path: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/characters")
-async def get_characters(directory: str):
-    """List character files in the specified directory."""
+async def get_characters(directory: Optional[str] = None):
+    """List characters from the provided directory."""
     try:
-        # Convert to absolute path if relative
-        directory_path = Path(directory).resolve()
-        
-        logger.log_step(f"Scanning directory: {directory_path}")
-        
-        if not directory_path.exists():
-            logger.log_step(f"Directory not found: {directory_path}")
-            return {
-                "exists": False,
-                "message": "Directory not found",
-                "files": []
-            }
+        # Use settings directory if none provided
+        if not directory:
+            settings = settings_manager.get_settings()
+            directory = settings.get('character_directory')
             
-        if not directory_path.is_dir():
-            logger.log_step(f"Not a directory: {directory_path}")
-            return {
+        if not directory:
+            return JSONResponse(content={
                 "exists": False,
-                "message": "Not a directory",
+                "message": "No character directory configured. Please set it in Settings.",
                 "files": []
-            }
-            
-        # List all PNG files
-        png_files = []
-        for file in directory_path.glob("*.png"):
-            logger.log_step(f"Found PNG: {file.name}")
-            png_files.append({
-                "name": file.stem,
-                "path": str(file),
-                "size": file.stat().st_size,
-                "modified": file.stat().st_mtime
             })
-            
-        # Sort alphabetically by name
-        png_files.sort(key=lambda x: x["name"].lower())
         
-        logger.log_step(f"Found {len(png_files)} PNG files")
+        # Replace backslashes with forward slashes for consistent path handling
+        directory = directory.replace('\\', '/')
         
-        return {
+        # Check if directory exists
+        if not os.path.isdir(directory):
+            return JSONResponse(content={
+                "exists": False,
+                "directory": directory,
+                "message": f"Directory not found: {directory}",
+                "files": []
+            })
+        
+        # Check if tags cache is valid for this directory
+        cache_valid = (
+            tag_cache["directory"] == directory and
+            tag_cache["last_updated"] > 0
+        )
+        
+        # Get all PNG files in directory and subdirectories
+        files_info = []
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if file.lower().endswith('.png'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        # Get basic file info
+                        stats = os.stat(file_path)
+                        
+                        # Get character name
+                        char_name = os.path.splitext(file)[0]
+                        tags = []
+                        
+                        # Use cached tags if available, otherwise extract from file
+                        if cache_valid and file_path in tag_cache["character_tags"]:
+                            tags = tag_cache["character_tags"][file_path]
+                            # Also try to get better name from cache
+                            metadata = png_handler.get_cached_metadata(file_path)
+                            if metadata and metadata.get('data', {}).get('name'):
+                                char_name = metadata.get('data', {}).get('name')
+                        else:
+                            try:
+                                with open(file_path, 'rb') as f:
+                                    file_content = f.read()
+                                    
+                                metadata = png_handler.read_metadata(file_content)
+                                
+                                # Get character name
+                                if metadata.get('data', {}).get('name'):
+                                    char_name = metadata.get('data', {}).get('name')
+                                
+                                # Get tags
+                                tags = metadata.get('data', {}).get('tags', [])
+                                if not isinstance(tags, list):
+                                    tags = []
+                            except Exception as e:
+                                logger.log_warning(f"Failed to extract metadata from {file_path}: {str(e)}")
+                                
+                        # Add to files info
+                        files_info.append({
+                            "name": char_name,
+                            "path": file_path,
+                            "size": stats.st_size,
+                            "modified": stats.st_mtime,
+                            "tags": tags
+                        })
+                    except Exception as e:
+                        logger.log_warning(f"Failed to process {file_path}: {str(e)}")
+        
+        # Sort by name (case-insensitive)
+        files_info.sort(key=lambda x: x["name"].lower())
+        
+        return JSONResponse(content={
             "exists": True,
-            "message": "Successfully scanned directory",
-            "directory": str(directory_path),
-            "files": png_files
-        }
+            "directory": directory,
+            "files": files_info
+        })
         
     except Exception as e:
-        logger.log_error(f"Error scanning directory: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to scan directory: {str(e)}"
+        logger.log_error(f"Failed to list characters: {str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={
+                "exists": False,
+                "message": f"Error listing characters: {str(e)}",
+                "files": []
+            }
         )
 
 @app.get("/api/health")

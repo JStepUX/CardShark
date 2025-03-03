@@ -9,6 +9,11 @@ class PngMetadataHandler:
     
     def __init__(self, logger):
         self.logger = logger
+        self.metadata_cache = {}  # Cache metadata by file path
+        
+    def get_cached_metadata(self, file_path):
+        """Get metadata from cache if available."""
+        return self.metadata_cache.get(file_path)
 
     def _decode_metadata(self, encoded_data: Union[str, bytes]) -> Dict:
         """Helper to decode base64 metadata with improved padding handling."""
@@ -194,6 +199,13 @@ class PngMetadataHandler:
         except Exception as e:
             self.logger.log_error(f"Failed to read metadata: {str(e)}")
             raise
+
+        # Add to cache if we have a file path
+        file_path = getattr(file_data, 'name', None)
+        if file_path and isinstance(metadata, dict):
+            self.metadata_cache[file_path] = metadata
+            
+        return metadata
 
     def write_metadata(self, image_data: bytes, metadata: Dict) -> bytes:
         """Write character metadata to a PNG file with improved error handling and metadata preservation."""
