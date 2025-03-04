@@ -78,6 +78,55 @@ tag_cache = {
     "character_tags": {}  # Map of character path to list of tags
 }
 
+@app.get("/api/characters-timestamp")
+async def get_characters_timestamp():
+    """Get the latest modification timestamp for characters directory."""
+    try:
+        # Get the character directory from settings
+        # Use correct method to get setting
+        character_dir = settings_manager.get_setting('character_directory')
+        
+        if not character_dir or not os.path.exists(character_dir):
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Character directory not configured or not found"
+                }
+            )
+            
+        # Find the latest modification time of any PNG file
+        latest_timestamp = 0
+        character_count = 0
+        
+        for root, _, files in os.walk(character_dir):
+            for file in files:
+                if file.lower().endswith('.png'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        stats = os.stat(file_path)
+                        latest_timestamp = max(latest_timestamp, stats.st_mtime)
+                        character_count += 1
+                    except:
+                        pass
+                        
+        return JSONResponse(
+            content={
+                "success": True,
+                "timestamp": latest_timestamp,
+                "character_count": character_count
+            }
+        )
+            
+    except Exception as e:
+        logger.log_error(f"Failed to get characters timestamp: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to get characters timestamp: {str(e)}"
+            }
+        )
+
 @app.get("/api/characters")
 async def get_characters(directory: Optional[str] = None):
     """List characters from the provided directory."""
