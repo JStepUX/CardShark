@@ -34,7 +34,11 @@ class ApiService {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+        // Remove experimental options for now
+        cache: 'no-store'
+        // priority: 'high',
+        // keepalive: true
       });
       return await this.handleResponse(response);
     } catch (error) {

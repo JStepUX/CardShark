@@ -1,8 +1,8 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    './src/**/*.{js,jsx,ts,tsx}',
+    './index.html',
   ],
   theme: {
     extend: {
@@ -15,7 +15,16 @@ export default {
       fontFamily: {
         sans: ['Poppins', 'sans-serif'],
       },
+      animation: {
+        'blink-caret': 'blink-caret 0.75s step-end infinite',
+      },
+      keyframes: {
+        'blink-caret': {
+          '0%, 100%': { opacity: 0 },
+          '50%': { opacity: 1 },
+        },
+      },
     },
   },
   plugins: [],
-}
+};

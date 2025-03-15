@@ -48,3 +48,13 @@
   max-height: 2000px; /* Large enough to fit all content */
   opacity: 1;
 }
+
+@keyframes blink-caret {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+.animate-blink-caret {
+  display: inline-block;
+  animation: blink-caret 0.75s step-end infinite;
+}

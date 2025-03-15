@@ -149,6 +149,14 @@ const ChatView: React.FC = () => {
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
+  // Add performance tracking ref
+  const streamingPerformanceRef = useRef({
+    startTime: 0,
+    endTime: 0,
+    tokens: 0,
+    tokensPerSecond: 0
+  });
+
   const {
     messages,
     isLoading,
@@ -222,6 +230,32 @@ const ChatView: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [scrollToBottom]);
+
+  // Add this effect to track performance
+  useEffect(() => {
+    if (isGenerating && streamingPerformanceRef.current.startTime === 0) {
+      // Started generating
+      streamingPerformanceRef.current.startTime = Date.now();
+      streamingPerformanceRef.current.tokens = 0;
+    } else if (!isGenerating && streamingPerformanceRef.current.startTime > 0) {
+      // Finished generating
+      streamingPerformanceRef.current.endTime = Date.now();
+      const durationSecs = (streamingPerformanceRef.current.endTime - streamingPerformanceRef.current.startTime) / 1000;
+      
+      // Count tokens in last message
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.role === 'assistant') {
+        const tokenCount = lastMessage.content.split(/\s+/).length;
+        streamingPerformanceRef.current.tokens = tokenCount;
+        streamingPerformanceRef.current.tokensPerSecond = tokenCount / durationSecs;
+        
+        console.log(`Generation performance: ${tokenCount} tokens in ${durationSecs.toFixed(2)}s (${streamingPerformanceRef.current.tokensPerSecond.toFixed(2)} tokens/sec)`);
+      }
+      
+      // Reset for next generation
+      streamingPerformanceRef.current.startTime = 0;
+    }
+  }, [isGenerating, messages]);
 
   // Early return while loading
   if (isLoading) {

@@ -388,7 +388,6 @@ ${character.data.mes_example || ''}
     });
   }
 
-  // Stream response handling with SSE
   static async *streamResponse(response: Response): AsyncGenerator<string, void, unknown> {
     if (!response.body) throw new Error('No response body');
     
@@ -398,6 +397,7 @@ ${character.data.mes_example || ''}
     try {
       console.log('Starting to read SSE stream');
       let buffer = '';
+      let chunkSize = 0;
       
       while (true) {
         const { value, done } = await reader.read();
@@ -406,9 +406,15 @@ ${character.data.mes_example || ''}
           break;
         }
         
-        buffer += decoder.decode(value, { stream: true });
+        // Decode only once per chunk
+        const decodedChunk = decoder.decode(value, { stream: true });
+        buffer += decodedChunk;
+        chunkSize += decodedChunk.length;
+        
+        // Process complete lines from buffer
         const lines = buffer.split('\n');
-        buffer = lines.pop() || '';  // Keep any incomplete line
+        // Keep the last line which might be incomplete
+        buffer = lines.pop() || '';
         
         for (const line of lines) {
           if (!line.trim()) continue;
