@@ -274,28 +274,28 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       </div>
 
       <div className="p-4">
-        {message.aborted ? (
-          <div className="text-red-400">Generation aborted.</div>
-        ) : isGenerating && message.role === 'assistant' ? (
-          // For streaming content
-          <div className="whitespace-pre-wrap break-words">
-            {htmlContent}
-            <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
-          </div>
-        ) : (
-          // For static content with editing
-          <div
-            ref={contentRef}
-            contentEditable={!isGenerating}
-            suppressContentEditableWarning
-            onInput={handleInput}
-            onBlur={handleBlur}
-            onPaste={handlePaste}
-            className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
-            style={{ minHeight: '1em' }}
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
-          />
-        )}
+      {message.aborted ? (
+        <div className="text-red-400">Generation failed.</div>
+      ) : isGenerating && message.role === 'assistant' ? (
+        // For streaming content
+        <div className="whitespace-pre-wrap break-words">
+          {htmlContent}
+          <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
+        </div>
+      ) : (
+        // For static content with editing
+        <div
+          ref={contentRef}
+          contentEditable={!isGenerating}
+          suppressContentEditableWarning
+          onInput={handleInput}
+          onBlur={handleBlur}
+          onPaste={handlePaste}
+          className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
+          style={{ minHeight: '1em' }}
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
+        />
+      )}
       </div>
     </div>
   );

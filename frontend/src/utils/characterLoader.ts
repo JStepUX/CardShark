@@ -44,3 +44,31 @@ export function validateCharacterData(data: any): CharacterData {
 
   return data as CharacterData;
 }
+
+/**
+ * Generate a consistent character ID based on character data
+ */
+export function getCharacterId(character: CharacterData | null): string | null {
+  if (!character?.data?.name) return null;
+  
+  try {
+    const name = character.data.name;
+    const desc = character.data.description?.substring(0, 50) || '';
+    
+    // Simple hash function for consistency
+    const simpleHash = (text: string): string => {
+      let hash = 0;
+      for (let i = 0; i < text.length; i++) {
+        const char = text.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+      }
+      return Math.abs(hash).toString(16).substring(0, 8);
+    };
+    
+    return `${name.replace(/\s+/g, '_').toLowerCase()}-${simpleHash(name + desc)}`;
+  } catch (error) {
+    console.error('Error generating character ID:', error);
+    return `char-${Date.now().toString(36)}`;
+  }
+}
