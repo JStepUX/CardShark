@@ -13,6 +13,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
+    "outDir": "./node_modules/.temp",
     "paths": {
       "@/*": ["./src/*"],
       "@features/*": ["./src/features/*"],
