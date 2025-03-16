@@ -380,37 +380,33 @@ export function useChatMessages(characterData: CharacterData | null) {
       }
       
       // Process streaming response
+      let newContent = '';
+      let chunkBuffer = '';
+      let lastUpdateTime = Date.now();
+      const UPDATE_INTERVAL = 50; // ms between UI updates
+      
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        // Batch updates for smoother performance
-        if (!bufferTimer) {
-          bufferTimer = setInterval(() => {
-            if (buffer.length > 0) {
-              const content = newContent + buffer;
-              buffer = '';
-              setState(prev => {
-                const updatedMessages = prev.messages.map(msg => 
-                  msg.id === assistantMessage.id ? {...msg, content} : msg
-                );
-                return {...prev, messages: updatedMessages};
-              });
-              newContent = content;
-            }
-          }, 50); // Render updates at ~20fps for smooth animation
-        }
+        chunkBuffer += chunk;
         
-        // Add new content to buffer
-        buffer += chunk;
+        // Only update UI periodically or when buffer gets large
+        const currentTime = Date.now();
+        if (currentTime - lastUpdateTime > UPDATE_INTERVAL || chunkBuffer.length > 30) {
+          newContent += chunkBuffer;
+          chunkBuffer = '';
+          lastUpdateTime = currentTime;
+          
+          setState(prev => {
+            const updatedMessages = prev.messages.map(msg => 
+              msg.id === assistantMessage.id ? {...msg, content: newContent} : msg
+            );
+            return {...prev, messages: updatedMessages};
+          });
+        }
       }
       
-      // Clear the buffer timer
-      if (bufferTimer) {
-        clearInterval(bufferTimer);
-        bufferTimer = null;
-      }
-      
-      // Final update to ensure all content is rendered
-      if (buffer.length > 0) {
-        newContent += buffer;
+      // Add any remaining buffer content
+      if (chunkBuffer.length > 0) {
+        newContent += chunkBuffer;
         setState(prev => {
           const updatedMessages = prev.messages.map(msg => 
             msg.id === assistantMessage.id ? {...msg, content: newContent} : msg

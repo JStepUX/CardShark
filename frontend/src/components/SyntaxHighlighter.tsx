@@ -16,6 +16,8 @@ const colors: ColorScheme = {
 
 const SyntaxHighlighter: React.FC<{ text: string }> = ({ text }) => {
   const formatText = (input: string) => {
+    if (!input) return '';
+
     // Split text into segments based on patterns
     const segments = input.split(/(".*?"|\*.*?\*|\{\{.*?\}\})/g);
     
