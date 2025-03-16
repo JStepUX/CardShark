@@ -272,8 +272,8 @@ const NavButton: React.FC<{
     <button
       className={`w-full px-4 py-2 rounded-lg transition-colors flex items-center gap-3
         ${currentView === view 
-          ? "bg-slate-700 text-white" 
-          : "text-gray-300 hover:text-white hover:bg-slate-700"
+          ? "bg-stone-800 text-white" 
+          : "text-gray-300 hover:text-white hover:bg-stone-700"
         }
         ${isCollapsed ? "justify-center w-10 !px-0" : ""}`}
       onClick={onClick}
