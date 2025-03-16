@@ -1,4 +1,5 @@
 // types/messages.ts
+// types/messages.ts
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -7,6 +8,9 @@ export interface Message {
   variations?: string[];
   currentVariation?: number;
   aborted?: boolean;
+  // Add these properties to match what's used in MessagesView
+  isFirst?: boolean;
+  order?: number;
 }
 
 export interface UserProfile {

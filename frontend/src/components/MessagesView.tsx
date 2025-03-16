@@ -49,10 +49,11 @@ MessageCard.displayName = 'MessageCard';
 
 const MessagesView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
-  const { apiConfig } = useAPIConfig(); // Get API configuration
+  useAPIConfig(); // Keep this, it may be used elsewhere
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Remove the unused state
+  // const [isGenerating, setIsGenerating] = useState(false);
+  const [error] = useState<string | null>(null);
   const hasLoaded = useRef(false);
 
   // Load initial messages
@@ -81,101 +82,6 @@ const MessagesView: React.FC = () => {
     setMessages(initialMessages);
     hasLoaded.current = true;
   }, [characterData?.data]);
-
-  // Generate message
-  const handleGenerateMessage = async () => {
-    try {
-      setIsGenerating(true);
-      setError(null);
-
-      // Check if API configuration exists
-      if (!apiConfig) {
-        throw new Error('API not configured. Please set up API in Settings first.');
-      }
-
-      // Create new message first
-      const messageId = crypto.randomUUID();
-      const newMessage: Message = {
-        id: messageId,
-        content: '',
-        isFirst: messages.length === 0,
-        order: messages.length
-      };
-      
-      setMessages(prev => [...prev, newMessage]);
-
-      // Start generation
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_config: apiConfig, // Pass API configuration
-          generation_params: {
-            prompt: `You are tasked with crafting a new, engaging first message for a character using the information provided below. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark.
-
-Character Name: "${characterData?.data?.name}"
-Description: ${characterData?.data?.description}
-Personality: ${characterData?.data?.personality}
-Scenario: ${characterData?.data?.scenario}
-
-Use the following as reference points:
-Current First Message: ${characterData?.data?.first_mes}
-Example Messages: 
-${characterData?.data?.mes_example}
-
-Craft a new introductory message that starts the conversation in a fresh and engaging way, ensuring variety from the existing scenario.`
-          }
-        })
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error('Generation failed - check API settings');
-      }
-
-      // Handle streaming response
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let generatedText = '';
-
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.error) throw new Error(data.error);
-                if (data.content) {
-                  generatedText += data.content;
-                  setMessages(prev => prev.map(msg =>
-                    msg.id === messageId ? { ...msg, content: generatedText } : msg
-                  ));
-                }
-              } catch (e) {
-                if (line.includes('[DONE]')) continue;
-                console.error('Error parsing SSE message:', e);
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-
-    } catch (error) {
-      console.error('Generation failed:', error);
-      setError(error instanceof Error ? error.message : 'Generation failed');
-      // Remove the empty message if generation failed
-      setMessages(prev => prev.filter(msg => msg.content !== ''));
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   // Basic message management
   const handleAddMessage = () => {
@@ -240,18 +146,6 @@ Craft a new introductory message that starts the conversation in a fresh and eng
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-semibold">Messages Manager</h2>
           <div className="flex items-center gap-2">
-            {/*<button
-                onClick={handleGenerateMessage}
-                disabled={isGenerating}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Wand2 size={18} />
-                )}
-                Generate Message
-              </button>*/}
             <button
               onClick={handleAddMessage}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

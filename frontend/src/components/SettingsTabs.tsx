@@ -31,7 +31,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
   // Filter children to find tabs
   const tabs = React.Children.toArray(children).filter(
     (child) => React.isValidElement(child) && (child.type as any).displayName === 'SettingsTab'
-  ) as React.ReactElement[];
+  ) as React.ReactElement<SettingsTabProps>[];
 
   // Find the active tab content
   const activeTabContent = tabs.find((tab) => tab.props.id === activeTab)?.props.children;

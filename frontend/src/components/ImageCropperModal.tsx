@@ -22,7 +22,7 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const [rotation, setRotation] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [originalSize, setOriginalSize] = useState({ width: 0, height: 0 });
+  const [, setOriginalSize] = useState({ width: 0, height: 0 });
   
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);

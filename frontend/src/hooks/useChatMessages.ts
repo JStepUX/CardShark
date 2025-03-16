@@ -328,8 +328,6 @@ export function useChatMessages(characterData: CharacterData | null) {
     await appendMessage(userMessage);
     
     // Stream generation
-    let newContent = '';
-    let buffer = '';
     let bufferTimer: NodeJS.Timeout | null = null;
     
     const abortController = new AbortController();
@@ -844,14 +842,8 @@ const regenerateMessage = async (message: Message) => {
       console.log('Stopping generation - aborting controller');
       
       setState(prev => {
-        // Find the last assistant message without using findLast
-        let generatingMessageId: string | undefined;
-        for (let i = prev.messages.length - 1; i >= 0; i--) {
-          if (prev.messages[i].role === 'assistant') {
-            generatingMessageId = prev.messages[i].id;
-            break;
-          }
-        }
+        // Note: We don't need to find the generating message ID since we're
+        // letting the abort controller handle stopping the generation
         
         const updatedContextWindow = {
           ...prev.lastContextWindow,

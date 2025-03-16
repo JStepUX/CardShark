@@ -26,4 +26,5 @@ scripts
 *.njsproj
 *.sln
 *.sw?
+*.js
 context/
