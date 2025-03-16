@@ -37,6 +37,7 @@ from backend.chat_handler import ChatHandler
 from backend.network_server import run_server
 from backend.template_handler import TemplateHandler
 from backend.background_handler import BackgroundHandler
+from backend.lore_handler import LoreHandler
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -68,6 +69,7 @@ chat_handler = ChatHandler(logger)
 template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds()
+lore_handler = LoreHandler(logger, default_position=0)
 
 # API Endpoints
 @app.get("/api/backgrounds")

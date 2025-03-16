@@ -362,7 +362,10 @@ ${character.data.mes_example || ''}
         memory,
         prompt: currentPrompt,
         stop_sequence: stopSequences,
-        context_window: contextInfo // Add the debugging context window
+        context_window: contextInfo, // Add the debugging context window
+        character_data: character, // Pass character data for lore entry matching
+        chat_history: history,     // Pass chat history for lore matching
+        current_message: currentMessage // Current message for context
       }
     };
 

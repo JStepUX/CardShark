@@ -198,12 +198,68 @@ class ApiHandler:
             ])
             quiet = generation_params.get('quiet', True)
             
+            # Process lore if character data is available
+            character_data = generation_params.get('character_data')
+            chat_history = generation_params.get('chat_history', [])
+            current_message = generation_params.get('current_message', '')
+            
+            # Add lore matching to context window if it exists
+            context_window = generation_params.get('context_window')
+            
+            # Handle lore matching if character data is available
+            if character_data and 'data' in character_data and 'character_book' in character_data['data']:
+                try:
+                    from backend.lore_handler import LoreHandler
+                    lore_handler = LoreHandler(self.logger)
+                    
+                    # Get lore entries
+                    lore_entries = character_data['data']['character_book'].get('entries', [])
+                    
+                    if lore_entries:
+                        self.logger.log_step(f"Found {len(lore_entries)} lore entries")
+                        
+                        # Create text for matching
+                        history_text = ''
+                        for msg in chat_history:
+                            role = msg.get('role', '')
+                            content = msg.get('content', '')
+                            if role == 'user':
+                                history_text += f"User: {content}\n"
+                            else:
+                                char_name = character_data.get('data', {}).get('name', 'Character')
+                                history_text += f"{char_name}: {content}\n"
+                        
+                        # Add current message
+                        if current_message:
+                            history_text += f"User: {current_message}"
+                            
+                        # Match lore entries
+                        matched_entries = lore_handler.match_lore_entries(lore_entries, history_text)
+                        
+                        # Only modify memory if we matched entries
+                        if matched_entries:
+                            self.logger.log_step(f"Matched {len(matched_entries)} lore entries")
+                            # Create new memory with lore
+                            memory = lore_handler.integrate_lore_into_prompt(
+                                character_data, 
+                                matched_entries
+                            )
+                            # Note this in the context window
+                            if context_window is not None and isinstance(context_window, dict):
+                                context_window['lore_info'] = {
+                                    'matched_count': len(matched_entries),
+                                    'entry_keys': [entry.get('keys', [''])[0] for entry in matched_entries 
+                                                if entry.get('keys')]
+                                }
+                except Exception as e:
+                    self.logger.log_error(f"Error processing lore: {str(e)}")
+                    # Continue with generation even if lore processing fails
+            
             # Add </s> to stop sequences if not already present
             if "</s>" not in stop_sequence:
                 stop_sequence.append("</s>")
             
             # Save context window for debugging if provided
-            context_window = generation_params.get('context_window')
             if context_window:
                 self.logger.log_step("Saving context window for debugging")
                 try:
