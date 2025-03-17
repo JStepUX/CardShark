@@ -1641,7 +1641,13 @@ if __name__ == "__main__":
             logger.log_step("Scheduled browser opening")
             
             # Start the server
-            run_server(app, port=9696, local_only=False)  # Use the already imported run_server
+            uvicorn.run(
+                app,
+                host="0.0.0.0",  # Force binding to all interfaces
+                port=9696,
+                log_level="info",
+                workers=1
+            )
             
         else:
             logger.log_warning(f"Frontend static files not found at {frontend_path}")
