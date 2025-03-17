@@ -15,13 +15,17 @@ export class MessageUtils {
     const pendingSaves = new Map<string, NodeJS.Timeout>();
     
     return (messageId: string, messages: Message[]) => {
+      console.debug(`Debounced save requested for message ${messageId}`);
+      
       // Clear any existing timer for this message
       if (pendingSaves.has(messageId)) {
         clearTimeout(pendingSaves.get(messageId)!);
+        console.debug(`Cleared existing timer for message ${messageId}`);
       }
       
       // Create a new timer
       const timer = setTimeout(() => {
+        console.debug(`Executing debounced save for message ${messageId}`);
         saveFunction(messages);
         pendingSaves.delete(messageId);
       }, delay);

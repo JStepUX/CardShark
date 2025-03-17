@@ -3,11 +3,14 @@ import { X, UserPlus, ImagePlus } from 'lucide-react';
 import { Dialog } from './Dialog';
 import { createEmptyCharacterCard } from '../types/schema';
 
-interface UserProfile {
+export interface UserProfile {
+  id: string;  // This is required but missing in your local definition
   name: string;
-  filename: string;  // For image loading
-  size: number;      // Keep for file info display
-  modified: number;  // Keep for sorting/display
+  avatar?: string;
+  color?: string;
+  filename: string;
+  size: number;
+  modified: number;
 }
 
 interface UserSelectProps {
@@ -128,7 +131,8 @@ const UserSelect: React.FC<UserSelectProps> = ({
           name: newUserName.trim(),
           filename: data.filename,
           size: newUserImage.size,
-          modified: Date.now()
+          modified: Date.now(),
+          id: `user_${newUserName.trim()}_${Date.now()}` // Generate a unique ID
         };
         
         // Reset form and refresh users

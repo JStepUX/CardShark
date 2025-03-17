@@ -3,6 +3,7 @@ import { Send, User, Plus, RefreshCw, Eye, Wallpaper } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
+import ThoughtBubble from './ThoughtBubble';
 import UserSelect from './UserSelect';
 import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
@@ -10,6 +11,16 @@ import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSett
 import { useChatMessages } from '../hooks/useChatMessages';
 import { apiService } from '../services/apiService';
 import { UserProfile } from '../types/messages';
+//import { REASONING_SETTINGS_KEY } from '../types/messages';
+
+// Define the ReasoningSettings interface
+interface ReasoningSettings {
+  enabled: boolean;
+  visible: boolean;
+}
+
+// Local storage keys
+const BACKGROUND_SETTINGS_KEY = 'cardshark_background_settings';
 
 // Default background settings
 const DEFAULT_BACKGROUND_SETTINGS: BackgroundSettings = {
@@ -18,8 +29,15 @@ const DEFAULT_BACKGROUND_SETTINGS: BackgroundSettings = {
   fadeLevel: 30
 };
 
-// Local storage key for saving background settings
-const BACKGROUND_SETTINGS_KEY = 'cardshark_chat_background';
+// Default reasoning settings
+const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
+  enabled: false,
+  visible: false
+};
+
+// Fix: Remove the problematic lines
+// localStorage.getItem(REASONING_SETTINGS_KEY);
+// localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(settings));
 
 // Separate hook for scroll management
 function useScrollToBottom() {
@@ -147,6 +165,23 @@ const ChatView: React.FC = () => {
   const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
   
+  // Load background settings from localStorage
+  useEffect(() => {
+    try {
+      const storedSettings = localStorage.getItem(BACKGROUND_SETTINGS_KEY);
+      if (storedSettings) {
+        setBackgroundSettings(JSON.parse(storedSettings));
+      }
+    } catch (err) {
+      console.error('Error loading background settings:', err);
+    }
+  }, []);
+
+  // Save background settings when they change
+  useEffect(() => {
+    localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));
+  }, [backgroundSettings]);
+  
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
@@ -165,6 +200,8 @@ const ChatView: React.FC = () => {
     error,
     currentUser,
     lastContextWindow,
+    generatingId, // Get this from the hook now
+    reasoningSettings: hookReasoningSettings, // Get settings from hook
     generateResponse,
     regenerateMessage,
     cycleVariation,
@@ -172,30 +209,26 @@ const ChatView: React.FC = () => {
     deleteMessage,
     updateMessage,
     setCurrentUser,
-    loadExistingChat
+    loadExistingChat,
+    updateReasoningSettings // New function
   } = useChatMessages(characterData);
 
-  // Load saved background settings on mount
-  useEffect(() => {
-    try {
-      const savedSettings = localStorage.getItem(BACKGROUND_SETTINGS_KEY);
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        setBackgroundSettings(parsed);
-      }
-    } catch (err) {
-      console.error('Error loading background settings:', err);
-    }
-  }, []);
+  // Use local state for UI control, synced with hook state
+  const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(
+    hookReasoningSettings || DEFAULT_REASONING_SETTINGS
+  );
 
-  // Save background settings when changed
-  const handleBackgroundSettingsChange = (newSettings: BackgroundSettings) => {
-    setBackgroundSettings(newSettings);
-    try {
-      localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(newSettings));
-    } catch (err) {
-      console.error('Error saving background settings:', err);
+  // Sync reasoning settings when they change in the hook
+  useEffect(() => {
+    if (hookReasoningSettings) {
+      setReasoningSettings(hookReasoningSettings);
     }
+  }, [hookReasoningSettings]);
+
+  // Update both local state and hook state when settings change
+  const handleReasoningSettingsChange = (settings: ReasoningSettings) => {
+    setReasoningSettings(settings);
+    updateReasoningSettings(settings);
   };
 
   const handleNewChat = async () => {
@@ -292,7 +325,38 @@ const ChatView: React.FC = () => {
             ? `Chatting with ${characterData.data.name}`
             : 'Chat'}
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          {/* Reasoning settings toggles */}
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reasoningSettings.enabled}
+                onChange={(e) => {
+                  const updated = { ...reasoningSettings, enabled: e.target.checked };
+                  handleReasoningSettingsChange(updated);
+                }}
+                className="form-checkbox h-4 w-4 text-blue-600 rounded"
+              />
+              <span className="text-sm text-gray-300">Thinking Mode</span>
+            </label>
+            
+            {reasoningSettings.enabled && (
+              <label className="flex items-center gap-2 cursor-pointer ml-4">
+                <input
+                  type="checkbox"
+                  checked={reasoningSettings.visible}
+                  onChange={(e) => {
+                    const updated = { ...reasoningSettings, visible: e.target.checked };
+                    handleReasoningSettingsChange(updated);
+                  }}
+                  className="form-checkbox h-4 w-4 text-blue-600 rounded"
+                />
+                <span className="text-sm text-gray-300">Show Thoughts</span>
+              </label>
+            )}
+          </div>
+
           {/* Background Settings button */}
           <button
             onClick={() => setShowBackgroundSettings(true)}
@@ -348,19 +412,32 @@ const ChatView: React.FC = () => {
       >
         <div className="flex flex-col space-y-4">
           {messages.map((message) => (
-            <ChatBubble
-              key={message.id}
-              message={message}
-              isGenerating={isGenerating}
-              onContentChange={(content) => updateMessage(message.id, content)}
-              onDelete={() => deleteMessage(message.id)}
-              onStop={stopGeneration}
-              onTryAgain={() => regenerateMessage(message)}
-              onNextVariation={() => cycleVariation(message.id, 'next')}
-              onPrevVariation={() => cycleVariation(message.id, 'prev')}
-              currentUser={currentUser?.name}
-              characterName={characterData?.data?.name}
-            />
+            <React.Fragment key={message.id}>
+              {message.role === 'thinking' && reasoningSettings.visible ? (
+                <ThoughtBubble
+                  message={message}
+                  isGenerating={isGenerating && message.id === generatingId}
+                  onContentChange={(content) => updateMessage(message.id, content)}
+                  onDelete={() => deleteMessage(message.id)}
+                  characterName={characterData?.data?.name}
+                />
+              ) : null}
+              
+              {message.role !== 'thinking' && (
+                <ChatBubble
+                  message={message}
+                  isGenerating={isGenerating && message.id === generatingId}
+                  onContentChange={(content) => updateMessage(message.id, content)}
+                  onDelete={() => deleteMessage(message.id)}
+                  onStop={message.role === 'assistant' ? stopGeneration : undefined}
+                  onTryAgain={message.role === 'assistant' ? () => regenerateMessage(message) : undefined}
+                  onNextVariation={() => cycleVariation(message.id, 'next')}
+                  onPrevVariation={() => cycleVariation(message.id, 'prev')}
+                  currentUser={currentUser?.name}
+                  characterName={characterData?.data?.name}
+                />
+              )}
+            </React.Fragment>
           ))}
           <div ref={messagesEndRef} className="h-px" />
         </div>
@@ -415,7 +492,7 @@ const ChatView: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <ChatBackgroundSettings
             settings={backgroundSettings}
-            onSettingsChange={handleBackgroundSettingsChange}
+            onSettingsChange={setBackgroundSettings}
             onClose={() => setShowBackgroundSettings(false)}
           />
         </div>

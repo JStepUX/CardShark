@@ -1,4 +1,3 @@
-
 import os
 import sys
 import json
@@ -73,15 +72,16 @@ class ChatHandler:
         # Get character ID or UUID
         char_id = self._get_character_uuid(character_data)
         
-        # Create base directory path
+        # Create base directory path that's consistent
         if getattr(sys, 'frozen', False):
             # Running as PyInstaller bundle
             base_dir = Path(sys.executable).parent
         else:
             # Running from source
             base_dir = Path.cwd()
-            
-        chats_dir = base_dir / 'chats'
+        
+        # Always use frontend/chats for consistency with existing code
+        chats_dir = base_dir / 'frontend' / 'chats'
         chats_dir.mkdir(parents=True, exist_ok=True)
         
         # Create character-specific directory

@@ -1,7 +1,7 @@
 // chatStorage.ts
 import { CharacterData } from '../contexts/CharacterContext';
 import { apiService } from './apiService';
-import { Message } from '../types/messages';
+import { Message, UserProfile } from '../types/messages';
 import { getCharacterId } from '../utils/characterLoader';
 
 export class ChatStorage {
@@ -22,7 +22,17 @@ export class ChatStorage {
 
   // Save full chat state
   static async saveChat(characterData: CharacterData, messages: Message[], lastUser?: any, apiInfo?: any) {
-    return apiService.saveChat(characterData, messages, lastUser, apiInfo);
+    console.debug(`ChatStorage.saveChat called with ${messages.length} messages`);
+    console.debug('Character name:', characterData?.data?.name);
+    
+    try {
+      const result = await apiService.saveChat(characterData, messages, lastUser, apiInfo);
+      console.debug('apiService.saveChat result:', result);
+      return result;
+    } catch (err) {
+      console.error('Error in ChatStorage.saveChat:', err);
+      throw err;
+    }
   }
 
   // Append/update a single message
@@ -45,14 +55,18 @@ export class ChatStorage {
     return apiService.clearContextWindow();
   }
 
-  // Get user from local storage
-  static getCurrentUser() {
+  // Get user from local storage - FIXED version with ID handling
+  static getCurrentUser(): UserProfile | null {
     try {
       const stored = localStorage.getItem('cardshark_current_user');
       if (stored) {
         const userData = JSON.parse(stored);
         if (userData.name && userData.filename) {
-          return userData;
+          // Add an ID if not present
+          if (!userData.id) {
+            userData.id = `user_${userData.name}_${Date.now()}`;
+          }
+          return userData as UserProfile;
         }
       }
       return null;
@@ -62,14 +76,17 @@ export class ChatStorage {
     }
   }
 
-  // Save user to local storage
-  static saveCurrentUser(user: any) {
+  // Save user to local storage - FIXED version to include ID
+  static saveCurrentUser(user: UserProfile | null) {
     if (user) {
       localStorage.setItem('cardshark_current_user', JSON.stringify({
+        id: user.id,
         name: user.name,
         filename: user.filename,
         size: user.size,
-        modified: user.modified
+        modified: user.modified,
+        avatar: user.avatar,
+        color: user.color
       }));
     } else {
       localStorage.removeItem('cardshark_current_user');

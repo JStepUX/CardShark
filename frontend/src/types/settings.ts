@@ -1,6 +1,13 @@
 // types/settings.ts
 import { APIConfig, APIProvider, createAPIConfig } from './api';
 
+export interface ReasoningSettings {
+  enabled: boolean;
+  visible: boolean;
+  instructions: string;
+  autoExpandContext: boolean;
+}
+
 export interface Settings {
   // App Settings
   character_directory: string;
@@ -28,7 +35,17 @@ export interface Settings {
   
   // API Configurations
   apis: Record<string, APIConfig>;
+  
+  // Reasoning settings
+  reasoning: ReasoningSettings;
 }
+
+export const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
+  enabled: false,
+  visible: true,
+  instructions: "Think carefully about what has occurred in the roleplay up to this point. Step inside {{char}}'s shoes and explain what next steps {{char}} would take and why.",
+  autoExpandContext: true
+};
 
 export const DEFAULT_SETTINGS: Settings = {
   // App defaults
@@ -40,5 +57,9 @@ export const DEFAULT_SETTINGS: Settings = {
   // Initialize with a default KoboldCPP configuration
   apis: {
     ['default_kobold']: createAPIConfig(APIProvider.KOBOLD)
-  }
+  },
+  
+  // Default reasoning settings
+  reasoning: DEFAULT_REASONING_SETTINGS
 };
+

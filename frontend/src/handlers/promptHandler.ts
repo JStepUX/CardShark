@@ -1,5 +1,4 @@
 // handlers/promptHandler.ts
-// Handles prompt generation and formatting for chat messages
 import { CharacterCard } from '../types/schema';
 import { APIConfig } from '../types/api';
 import { templateService } from '../services/templateService';
@@ -161,9 +160,10 @@ ${character.data.mes_example || ''}
 
   /**
    * Format chat history into proper template format, ensuring edited messages are used
+   * and thinking messages are filtered out
    */
   static formatChatHistory(
-    messages: Array<{ role: 'user' | 'assistant', content: string, variations?: string[], currentVariation?: number }>,
+    messages: Array<{ role: 'user' | 'assistant' | 'thinking' | 'system', content: string, variations?: string[], currentVariation?: number }>,
     characterName: string,
     templateId?: string
   ): string {
@@ -172,21 +172,23 @@ ${character.data.mes_example || ''}
     const template = this.getTemplate(templateId);
     console.log('Formatting chat history with template:', template?.name || 'Default');
     
-    // Process each message to ensure we use the latest edited version
-    const processedMessages = messages.map(msg => {
-      // If the message has variations and a currentVariation index, use that content
-      // This ensures we're using the edited version chosen by the user
-      let finalContent = msg.content;
-      if (msg.variations && msg.variations.length > 0 && 
-          typeof msg.currentVariation === 'number' && 
-          msg.variations[msg.currentVariation]) {
-        finalContent = msg.variations[msg.currentVariation];
-      }
-      
-      return {
-        role: msg.role,
-        content: finalContent
-      };
+    // Process each message to ensure we use the latest edited version,
+    // and handle thinking messages specially
+    const processedMessages = messages
+      .filter(msg => msg.role !== 'thinking') // Filter out thinking messages from normal history
+      .map(msg => {
+        // If the message has variations and a currentVariation index, use that content
+        let finalContent = msg.content;
+        if (msg.variations && msg.variations.length > 0 && 
+            typeof msg.currentVariation === 'number' && 
+            msg.variations[msg.currentVariation]) {
+          finalContent = msg.variations[msg.currentVariation];
+        }
+        
+        return {
+          role: msg.role,
+          content: finalContent
+        };
     });
     
     if (!template) {
@@ -212,6 +214,10 @@ ${character.data.mes_example || ''}
             return this.replaceVariables(template.assistantFormat, { 
               content, 
               char: characterName 
+            });
+          } else if (role === 'system' && template.systemFormat) {
+            return this.replaceVariables(template.systemFormat, {
+              content
             });
           } else {
             return this.replaceVariables(template.userFormat, { 
@@ -256,11 +262,11 @@ ${character.data.mes_example || ''}
     );
   }
 
-  // Generate chat response with enhanced context tracking
+  // Generate chat response with enhanced context tracking and thinking support
   static async generateChatResponse(
     character: CharacterCard,
     currentMessage: string,
-    history: Array<{ role: 'user' | 'assistant', content: string }>,
+    history: Array<{ role: 'user' | 'assistant' | 'system' | 'thinking', content: string }>,
     apiConfig: APIConfig,
     signal?: AbortSignal
   ): Promise<Response> {
@@ -271,20 +277,33 @@ ${character.data.mes_example || ''}
     const template = this.getTemplate(apiConfig.templateId);
     console.log('Using template:', template?.name || 'Default');
 
+    // Look for thinking content in system messages
+    const thinkingContent = history
+      .filter(msg => msg.role === 'system' && msg.content.startsWith('<think>'))
+      .map(msg => msg.content)
+      .join('\n');
+    
+    // Create a special thinking prompt if thinking content exists
+    let enhancedPrompt = currentMessage;
+    if (thinkingContent) {
+      // Add thinking to the prompt in a way that encourages the model to use it
+      enhancedPrompt = `${thinkingContent}\n\nBased on the above reasoning, respond to: ${currentMessage}`;
+    }
+
     // Create memory context
     const memory = this.createMemoryContext(character, template);
 
-    // Format chat history using the template
+    // Format chat history using the template - filter out thinking messages
     const formattedHistory = this.formatChatHistory(
       history, 
       character.data.name, 
       apiConfig.templateId // Make sure we're passing templateId here
     );
     
-    // Create the final prompt using the template
+    // Create the final prompt using the template with the enhanced prompt
     const currentPrompt = this.formatPromptWithTemplate(
       formattedHistory,
-      currentMessage,
+      enhancedPrompt, // Use the enhanced prompt that may include thinking
       character.data.name,
       template
     );
@@ -326,6 +345,8 @@ ${character.data.mes_example || ''}
       memory,
       historyLength: history.length,
       currentMessage,
+      enhancedPrompt: enhancedPrompt !== currentMessage ? enhancedPrompt : undefined,
+      thinkingIncluded: thinkingContent.length > 0,
       formattedPrompt: currentPrompt,
       template: {
         id: template?.id || 'default',
@@ -365,7 +386,8 @@ ${character.data.mes_example || ''}
         context_window: contextInfo, // Add the debugging context window
         character_data: character, // Pass character data for lore entry matching
         chat_history: history,     // Pass chat history for lore matching
-        current_message: currentMessage // Current message for context
+        current_message: enhancedPrompt, // Pass enhanced message that may contain thinking
+        has_thinking: thinkingContent.length > 0 // Flag to indicate if thinking was included
       }
     };
 
@@ -394,6 +416,7 @@ ${character.data.mes_example || ''}
   static async *streamResponse(response: Response): AsyncGenerator<string, void, unknown> {
     if (!response.body) throw new Error('No response body');
     
+    // Use ES2024's Promise.withResolvers for cleaner streaming implementation
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     
@@ -403,7 +426,17 @@ ${character.data.mes_example || ''}
       let chunkSize = 0;
       
       while (true) {
-        const { value, done } = await reader.read();
+        // Use withResolvers to handle the read operation cleanly
+        const { promise, resolve, reject } = Promise.withResolvers<ReadableStreamReadResult<Uint8Array>>();
+        
+        // Read the next chunk
+        reader.read()
+          .then(resolve)
+          .catch(reject);
+        
+        // Wait for the read operation to complete
+        const { value, done } = await promise;
+        
         if (done) {
           console.log('Stream complete');
           break;

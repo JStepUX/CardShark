@@ -121,12 +121,22 @@ class ApiService {
    * Saves the current chat state
    */
   async saveChat(characterData: any, messages: any[], lastUser?: any, apiInfo?: any) {
-    return this.post('/api/save-chat', {
-      character_data: characterData,
-      messages,
-      lastUser,
-      api_info: apiInfo
-    });
+    console.debug(`apiService.saveChat called with ${messages.length} messages`);
+    
+    try {
+      const response = await this.post('/api/save-chat', {
+        character_data: characterData,
+        messages,
+        lastUser,
+        api_info: apiInfo
+      });
+      
+      console.debug('API response from save-chat:', response);
+      return response;
+    } catch (error) {
+      console.error('API error in saveChat:', error);
+      throw error;
+    }
   }
 
   /**

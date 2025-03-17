@@ -8,21 +8,48 @@ import { APIConfig, APIProvider } from '../types/api';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
 
+// Add ReasoningSettings interface
+interface ReasoningSettings {
+  enabled: boolean;
+  visible: boolean;
+  instructions?: string;
+}
+
+// Default reasoning settings
+const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
+  enabled: false,
+  visible: false,
+  instructions: "!important! Embody {{char}}. **Think** through the context of this interaction with <thinking></thinking> tags. Consider your character, your relationship with the user, and relevant context from the conversation history."
+};
+
+// Enhanced ChatState interface to include generatingId
+interface EnhancedChatState extends ChatState {
+  generatingId: string | null;
+  reasoningSettings: ReasoningSettings;
+}
+
 export function useChatMessages(characterData: CharacterData | null) {
   const { apiConfig } = useContext(APIConfigContext);
   
   // Initialize state with stored values
-  const [state, setState] = useState<ChatState>(() => {
+  const [state, setState] = useState<EnhancedChatState>(() => {
     let storedUser = ChatStorage.getCurrentUser();
     let persistedContextWindow = null;
+    let reasoningSettings = DEFAULT_REASONING_SETTINGS;
     
     try {
       const storedContextWindow = localStorage.getItem('cardshark_context_window');
       if (storedContextWindow) {
         persistedContextWindow = JSON.parse(storedContextWindow);
       }
+      
+      // Load reasoning settings
+      const savedReasoningSettings = localStorage.getItem('cardshark_reasoning_settings');
+      if (savedReasoningSettings) {
+        reasoningSettings = JSON.parse(savedReasoningSettings);
+      }
     } catch (err) {
-      console.error('Error loading context window:', err);
+      console.error('Error loading settings:', err);
     }
     
     return {
@@ -31,7 +58,9 @@ export function useChatMessages(characterData: CharacterData | null) {
       isGenerating: false,
       error: null,
       currentUser: storedUser,
-      lastContextWindow: persistedContextWindow
+      lastContextWindow: persistedContextWindow,
+      generatingId: null,
+      reasoningSettings
     };
   });
   
@@ -163,15 +192,26 @@ export function useChatMessages(characterData: CharacterData | null) {
   
   // Save chat function
   const saveChat = (messageList = state.messages) => {
-    if (!characterData?.data?.name || !autoSaveEnabled.current) return;
+    if (!characterData?.data?.name) {
+      console.debug('Save aborted: no character data name');
+      return;
+    }
+    
+    if (!autoSaveEnabled.current) {
+      console.debug('Save aborted: autoSave disabled');
+      return;
+    }
+    
+    console.debug('Scheduling save with timeout...');
     
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
+      console.debug('Cleared existing save timeout');
     }
     
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        console.log('Saving chat state...', messageList.length);
+        console.debug(`Executing save for ${messageList.length} messages`);
         
         const apiInfo = apiConfig ? {
           provider: apiConfig.provider,
@@ -181,9 +221,12 @@ export function useChatMessages(characterData: CharacterData | null) {
           enabled: apiConfig.enabled
         } : null;
         
-        await ChatStorage.saveChat(characterData, messageList, state.currentUser, apiInfo);
+        const result = await ChatStorage.saveChat(characterData, messageList, state.currentUser, apiInfo);
+        console.debug('Save result:', result);
       } catch (err) {
         console.error('Error saving chat:', err);
+      } finally {
+        saveTimeoutRef.current = null;
       }
     }, 500);
   };
@@ -302,6 +345,101 @@ export function useChatMessages(characterData: CharacterData | null) {
     }, 50);
   };
   
+  // Add reasoning generation
+  const generateReasoningResponse = async (prompt: string) => {
+    if (!state.reasoningSettings.enabled || !characterData) return null;
+    
+    // Create thinking message
+    const thinkingId = crypto.randomUUID();
+    const thinkingMessage: Message = {
+      id: thinkingId,
+      role: 'thinking',
+      content: '',
+      timestamp: Date.now()
+    };
+    
+    // Add thinking message to state
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, thinkingMessage],
+      isGenerating: true,
+      generatingId: thinkingId
+    }));
+    
+    try {
+      // Guard against undefined characterData
+      if (!characterData) {
+        throw new Error('No character data available for generating a response');
+      }
+    
+      // Prepare reasoning prompt with proper null checks
+      const reasoningInstructions = state.reasoningSettings?.instructions || DEFAULT_REASONING_SETTINGS.instructions || '';
+      const characterName = characterData.data?.name || 'Character';
+      const userName = state.currentUser?.name || 'User';
+      
+      const reasoningPrompt = reasoningInstructions
+        .replace(/\{\{char\}\}/g, characterName)
+        .replace(/\{\{user\}\}/g, userName);
+      
+      // Fixed: Proper type handling when mapping message roles
+      const contextMessages = state.messages
+        .filter(msg => msg.role !== 'thinking')
+        .map(({role, content}) => {
+          return {
+            role: role === 'thinking' ? 'system' : role, 
+            content
+          } as { role: 'user' | 'assistant' | 'system'; content: string };
+        });
+      
+      // Generate thinking content
+      const thinkingPrompt = `${reasoningPrompt}\n\nUser's message: ${prompt}`;
+      const formattedAPIConfig = prepareAPIConfig(apiConfig);
+      
+      const response = await PromptHandler.generateChatResponse(
+        characterData,
+        thinkingPrompt,
+        contextMessages,
+        formattedAPIConfig,
+        // Add signal if using AbortController
+        currentGenerationRef.current?.signal
+      );
+      
+      // Process streaming response
+      let thinkingContent = '';
+      for await (const chunk of PromptHandler.streamResponse(response)) {
+        thinkingContent += chunk;
+        setState(prev => {
+          const updatedMessages = prev.messages.map(msg => 
+            msg.id === thinkingId ? {...msg, content: thinkingContent} : msg
+          );
+          return {...prev, messages: updatedMessages};
+        });
+      }
+      
+      // Update final thinking message
+      setState(prev => {
+        const updatedMessages = prev.messages.map(msg => 
+          msg.id === thinkingId ? {...msg, content: thinkingContent} : msg
+        );
+        return {
+          ...prev,
+          messages: updatedMessages,
+          isGenerating: false
+        };
+      });
+      
+      return thinkingContent;
+    } catch (err) {
+      console.error('Error generating thinking:', err);
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        error: err instanceof Error ? err.message : 'Failed to generate thinking'
+      }));
+      return null;
+    }
+  };
+  
   // Generate response (Implementation stays largely the same but streamlined)
   const generateResponse = async (prompt: string) => {
     if (!characterData || state.isGenerating) return;
@@ -322,7 +460,8 @@ export function useChatMessages(characterData: CharacterData | null) {
     setState(prev => ({
       ...prev,
       messages: [...prev.messages, userMessage, assistantMessage],
-      isGenerating: true
+      isGenerating: true,
+      generatingId: assistantMessage.id
     }));
     
     await appendMessage(userMessage);
@@ -334,37 +473,46 @@ export function useChatMessages(characterData: CharacterData | null) {
     currentGenerationRef.current = abortController;
     
     try {
-      // Format context for API
-      const contextMessages = state.messages.map(({role, content}) => ({role, content}));
+      // Check if reasoning is enabled and generate reasoning first
+      let reasoningContent = null;
+      if (state.reasoningSettings.enabled) {
+        reasoningContent = await generateReasoningResponse(prompt);
+      }
+
+      // Fixed: Format context for API with proper typing
+      const contextMessages = state.messages
+        .filter(msg => msg.role !== 'thinking')
+        .map(({role, content}) => {
+          return {
+            role: role === 'thinking' ? 'system' : role, 
+            content
+          } as { role: 'user' | 'assistant' | 'system'; content: string };
+        });
+      
+      // Fixed: If we have reasoning content, include it as system role
+      if (reasoningContent) {
+        contextMessages.push({
+          role: 'system',  // Changed from 'thinking' to 'system'
+          content: `<think>${reasoningContent}</think>`
+        });
+      }
+      
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
       
       // Update context window
       const contextWindow = {
-        type: 'generation',
+        type: 'generation_starting',
         timestamp: new Date().toISOString(),
-        prompt,
         characterName: characterData.data?.name || 'Unknown',
-        messageHistory: contextMessages,
-        userMessage: userMessage,
-        assistantMessageId: assistantMessage.id,
-        config: { ...formattedAPIConfig, apiKey: formattedAPIConfig.apiKey ? '[REDACTED]' : null },
-        systemPrompt: characterData.data?.system_prompt || '',
-        firstMes: characterData.data?.first_mes || '',
-        personality: characterData.data?.personality || '',
-        scenario: characterData.data?.scenario || '',
-        editedMessages: state.messages
-          .filter(msg => msg.variations && msg.variations.length > 1)
-          .map(msg => ({
-            id: msg.id,
-            role: msg.role,
-            variationCount: msg.variations?.length || 0,
-            currentVariation: msg.currentVariation || 0
-          }))
+        messageId: assistantMessage.id,
+        prompt,
+        reasoningEnabled: state.reasoningSettings.enabled,
+        hasReasoningContent: !!reasoningContent
       };
       
       setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
       
-      // Make API request
+      // Start generation request
       const response = await PromptHandler.generateChatResponse(
         characterData,
         prompt,
@@ -374,80 +522,77 @@ export function useChatMessages(characterData: CharacterData | null) {
       );
       
       if (!response.ok) {
-        throw new Error('Generation failed - check API settings');
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
       }
       
       // Process streaming response
-      let newContent = '';
-      let chunkBuffer = '';
-      let lastUpdateTime = Date.now();
-      const UPDATE_INTERVAL = 50; // ms between UI updates
+      let content = '';
+      let buffer = '';
       
-      for await (const chunk of PromptHandler.streamResponse(response)) {
-        chunkBuffer += chunk;
-        
-        // Only update UI periodically or when buffer gets large
-        const currentTime = Date.now();
-        if (currentTime - lastUpdateTime > UPDATE_INTERVAL || chunkBuffer.length > 30) {
-          newContent += chunkBuffer;
-          chunkBuffer = '';
-          lastUpdateTime = currentTime;
+      bufferTimer = setInterval(() => {
+        if (buffer.length > 0) {
+          const newContent = content + buffer;
+          buffer = '';
           
           setState(prev => {
             const updatedMessages = prev.messages.map(msg => 
               msg.id === assistantMessage.id ? {...msg, content: newContent} : msg
             );
-            return {...prev, messages: updatedMessages};
+            return { ...prev, messages: updatedMessages };
           });
+          
+          content = newContent;
         }
+      }, 50);
+      
+      for await (const chunk of PromptHandler.streamResponse(response)) {
+        buffer += chunk;
       }
       
-      // Add any remaining buffer content
-      if (chunkBuffer.length > 0) {
-        newContent += chunkBuffer;
+      // Final update
+      if (buffer.length > 0) {
+        content += buffer;
         setState(prev => {
           const updatedMessages = prev.messages.map(msg => 
-            msg.id === assistantMessage.id ? {...msg, content: newContent} : msg
+            msg.id === assistantMessage.id ? {...msg, content} : msg
           );
-          return {...prev, messages: updatedMessages};
+          return { ...prev, messages: updatedMessages };
         });
       }
       
-      // Update state after generation is complete
+      // Finalize message
       setState(prev => {
-        const finalMessages = prev.messages.map(msg => 
-          msg.id === assistantMessage.id ? MessageUtils.addVariation(msg, newContent) : msg
+        const updatedMessages = prev.messages.map(msg => 
+          msg.id === assistantMessage.id ? {
+            ...msg, 
+            content,
+            variations: [content],
+            currentVariation: 0
+          } : msg
         );
-        
-        const updatedContextWindow = {
-          ...prev.lastContextWindow,
-          type: 'generation_complete',
-          finalResponse: newContent,
-          completionTime: new Date().toISOString(),
-          totalTokens: newContent.split(/\s+/).length
-        };
-        
-        setTimeout(() => saveChat(finalMessages), 100);
         
         return {
           ...prev,
-          messages: finalMessages,
+          messages: updatedMessages,
           isGenerating: false,
-          lastContextWindow: updatedContextWindow
+          generatingId: null,
+          lastContextWindow: {
+            ...prev.lastContextWindow,
+            type: 'generation_complete',
+            completionTime: new Date().toISOString()
+          }
         };
       });
       
-      // Save message
-      await appendMessage({
-        ...assistantMessage,
-        content: newContent,
-        variations: [newContent],
-        currentVariation: 0
-      });
+      // Save messages
+      saveChat();
+      appendMessage({...assistantMessage, content});
+      
     } catch (err) {
       handleGenerationError(err, assistantMessage.id);
     } finally {
       currentGenerationRef.current = null;
+      
       // Ensure buffer timer is cleared
       if (bufferTimer) {
         clearInterval(bufferTimer);
@@ -658,7 +803,13 @@ const regenerateMessage = async (message: Message) => {
       // Get context messages up to the target message
       const contextMessages = state.messages
         .slice(0, targetIndex)
-        .map(({ role, content }) => ({ role, content }));
+        .filter(msg => msg.role !== 'thinking')
+        .map(({role, content}) => {
+          return {
+            role: role === 'thinking' ? 'system' : role, 
+            content
+          } as { role: 'user' | 'assistant' | 'system'; content: string };
+        });
   
       // Find the most recent user prompt
       let promptText = "Provide a fresh response that builds on the existing story without repeating previous details verbatim. ##!important:avoid acting,speaking, or thinking for {{user}}!##";
@@ -742,47 +893,37 @@ const regenerateMessage = async (message: Message) => {
         newContent += buffer;
         setState(prev => {
           const updatedMessages = [...prev.messages];
+          const targetMsg = updatedMessages[targetIndex];
+        
+          // Add as a new variation
+          const variations = [...(targetMsg.variations || [])];
+          if (!variations.includes(newContent)) {
+            variations.push(newContent);
+          }
+        
           updatedMessages[targetIndex] = {
-            ...updatedMessages[targetIndex],
-            content: newContent
+            ...targetMsg,
+            content: newContent,
+            variations,
+            currentVariation: variations.length - 1
           };
-          return { ...prev, messages: updatedMessages };
+  
+          const updatedContextWindow = {
+            ...prev.lastContextWindow,
+            type: 'regeneration_complete',
+            finalResponse: newContent,
+            completionTime: new Date().toISOString(),
+            variationsCount: variations.length
+          };
+  
+          return {
+            ...prev,
+            messages: updatedMessages,
+            isGenerating: false,
+            lastContextWindow: updatedContextWindow
+          };
         });
       }
-  
-      // Update state with new variation
-      setState(prev => {
-        const updatedMessages = [...prev.messages];
-        const targetMsg = updatedMessages[targetIndex];
-        
-        // Add as a new variation
-        const variations = [...(targetMsg.variations || [])];
-        if (!variations.includes(newContent)) {
-          variations.push(newContent);
-        }
-        
-        updatedMessages[targetIndex] = {
-          ...targetMsg,
-          content: newContent,
-          variations,
-          currentVariation: variations.length - 1
-        };
-  
-        const updatedContextWindow = {
-          ...prev.lastContextWindow,
-          type: 'regeneration_complete',
-          finalResponse: newContent,
-          completionTime: new Date().toISOString(),
-          variationsCount: variations.length
-        };
-  
-        return {
-          ...prev,
-          messages: updatedMessages,
-          isGenerating: false,
-          lastContextWindow: updatedContextWindow
-        };
-      });
   
       // Save messages
       saveChat();
@@ -943,18 +1084,48 @@ const regenerateMessage = async (message: Message) => {
             }
             };
 
-            // Return the hook state and functions
-            return {
-            ...state,
-            updateMessage,
-            deleteMessage,
-            addMessage,
-            generateResponse,
-            regenerateMessage,
-            cycleVariation,
-            stopGeneration,
-            setCurrentUser,
-            loadExistingChat,
-            clearError
-            };
+  // Update reasoning settings
+  const updateReasoningSettings = (settings: ReasoningSettings) => {
+    try {
+      // Save to localStorage
+      localStorage.setItem('cardshark_reasoning_settings', JSON.stringify(settings));
+      
+      // Update state
+      setState(prev => ({
+        ...prev,
+        reasoningSettings: settings,
+        lastContextWindow: {
+          type: 'reasoning_settings_updated',
+          timestamp: new Date().toISOString(),
+          enabled: settings.enabled,
+          visible: settings.visible,
+          characterName: characterData?.data?.name || 'Unknown'
         }
+      }));
+      
+      console.log('Updated reasoning settings:', settings);
+    } catch (err) {
+      console.error('Error updating reasoning settings:', err);
+      setState(prev => ({
+        ...prev,
+        error: 'Failed to update reasoning settings'
+      }));
+    }
+  };
+  
+  // Return the hook state and functions
+  return {
+    ...state,
+    updateMessage,
+    deleteMessage,
+    addMessage,
+    generateResponse,
+    regenerateMessage,
+    cycleVariation,
+    stopGeneration,
+    setCurrentUser,
+    loadExistingChat,
+    clearError,
+    updateReasoningSettings
+  };
+}
