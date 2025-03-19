@@ -338,7 +338,7 @@ const ChatView: React.FC = () => {
                 }}
                 className="form-checkbox h-4 w-4 text-blue-600 rounded"
               />
-              <span className="text-sm text-gray-300">Thinking Mode</span>
+              <span className="text-sm text-gray-300">Think</span>
             </label>
             
             {reasoningSettings.enabled && (

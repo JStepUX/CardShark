@@ -340,7 +340,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     setIsEditing(true);
     
     // Get current content
-    const newContent = contentRef.current.textContent || '';
     
     // Clear any existing timeout
     if (saveTimeoutRef.current) {
