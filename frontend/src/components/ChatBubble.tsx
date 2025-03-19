@@ -39,6 +39,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const previousContent = useRef<string>(message.content);
   const [htmlContent, setHtmlContent] = useState<string>('');
   const highlightCache = useRef(new Map<string, string>());
+  const [copied, setCopied] = useState(false);
   
   // Enhanced cursor position tracking
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -435,6 +436,19 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     setTimeout(saveCursorPosition, 0);
   }, [handleInput, saveCursorPosition]);
 
+  // Replace the deprecated document.queryCommandSupported and document.execCommand
+  // with modern clipboard API
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      // Show visual feedback that text was copied
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  }, [message.content]);
+
   // Skip rendering system messages in chat bubbles
   if (message.role === 'system') {
     return null;
@@ -449,9 +463,22 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       <div className="px-4 pt-2 flex justify-between items-center">
         <div className="text-sm text-gray-500">
           {message.role === 'user' ? currentUser : characterName || 'Character'}
+          {copied && <span className="ml-2 text-green-500 text-xs">Copied!</span>}
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Add copy button */}
+          <button
+            onClick={handleCopy}
+            className="p-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
+            title="Copy message"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+
           {message.variations && message.variations.length > 0 && (
             <>
               <button

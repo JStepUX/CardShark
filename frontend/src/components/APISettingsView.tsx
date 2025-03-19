@@ -13,6 +13,7 @@ import { SettingsTabs, SettingsTab } from './SettingsTabs';
 import TemplateManager from './TemplateManager';
 import { TemplateProvider } from '../contexts/TemplateContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
+import PromptSettings from './PromptSettings'; // Add this import
 
 interface ViewProps {
   settings: Settings;
@@ -168,11 +169,8 @@ const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
         </SettingsTab>
         
         <SettingsTab id="prompts">
-          <div className="p-8">
-            <h2 className="text-lg font-semibold mb-6">Prompt Templates</h2>
-            <p className="text-gray-400">
-              Prompt templates management functionality will be available in a future update.
-            </p>
+          <div className="h-full overflow-y-auto">
+            <PromptSettings />
           </div>
         </SettingsTab>
       </SettingsTabs>
