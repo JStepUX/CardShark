@@ -3,6 +3,7 @@ import { Plus, Trash, Edit, Image, Loader2 } from 'lucide-react';
 import { generateUUID } from '../utils/generateUUID';
 import BackgroundCropper from './BackgroundCropper'; // Import the cropper component
 
+// Add aspect ratio to the Background interface
 export interface Background {
   id: string;
   name: string;
@@ -11,6 +12,7 @@ export interface Background {
   thumbnail?: string;
   isDefault?: boolean;
   isAnimated?: boolean; // New property to identify GIFs
+  aspectRatio?: number; // Add this property
 }
 
 export interface BackgroundSelectorProps {
@@ -104,7 +106,8 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
     event.target.value = '';
   };
 
-  const uploadFile = async (file: File, croppedImageData?: string) => {
+  // Modified upload function to include aspect ratio
+  const uploadFile = async (file: File, croppedImageData?: string, aspectRatio?: number) => {
     try {
       setIsUploading(true);
       setError(null);
@@ -121,6 +124,11 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
         formData.append('file', croppedFile);
       } else {
         formData.append('file', file);
+      }
+
+      // Add aspect ratio to form data if provided
+      if (aspectRatio) {
+        formData.append('aspectRatio', aspectRatio.toString());
       }
 
       const response = await fetch('/api/backgrounds/upload', {
@@ -153,7 +161,8 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             name: data.background.name,
             filename: data.background.filename,
             url: `/api/backgrounds/${encodeURIComponent(data.background.filename)}`,
-            isAnimated: data.background.filename.toLowerCase().endsWith('.gif')
+            isAnimated: data.background.filename.toLowerCase().endsWith('.gif'),
+            aspectRatio: aspectRatio || editingBackground.aspectRatio // Preserve or update aspect ratio
           };
           
           // Update the backgrounds list
@@ -175,7 +184,8 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             name: data.background.name,
             filename: data.background.filename,
             url: `/api/backgrounds/${encodeURIComponent(data.background.filename)}`,
-            isAnimated: data.background.filename.toLowerCase().endsWith('.gif')
+            isAnimated: data.background.filename.toLowerCase().endsWith('.gif'),
+            aspectRatio: aspectRatio || (data.background.isAnimated ? 16/9 : undefined) // Default for GIFs
           };
 
           // Add to backgrounds list
@@ -200,9 +210,10 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
     }
   };
   
-  const handleCropSave = (croppedImageData: string) => {
+  // Modified handleCropSave to include aspect ratio
+  const handleCropSave = (croppedImageData: string, aspectRatio: number) => {
     if (tempImageFile) {
-      uploadFile(tempImageFile, croppedImageData);
+      uploadFile(tempImageFile, croppedImageData, aspectRatio);
     }
     setShowCropper(false);
   };
@@ -256,6 +267,7 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
     );
   }
 
+  // Render grid with aspect ratio-aware background items
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center mb-4">
@@ -299,7 +311,10 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
                 : 'hover:ring-1 hover:ring-gray-400'
             }`}
             style={{
-              aspectRatio: '16/9'
+              // Use the background's aspect ratio if available, otherwise default to 16:9
+              aspectRatio: background.aspectRatio 
+                ? `${background.aspectRatio}` 
+                : '16/9'
             }}
             onClick={() => onSelect(background)}
           >

@@ -64,6 +64,17 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
   
   // Determine if current background is a GIF
   const isAnimatedGif = localSettings.background?.isAnimated || false;
+
+  // Calculate preview container size based on aspect ratio
+  // This ensures consistent width across different aspect ratios
+  const previewContainerStyle = {
+    width: '100%',
+    maxWidth: '400px',
+    height: previewRatio < 1 
+      ? '300px'  // For portrait orientation (mobile), fix the height
+      : 'auto',  // For landscape and square, let height adjust based on ratio
+    margin: '0 auto' // Center the preview
+  };
   
   return (
     <div className="p-6 bg-stone-900 rounded-lg space-y-6 w-full max-w-2xl">
@@ -93,11 +104,14 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
           </div>
         </div>
         
-        <div className="rounded-lg overflow-hidden border border-stone-700" 
-             style={{ aspectRatio: `${previewRatio}` }}>
+        <div 
+          className="mx-auto rounded-lg overflow-hidden border border-stone-700" 
+          style={previewContainerStyle}
+        >
           <div 
             className="relative w-full h-full"
             style={{
+              aspectRatio: previewRatio,
               backgroundColor: 'rgb(28, 25, 23)', // bg-stone-900
               backgroundImage: localSettings.background?.url ? `url(${localSettings.background.url})` : 'none',
               backgroundSize: 'cover',

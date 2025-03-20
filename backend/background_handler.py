@@ -5,11 +5,14 @@ from typing import List, Dict, Optional
 from PIL import Image
 import uuid
 import shutil
+import json
 
 class BackgroundHandler:
     def __init__(self, logger):
         self.logger = logger
         self.backgrounds_dir = self._get_backgrounds_dir()
+        self.metadata_file = self.backgrounds_dir / 'metadata.json'
+        self._load_metadata()
         
     def _get_backgrounds_dir(self) -> Path:
         """Get the backgrounds directory path"""
@@ -28,6 +31,27 @@ class BackgroundHandler:
         self.logger.log_step(f"Backgrounds directory: {backgrounds_dir}")
         return backgrounds_dir
     
+    def _load_metadata(self):
+        """Load background metadata from JSON file"""
+        self.metadata = {}
+        try:
+            if self.metadata_file.exists():
+                with open(self.metadata_file, 'r') as f:
+                    self.metadata = json.load(f)
+                self.logger.log_step(f"Loaded metadata for {len(self.metadata)} backgrounds")
+        except Exception as e:
+            self.logger.log_error(f"Error loading background metadata: {str(e)}")
+            self.metadata = {}
+    
+    def _save_metadata(self):
+        """Save background metadata to JSON file"""
+        try:
+            with open(self.metadata_file, 'w') as f:
+                json.dump(self.metadata, f)
+            self.logger.log_step(f"Saved metadata for {len(self.metadata)} backgrounds")
+        except Exception as e:
+            self.logger.log_error(f"Error saving background metadata: {str(e)}")
+    
     def get_all_backgrounds(self) -> List[Dict]:
         """List all background images"""
         try:
@@ -40,13 +64,21 @@ class BackgroundHandler:
                 if file_path.suffix.lower() in image_extensions:
                     try:
                         # Get basic file info
-                        backgrounds.append({
+                        filename = file_path.name
+                        background_info = {
                             "name": file_path.stem,
-                            "filename": file_path.name,
+                            "filename": filename,
                             "path": str(file_path),
                             "size": file_path.stat().st_size,
-                            "modified": file_path.stat().st_mtime
-                        })
+                            "modified": file_path.stat().st_mtime,
+                            "isAnimated": file_path.suffix.lower() == '.gif'
+                        }
+                        
+                        # Add metadata if available
+                        if filename in self.metadata:
+                            background_info.update(self.metadata[filename])
+                        
+                        backgrounds.append(background_info)
                         self.logger.log_step(f"Found background: {file_path.name}")
                     except Exception as e:
                         self.logger.log_error(f"Error processing background {file_path}: {str(e)}")
@@ -62,7 +94,7 @@ class BackgroundHandler:
             self.logger.log_error(f"Error listing backgrounds: {str(e)}")
             return []
     
-    def save_background(self, file_content: bytes, original_filename: str) -> Optional[Dict]:
+    def save_background(self, file_content: bytes, original_filename: str, aspect_ratio: Optional[float] = None) -> Optional[Dict]:
         """Save a new background image"""
         try:
             # Generate a safe filename
@@ -85,6 +117,10 @@ class BackgroundHandler:
                 f.write(file_content)
             
             # Validate it's a valid image - special handling for GIFs
+            is_animated = False
+            img_width = 0
+            img_height = 0
+            
             try:
                 if extension.lower() == '.gif':
                     # Just try to open the file to validate without calling verify()
@@ -96,16 +132,35 @@ class BackgroundHandler:
                         except EOFError:
                             is_animated = False
                         
+                        # Get image dimensions
+                        img_width, img_height = img.size
+                        
                         self.logger.log_step(f"Validated GIF. Animated: {is_animated}")
                 else:
                     # For non-GIFs, use verify()
                     with Image.open(file_path) as img:
                         img.verify()
+                        # Open again to get dimensions (verify closes the file)
+                        with Image.open(file_path) as img2:
+                            img_width, img_height = img2.size
             except Exception as e:
                 self.logger.log_error(f"Invalid image file: {str(e)}")
                 if file_path.exists():
                     file_path.unlink()
                 return None
+                
+            # If aspect ratio wasn't provided, calculate it from dimensions
+            if aspect_ratio is None and img_width > 0 and img_height > 0:
+                aspect_ratio = img_width / img_height
+            
+            # Save metadata
+            self.metadata[filename] = {
+                "aspectRatio": aspect_ratio,
+                "isAnimated": is_animated,
+                "width": img_width,
+                "height": img_height
+            }
+            self._save_metadata()
             
             # Return file info
             result = {
@@ -113,10 +168,12 @@ class BackgroundHandler:
                 "filename": filename,
                 "path": str(file_path),
                 "size": file_path.stat().st_size,
-                "modified": file_path.stat().st_mtime
+                "modified": file_path.stat().st_mtime,
+                "isAnimated": is_animated,
+                "aspectRatio": aspect_ratio
             }
             
-            self.logger.log_step(f"Saved background: {filename}")
+            self.logger.log_step(f"Saved background: {filename} with aspect ratio {aspect_ratio}")
             return result
             
         except Exception as e:
@@ -134,6 +191,12 @@ class BackgroundHandler:
                 
             # Delete the file
             file_path.unlink()
+            
+            # Remove from metadata
+            if filename in self.metadata:
+                del self.metadata[filename]
+                self._save_metadata()
+                
             self.logger.log_step(f"Deleted background: {filename}")
             return True
             
@@ -165,7 +228,34 @@ class BackgroundHandler:
                     if not target_path.exists():
                         shutil.copy2(file_path, target_path)
                         self.logger.log_step(f"Copied default background: {file_path.name}")
+                        
+                        # Calculate and store aspect ratio for default backgrounds
+                        try:
+                            with Image.open(target_path) as img:
+                                width, height = img.size
+                                aspect_ratio = width / height
+                                
+                                # Check if it's an animated GIF
+                                is_animated = False
+                                if file_path.suffix.lower() == '.gif':
+                                    try:
+                                        img.seek(1)
+                                        is_animated = True
+                                    except EOFError:
+                                        pass
+                                
+                                # Store metadata
+                                self.metadata[file_path.name] = {
+                                    "aspectRatio": aspect_ratio,
+                                    "isAnimated": is_animated,
+                                    "width": width,
+                                    "height": height
+                                }
+                        except Exception as e:
+                            self.logger.log_error(f"Error processing default background metadata: {str(e)}")
                     
+            # Save metadata after processing all default backgrounds
+            self._save_metadata()
             self.logger.log_step("Default backgrounds initialization complete")
         
         except Exception as e:
