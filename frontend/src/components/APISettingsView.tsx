@@ -15,29 +15,37 @@ import { TemplateProvider } from '../contexts/TemplateContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import PromptSettings from './PromptSettings'; // Add this import
 
-interface ViewProps {
-  settings: Settings;
-  onUpdate: (updates: Partial<Settings>) => void;
+interface APISettingsViewProps {
+  settings: Settings; // Use the Settings type directly
+  onUpdate: (update: Partial<Settings>) => void; // Match the type from Layout
 }
 
-const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
+export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts'>('general');
-  const { setAPIConfig } = useAPIConfig(); // **NEW: Get setAPIConfig from APIConfigContext**
+  const { setAPIConfig } = useAPIConfig();
+  // Remove or use the isRefetching state
+  const [isRefetching, setIsRefetching] = useState(false);
 
   const handleAPIUpdate = (id: string, updates: Partial<APIConfig>) => {
-    onUpdate({ // **Existing onUpdate call to update settings state**
+    // Disable update button while refetching
+    if (isRefetching) {
+      console.log("API update already in progress, please wait...");
+      return;
+    }
+    
+    onUpdate({ 
         apis: {
             ...settings.apis,
-            [id]: {
+            [id]: { // No need for the 'as string' type assertion since id is already a string
                 ...settings.apis[id],
                 ...updates
             }
         }
     });
 
-    // **NEW: Re-fetch settings from backend and update APIConfigContext**
     const refetchSettingsAndUpdateContext = async () => {
         try {
+            setIsRefetching(true);
             const response = await fetch("/api/settings"); // Re-fetch ALL settings
             if (!response.ok) throw new Error("Failed to load settings after update");
             const data = await response.json();
@@ -57,6 +65,9 @@ const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
             }
         } catch (error) {
             console.error("Error re-fetching settings after API update:", error);
+            // No user notification of the error
+        } finally {
+            setIsRefetching(false);
         }
     };
 
@@ -65,16 +76,17 @@ const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
 
   const handleAddAPI = () => {
     const newConfig = createAPIConfig(APIProvider.KOBOLD);
+    const configId: string = newConfig.id || `api-${Date.now()}`;
     onUpdate({
       apis: {
         ...settings.apis,
-        [newConfig.id]: newConfig
+        [configId]: newConfig
       }
     });
   };
 
   const handleRemoveAPI = (id: string) => {
-    const newApis = { ...settings.apis };
+    const newApis: Record<string, APIConfig> = { ...settings.apis };
     delete newApis[id];
     onUpdate({ apis: newApis });
   };
@@ -85,8 +97,21 @@ const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
     handleAPIUpdate(id, newConfig);
   };
 
+  const handleDirectoryChange = (directory: string | null) => {
+    onUpdate({
+      character_directory: directory,
+      save_to_character_directory: true
+    });
+  };
+
+  // Add visual indicator when API settings are being refetched
   return (
     <div className="h-full flex flex-col">
+      {isRefetching && (
+        <div className="fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+          Refreshing API settings...
+        </div>
+      )}
       <SettingsTabs defaultTab={activeTab} onTabChange={setActiveTab}>
         <SettingsTab id="general">
           <div className="p-8">
@@ -97,10 +122,7 @@ const APISettingsView: React.FC<ViewProps> = ({ settings, onUpdate }) => {
               <h3 className="text-md font-medium mb-4">Character Directory</h3>
               <DirectoryPicker
                 currentDirectory={settings.character_directory}
-                onDirectoryChange={(directory) => onUpdate({ 
-                  character_directory: directory,
-                  save_to_character_directory: true 
-                })}
+                onDirectoryChange={handleDirectoryChange}
               />
               
               {settings.character_directory && (

@@ -10,7 +10,7 @@ export interface ReasoningSettings {
 
 export interface Settings {
   // App Settings
-  character_directory: string;
+  character_directory: string | null;  // Updated to allow null
   save_to_character_directory: boolean;
   theme: 'dark' | 'light';
   version: string;
@@ -49,7 +49,7 @@ export const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   // App defaults
-  character_directory: '',
+  character_directory: '',  // Keep as empty string in defaults
   save_to_character_directory: false,
   theme: 'dark',
   version: '1.0',

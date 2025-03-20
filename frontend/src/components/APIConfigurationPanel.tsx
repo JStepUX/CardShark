@@ -122,7 +122,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
         sampler_order: config.generation_settings.sampler_order ?? [6, 0, 1, 3, 4, 2, 5]
       });
     }
-  }, [config.generation_settings]);
+  }, [config.generation_settings, config]);
 
   const handleSettingChange = (key: keyof typeof settings, value: number) => {
     const newSettings = { ...settings, [key]: value };
@@ -299,7 +299,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
           <div className="space-y-4">
             <h4 className="text-sm text-gray-400">Sampler Order</h4>
             <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto border border-stone-700 rounded-lg p-3 bg-stone-900">
-              {settings.sampler_order.map((samplerId, index) => {
+              {settings.sampler_order.map((samplerId: number, index: number) => {
                 const sampler = SAMPLER_ORDER_OPTIONS.find(s => s.id === samplerId);
                 if (!sampler) return null;
                 return (

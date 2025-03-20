@@ -252,7 +252,6 @@ const Layout: React.FC = () => {
     }
   };
 
-
   // Settings update handler
   const handleSettingsUpdate = async (updates: Partial<Settings>) => {
     try {

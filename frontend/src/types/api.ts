@@ -136,6 +136,21 @@ export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
 
 import { z } from 'zod';
 
+// Define the model info interface
+export interface ModelInfo {
+  id: string;
+  name?: string;
+  provider?: string;
+  contextLength?: number;
+}
+
+// Define the connection status interface
+export interface ConnectionStatus {
+  connected: boolean;
+  timestamp: number;
+  error?: string;
+}
+
 // API Configuration Schema
 export const APIConfigSchema = z.object({
   id: z.string().optional(),
@@ -145,9 +160,21 @@ export const APIConfigSchema = z.object({
   model: z.string().optional(),
   templateId: z.string().optional(),
   generation_settings: z.record(z.any()).optional(),
-  enabled: z.boolean().default(false)
+  enabled: z.boolean().default(false),
+  lastConnectionStatus: z.object({
+    connected: z.boolean(),
+    timestamp: z.number(),
+    error: z.string().optional()
+  }).optional(),
+  model_info: z.object({
+    id: z.string(),
+    name: z.string().optional(),
+    provider: z.string().optional(),
+    contextLength: z.number().optional()
+  }).optional()
 });
 
+// Define the APIConfig interface using the Zod schema
 export type APIConfig = z.infer<typeof APIConfigSchema>;
 
 // Generation Response Schema
@@ -163,6 +190,7 @@ export const GenerationResponseSchema = z.object({
 });
 
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
+
 // Function to create an API config with appropriate defaults
 export function createAPIConfig(provider: APIProvider): APIConfig {
   const config = PROVIDER_CONFIGS[provider];
@@ -170,9 +198,9 @@ export function createAPIConfig(provider: APIProvider): APIConfig {
     id: `api_${Date.now()}`,
     provider,
     url: config.defaultUrl,
-    templateId: config.templateId,   // Only use templateId
+    templateId: config.templateId,
     enabled: false,
-    model: config.defaultModel,
-    generation_settings: { ...DEFAULT_GENERATION_SETTINGS } // Include default generation settings
+    model: config.defaultModel, // May be undefined for some providers
+    generation_settings: { ...DEFAULT_GENERATION_SETTINGS }
   };
 }

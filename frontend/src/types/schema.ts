@@ -48,7 +48,7 @@ export interface LoreEntryInterface {
         use_group_scoring: boolean | null;
         case_sensitive: boolean | null;
         automation_id: string;
-        role: number;
+        role: number; // Add missing role property
         vectorized: boolean;
         sticky: number | null;
         cooldown: number | null;
@@ -172,7 +172,7 @@ export function createEmptyLoreEntry(index: number): LoreEntryInterface {
             use_group_scoring: false,
             case_sensitive: null,
             automation_id: "",
-            role: 0,
+            role: 0, // Ensure role is initialized correctly
             vectorized: false,
             sticky: 0,
             cooldown: 0,
@@ -275,6 +275,9 @@ export const LoreEntrySchema = z.object({
     match_whole_words: z.boolean().nullable().default(null),
     use_group_scoring: z.boolean().nullable().default(null),
     case_sensitive: z.boolean().nullable().default(null),
+    automation_id: z.string().default(""),
+    role: z.number().default(0),
+    vectorized: z.boolean().default(false),
     sticky: z.number().nullable().optional(),
     cooldown: z.number().nullable().optional(),
     delay: z.number().nullable().optional()
