@@ -18,7 +18,7 @@ export enum WorldInfoLogic {
 }
 
 // Main Lore Entry Interface
-export interface LoreEntry {
+export interface LoreEntryInterface {
     id: number;              // Unique identifier
     keys: string[];           // Primary trigger keywords
     secondary_keys: string[];     // Secondary/optional filter keywords
@@ -141,7 +141,7 @@ export interface CharacterCard {
 }
 
 // Helper Functions
-export function createEmptyLoreEntry(index: number): LoreEntry {
+export function createEmptyLoreEntry(index: number): LoreEntryInterface {
     return {
         id: 1 + index,
         keys: [],
@@ -231,3 +231,54 @@ export function createEmptyCharacterCard(): CharacterCard {
         create_date: ""
     };
 }
+
+// src/types/schema.ts
+import { z } from 'zod';
+
+// Extend existing enums with Zod
+export const WorldInfoPositionSchema = z.enum([
+  'BEFORE_CHAR', 'AFTER_CHAR', 'AN_TOP', 'AN_BOTTOM', 
+  'AT_DEPTH', 'BEFORE_EXAMPLE', 'AFTER_EXAMPLE'
+]).transform(val => WorldInfoPosition[val]);
+
+export const WorldInfoLogicSchema = z.enum([
+  'AND_ANY', 'NOT_ALL', 'NOT_ANY', 'AND_ALL'
+]).transform(val => WorldInfoLogic[val]);
+
+// Lore Entry Schema
+export const LoreEntrySchema = z.object({
+  id: z.number(),
+  keys: z.array(z.string()),
+  secondary_keys: z.array(z.string()),
+  comment: z.string().default(""),
+  content: z.string(),
+  constant: z.boolean().default(false),
+  selective: z.boolean().default(false),
+  insertion_order: z.number().default(100),
+  enabled: z.boolean().default(true),
+  position: z.string(),
+  use_regex: z.boolean().default(false),
+  extensions: z.object({
+    position: z.number(),
+    exclude_recursion: z.boolean().default(false),
+    display_index: z.number(),
+    probability: z.number().min(0).max(100).optional(),
+    useProbability: z.boolean().default(false),
+    depth: z.number().default(0),
+    selectiveLogic: z.number().default(0),
+    group: z.string().default(""),
+    group_override: z.boolean().default(false),
+    group_weight: z.number().default(1),
+    prevent_recursion: z.boolean().default(false),
+    delay_until_recursion: z.boolean().default(false),
+    scan_depth: z.number().nullable().default(null),
+    match_whole_words: z.boolean().nullable().default(null),
+    use_group_scoring: z.boolean().nullable().default(null),
+    case_sensitive: z.boolean().nullable().default(null),
+    sticky: z.number().nullable().optional(),
+    cooldown: z.number().nullable().optional(),
+    delay: z.number().nullable().optional()
+  })
+});
+
+export type LoreEntry = z.infer<typeof LoreEntrySchema>;

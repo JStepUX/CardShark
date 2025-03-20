@@ -5,6 +5,9 @@ import { RefreshCw, Save, Plus, Download, Upload, AlertCircle, Info, Trash2 } fr
 import HighlightedTextArea from './HighlightedTextArea';
 import { StandardPromptKey, PromptVariable, PromptCategory } from '../types/promptTypes';
 import { Dialog } from './Dialog';
+import { 
+  newPromptSchema, 
+  PromptExportSchema} from '../types/promptSchemas';
 
 interface PromptEditorProps {
   promptKey: string;
@@ -150,18 +153,13 @@ const NewPromptDialog: React.FC<NewPromptDialogProps> = ({
   
   const handleSubmit = () => {
     try {
-      if (!key) {
-        setError('Prompt key is required');
-        return;
-      }
+      // Use Zod to validate the input
+      const result = newPromptSchema.safeParse({ key, template });
       
-      if (!/^[a-zA-Z0-9_]+$/.test(key)) {
-        setError('Prompt key can only contain letters, numbers, and underscores');
-        return;
-      }
-      
-      if (!template) {
-        setError('Prompt template is required');
+      if (!result.success) {
+        // Extract the first error message
+        const errorMessage = result.error.issues[0]?.message || 'Invalid input';
+        setError(errorMessage);
         return;
       }
       
@@ -266,9 +264,16 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         return;
       }
       
-      // Basic validation
+      // Parse and validate JSON with Zod
       try {
-        JSON.parse(data);
+        const parsedData = JSON.parse(data);
+        const validationResult = PromptExportSchema.safeParse(parsedData);
+        
+        if (!validationResult.success) {
+          const errorMessage = validationResult.error.issues[0]?.message || 'Invalid prompt data format';
+          setError(`Invalid import format: ${errorMessage}`);
+          return;
+        }
       } catch (e) {
         setError('Invalid JSON format');
         return;
@@ -484,9 +489,10 @@ const PromptSettings: React.FC = () => {
     setIsImportExportDialogOpen(true);
   };
   
-  // Process prompt import
+  // Process prompt import with better error handling using Zod
   const processImport = (data: string) => {
     try {
+      // Validation already happened in the dialog component
       importPrompts(data);
       setCustomPromptKeys(getCustomPromptKeys());
     } catch (error) {

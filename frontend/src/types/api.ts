@@ -134,27 +134,35 @@ export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
   }
 };
 
-export interface APIConfig {
-  id: string;
-  provider: APIProvider;
-  url: string;
-  apiKey?: string;
-  model?: ModelType;
-  templateId: string;          // Only templateId, no template
-  enabled: boolean;
-  generation_settings?: GenerationSettings;
-  lastConnectionStatus?: {
-    connected: boolean;
-    timestamp: number;
-    error?: string;
-  };
-  model_info?: {
-    id: string;
-    name?: string;
-    provider?: string;
-  };
-}
+import { z } from 'zod';
 
+// API Configuration Schema
+export const APIConfigSchema = z.object({
+  id: z.string().optional(),
+  provider: z.enum(['KoboldCPP', 'OpenAI', 'Claude', 'Gemini', 'OpenRouter']),
+  url: z.string().url().optional(),
+  apiKey: z.string().optional(),
+  model: z.string().optional(),
+  templateId: z.string().optional(),
+  generation_settings: z.record(z.any()).optional(),
+  enabled: z.boolean().default(false)
+});
+
+export type APIConfig = z.infer<typeof APIConfigSchema>;
+
+// Generation Response Schema
+export const GenerationResponseSchema = z.object({
+  content: z.string(),
+  model: z.string().optional(),
+  finish_reason: z.enum(['stop', 'length', 'content_filter']).optional(),
+  usage: z.object({
+    prompt_tokens: z.number().optional(),
+    completion_tokens: z.number().optional(),
+    total_tokens: z.number().optional()
+  }).optional()
+});
+
+export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 // Function to create an API config with appropriate defaults
 export function createAPIConfig(provider: APIProvider): APIConfig {
   const config = PROVIDER_CONFIGS[provider];

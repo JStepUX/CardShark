@@ -1,9 +1,31 @@
 // src/types/templateTypes.ts
+import { z } from 'zod';
 
 /**
- * Template format interface that defines the structure of a chat completion template
+ * Zod schema for template validation
  */
-export interface Template {
+export const TemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  search: z.array(z.string()).optional(),
+  isBuiltIn: z.boolean().default(false),
+  isEditable: z.boolean().default(true),
+  systemFormat: z.string().nullable().optional(),
+  userFormat: z.string(),
+  assistantFormat: z.string(),
+  memoryFormat: z.string().optional(),
+  detectionPatterns: z.array(z.string()).optional(),
+  stopSequences: z.array(z.string()).optional(),
+  tools_start: z.string().optional(),
+  tools_end: z.string().optional()
+});
+
+/**
+ * Template interface that defines the structure of a chat completion template
+ * Extended from the Zod schema
+ */
+export interface ITemplate {
   id: string;           // Unique identifier (kebab-case)
   name: string;         // Display name
   description: string;  // Short description
@@ -29,6 +51,16 @@ export interface Template {
   // Field for backwards compatibility with search patterns
   search?: string[];       // Patterns used to identify this template
 }
+
+/**
+ * Type definition from Zod schema
+ */
+export type TemplateType = z.infer<typeof TemplateSchema>;
+
+/**
+ * Export Template as the main type for backward compatibility
+ */
+export type Template = ITemplate;
 
 /**
  * Template category for organization
@@ -69,7 +101,7 @@ export enum TokenType {
  * Template export/import format
  */
 export interface TemplateExport {
-  templates: Template[];
+  templates: ITemplate[];
   version: string;
   exportedAt: string;
 }

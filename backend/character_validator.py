@@ -4,16 +4,17 @@ import time
 import json
 import traceback
 import logging
+from pydantic import BaseModel, Field, validator
+from enum import Enum
 
-class WorldInfoPosition(IntEnum):
-    """Matches TypeScript WorldInfoPosition enum"""
-    BEFORE_CHAR = 0
-    AFTER_CHAR = 1
-    AN_TOP = 2
-    AN_BOTTOM = 3
-    AT_DEPTH = 4
-    BEFORE_EXAMPLE = 5
-    AFTER_EXAMPLE = 6
+class WorldInfoPosition(str, Enum):
+    BEFORE_CHAR = "BEFORE_CHAR"
+    AFTER_CHAR = "AFTER_CHAR"
+    AN_TOP = "AN_TOP"
+    AN_BOTTOM = "AN_BOTTOM" 
+    AT_DEPTH = "AT_DEPTH"
+    BEFORE_EXAMPLE = "BEFORE_EXAMPLE"
+    AFTER_EXAMPLE = "AFTER_EXAMPLE"
 
 class WorldInfoLogic(IntEnum):
     """Matches TypeScript WorldInfoLogic enum"""
@@ -342,3 +343,17 @@ class CharacterValidator:
             },
             "create_date": ""
         }
+
+class GenerationRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = None
+    max_tokens: int = Field(default=100, ge=1, le=4096)
+    temperature: float = Field(default=0.7, ge=0, le=2)
+    top_p: float = Field(default=0.9, ge=0, le=1)
+    stop_sequences: List[str] = []
+    
+    @validator('prompt')
+    def prompt_not_empty(cls, v):
+        if not v.strip():
+            raise ValueError('prompt cannot be empty')
+        return v

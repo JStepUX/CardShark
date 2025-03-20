@@ -1,6 +1,45 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog } from './Dialog';
 import { Copy, FileText, MessageSquare, Settings } from 'lucide-react';
+import { z } from 'zod';
+
+const ContextWindowSchema = z.object({
+  type: z.enum([
+    'generation', 'regeneration', 'generation_complete', 
+    'regeneration_complete', 'initial_message', 
+    'loaded_chat', 'chat_loaded', 'new_chat'
+  ]),
+  timestamp: z.string().datetime(),
+  characterName: z.string(),
+  systemPrompt: z.string().optional(),
+  description: z.string().optional(),
+  personality: z.string().optional(),
+  scenario: z.string().optional(),
+  memory: z.string().optional(),
+  historyLength: z.number().int().nonnegative(),
+  currentMessage: z.string().optional(),
+  enhancedPrompt: z.string().optional(),
+  thinkingIncluded: z.boolean().optional(),
+  formattedPrompt: z.string().optional(),
+  messageHistory: z.array(z.object({
+    role: z.string(),
+    content: z.string()
+  })).optional(),
+  config: z.object({
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    templateId: z.string().optional(),
+    max_context_length: z.number().int().positive(),
+    max_length: z.number().int().positive()
+  }).optional(),
+  template: z.object({
+    id: z.string(),
+    name: z.string()
+  }).optional()
+});
+
+// Use for type inference and validation
+export type ContextWindowData = z.infer<typeof ContextWindowSchema>;
 
 interface ContextWindowModalProps {
   isOpen: boolean;

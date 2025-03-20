@@ -1,25 +1,9 @@
 // hooks/usePrompts.ts
 import { useState, useEffect, useCallback } from 'react';
-import { z } from 'zod';
-
-// Define types for the prompts
-export interface PromptTemplate {
-  key: string;
-  template: string;
-  isCustom?: boolean;
-}
-
-// Schema for validating prompt exports/imports
-export const PromptExportSchema = z.object({
-  prompts: z.record(z.string()),
-  custom: z.array(z.object({
-    key: z.string(),
-    template: z.string()
-  })).optional(),
-  version: z.string().optional()
-});
-
-export type PromptExport = z.infer<typeof PromptExportSchema>;
+import { 
+  PromptExportSchema, 
+  PromptExport, 
+} from '../types/promptSchemas';
 
 // Default prompts
 const DEFAULT_PROMPTS: Record<string, string> = {
@@ -234,52 +218,45 @@ export const usePrompts = () => {
     }
   }, [prompts, customPrompts]);
   
-  // Import prompts from JSON
-  const importPrompts = useCallback((data: string) => {
+  // Import prompts with validation
+  const importPrompts = useCallback((jsonData: string) => {
     try {
-      const parsed = JSON.parse(data);
-      const validated = PromptExportSchema.parse(parsed);
+      const data = JSON.parse(jsonData);
       
-      // Import modified prompts
-      if (validated.prompts) {
-        const modifiedPrompts: Record<string, string> = {};
-        
-        // Only save prompts that are different from defaults or don't exist in defaults
-        Object.entries(validated.prompts).forEach(([key, value]) => {
-          if (typeof value === 'string') {
-            if (DEFAULT_PROMPTS[key] && value !== DEFAULT_PROMPTS[key]) {
-              modifiedPrompts[key] = value;
-            } else if (!DEFAULT_PROMPTS[key]) {
-              // This is for backward compatibility
-              modifiedPrompts[key] = value;
-            }
-          }
+      // Validate with Zod
+      const validationResult = PromptExportSchema.safeParse(data);
+      if (!validationResult.success) {
+        const errorMessage = validationResult.error.issues[0]?.message || 'Invalid data format';
+        throw new Error(`Invalid import format: ${errorMessage}`);
+      }
+      
+      const parsedData = validationResult.data;
+      
+      // Process the validated data
+      const newCustomPrompts: Record<string, string> = {};
+      
+      // Import modified standard prompts
+      if (parsedData.prompts) {
+        Object.entries(parsedData.prompts).forEach(([key, value]) => {
+          updatePrompt(key, value);
         });
-        
-        setPrompts({ ...DEFAULT_PROMPTS, ...modifiedPrompts });
-        localStorage.setItem(MODIFIED_PROMPTS_KEY, JSON.stringify(modifiedPrompts));
       }
       
       // Import custom prompts
-      if (validated.custom) {
-        const importedCustomPrompts: Record<string, string> = {};
-        
-        validated.custom.forEach((item) => {
-          const { key, template } = item;
-          if (typeof key === 'string' && typeof template === 'string') {
-            importedCustomPrompts[key] = template;
-          }
+      if (parsedData.custom) {
+        parsedData.custom.forEach(({ key, template }) => {
+          newCustomPrompts[key] = template;
         });
         
-        setCustomPrompts(importedCustomPrompts);
-        localStorage.setItem(CUSTOM_PROMPTS_KEY, JSON.stringify(importedCustomPrompts));
+        setCustomPrompts(prev => ({ ...prev, ...newCustomPrompts }));
+        localStorage.setItem(CUSTOM_PROMPTS_KEY, JSON.stringify({ ...customPrompts, ...newCustomPrompts }));
       }
-    } catch (err) {
-      setError('Failed to import prompts: Invalid format');
-      console.error('Error importing prompts:', err);
-      throw new Error('Invalid prompt export format');
+      
+    } catch (error) {
+      console.error('Error importing prompts:', error);
+      throw error;
     }
-  }, []);
+  }, [customPrompts, updatePrompt]);
   
   return {
     prompts: getAllPrompts(),
