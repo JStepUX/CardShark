@@ -1,8 +1,7 @@
 // contexts/ChatContext.tsx
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { Message, UserProfile } from '../types/messages';
-// Fix the import path for CharacterData
-import { CharacterData as CharacterDataType } from '../contexts/CharacterContext';
+import { useCharacter } from '../contexts/CharacterContext';
 import { APIConfig, APIProvider } from '../types/api';
 import { APIConfigContext } from '../contexts/APIConfigContext';
 import { PromptHandler } from '../handlers/promptHandler';
@@ -62,30 +61,31 @@ const ChatContext = createContext<ChatContextType | null>(null);
 
 // Create the provider component
 export const ChatProvider: React.FC<{
-  children: React.ReactNode, 
-  characterData: CharacterDataType | null 
-}> = ({ children, characterData }) => {
-  const { apiConfig } = useContext(APIConfigContext);
-  
-  // Initialize state
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => ChatStorage.getCurrentUser());
-  const [lastContextWindow, setLastContextWindow] = useState<any>(null);
-  const [generatingId, setGeneratingId] = useState<string | null>(null);
-  const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(() => {
-    try {
-      const savedSettings = localStorage.getItem('cardshark_reasoning_settings');
-      if (savedSettings) {
-        return JSON.parse(savedSettings);
+    children: React.ReactNode
+  }> = ({ children }) => {
+    // Get character data from the CharacterContext
+    const { characterData } = useCharacter();
+    const { apiConfig } = useContext(APIConfigContext);
+    
+    // Initialize state
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => ChatStorage.getCurrentUser());
+    const [lastContextWindow, setLastContextWindow] = useState<any>(null);
+    const [generatingId, setGeneratingId] = useState<string | null>(null);
+    const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(() => {
+      try {
+        const savedSettings = localStorage.getItem('cardshark_reasoning_settings');
+        if (savedSettings) {
+          return JSON.parse(savedSettings);
+        }
+      } catch (err) {
+        console.error('Error loading reasoning settings:', err);
       }
-    } catch (err) {
-      console.error('Error loading reasoning settings:', err);
-    }
-    return DEFAULT_REASONING_SETTINGS;
-  });
+      return DEFAULT_REASONING_SETTINGS;
+    });
 
   // Refs for managing generation and debounced saves
   const currentGenerationRef = useRef<AbortController | null>(null);

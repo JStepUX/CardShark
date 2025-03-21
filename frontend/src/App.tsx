@@ -2,6 +2,7 @@
 import { CharacterProvider } from './contexts/CharacterContext';
 import { APIConfigProvider } from './contexts/APIConfigContext';
 import { TemplateProvider } from './contexts/TemplateContext';
+import { ChatProvider } from './contexts/ChatContext';
 import Layout from './components/Layout';
 import './styles/fonts.css';
 
@@ -10,7 +11,9 @@ function App() {
     <APIConfigProvider>
       <TemplateProvider>
         <CharacterProvider>
-          <Layout />
+          <ChatProvider>
+            <Layout />
+          </ChatProvider>
         </CharacterProvider>
       </TemplateProvider>
     </APIConfigProvider>
