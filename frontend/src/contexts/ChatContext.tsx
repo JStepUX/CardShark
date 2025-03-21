@@ -207,32 +207,70 @@ export const ChatProvider: React.FC<{
   
   // Save chat function
         
-const saveChat = useCallback(async (messageList: Message[]) => {
+  const saveChat = useCallback(async (messageList: Message[]) => {
     if (!characterData?.data?.name || !autoSaveEnabled.current) {
-        console.debug('Save aborted: no character data name or autoSave disabled');
-        return;
+      console.debug('Save aborted: no character data name or autoSave disabled');
+      return false;
     }
-    try {
-        console.debug(`Executing save for ${messageList.length} messages`);
-        const apiInfo = apiConfig ? { /* ... */ } : null;
-        const result = await ChatStorage.saveChat(characterData, messageList, currentUser, apiInfo);
-        console.debug('Save result:', result);
-    } catch (err) {
-        console.error('Error saving chat:', err);
-    }
-}, [characterData, currentUser, apiConfig]); // Keep dependencies minimal
-
     
-  
+    try {
+      console.debug(`Executing save for ${messageList.length} messages`);
+      
+      // Clone the message list to avoid any state mutation issues
+      const messagesToSave = JSON.parse(JSON.stringify(messageList));
+      
+      // Create consistent API info
+      const apiInfo = apiConfig ? {
+        provider: apiConfig.provider,
+        model: apiConfig.model || 'unknown',
+        url: apiConfig.url || '',
+        templateId: apiConfig.templateId || 'unknown',
+        enabled: apiConfig.enabled
+      } : null;
+      
+      console.debug('Saving with API info:', apiInfo ? apiConfig?.provider : 'none');
+      
+      // Make a single saveChat call with proper debug info
+      const result = await ChatStorage.saveChat(
+        characterData, 
+        messagesToSave, 
+        currentUser, 
+        apiInfo
+      );
+      
+      console.debug('Save result:', result?.success ? 'success' : 'failed');
+      return result?.success || false;
+    } catch (err) {
+      console.error('Error saving chat:', err);
+      return false;
+    }
+  }, [characterData, currentUser, apiConfig]);
+
   // Append a message to the chat
   const appendMessage = useCallback(async (message: Message) => {
-    if (!characterData?.data?.name) return;
+    if (!characterData?.data?.name) {
+      console.debug('Append aborted: no character data name');
+      return null;
+    }
     
     try {
-      console.log(`Appending/updating message ${message.id} to chat`);
-      await ChatStorage.appendMessage(characterData, message);
+      console.debug(`Appending message ${message.id} (${message.role}) to chat`);
+      
+      // Ensure message has required fields
+      const messageToAppend = {
+        ...message,
+        id: message.id || crypto.randomUUID(),
+        timestamp: message.timestamp || Date.now()
+      };
+      
+      // Make API call
+      const result = await ChatStorage.appendMessage(characterData, messageToAppend);
+      
+      console.debug(`Append result for ${messageToAppend.id}:`, result?.success ? 'success' : 'failed');
+      return messageToAppend;
     } catch (err) {
-      console.error('Error appending/updating message:', err);
+      console.error('Error appending message:', err);
+      return null;
     }
   }, [characterData]);
   
@@ -578,9 +616,16 @@ const saveChat = useCallback(async (messageList: Message[]) => {
   }, [createNewChat]);
   
   const updateAndSaveMessages = useCallback((newMessages: Message[]) => {
+    // First update state
     setMessages(newMessages);
-    saveChat(newMessages);
-}, [saveChat]); // Include saveChat in the dependency array
+    
+    // Then schedule a save (not immediate, to avoid race conditions)
+    setTimeout(() => {
+      if (characterData) {
+        saveChat(newMessages);
+      }
+    }, 50); // Short delay to ensure state is updated first
+  }, [characterData, saveChat]);
 
 
   // Generate response with support for /new command
@@ -912,8 +957,8 @@ const saveChat = useCallback(async (messageList: Message[]) => {
     // Corrected Dependency Array:
   }, [characterData, isGenerating, apiConfig, messages, prepareAPIConfig, updateAndSaveMessages, appendMessage]);
   
-  // Continue response
-const continueResponse = useCallback(async (message: Message) => {
+  // Complete continueResponse function for ChatContext.tsx
+  const continueResponse = useCallback(async (message: Message) => {
     if (!characterData || isGenerating || !apiConfig) {
       setError(!apiConfig ? "API configuration not loaded" : "Cannot continue message");
       setLastContextWindow({
@@ -992,7 +1037,8 @@ const continueResponse = useCallback(async (message: Message) => {
       let newContent = message.content; // Start with existing content
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
-  
+      
+      // While streaming, ONLY update the current message content - don't save or create variations yet
       for await (const chunk of PromptHandler.streamResponse(response)) {
         // Batch updates for smoother performance
         if (!bufferTimer) {
@@ -1001,13 +1047,15 @@ const continueResponse = useCallback(async (message: Message) => {
               const content = newContent + buffer;
               buffer = '';
   
-              // Update state with new content
+              // ONLY update state for display purposes, no saving or variations
               setMessages((prev: Message[]) => {
                 const updatedMessages = [...prev];
-                updatedMessages[targetIndex] = {
-                  ...updatedMessages[targetIndex],
-                  content
-                };
+                if (targetIndex < updatedMessages.length) {
+                  updatedMessages[targetIndex] = {
+                    ...updatedMessages[targetIndex],
+                    content
+                  };
+                }
                 return updatedMessages;
               });
               newContent = content;
@@ -1025,39 +1073,71 @@ const continueResponse = useCallback(async (message: Message) => {
         bufferTimer = null;
       }
   
-       // Final update. Define finalMessages *here*.
+      // Add any remaining buffered content
       if (buffer.length > 0) {
         newContent += buffer;
       }
-      const finalMessages = messages.map(msg => {
-          if(msg.id === message.id){
-              const variations = [...(msg.variations || [])];
-                if (!variations.includes(newContent)) {
-                    variations.push(newContent);
-                  }
-  
-                return {
-                  ...msg,
-                  content: newContent,
-                  variations,
-                  currentVariation: variations.length - 1
-                };
-          }
-          return msg;
-      });
       
-  
-      setLastContextWindow((_prev: any) => ({
-        ...lastContextWindow,
-        type: 'continuation_complete',
-        finalResponse: newContent,
-        completionTime: new Date().toISOString()
-      }));
-  
-      // Save completed messages using the helper function
-      updateAndSaveMessages(finalMessages);
-      appendMessage({...message, content: newContent, timestamp: Date.now()});
-  
+      // Now that streaming is complete, handle variations correctly - only once at the end
+      
+      // Keep a local copy of the current message state to compare
+      const originalMessage = messages.find(msg => msg.id === message.id);
+      
+      // Check if we actually have new content to add as a variation
+      if (originalMessage && newContent !== originalMessage.content) {
+        console.log("Creating final message with continuation content");
+        
+        // Get existing variations, or initialize if none
+        const variations = [...(originalMessage.variations || [originalMessage.content])];
+        
+        // Only add as a new variation if it's different
+        if (!variations.includes(newContent)) {
+          variations.push(newContent);
+        }
+        
+        // Create the final message with the new content and updated variations
+        const finalMessage = {
+          ...originalMessage,
+          content: newContent,
+          variations,
+          currentVariation: variations.length - 1,
+          timestamp: Date.now() // Update timestamp
+        };
+        
+        // Update messages state once with the final result
+        setMessages(prevMessages => 
+          prevMessages.map(msg => msg.id === message.id ? finalMessage : msg)
+        );
+        
+        // Update context window info
+        setLastContextWindow({
+          type: 'continuation_complete',
+          timestamp: new Date().toISOString(),
+          characterName: characterData.data?.name || 'Unknown',
+          messageId: message.id,
+          finalResponse: newContent,
+          completionTime: new Date().toISOString(),
+          variationsCount: variations.length
+        });
+        
+        // Save ONCE at the end instead of for each chunk
+        try {
+          // Make a single append call
+          await appendMessage(finalMessage);
+          
+          // Get the current state of messages after our state update
+          const currentMessages = messages.map(msg => 
+            msg.id === message.id ? finalMessage : msg
+          );
+          
+          // Make a single save call
+          await saveChat(currentMessages);
+          
+          console.log('Successfully saved continued message');
+        } catch (saveError) {
+          console.error('Error saving continued message:', saveError);
+        }
+      }
     } catch (err) {
       console.error("Continuation error:", err);
       setError(err instanceof Error ? err.message : "Continuation failed");
@@ -1073,8 +1153,15 @@ const continueResponse = useCallback(async (message: Message) => {
       setIsGenerating(false);
       setGeneratingId(null);
     }
-  // Corrected Dependency Array:
-  }, [characterData, isGenerating, apiConfig, messages, prepareAPIConfig, updateAndSaveMessages, appendMessage]);
+  }, [
+    characterData,
+    isGenerating,
+    apiConfig,
+    messages,
+    prepareAPIConfig,
+    saveChat,
+    appendMessage
+  ]);
   
   // Stop generation
   const stopGeneration = useCallback(() => {

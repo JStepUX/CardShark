@@ -80,8 +80,14 @@ class ChatHandler:
             # Running from source
             base_dir = Path.cwd()
         
-        # Always use frontend/chats for consistency with existing code
-        chats_dir = base_dir / 'frontend' / 'chats'
+        # Check if base_dir already contains a 'frontend' directory
+        if base_dir.name == 'frontend':
+            # Already in a frontend directory, just add 'chats'
+            chats_dir = base_dir / 'chats'
+        else:
+            # Not in a frontend directory, use the standard path
+            chats_dir = base_dir / 'chats'  # Removed the 'frontend' part
+        
         chats_dir.mkdir(parents=True, exist_ok=True)
         
         # Create character-specific directory
