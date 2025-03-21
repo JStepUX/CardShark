@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Pause,
   Trash2,
+  StepForward,
 } from 'lucide-react';
 import { Message } from '../types/messages'; // Import Message type from message.ts
 
@@ -15,6 +16,7 @@ interface ChatBubbleProps {
   onDelete: () => void;
   onStop?: () => void;
   onTryAgain?: () => void;
+  onContinue?: () => void; // New prop for continue functionality
   onNextVariation: () => void;
   onPrevVariation: () => void;
   currentUser?: string;
@@ -29,6 +31,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   onDelete,
   onStop,
   onTryAgain,
+  onContinue, // Add the new continue handler
   onNextVariation,
   onPrevVariation,
   currentUser,
@@ -340,8 +343,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     isEditingRef.current = true;
     setIsEditing(true);
     
-    // Get current content
-    
     // Clear any existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -467,7 +468,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Add copy button */}
+          {/* Copy button */}
           <button
             onClick={handleCopy}
             className="p-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
@@ -487,7 +488,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                 disabled={isGenerating}
                 title="Previous version"
               >
-                <ArrowLeft size={16} />
+          <ArrowLeft size={16} />
               </button>
               <span className="text-xs text-gray-500">
                 {(message.currentVariation ?? 0) + 1}/{message.variations.length}
@@ -501,6 +502,18 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                 <ArrowRight size={16} />
               </button>
             </>
+          )}
+
+          {/* Continue button - new addition for this feature */}
+          {message.role === 'assistant' && onContinue && (
+            <button
+              onClick={onContinue}
+              className="p-1 text-gray-400 hover:text-blue-400 disabled:opacity-50"
+              disabled={isGenerating}
+              title="Continue response"
+            >
+              <StepForward size={16} />
+            </button>
           )}
 
           {isGenerating && onStop ? (

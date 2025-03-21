@@ -15,5 +15,7 @@ __tests__/
 context/
 backgrounds/
 Characters/
+site-Home/
 
 *.spec
+crawlsite.py

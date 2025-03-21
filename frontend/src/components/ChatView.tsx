@@ -9,9 +9,9 @@ import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
 import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSettings';
 import { useChatMessages } from '../hooks/useChatMessages';
+import { useChatContinuation } from '../hooks/useChatContinuation'; // Import the continuation hook
 import { apiService } from '../services/apiService';
-import { UserProfile } from '../types/messages';
-//import { REASONING_SETTINGS_KEY } from '../types/messages';
+import { Message, UserProfile } from '../types/messages';
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -34,10 +34,6 @@ const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
   enabled: false,
   visible: false
 };
-
-// Fix: Remove the problematic lines
-// localStorage.getItem(REASONING_SETTINGS_KEY);
-// localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(settings));
 
 // Separate hook for scroll management
 function useScrollToBottom() {
@@ -200,8 +196,8 @@ const ChatView: React.FC = () => {
     error,
     currentUser,
     lastContextWindow,
-    generatingId, // Get this from the hook now
-    reasoningSettings: hookReasoningSettings, // Get settings from hook
+    generatingId,
+    reasoningSettings: hookReasoningSettings,
     generateResponse,
     regenerateMessage,
     cycleVariation,
@@ -210,8 +206,60 @@ const ChatView: React.FC = () => {
     updateMessage,
     setCurrentUser,
     loadExistingChat,
-    updateReasoningSettings // New function
+    updateReasoningSettings
   } = useChatMessages(characterData);
+
+  // Use the chat continuation hook
+  const {
+    continueResponse,
+    stopContinuation,
+    error: continuationError,
+    clearError: clearContinuationError
+  } = useChatContinuation(
+    messages,
+    characterData,
+    (updatedMessages) => {
+      // This is the saveMessages function passed to useChatContinuation
+      // It should save the messages to the backend or local storage
+      apiService.saveChat(characterData!, updatedMessages, currentUser);
+    },
+    (updatedMessages) => {
+      // This is the updateMessagesState function passed to useChatContinuation
+      // We don't have direct access to setState from useChatMessages, so we need a workaround
+      // One approach is to use the updateMessage function for each message that changed
+      const messagesToUpdate = updatedMessages.filter((msg, index) => 
+        index < messages.length && msg.content !== messages[index].content
+      );
+      
+      messagesToUpdate.forEach(msg => {
+        updateMessage(msg.id, msg.content);
+      });
+    },
+    (isGen) => {
+      // setIsGenerating - we can't directly modify useChatMessages state
+      // This is a dummy function since we rely on useChatMessages for generation state
+      console.log('Continuation generation state:', isGen);
+    },
+    (genId) => {
+      // setGeneratingId - we can't directly modify useChatMessages state
+      // This is a dummy function since we rely on useChatMessages for generatingId
+      console.log('Continuation generating ID:', genId);
+    },
+    (contextWindow) => {
+      // This updates the context window in useChatMessages
+      // Since we can't directly modify useChatMessages state, we log it
+      console.log('Continuation context window:', contextWindow);
+    }
+  );
+
+  // If there's a continuation error, merge it with the main error
+  const combinedError = error || continuationError;
+  // Clear both errors when either is cleared
+  useEffect(() => {
+    if (continuationError && !error) {
+      clearContinuationError();
+    }
+  }, [error, continuationError, clearContinuationError]);
 
   // Use local state for UI control, synced with hook state
   const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(
@@ -299,6 +347,14 @@ const ChatView: React.FC = () => {
       </div>
     );
   }
+
+  // Handle message continuation
+  const handleContinueResponse = (message: Message) => {
+    if (message.role === 'assistant') {
+      // Use the continueResponse function from useChatContinuation
+      continueResponse(message);
+    }
+  };
 
   return (
     <div className="h-full relative flex flex-col overflow-hidden">
@@ -394,9 +450,9 @@ const ChatView: React.FC = () => {
         </div>
       </div>
 
-      {error && (
+      {combinedError && (
         <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200 relative z-10">
-          {error}
+          {combinedError}
         </div>
       )}
 
@@ -429,8 +485,21 @@ const ChatView: React.FC = () => {
                   isGenerating={isGenerating && message.id === generatingId}
                   onContentChange={(content) => updateMessage(message.id, content)}
                   onDelete={() => deleteMessage(message.id)}
-                  onStop={message.role === 'assistant' ? stopGeneration : undefined}
-                  onTryAgain={message.role === 'assistant' ? () => regenerateMessage(message) : undefined}
+                  onStop={
+                    message.role === 'assistant' 
+                      ? isGenerating ? stopGeneration : stopContinuation 
+                      : undefined
+                  }
+                  onTryAgain={
+                    message.role === 'assistant' 
+                      ? () => regenerateMessage(message) 
+                      : undefined
+                  }
+                  onContinue={
+                    message.role === 'assistant' 
+                      ? () => handleContinueResponse(message) 
+                      : undefined
+                  }
                   onNextVariation={() => cycleVariation(message.id, 'next')}
                   onPrevVariation={() => cycleVariation(message.id, 'prev')}
                   currentUser={currentUser?.name}
