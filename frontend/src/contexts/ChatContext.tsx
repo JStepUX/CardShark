@@ -714,39 +714,58 @@ export const ChatProvider: React.FC<{
       // Process streaming response
       let content = '';
       let buffer = '';
+      let isFirstChunk = true;
 
       bufferTimer = setInterval(() => {
         if (buffer.length > 0) {
-          const newContent = content + buffer;
+          let processedBuffer = buffer; // Define processedBuffer here
+          
+          // Trim leading whitespace only for the first chunk
+          if (isFirstChunk && content === '') {
+            processedBuffer = processedBuffer.replace(/^\s+/, '');
+            isFirstChunk = false;
+          }
+          
+          const newContent = content + processedBuffer; // Use processedBuffer instead of buffer
           buffer = '';
-
+          
           setMessages((prev: Message[]) => {
             const updatedMessages = prev.map(msg =>
               msg.id === assistantMessage.id ? { ...msg, content: newContent } : msg
             );
             return updatedMessages;
           });
-
+          
           content = newContent;
         }
       }, 50);
-
+      
       for await (const chunk of PromptHandler.streamResponse(response)) {
         buffer += chunk;
       }
-
-      // Final update (Define finalMessages *here*)
+      
+      // Final update
       if (buffer.length > 0) {
-          content += buffer;
+        let processedBuffer = buffer; // Also handle final buffer properly
+        
+        // Apply the same whitespace trimming logic for the final buffer if it's the first chunk
+        if (isFirstChunk && content === '') {
+          processedBuffer = processedBuffer.replace(/^\s+/, '');
+          isFirstChunk = false;
+        }
+        
+        content += processedBuffer;
       }
-        const finalMessages = messages.map(msg =>
-            msg.id === assistantMessage.id ? {
-              ...msg,
-              content,
-              variations: [content],
-              currentVariation: 0
-            } : msg
-        );
+
+      // Define finalMessages here before using it
+      const finalMessages = messages.map(msg =>
+        msg.id === assistantMessage.id ? {
+          ...msg,
+          content,
+          variations: [content],
+          currentVariation: 0
+        } : msg
+      );
 
       // Finalize message
       setIsGenerating(false);
@@ -758,7 +777,7 @@ export const ChatProvider: React.FC<{
       }));
 
       // Save messages
-      updateAndSaveMessages(finalMessages); // Use the helper function
+      updateAndSaveMessages(finalMessages); // Now finalMessages is defined
       appendMessage({...assistantMessage, content});
 
     } catch (err) {

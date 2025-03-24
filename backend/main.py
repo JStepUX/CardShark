@@ -1324,7 +1324,6 @@ async def get_characters(directory: str):
         # List all PNG files
         png_files = []
         for file in directory_path.glob("*.png"):
-            logger.log_step(f"Found PNG: {file.name}")
             png_files.append({
                 "name": file.stem,
                 "path": str(file),
