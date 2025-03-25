@@ -1,5 +1,7 @@
+// frontend/src/components/Layout.tsx (Modified)
 import React, { useRef, useState, useEffect } from "react";
 import { useCharacter } from "../contexts/CharacterContext";
+import { useComparison } from "../contexts/ComparisonContext";
 import LoreView from "./LoreView";
 import MessagesView from "./MessagesView";
 import CharacterInfoView from "./CharacterInfoView";
@@ -7,6 +9,7 @@ import APISettingsView from "./APISettingsView";
 import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
 import CharacterGallery from "./CharacterGallery";
+import ComparisonPanel from "./ComparisonPanel";
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
 import ChatView from "./ChatView";
 import SideNav from "./SideNav";
@@ -37,6 +40,9 @@ const Layout: React.FC = () => {
     error, 
     setError 
   } = useCharacter();
+
+  // Comparison context
+  const { isCompareMode } = useComparison();
 
   // Load settings on mount
   useEffect(() => {
@@ -319,16 +325,26 @@ const Layout: React.FC = () => {
       />
       
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-[600px] bg-stone-900">
-        {error && (
-          <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
-        )}
-        {isLoading && (
-          <div className="px-8 py-4 bg-blue-900/50 text-blue-200">
-            Loading character data...
+      <div className={`flex flex-1 ${isCompareMode ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900`}>
+        {/* Main content column */}
+        <div className={`flex flex-col ${isCompareMode ? 'w-1/2' : 'flex-1'}`}>
+          {error && (
+            <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
+          )}
+          {isLoading && (
+            <div className="px-8 py-4 bg-blue-900/50 text-blue-200">
+              Loading character data...
+            </div>
+          )}
+          {renderContent()}
+        </div>
+        
+        {/* Comparison panel (conditional) */}
+        {isCompareMode && (
+          <div className="w-1/2 border-l border-stone-800">
+            <ComparisonPanel settingsChangeCount={settingsChangeCount} />
           </div>
         )}
-        {renderContent()}
       </div>
       
       {/* Dialogs */}

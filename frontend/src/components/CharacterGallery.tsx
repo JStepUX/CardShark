@@ -1,5 +1,7 @@
+// frontend/src/components/CharacterGallery.tsx (Modified version)
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
+import { useComparison } from '../contexts/ComparisonContext';
 
 interface CharacterFile {
   name: string;
@@ -10,16 +12,35 @@ interface CharacterFile {
 
 interface CharacterGalleryProps {
   settingsChangeCount?: number;
+  isSecondarySelector?: boolean;
+  onCharacterSelected?: () => void;
 }
 
-const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount = 0 }) => {
+const CharacterGallery: React.FC<CharacterGalleryProps> = ({ 
+  settingsChangeCount = 0, 
+  isSecondarySelector = false,
+  onCharacterSelected
+}) => {
   const [characters, setCharacters] = useState<CharacterFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [displayedCount, setDisplayedCount] = useState(25);
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const { setCharacterData, setImageUrl, setIsLoading: setAppLoading } = useCharacter();
+  
+  // Use the appropriate context based on the gallery mode
+  const { 
+    setCharacterData, 
+    setImageUrl, 
+    setIsLoading: setPrimaryLoading 
+  } = useCharacter();
+  
+  const { 
+    setSecondaryCharacterData, 
+    setSecondaryImageUrl, 
+    setSecondaryIsLoading 
+  } = useComparison();
+  
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Filter characters based on search term
@@ -103,7 +124,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
 
   const handleCharacterClick = async (character: CharacterFile) => {
     try {
-      setAppLoading(true);
+      // Set loading state based on which context we're using
+      if (isSecondarySelector) {
+        setSecondaryIsLoading(true);
+      } else {
+        setPrimaryLoading(true);
+      }
       
       const response = await fetch(`/api/character-image/${encodeURIComponent(character.path)}`);
       if (!response.ok) throw new Error('Failed to load character image');
@@ -124,13 +150,28 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
       const data = await uploadResponse.json();
       
       if (data.success && data.metadata) {
-        setCharacterData(data.metadata);
-        setImageUrl(URL.createObjectURL(blob));
+        // Set data in the appropriate context
+        if (isSecondarySelector) {
+          setSecondaryCharacterData(data.metadata);
+          setSecondaryImageUrl(URL.createObjectURL(blob));
+          // Notify parent that a character was selected (to switch views)
+          if (onCharacterSelected) {
+            onCharacterSelected();
+          }
+        } else {
+          setCharacterData(data.metadata);
+          setImageUrl(URL.createObjectURL(blob));
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load character');
     } finally {
-      setAppLoading(false);
+      // Clear loading state
+      if (isSecondarySelector) {
+        setSecondaryIsLoading(false);
+      } else {
+        setPrimaryLoading(false);
+      }
     }
   };
 
@@ -140,7 +181,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
       <div className="flex-none bg-stone-900 border-b border-stone-800">
         <div className="p-4">
           <h2 className="text-lg font-semibold">
-            Character Gallery {filteredCharacters.length ? `(${filteredCharacters.length})` : ''}
+            {isSecondarySelector 
+              ? "Select Character for Comparison" 
+              : `Character Gallery ${filteredCharacters.length ? `(${filteredCharacters.length})` : ''}`}
           </h2>
           {currentDirectory && (
             <div className="mt-2 text-sm text-slate-500 truncate">
@@ -181,8 +224,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({ settingsChangeCount
           </div>
         ) : (
           <div className="p-4">
-
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <div className={`grid ${isSecondarySelector ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'} gap-4`}>
               {filteredCharacters.slice(0, displayedCount).map((character) => (
                 <div 
                   key={character.path}

@@ -1,6 +1,8 @@
+// frontend/src/components/CharacterInfoView.tsx (Modified)
 import React, { useState } from 'react';
-import { Search, FileJson } from 'lucide-react';
+import { Search, FileJson, SplitSquareVertical } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
+import { useComparison } from '../contexts/ComparisonContext';
 import { CharacterCard } from '../types/schema';
 import HighlightedTextArea from './HighlightedTextArea';
 import { FindReplaceDialog } from './FindReplaceDialog';
@@ -70,10 +72,22 @@ const JsonViewerModal: React.FC<{
   );
 };
 
-const CharacterInfoView: React.FC = () => {
-  const { characterData, setCharacterData } = useCharacter();
+interface CharacterInfoViewProps {
+  isSecondary?: boolean;
+}
+
+const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = false }) => {
+  // Use the appropriate context based on the mode
+  const primaryContext = useCharacter();
+  const { isCompareMode, setCompareMode, secondaryCharacterData, setSecondaryCharacterData } = useComparison();
+  
+  // Determine which data to use based on isSecondary prop
+  const { characterData, setCharacterData } = isSecondary 
+    ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
+    : primaryContext;
+    
   const [showFindReplace, setShowFindReplace] = useState(false);
-  const [showJsonModal, setShowJsonModal] = useState(false); // New state for JSON modal
+  const [showJsonModal, setShowJsonModal] = useState(false);
 
   const handleFieldChange = (field: keyof CharacterCard['data'], value: string | string[]): void => {
     try {
@@ -111,12 +125,35 @@ const CharacterInfoView: React.FC = () => {
     return value?.toString() || '';
   };
 
+  // Toggle comparison mode
+  const toggleCompareMode = () => {
+    setCompareMode(!isCompareMode);
+  };
+
   return (
     <>
       <div className="p-8 pb-4 flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Primary Character Info</h2>
+        <h2 className="text-lg font-semibold">
+          {isSecondary ? "Comparison View" : "Primary Character Info"}
+        </h2>
         <div className="flex items-center gap-3">
-          {/* JSON Viewer Button */}
+          {/* Compare button - only shown in primary view when not already comparing */}
+          {!isSecondary && (
+            <button
+              onClick={toggleCompareMode}
+              className={`flex items-center gap-2 px-4 py-2 ${
+                isCompareMode 
+                  ? 'bg-stone-700 text-white' 
+                  : 'bg-transparent hover:bg-stone-800 text-white'
+              } rounded-lg transition-colors`}
+              title={isCompareMode ? "Close comparison" : "Compare with another character"}
+            >
+              <SplitSquareVertical className="w-4 h-4" />
+              {isCompareMode ? "Close Compare" : "Compare"}
+            </button>
+          )}
+          
+          {/* Find & Replace button */}
           <button
             onClick={() => setShowFindReplace(true)}
             className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
@@ -124,6 +161,8 @@ const CharacterInfoView: React.FC = () => {
             <Search className="w-4 h-4" />
             Find & Replace
           </button>
+          
+          {/* JSON Viewer Button */}
           <button
             onClick={() => setShowJsonModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
@@ -142,7 +181,7 @@ const CharacterInfoView: React.FC = () => {
               <label className="block text-sm font-medium mb-2">Name</label>
               <input
                 type="text"
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2"
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} rounded-lg px-3 py-2`}
                 placeholder="Character name"
                 value={getFieldValue('name')}
                 onChange={(e) => handleFieldChange('name', e.target.value)}
@@ -153,7 +192,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Description</label>
               <HighlightedTextArea
-                className="bg-stone-800 border border-stone-700 font-light tracking-wide rounded-lg h-64"
+                className={`bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`}
                 placeholder="Character description"
                 value={getFieldValue('description')}
                 onChange={(value) => handleFieldChange('description', value)}
@@ -164,7 +203,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Scenario</label>
               <HighlightedTextArea
-                className="w-full bg-stone-800 border border-stone-700 font-light tracking-wide rounded-lg px-3 py-2 h-32 resize-y"
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 h-32 resize-y`}
                 placeholder="Current situation or context"
                 value={getFieldValue('scenario')}
                 onChange={(value) => handleFieldChange('scenario', value)}
@@ -175,7 +214,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Personality</label>
               <HighlightedTextArea
-                className="w-full bg-stone-800 border border-stone-700 font-light tracking-wide rounded-lg px-3 py-2 h-32 resize-y"
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 h-32 resize-y`}
                 placeholder="Key personality traits"
                 value={getFieldValue('personality')}
                 onChange={(value) => handleFieldChange('personality', value)}
@@ -186,7 +225,7 @@ const CharacterInfoView: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-2">Example Dialogue</label>
               <HighlightedTextArea
-                className="w-full bg-stone-800 border font-light tracking-wide border-stone-700 rounded-lg px-3 py-2 h-64 resize-y overflow-auto"
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 h-64 resize-y overflow-auto`}
                 placeholder="Examples of character dialogue and interactions"
                 value={getFieldValue('mes_example')}
                 onChange={(value) => handleFieldChange('mes_example', value)}
@@ -198,7 +237,7 @@ const CharacterInfoView: React.FC = () => {
               <label className="block text-sm font-medium mb-2">System Prompt</label>
               <div className="relative w-full">
                 <HighlightedTextArea
-                  className="w-full h-64 bg-stone-800 border border-stone-700 font-light tracking-wide rounded-lg px-3 py-2 resize-y overflow-auto text-base leading-relaxed"
+                  className={`w-full h-64 bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 resize-y overflow-auto text-base leading-relaxed`}
                   placeholder="AI instructions"
                   value={getFieldValue('system_prompt')}
                   onChange={(value) => handleFieldChange('system_prompt', value)}
@@ -211,7 +250,7 @@ const CharacterInfoView: React.FC = () => {
               <label className="block text-sm font-medium mb-2">Tags</label>
               <input
                 type="text"
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2"
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} rounded-lg px-3 py-2`}
                 placeholder="Character tags (comma-separated)"
                 value={characterData?.data?.tags?.join(', ') || ''}
                 onChange={(e) => handleFieldChange('tags', e.target.value.split(',').map(tag => tag.trim()))}
