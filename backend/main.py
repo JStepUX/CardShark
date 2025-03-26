@@ -151,6 +151,125 @@ async def delete_character(path: str):
 # END CHARACTER DELETION ENDPOINT
 # ============================================================
 
+# --- Determine Base Path and User Directory Path ---
+
+# Check if the application is running as a bundled executable (PyInstaller)
+# The '_MEIPASS' attribute is set by PyInstaller in the temporary environment
+IS_BUNDLED = hasattr(sys, '_MEIPASS')
+
+if IS_BUNDLED:
+    # If bundled, the base path is the directory containing the executable
+    # sys.executable points to the path of the running executable
+    base_path = Path(sys.executable).parent
+    # The user directory is expected to be directly inside the executable's directory
+    USER_DIR_PATH = base_path / "users"
+    logger.log_step(f"[Startup Info] Running bundled. User Directory Path set relative to EXE: {USER_DIR_PATH}")
+else:
+    # If not bundled (running as a script), calculate path relative to the script file
+    # Assumes script is in 'backend/' and users are in '../frontend/users' relative to script
+    script_path = Path(__file__).parent
+    USER_DIR_PATH = (script_path / "../frontend/users").resolve()
+    logger.log_step(f"[Startup Info] Running as script. User Directory Path set relative to script: {USER_DIR_PATH}")
+
+# Optional: Log the final determined path for verification
+print(f"[Startup Info] Final User Directory Path for Deletion Checks: {USER_DIR_PATH}")
+logger.log_step(f"[Startup Info] Final User Directory Path: {USER_DIR_PATH}")
+
+# Create the directory if it doesn't exist (important for first run or bundled app)
+try:
+    USER_DIR_PATH.mkdir(parents=True, exist_ok=True)
+    logger.log_step(f"Ensured user directory exists: {USER_DIR_PATH}")
+except Exception as e:
+    logger.log_error(f"Could not create or access user directory: {USER_DIR_PATH} - Error: {e}")
+    # Depending on severity, you might want to exit or raise a critical error here
+
+
+# ============================================================
+# USER FILE DELETION ENDPOINT
+# (The function definition and its internal logic remain the same,
+# as it correctly uses the USER_DIR_PATH variable calculated above)
+# ============================================================
+@app.delete("/api/user/{path:path}")
+async def delete_user_file(path: str):
+    logger.log_step(f"Received request to delete user file (raw path from URL): '{path}'")
+    try:
+        # --- Path Validation and Security ---
+        allowed_user_dir = USER_DIR_PATH # Uses the path calculated above
+        decoded_path = requests.utils.unquote(path)
+        file_path = Path(decoded_path).resolve()
+
+        # Add the debug logging back temporarily if needed
+        logger.log_step(f"DEBUG: Allowed Directory Path (allowed_user_dir): '{str(allowed_user_dir)}'")
+        logger.log_step(f"DEBUG: Requested File Path (file_path):          '{str(file_path)}'")
+
+        # Check 1: Is the file path within the allowed USER directory?
+        try:
+             is_within_allowed_dir = file_path.is_relative_to(allowed_user_dir)
+             logger.log_step(f"DEBUG: Check 'file_path.is_relative_to(allowed_user_dir)' result: {is_within_allowed_dir}")
+        except AttributeError:
+             is_within_allowed_dir = str(file_path).startswith(str(allowed_user_dir))
+             logger.log_step(f"DEBUG: Check 'str(file_path).startswith(str(allowed_user_dir))' result: {is_within_allowed_dir}")
+
+        if not is_within_allowed_dir:
+             logger.log_warning(f"SECURITY CHECK FAILED: Attempt to delete file outside allowed USER directory.")
+             raise HTTPException(
+                 status_code=403,
+                 detail="Access denied: Cannot delete files outside the designated user directory."
+             )
+
+        # ... (Rest of the checks: is_file, allowed_extensions) ...
+        if not file_path.is_file():
+            # ... (raise 404) ...
+            logger.log_warning(f"User file not found or is not a file at path: {file_path}")
+            raise HTTPException(status_code=404, detail="User file not found.")
+
+        allowed_extensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"]
+        if file_path.suffix.lower() not in allowed_extensions:
+            # ... (raise 400) ...
+            logger.log_warning(f"Attempt to delete non-allowed file type: {file_path}")
+            raise HTTPException(
+                 status_code=400,
+                 detail=f"Invalid file type. Only files with extensions {', '.join(allowed_extensions)} can be deleted."
+             )
+
+        # Perform Deletion
+        logger.log_step(f"All checks passed. Attempting to move user file to trash: {file_path}")
+        try:
+            send2trash.send2trash(str(file_path))
+            logger.log_step(f"Successfully moved user file to trash: {file_path}")
+        except Exception as trash_error:
+             # ... (raise 500) ...
+             logger.log_error(f"Error during send2trash operation for {file_path}: {trash_error}")
+             raise HTTPException(
+                 status_code=500,
+                 detail=f"Failed to move file to trash: {trash_error}"
+             )
+
+        # Return Success
+        return JSONResponse(
+            status_code=200,
+            content={ "success": True, "message": f"User file '{file_path.name}' moved to trash." }
+        )
+
+    # ... (Exception handling remains the same) ...
+    except HTTPException as http_exc:
+         raise http_exc
+    except PermissionError:
+         # ... (raise 403) ...
+         logger.log_error(f"OS Permission error deleting user file: {path}")
+         raise HTTPException(status_code=403, detail="Permission denied by the operating system to delete the user file.")
+    except Exception as e:
+         # ... (raise 500) ...
+         logger.log_error(f"Unexpected error occurred while deleting user file '{path}': {str(e)}")
+         logger.log_error(traceback.format_exc())
+         raise HTTPException(
+            status_code=500,
+            detail="An unexpected server error occurred while attempting to delete the user file."
+         )
+# ============================================================
+# END USER FILE DELETION ENDPOINT
+# ============================================================
+
 @app.get("/api/backgrounds")
 async def get_backgrounds():
     """List all background images."""
