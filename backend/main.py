@@ -8,6 +8,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Response, Re
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse # type: ignore
 from fastapi.staticfiles import StaticFiles # type: ignore
 from fastapi.middleware.cors import CORSMiddleware # type: ignore
+import send2trash
 import uvicorn # type: ignore
 import json
 import base64
@@ -72,6 +73,84 @@ background_handler.initialize_default_backgrounds()
 lore_handler = LoreHandler(logger, default_position=0)
 
 # API Endpoints
+# ============================================================
+# CHARACTER DELETION ENDPOINT
+# ============================================================
+@app.delete("/api/character/{path:path}")
+async def delete_character(path: str):
+    """Move a character file to the system's trash/recycling bin."""
+    logger.log_step(f"Received request to delete character: {path}")
+
+    try:
+        # **Security Validation:** Ensure the path is within the allowed directory
+        char_dir_setting = settings_manager.get_setting('character_directory')
+        if not char_dir_setting:
+            logger.log_error("Character directory setting is not configured.")
+            raise HTTPException(status_code=400, detail="Character directory not configured on server.")
+
+        allowed_dir = Path(char_dir_setting).resolve()
+        # Decode the path parameter which might be URL-encoded by the browser/fetch
+        decoded_path = requests.utils.unquote(path)
+        file_path = Path(decoded_path).resolve()
+
+        logger.log_step(f"Resolved path for deletion: {file_path}")
+        logger.log_step(f"Allowed character directory: {allowed_dir}")
+
+
+        # Check 1: Is the file path within the allowed directory?
+        # Use Path.is_relative_to (requires Python 3.9+)
+        # Fallback for older Python: check if allowed_dir is one of the parents of file_path
+        try:
+             is_relative = file_path.is_relative_to(allowed_dir)
+        except AttributeError: # Fallback for Python < 3.9
+             is_relative = str(file_path).startswith(str(allowed_dir))
+
+        if not is_relative:
+             logger.log_warning(f"Attempt to delete file outside allowed directory: {file_path}")
+             raise HTTPException(status_code=403, detail="Access denied: Cannot delete files outside the character directory.")
+
+        # Check 2: Does the file exist and is it a file?
+        if not file_path.is_file():
+            logger.log_warning(f"File not found or is not a file: {file_path}")
+            raise HTTPException(status_code=404, detail="Character file not found.")
+
+        # Check 3: Is it a PNG file? (Recommended)
+        if file_path.suffix.lower() != ".png":
+             logger.log_warning(f"Attempt to delete non-PNG file: {file_path}")
+             raise HTTPException(status_code=400, detail="Invalid file type. Only PNG files can be deleted.")
+
+        # Perform the deletion (move to trash)
+        logger.log_step(f"Attempting to move to trash: {file_path}")
+        send2trash.send2trash(str(file_path))
+        logger.log_step(f"Successfully moved to trash: {file_path}")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"Character '{file_path.name}' moved to trash."
+            }
+        )
+
+    except FileNotFoundError:
+         # This might occur if the file is deleted between the check and the send2trash call
+         logger.log_warning(f"File not found during send2trash operation: {path}")
+         raise HTTPException(status_code=404, detail="Character file not found.")
+    except PermissionError:
+         logger.log_error(f"Permission error deleting file: {path}")
+         raise HTTPException(status_code=403, detail="Permission denied to delete the file.")
+    except HTTPException as http_exc:
+         # Re-raise HTTPExceptions directly (like 404, 403 from checks)
+         raise http_exc
+    except Exception as e:
+        # Catch any other unexpected errors during the process
+        logger.log_error(f"Error deleting character '{path}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to delete character: {str(e)}")
+# ============================================================
+# END CHARACTER DELETION ENDPOINT
+# ============================================================
+
 @app.get("/api/backgrounds")
 async def get_backgrounds():
     """List all background images."""

@@ -4,3 +4,4 @@ uvicorn>=0.24.0             # Run the server
 python-multipart>=0.0.6      # File uploads
 pyinstaller>=6.0.0           # Create executable
 pydantic>=2.4.2             # Data validation
+send2Trash>=1.8.3           # Native delete functionality

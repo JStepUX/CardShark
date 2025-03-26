@@ -430,7 +430,7 @@ const ChatView: React.FC = () => {
             title="View API Context Window"
           >
             <Eye size={18} />
-            View Context
+            Context
           </button>
 
           <button
@@ -438,14 +438,14 @@ const ChatView: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
           >
             <RefreshCw size={18} />
-            Load Chat
+            Load
           </button>
           <button
             onClick={handleNewChat}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus size={18} />
-            New Chat
+            New
           </button>
         </div>
       </div>
