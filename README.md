@@ -1,22 +1,20 @@
-CardShark is a PNG metadata editor built exclusively by Claude 3.5 Sonnet under the guidance of me!
+CardShark is a PNG metadata editor built exclusively by Claude 3.5/3.7 Sonnet and Gemini 2.5 Pro (minor).
 
-![card_shark_character_folder](https://github.com/user-attachments/assets/15bfee24-cab4-4f8c-a3df-4c4d0b668dbc)
+![cs_gallery](https://github.com/user-attachments/assets/4ab24c52-3a9c-4c96-9c30-77ed822f677b)
 
-Work out of your ST/character directory or any directory with PNGs
-![setDirectory](https://github.com/user-attachments/assets/f80a3c82-e396-4434-a580-c3a1e1275bae)
+![cs_charinfo](https://github.com/user-attachments/assets/79bd551c-ab8f-42e9-a1eb-9a7fddb2eb8b)
 
-![cardshark_character_info](https://github.com/user-attachments/assets/08b92805-9fb0-4945-a69b-e457c9dede00)
+![cs_compare](https://github.com/user-attachments/assets/c757f693-5f27-42c3-a4a3-f54af63bb53d)
 
-Import lore/worldbooks from PNG, JSON, and TSV
-![importLore](https://github.com/user-attachments/assets/54c5eb6f-2f92-496a-9efd-29c4399e07bc)
+![cs_greetings](https://github.com/user-attachments/assets/3f484ba5-2ac2-4511-a61e-3d7ff08838ec)
 
-![cardshark_lore2](https://github.com/user-attachments/assets/01af61ef-82c9-4a54-9baa-c59cde02ede9)
+![cs_lore](https://github.com/user-attachments/assets/b83ecf38-52f8-433f-8cb7-392d803385c4)
 
-TSV Example (just 2 columns, 1 for key and one for content at this point):
-![exampleTSV](https://github.com/user-attachments/assets/a6e4fe3e-e4c1-4644-8240-3cdea105cac4)
+![cs_chat](https://github.com/user-attachments/assets/c1f9999d-89c5-420a-9f7d-bb7f9e74dac0)
 
-Import from Backyard.AI
-![byImport](https://github.com/user-attachments/assets/5c64a1cc-ee6d-4dff-9a7b-1b5c1296a468)
+![cs_api](https://github.com/user-attachments/assets/3d091e6b-770d-4c8b-881e-b0d2a2a3b121)
 
-Manage introductions
-![cardshark_messages](https://github.com/user-attachments/assets/05153131-06eb-4706-a263-45e548327be5)
+![cs_templates](https://github.com/user-attachments/assets/a54b277d-8a38-4fbc-bc1a-3f23406b1aeb)
+
+![cs_prompts](https://github.com/user-attachments/assets/60cd72e6-dcf5-4a2f-b821-342d8c5e030e)
+
