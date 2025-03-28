@@ -73,6 +73,119 @@ background_handler.initialize_default_backgrounds()
 lore_handler = LoreHandler(logger, default_position=0)
 
 # API Endpoints
+@app.post("/api/generate-greeting")
+async def generate_greeting(request: Request):
+    """Generate a greeting for a character using the existing generation system."""
+    try:
+        # Get request data
+        data = await request.json()
+        
+        character_data = data.get('character_data')
+        api_config = data.get('api_config')
+        
+        if not character_data or not api_config:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Missing character data or API configuration"
+                }
+            )
+        
+        # Extract character information
+        char_name = character_data.get('data', {}).get('name', 'Character')
+        description = character_data.get('data', {}).get('description', '')
+        personality = character_data.get('data', {}).get('personality', '')
+        scenario = character_data.get('data', {}).get('scenario', '')
+        first_message = character_data.get('data', {}).get('first_mes', '')
+        examples = character_data.get('data', {}).get('mes_example', '')
+        
+        logger.log_step(f"Generating greeting for character: {char_name}")
+        
+        # Create specialized prompt
+        prompt = f"""
+        You are tasked with crafting a new, engaging first message for {char_name} using the information provided below. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark.
+
+        Description: {description}
+        Personality: {personality}
+        Scenario: {scenario}
+
+        Use the following as reference points:
+        Current First Message: {first_message}
+        Example Messages: 
+        {examples}
+
+        Craft a new introductory message that starts the conversation in a fresh and engaging way, ensuring variety from the existing scenario.
+        """
+        
+        # Create context window for tracking
+        context_window = {
+            "type": "greeting_generation",
+            "timestamp": time.time(),
+            "character_name": char_name
+        }
+        
+        # Prepare generation parameters
+        gen_params = {
+            "memory": f"{description}\n{personality}\n{scenario}",
+            "prompt": prompt.strip(),
+            "stop_sequence": ["User:", "Human:", f"{char_name}:"],
+            "context_window": context_window,
+            "character_data": character_data,
+            "chat_history": []
+        }
+        
+        # Use existing generation handler
+        result = await api_handler.generate_with_config(api_config, gen_params)
+        
+        if not result or not result.get('content'):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": "Failed to generate greeting - no content returned from API"
+                }
+            )
+        
+        # Clean up the response
+        greeting = result.get('content', '').strip()
+        
+        # Remove any character name prefixes
+        greeting = re.sub(rf'^{re.escape(char_name)}\s*:', '', greeting, flags=re.IGNORECASE).strip()
+        
+        # Log success
+        logger.log_step(f"Successfully generated greeting ({len(greeting)} chars)")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "greeting": greeting
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error generating greeting: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error generating greeting: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to generate greeting: {str(e)}"
+            }
+        )
+
 # ============================================================
 # CHARACTER DELETION ENDPOINT
 # ============================================================
