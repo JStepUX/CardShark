@@ -17,9 +17,14 @@ module.exports = {
       },
       animation: {
         'blink-caret': 'blink-caret 0.75s step-end infinite',
+        'blink': 'blink 1s infinite',
       },
       keyframes: {
         'blink-caret': {
+          '0%, 100%': { opacity: 0 },
+          '50%': { opacity: 1 },
+        },
+        blink: {
           '0%, 100%': { opacity: 0 },
           '50%': { opacity: 1 },
         },

@@ -1,0 +1,148 @@
+/* Base editor styles */
+.tiptap-editor {
+  width: 100%;
+  position: relative;
+  height: 100%; 
+  display: flex;
+  flex-direction: column;
+}
+
+.tiptap-editor .ProseMirror {
+  min-height: 100%; 
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  outline: none;
+  background-color: transparent;
+  color: white;
+  white-space: pre-wrap !important;
+  position: relative;
+  z-index: 1;
+  cursor: text;
+  flex-grow: 1;
+}
+
+/* Preserve whitespace in paragraphs */
+.tiptap-editor .ProseMirror p.preserve-whitespace {
+  white-space: pre-wrap !important;
+}
+
+.tiptap-editor .ProseMirror p {
+  margin: 0;
+}
+
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: rgb(120, 113, 108);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Make the .tiptap-editor element fill its container and be fully clickable */
+.tiptap-editor .ProseMirror-focused {
+  outline: none;
+}
+
+/* Ensure the editor content has proper height when empty */
+.tiptap-editor .ProseMirror:empty::after {
+  content: '';
+  display: block;
+  min-height: 1em; 
+}
+
+/* Styles for the input area in ChatView */
+.bg-stone-950.border.border-stone-800.rounded-lg.h-32 .tiptap-editor {
+  height: 100%; 
+}
+
+/* Make sure the editor is clickable everywhere */
+.bg-stone-950.border.border-stone-800.rounded-lg.h-32 .tiptap-editor .ProseMirror {
+  min-height: calc(8rem - 1.5rem); 
+}
+
+/* Markdown Syntax Highlighting */
+.tiptap-editor .md-bold-syntax,
+.tiptap-editor .md-italic-syntax,
+.tiptap-editor .md-code-syntax,
+.tiptap-editor .md-quote-syntax,
+.tiptap-editor .md-header-syntax,
+.tiptap-editor .md-list-syntax,
+.tiptap-editor .md-variable-syntax {
+  display: inline !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Chat bubble specific styles */
+.chat-bubble-editor .ProseMirror {
+  min-height: auto;
+  padding: 0;
+  background-color: transparent;
+  white-space: pre-wrap !important;
+}
+
+.chat-bubble-editor .ProseMirror:hover {
+  background-color: rgba(30, 41, 59, 0.1);
+  border-radius: 0.25rem;
+}
+
+.chat-bubble-editor .ProseMirror:focus {
+  outline: none;
+  background-color: rgba(30, 41, 59, 0.2);
+  border-radius: 0.25rem;
+}
+
+/* Enhanced streaming content styles */
+.streaming-content {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: white;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Elegant blinking cursor for streaming content */
+.streaming-content .cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background-color: #a0aec0;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+}
+
+/* Animation for the cursor */
+@keyframes blink {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+.streaming-content .cursor.animate-blink {
+  animation: blink 1s infinite;
+}
+
+/* Style for bold text in streaming content */
+.streaming-content strong,
+.streaming-content b {
+  font-weight: bold;
+  color: inherit;
+}
+
+/* Style for italic text in streaming content */
+.streaming-content em,
+.streaming-content i {
+  font-style: italic;
+  color: inherit;
+}
+
+/* Style for code blocks in streaming content */
+.streaming-content code {
+  font-family: monospace;
+  background-color: rgba(30, 41, 59, 0.5);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  color: #a3e635;
+}

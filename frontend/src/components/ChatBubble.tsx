@@ -7,8 +7,9 @@ import {
   Trash2,
   StepForward,
 } from 'lucide-react';
-import { Message } from '../types/messages'; // Import Message type from message.ts
+import { Message } from '../types/messages';
 import RichTextEditor from './RichTextEditor';
+import DOMPurify from 'dompurify'; // Add this import for HTML sanitization
 
 interface ChatBubbleProps {
   message: Message;
@@ -17,14 +18,13 @@ interface ChatBubbleProps {
   onDelete: () => void;
   onStop?: () => void;
   onTryAgain?: () => void;
-  onContinue?: () => void; // New prop for continue functionality
+  onContinue?: () => void;
   onNextVariation: () => void;
   onPrevVariation: () => void;
   currentUser?: string;
   characterName?: string;
 }
 
-// Create an optimized highlighter with variable replacement
 const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   message,
   isGenerating,
@@ -32,7 +32,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   onDelete,
   onStop,
   onTryAgain,
-  onContinue, // Add the new continue handler
+  onContinue,
   onNextVariation,
   onPrevVariation,
   currentUser,
@@ -43,10 +43,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const [htmlContent, setHtmlContent] = useState<string>('');
   const highlightCache = useRef(new Map<string, string>());
   const [copied, setCopied] = useState(false);
-  
-  // Enhanced cursor position tracking
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isEditingRef = useRef(false);
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
@@ -60,16 +56,37 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     };
   }, []);
 
+  // Enhanced cursor position tracking
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const cursorPosRef = useRef<number | null>(null);
+
   // Function to process content with variable replacements and highlighting
   const processContent = useCallback((text: string): string => {
     // Create a cache key based on content and variables
     const cacheKey = `${text}_${currentUser || ''}_${characterName || ''}`;
-    
+
     // Check if we have this content processed already
     if (highlightCache.current.has(cacheKey)) {
       return highlightCache.current.get(cacheKey)!;
     }
-    
+
+    // Replace variables while preserving asterisks and other syntax
+    let processedText = text;
+    if (currentUser) {
+      processedText = processedText.replace(/\{\{user\}\}/gi, currentUser);
+    }
+    if (characterName) {
+      processedText = processedText.replace(/\{\{char\}\}/gi, characterName);
+    }
+
+    // Cache the result
+    highlightCache.current.set(cacheKey, processedText);
+
+    return processedText;
+  }, [currentUser, characterName]);
+
+  // Enhanced streaming content processing with HTML sanitization
+  const getStreamingDisplay = useCallback((text: string): string => {
     // Replace variables first
     let processedText = text;
     if (currentUser) {
@@ -79,46 +96,31 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       processedText = processedText.replace(/\{\{char\}\}/gi, characterName);
     }
     
-    // Apply syntax highlighting
-    const highlighted = processedText
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-400">$1</span>')
-      .replace(/(\*([^*\n]|\\.)*\*)/g, '<span class="text-blue-300">$1</span>')
-      .replace(/(`([^`\n]|\\.)*`)/g, '<span class="text-yellow-300">$1</span>')
-      .replace(/(\{\{([^}\n]|\\.)*\}\})/g, '<span class="text-pink-300">$1</span>');
-    
-    // Cache the result
-    highlightCache.current.set(cacheKey, highlighted);
-    
-    return highlighted;
+    // Strip any HTML tags for cleaner streaming display
+    return processedText.replace(/<[^>]*>/g, '');
   }, [currentUser, characterName]);
+
+  // Track whether this is the first time we're displaying the content
+  const [isFirstRender, setIsFirstRender] = useState(true);
 
   // Update htmlContent when message content changes
   useEffect(() => {
     previousContent.current = message.content;
-    
-    // Only apply full highlighting when not generating
-    // This improves performance during streaming
+
+    // Apply variable substitution
     if (!isGenerating || message.role !== 'assistant') {
       setHtmlContent(processContent(message.content));
+      setIsFirstRender(true); // Reset for future streaming
     } else if (isGenerating && message.role === 'assistant') {
-      // For streaming content, only do basic variable replacement
-      let processedText = message.content;
-      if (currentUser) {
-        processedText = processedText.replace(/\{\{user\}\}/gi, currentUser);
-      }
-      if (characterName) {
-        processedText = processedText.replace(/\{\{char\}\}/gi, characterName);
-      }
+      // For streaming content, do basic variable replacement and remove HTML
+      setHtmlContent(getStreamingDisplay(message.content));
       
-      // Set content without syntax highlighting during streaming
-      setHtmlContent(processedText);
+      // After small delay, mark as not first render to enable animations
+      if (isFirstRender) {
+        setTimeout(() => setIsFirstRender(false), 50);
+      }
     }
-  }, [message.content, isGenerating, processContent, message.role, currentUser, characterName]);
-
-  // Track if user is currently editing
-  const [, setIsEditing] = useState(false);
+  }, [message.content, isGenerating, processContent, getStreamingDisplay, message.role]);
 
   // Improved handle input with better debouncing
   const handleContentChange = useCallback((newContent: string) => {
@@ -126,15 +128,14 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
 
     // Only update if content has actually changed
     if (newContent !== message.content) {
-      console.debug(`Calling onContentChange with new content after ${isGenerating ? 'generating' : 'editing'}`);
+      console.debug(`Calling onContentChange with new content`);
       onContentChange(newContent);
     } else {
       console.debug('Content unchanged, not saving');
     }
-  }, [message.content, onContentChange, isGenerating]);
+  }, [message.content, onContentChange]);
 
   // Replace the deprecated document.queryCommandSupported and document.execCommand
-  // with modern clipboard API
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -200,7 +201,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
             </>
           )}
 
-          {/* Continue button - new addition for this feature */}
+          {/* Continue button */}
           {message.role === 'assistant' && onContinue && (
             <button
               onClick={onContinue}
@@ -248,31 +249,20 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         {message.aborted ? (
           <div className="text-red-400">Generation failed.</div>
         ) : isGenerating && message.role === 'assistant' ? (
-          // For streaming content - keep as plain text with animation
-          <div className="whitespace-pre-wrap break-words">
+          // Enhanced streaming content display
+          <div className="streaming-content whitespace-pre-wrap break-words">
             {htmlContent}
-            <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
+            <span className={`cursor ${isFirstRender ? '' : 'animate-blink'}`}></span>
           </div>
         ) : (
-          // For viewing/editing - use TipTap
+          // For viewing/editing - use TipTap with proper newline handling
           <RichTextEditor
             content={message.content}
-            onChange={(newContent) => {
-              // Only trigger change if we're in edit mode
-              if (isEditingRef.current) {
-                handleContentChange(newContent);
-              }
-            }}
-            readOnly={!isEditingRef.current || isGenerating}
+            onChange={handleContentChange}
+            readOnly={isGenerating}
             className="chat-bubble-editor"
-            onKeyDown={(e) => {
-              // Handle special key combinations
-              if (e.key === 'Escape') {
-                // Exit edit mode
-                isEditingRef.current = false;
-                setIsEditing(false);
-              }
-            }}
+            autofocus={false}
+            preserveWhitespace={true} // Enable whitespace preservation
           />
         )}
       </div>

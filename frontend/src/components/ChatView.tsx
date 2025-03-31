@@ -126,13 +126,14 @@ const InputArea: React.FC<{
           )}
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 h-32"> {/* Explicitly set height directly on this container */}
           <RichTextEditor
             content={inputValue}
             onChange={setInputValue}
-            className="bg-stone-950 border border-stone-800 rounded-lg"
+            className="bg-stone-950 border border-stone-800 rounded-lg h-full" /* Use h-full instead of fixed h-32 */
             placeholder="Type your message..."
             onKeyDown={handleKeyPress}
+            preserveWhitespace={true}
           />
         </div>
 
@@ -340,6 +341,21 @@ const ChatView: React.FC = () => {
       streamingPerformanceRef.current.startTime = 0;
     }
   }, [isGenerating, messages]);
+
+  // Update this existing effect to add smooth scrolling during streaming
+  useEffect(() => {
+    if (isGenerating) {
+      // More frequent smooth scrolling during generation to follow the streaming text
+      const scrollInterval = setInterval(() => {
+        scrollToBottom();
+      }, 200); // Scroll more frequently during streaming
+      
+      return () => clearInterval(scrollInterval);
+    } else {
+      // Single scroll when generation finishes
+      scrollToBottom();
+    }
+  }, [isGenerating, messages, scrollToBottom]);
 
   // Early return while loading
   if (isLoading) {
