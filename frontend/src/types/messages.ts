@@ -7,7 +7,8 @@ import { z } from 'zod';
 export interface IMessage {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'thinking';
-  content: string;
+  content: string; // Now contains HTML content
+  rawContent?: string; // Optional plain text version for API calls
   timestamp: number;
   variations?: string[];
   currentVariation?: number;

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Send, User, Plus, RefreshCw, Eye, Wallpaper } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
-import HighlightedTextArea from './HighlightedTextArea';
 import ChatBubble from './ChatBubble';
 import ThoughtBubble from './ThoughtBubble';
 import UserSelect from './UserSelect';
@@ -12,6 +11,9 @@ import { useChatMessages } from '../hooks/useChatMessages';
 import { useChatContinuation } from '../hooks/useChatContinuation'; // Import the continuation hook
 import { apiService } from '../services/apiService';
 import { Message, UserProfile } from '../types/messages';
+import RichTextEditor from './RichTextEditor';
+import { htmlToText, markdownToHtml } from '../utils/contentUtils';
+import { generateUUID } from '../utils/uuidUtils';
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -125,10 +127,10 @@ const InputArea: React.FC<{
         </div>
 
         <div className="flex-1">
-          <HighlightedTextArea
-            value={inputValue}
+          <RichTextEditor
+            content={inputValue}
             onChange={setInputValue}
-            className="bg-stone-950 border border-stone-800 rounded-lg h-24"
+            className="bg-stone-950 border border-stone-800 rounded-lg"
             placeholder="Type your message..."
             onKeyDown={handleKeyPress}
           />
@@ -356,6 +358,23 @@ const ChatView: React.FC = () => {
     }
   };
 
+  const handleSendMessage = (content: string) => {
+    // Convert markdown image syntax to HTML if needed
+    const htmlContent = markdownToHtml(content);
+    
+    // Create a message with both HTML content and raw text
+    const userMessage = {
+      id: generateUUID(),
+      role: 'user',
+      content: htmlContent,
+      rawContent: htmlToText(htmlContent),
+      timestamp: Date.now()
+    };
+    
+    // Add the message to your state
+    generateResponse(userMessage.content);
+  };
+
   return (
     <div className="h-full relative flex flex-col overflow-hidden">
       {/* Background Image */}
@@ -522,7 +541,7 @@ const ChatView: React.FC = () => {
         }}
       >
         <InputArea
-          onSend={generateResponse}
+          onSend={handleSendMessage}
           isGenerating={isGenerating}
           currentUser={currentUser}
           onUserSelect={() => setShowUserSelect(true)}

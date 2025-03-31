@@ -7,6 +7,8 @@ import { APIConfigContext } from '../contexts/APIConfigContext';
 import { APIConfig, APIProvider } from '../types/api';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
+import { htmlToText, markdownToHtml } from '../utils/contentUtils';
+import { generateUUID } from '../utils/generateUUID';
 
 // Add ReasoningSettings interface
 interface ReasoningSettings {
@@ -138,7 +140,7 @@ export function useChatMessages(characterData: CharacterData | null) {
               }
             }));
           } else if (characterData?.data?.first_mes) {
-            const firstMessage = MessageUtils.createAssistantMessage(characterData?.data?.first_mes);
+            const firstMessage = createAssistantMessage(characterData?.data?.first_mes);
             
             setState(prev => ({
               ...prev, 
@@ -154,7 +156,7 @@ export function useChatMessages(characterData: CharacterData | null) {
             saveChat([firstMessage]);
           }
         } else if (characterData?.data?.first_mes) {
-          const firstMessage = MessageUtils.createAssistantMessage(characterData.data.first_mes);
+          const firstMessage = createAssistantMessage(characterData.data.first_mes);
           
           setState(prev => ({
             ...prev,
@@ -252,7 +254,7 @@ export function useChatMessages(characterData: CharacterData | null) {
       const messageToUpdate = prev.messages[msgIndex];
       if (messageToUpdate.content === content) return prev;
       
-      const updatedMessage = MessageUtils.addVariation(messageToUpdate, content);
+      const updatedMessage = addVariation(messageToUpdate, content);
       
       const newMessages = [...prev.messages];
       newMessages[msgIndex] = updatedMessage;
@@ -350,7 +352,7 @@ export function useChatMessages(characterData: CharacterData | null) {
     if (!state.reasoningSettings.enabled || !characterData) return null;
     
     // Create thinking message
-    const thinkingId = crypto.randomUUID();
+    const thinkingId = MessageUtils.generateUUID();
     const thinkingMessage: Message = {
       id: thinkingId,
       role: 'thinking',
@@ -363,7 +365,7 @@ export function useChatMessages(characterData: CharacterData | null) {
       ...prev,
       messages: [...prev.messages, thinkingMessage],
       isGenerating: true,
-      generatingId: thinkingId
+      generatingId: thinkingId as unknown as string // Explicitly cast to string type
     }));
     
     try {
@@ -453,8 +455,8 @@ export function useChatMessages(characterData: CharacterData | null) {
     }
     
     // Create user and assistant messages
-    const userMessage = MessageUtils.createUserMessage(prompt);
-    const assistantMessage = MessageUtils.createAssistantMessage();
+    const userMessage = createUserMessage(prompt);
+    const assistantMessage = createAssistantMessage();
     
     // Update state with new messages
     setState(prev => ({
@@ -556,33 +558,19 @@ export function useChatMessages(characterData: CharacterData | null) {
           const updatedMessages = prev.messages.map(msg => 
             msg.id === assistantMessage.id ? {...msg, content} : msg
           );
-          return { ...prev, messages: updatedMessages };
+          return {
+            ...prev,
+            messages: updatedMessages,
+            isGenerating: false,
+            generatingId: null,
+            lastContextWindow: {
+              ...prev.lastContextWindow,
+              type: 'generation_complete',
+              completionTime: new Date().toISOString()
+            }
+          };
         });
       }
-      
-      // Finalize message
-      setState(prev => {
-        const updatedMessages = prev.messages.map(msg => 
-          msg.id === assistantMessage.id ? {
-            ...msg, 
-            content,
-            variations: [content],
-            currentVariation: 0
-          } : msg
-        );
-        
-        return {
-          ...prev,
-          messages: updatedMessages,
-          isGenerating: false,
-          generatingId: null,
-          lastContextWindow: {
-            ...prev.lastContextWindow,
-            type: 'generation_complete',
-            completionTime: new Date().toISOString()
-          }
-        };
-      });
       
       // Save messages
       saveChat();
@@ -622,7 +610,7 @@ export function useChatMessages(characterData: CharacterData | null) {
       await ChatStorage.clearContextWindow();
       
       if (characterData?.data.first_mes) {
-        const firstMessage = MessageUtils.createAssistantMessage(characterData.data.first_mes);
+        const firstMessage = createAssistantMessage(characterData.data.first_mes);
         
         setState(prev => ({
           ...prev,
@@ -1129,3 +1117,57 @@ const regenerateMessage = async (message: Message) => {
     updateReasoningSettings
   };
 }
+
+// Update message creation to handle HTML content
+const createUserMessage = (content: string): Message => {
+  // Convert markdown to HTML
+  const htmlContent = markdownToHtml(content);
+  
+  return {
+    id: MessageUtils.generateUUID(),
+    role: 'user',
+    content: htmlContent,
+    rawContent: htmlToText(htmlContent),
+    timestamp: Date.now()
+  };
+};
+
+const createAssistantMessage = (content: string = ''): Message => {
+  // Convert markdown to HTML
+  const htmlContent = markdownToHtml(content);
+  
+  return {
+    id: MessageUtils.generateUUID(),
+    role: 'assistant',
+    content: htmlContent,
+    rawContent: htmlToText(htmlContent),
+    timestamp: Date.now(),
+    variations: content ? [htmlContent] : [],
+    currentVariation: 0
+  };
+};
+
+// Handle message variations for rich content
+const addVariation = (message: Message, newContent: string): Message => {
+  // Ensure we convert markdown in new content
+  const htmlContent = markdownToHtml(newContent);
+  
+  // Create a copy of variations or initialize it
+  const variations = [...(message.variations || [])];
+  
+  // Add the new content if it doesn't already exist
+  if (!variations.includes(htmlContent)) {
+    variations.push(htmlContent);
+  }
+  
+  // Find the index of the new content
+  const variationIndex = variations.indexOf(htmlContent);
+  
+  return {
+    ...message,
+    content: htmlContent,
+    rawContent: htmlToText(htmlContent),
+    variations: variations,
+    currentVariation: variationIndex
+  };
+};

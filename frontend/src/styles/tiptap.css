@@ -1,0 +1,77 @@
+.tiptap-editor {
+  width: 100%;
+}
+
+.tiptap-editor .ProseMirror {
+  min-height: 120px;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  outline: none;
+  background-color: rgb(12, 10, 9);
+  color: white;
+  white-space: pre-wrap;
+}
+
+.tiptap-editor .ProseMirror p {
+  margin: 0;
+}
+
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: rgb(120, 113, 108);
+  pointer-events: none;
+  height: 0;
+}
+
+.tiptap-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+  cursor: pointer;
+}
+
+.tiptap-editor .ProseMirror a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.tiptap-editor .ProseMirror code {
+  background-color: rgba(30, 41, 59, 0.5);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  font-family: monospace;
+}
+
+/* Styling for image captions */
+.tiptap-editor .image-wrapper {
+  display: inline-block;
+  position: relative;
+  margin: 0.5rem 0;
+}
+
+.tiptap-editor .image-caption {
+  font-size: 0.875rem;
+  color: rgb(156, 163, 175);
+  text-align: center;
+  margin-top: 0.25rem;
+}
+
+/* Additional styles for the chat bubble editor */
+.chat-bubble-editor .ProseMirror {
+  padding: 0;
+  min-height: auto;
+  background-color: transparent;
+}
+
+/* Expanded image style */
+.tiptap-editor img.expanded-image {
+  max-width: 100%;
+  width: 100%;
+  cursor: zoom-out;
+}
+
+.tiptap-editor img.normal-image {
+  cursor: zoom-in;
+}

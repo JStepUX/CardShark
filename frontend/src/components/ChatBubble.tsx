@@ -8,6 +8,7 @@ import {
   StepForward,
 } from 'lucide-react';
 import { Message } from '../types/messages'; // Import Message type from message.ts
+import RichTextEditor from './RichTextEditor';
 
 interface ChatBubbleProps {
   message: Message;
@@ -37,7 +38,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   currentUser,
   characterName
 }) => {
-  const contentRef = useRef<HTMLDivElement>(null);
   const isMounted = useRef(true);
   const previousContent = useRef<string>(message.content);
   const [htmlContent, setHtmlContent] = useState<string>('');
@@ -47,16 +47,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   // Enhanced cursor position tracking
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isEditingRef = useRef(false);
-  const lastCursorPosition = useRef<{
-    node: Node | null;
-    offset: number;
-    textContent: string | null;
-    percentPosition?: number;
-  }>({
-    node: null,
-    offset: 0,
-    textContent: null
-  });
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
@@ -129,313 +119,19 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
 
   // Track if user is currently editing
   const [, setIsEditing] = useState(false);
-  
-  // Save cursor position before any content changes
-  const saveCursorPosition = useCallback(() => {
-    if (!contentRef.current) return;
-    
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-    
-    const range = selection.getRangeAt(0);
-    const container = range.startContainer;
-    
-    // Make sure we're within our content element
-    if (!contentRef.current.contains(container)) return;
-    
-    // Store the current cursor position with more context
-    lastCursorPosition.current = {
-      node: container,
-      offset: range.startOffset,
-      textContent: container.textContent
-    };
-    
-    // Also store the full content to help with position restoration
-    if (contentRef.current) {
-      const fullText = contentRef.current.textContent || '';
-      // Find approximate character position within the full text
-      if (container.nodeType === Node.TEXT_NODE && container.textContent) {
-        // Compute approximate position in the full text
-        let charPosition = 0;
-        let found = false;
-        
-        // Simple function to iterate through text nodes
-        const findPositionInTextNodes = (node: Node, targetNode: Node): boolean => {
-          if (node === targetNode) {
-            found = true;
-            return true;
-          }
-          
-          if (node.nodeType === Node.TEXT_NODE) {
-            if (!found) {
-              charPosition += node.textContent?.length || 0;
-            }
-          } else {
-            for (let i = 0; i < node.childNodes.length; i++) {
-              if (findPositionInTextNodes(node.childNodes[i], targetNode)) {
-                return true;
-              }
-            }
-          }
-          
-          return false;
-        };
-        
-        findPositionInTextNodes(contentRef.current, container);
-        charPosition += range.startOffset;
-        
-        // Save the global position as a percentage of the total length
-        if (fullText.length > 0) {
-          const percentPosition = charPosition / fullText.length;
-          lastCursorPosition.current.percentPosition = percentPosition;
-        }
-      }
-    }
-  }, []);
-
-  // Restore cursor position after content updates
-  const restoreCursorPosition = useCallback(() => {
-    if (!contentRef.current || !lastCursorPosition.current.node) return;
-    
-    try {
-      const selection = window.getSelection();
-      if (!selection) return;
-      
-      // Don't attempt cursor restoration if we're not in edit mode anymore
-      if (!isEditingRef.current) return;
-      
-      // Create a new range
-      const range = document.createRange();
-      const fullText = contentRef.current.textContent || '';
-      
-      // If we have a percentage position from the total text, use that
-      if ('percentPosition' in lastCursorPosition.current && 
-          lastCursorPosition.current.percentPosition !== undefined && 
-          lastCursorPosition.current.percentPosition >= 0 && 
-          fullText.length > 0) {
-          
-        const approxCharPos = Math.floor(lastCursorPosition.current.percentPosition * fullText.length);
-        
-        // Find the appropriate text node and offset
-        let currentPos = 0;
-        let targetNode: Node | null = null;
-        let targetOffset = 0;
-        
-        const findNodeAtPosition = (node: Node): boolean => {
-          if (node.nodeType === Node.TEXT_NODE) {
-            const nodeLength = node.textContent?.length || 0;
-            if (currentPos <= approxCharPos && approxCharPos < currentPos + nodeLength) {
-              targetNode = node;
-              targetOffset = approxCharPos - currentPos;
-              return true;
-            }
-            currentPos += nodeLength;
-          } else {
-            for (let i = 0; i < node.childNodes.length; i++) {
-              if (findNodeAtPosition(node.childNodes[i])) {
-                return true;
-              }
-            }
-          }
-          return false;
-        };
-        
-        findNodeAtPosition(contentRef.current);
-        
-        // If we found an appropriate node, set the cursor there
-        if (targetNode) {
-          range.setStart(targetNode, targetOffset);
-          range.setEnd(targetNode, targetOffset);
-          selection.removeAllRanges();
-          selection.addRange(range);
-          return;
-        }
-      }
-      
-      // Fallback: try to find a similar text node to where we were
-      const savedText = lastCursorPosition.current.textContent;
-      const savedOffset = lastCursorPosition.current.offset;
-      
-      if (savedText) {
-        // Get all text nodes
-        const textNodes: Node[] = [];
-        const findTextNodes = (node: Node) => {
-          if (node.nodeType === Node.TEXT_NODE) {
-            textNodes.push(node);
-          } else {
-            for (let i = 0; i < node.childNodes.length; i++) {
-              findTextNodes(node.childNodes[i]);
-            }
-          }
-        };
-        
-        findTextNodes(contentRef.current);
-        
-        // Find the best matching text node
-        let bestMatchNode = null;
-        let bestMatchScore = -1;
-        
-        for (const node of textNodes) {
-          const nodeText = node.textContent || '';
-          if (nodeText === savedText) {
-            // Perfect match!
-            bestMatchNode = node;
-            break;
-          }
-          
-          // Check for partial matches
-          if (savedText.includes(nodeText) || nodeText.includes(savedText)) {
-            const matchLength = Math.min(nodeText.length, savedText.length);
-            if (matchLength > bestMatchScore) {
-              bestMatchScore = matchLength;
-              bestMatchNode = node;
-            }
-          }
-        }
-        
-        if (bestMatchNode) {
-          // Adjust offset if needed
-          const offset = Math.min(savedOffset, (bestMatchNode.textContent || '').length);
-          range.setStart(bestMatchNode, offset);
-          range.setEnd(bestMatchNode, offset);
-          selection.removeAllRanges();
-          selection.addRange(range);
-          return;
-        }
-      }
-      
-      // Final fallback: just place cursor at the end
-      // Get all text nodes for the final fallback
-      const textNodes: Node[] = [];
-      const collectTextNodes = (node: Node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          textNodes.push(node);
-        } else {
-          for (let i = 0; i < node.childNodes.length; i++) {
-            collectTextNodes(node.childNodes[i]);
-          }
-        }
-      };
-      
-      collectTextNodes(contentRef.current);
-      
-      if (textNodes.length > 0) {
-        const lastNode = textNodes[textNodes.length - 1];
-        const offset = lastNode.textContent?.length || 0;
-        range.setStart(lastNode, offset);
-        range.setEnd(lastNode, offset);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-    } catch (e) {
-      console.error('Error restoring cursor position:', e);
-    }
-  }, []);
 
   // Improved handle input with better debouncing
-  const handleInput = useCallback(() => {
-    if (!contentRef.current || !isMounted.current) return;
-    
-    // Save cursor position before any updates
-    saveCursorPosition();
-    
-    // Mark that we're actively editing
-    isEditingRef.current = true;
-    setIsEditing(true);
-    
-    // Clear any existing timeout
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    // Set a new timeout
-    saveTimeoutRef.current = setTimeout(() => {
-      if (!isMounted.current || !contentRef.current) return;
-      
-      // Double-check the current content at save time
-      const finalContent = contentRef.current.textContent || '';
-      
-      // Save cursor position again right before we update
-      saveCursorPosition();
-      
-      // Only update if content has actually changed
-      if (finalContent !== message.content) {
-        console.debug(`Calling onContentChange with new content after ${isGenerating ? 'generating' : 'editing'}`);
-        onContentChange(finalContent);
-        
-        // Important: wait for React to process the update then restore cursor
-        setTimeout(() => {
-          if (isMounted.current) {
-            restoreCursorPosition();
-          }
-        }, 0);
-      } else {
-        console.debug('Content unchanged, not saving');
-      }
-      
-      // Clear the timeout reference
-      saveTimeoutRef.current = null;
-    }, 2000); // Increased to 2 seconds for a better user experience
-  }, [message.content, onContentChange, saveCursorPosition, restoreCursorPosition, isGenerating]);
+  const handleContentChange = useCallback((newContent: string) => {
+    if (!isMounted.current) return;
 
-  // Improved handle blur to save on focus loss
-  const handleBlur = useCallback(() => {
-    // When user stops editing, clear any pending save timer
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    
-    // Only process if component is still mounted
-    if (!isMounted.current || !contentRef.current) return;
-    
-    const finalContent = contentRef.current.textContent || '';
-    
-    // Save cursor position before we lose focus completely
-    saveCursorPosition();
-    
-    // Only save if content actually changed
-    if (finalContent !== message.content) {
-      onContentChange(finalContent);
-    }
-    
-    // Set a short timeout before marking as no longer editing
-    // This helps with any focus-related race conditions
-    setTimeout(() => {
-      if (isMounted.current) {
-        isEditingRef.current = false;
-        setIsEditing(false);
-      }
-    }, 100);
-  }, [message.content, onContentChange, saveCursorPosition]);
-
-  // Handle paste events to ensure clean text
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    
-    // Save cursor position before paste
-    saveCursorPosition();
-    
-    // Use the safer insertText command instead of execCommand when possible
-    if (document.queryCommandSupported('insertText')) {
-      document.execCommand('insertText', false, text);
+    // Only update if content has actually changed
+    if (newContent !== message.content) {
+      console.debug(`Calling onContentChange with new content after ${isGenerating ? 'generating' : 'editing'}`);
+      onContentChange(newContent);
     } else {
-      // Fallback to selection API
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        range.insertNode(document.createTextNode(text));
-      }
+      console.debug('Content unchanged, not saving');
     }
-    
-    // Make sure to trigger the input handler for highlighting
-    handleInput();
-
-    // After paste operation, save new cursor position
-    setTimeout(saveCursorPosition, 0);
-  }, [handleInput, saveCursorPosition]);
+  }, [message.content, onContentChange, isGenerating]);
 
   // Replace the deprecated document.queryCommandSupported and document.execCommand
   // with modern clipboard API
@@ -488,7 +184,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                 disabled={isGenerating}
                 title="Previous version"
               >
-          <ArrowLeft size={16} />
+                <ArrowLeft size={16} />
               </button>
               <span className="text-xs text-gray-500">
                 {(message.currentVariation ?? 0) + 1}/{message.variations.length}
@@ -552,37 +248,31 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         {message.aborted ? (
           <div className="text-red-400">Generation failed.</div>
         ) : isGenerating && message.role === 'assistant' ? (
-          // For streaming content
+          // For streaming content - keep as plain text with animation
           <div className="whitespace-pre-wrap break-words">
             {htmlContent}
             <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
           </div>
         ) : (
-          // For static content with editing
-          <div
-            ref={contentRef}
-            contentEditable={!isGenerating}
-            suppressContentEditableWarning
-            onInput={handleInput}
-            onBlur={handleBlur}
-            onFocus={() => {
-              isEditingRef.current = true;
-              saveCursorPosition();
-            }}
-            onKeyDown={(e) => {
-              // Save position on key events to handle more complex editing
-              if (e.key !== 'Tab' && e.key !== 'Escape') {
-                saveCursorPosition();
+          // For viewing/editing - use TipTap
+          <RichTextEditor
+            content={message.content}
+            onChange={(newContent) => {
+              // Only trigger change if we're in edit mode
+              if (isEditingRef.current) {
+                handleContentChange(newContent);
               }
             }}
-            onMouseUp={() => {
-              // Save position on mouse selection changes
-              saveCursorPosition();
+            readOnly={!isEditingRef.current || isGenerating}
+            className="chat-bubble-editor"
+            onKeyDown={(e) => {
+              // Handle special key combinations
+              if (e.key === 'Escape') {
+                // Exit edit mode
+                isEditingRef.current = false;
+                setIsEditing(false);
+              }
             }}
-            onPaste={handlePaste}
-            className="whitespace-pre-wrap break-words focus:outline-none cursor-text"
-            style={{ minHeight: '1em' }}
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
           />
         )}
       </div>

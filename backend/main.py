@@ -4,6 +4,7 @@ import sys
 import os
 import argparse
 from pathlib import Path
+import uuid
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Response, Request # type: ignore
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse # type: ignore
 from fastapi.staticfiles import StaticFiles # type: ignore
@@ -73,6 +74,21 @@ background_handler.initialize_default_backgrounds()
 lore_handler = LoreHandler(logger, default_position=0)
 
 # API Endpoints
+@app.get("/api/uploads/{filename}")
+async def get_uploaded_image(filename: str):
+    """Serve uploaded images."""
+    try:
+        uploads_dir = Path("uploads")
+        file_path = uploads_dir / filename
+        
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+            
+        return FileResponse(file_path)
+    except Exception as e:
+        logger.log_error(f"Error serving image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @app.post("/api/generate-greeting")
 async def generate_greeting(request: Request):
     """Generate a greeting for a character using the existing generation system."""
@@ -1665,6 +1681,58 @@ async def get_characters(directory: str):
 async def health_check():
     """Simple health check endpoint."""
     return {"status": "ok", "message": "Server is running"}
+
+@app.post("/api/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    """Handle image upload for rich text editor."""
+    try:
+        # Check if file is an image
+        content_type = file.content_type.lower()
+        if not content_type.startswith('image/'):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "File must be an image"}
+            )
+            
+        # Check allowed image types
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+        if content_type not in allowed_types:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": f"Unsupported image format. Allowed: {', '.join(t.split('/')[1] for t in allowed_types)}"}
+            )
+        
+        # Generate a unique filename
+        filename = f"{uuid.uuid4()}.{file.filename.split('.')[-1]}"
+        
+        # Create uploads directory if it doesn't exist
+        uploads_dir = Path("uploads")
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = uploads_dir / filename
+        
+        # Read file content
+        content = await file.read()
+        
+        # Write file to disk
+        with open(file_path, "wb") as f:
+            f.write(content)
+            
+        # Return success with URL for TipTap to use
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "url": f"/api/uploads/{filename}"
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error uploading image: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": str(e)}
+        )
 
 @app.post("/api/upload-png")
 async def upload_png(file: UploadFile = File(...)):

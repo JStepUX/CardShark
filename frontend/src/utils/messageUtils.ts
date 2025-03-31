@@ -2,16 +2,19 @@
 import { Message } from '../types/messages';
 import { generateUUID } from './generateUUID';
 
-export class MessageUtils {
+export const MessageUtils = {
+  /**
+   * Generate a unique ID for a message
+   */
+  generateUUID,
+  
   /**
    * Create a debounced save function for efficient message saving
-   * @param saveFunction The function to call when debounce completes
-   * @param delay Debounce delay in ms (default: 1000ms)
    */
-  static createDebouncedSave(
+  createDebouncedSave: (
     saveFunction: (messages: Message[]) => void,
     delay: number = 1000
-  ) {
+  ) => {
     const pendingSaves = new Map<string, NodeJS.Timeout>();
     
     return (messageId: string, messages: Message[]) => {
@@ -33,28 +36,28 @@ export class MessageUtils {
       // Store the timer reference
       pendingSaves.set(messageId, timer);
     };
-  }
+  },
   
   /**
    * Create a user message
    * @param content Message content
    * @returns Message object
    */
-  static createUserMessage(content: string): Message {
+  createUserMessage: (content: string): Message => {
     return {
       id: generateUUID(),
       role: 'user',
       content,
       timestamp: Date.now()
     };
-  }
+  },
   
   /**
    * Create an assistant message
    * @param content Optional initial content
    * @returns Message object
    */
-  static createAssistantMessage(content: string = ''): Message {
+  createAssistantMessage: (content: string = ''): Message => {
     return {
       id: generateUUID(),
       role: 'assistant',
@@ -63,7 +66,7 @@ export class MessageUtils {
       variations: content ? [content] : [],
       currentVariation: 0
     };
-  }
+  },
   
   /**
    * Add a variation to a message
@@ -71,7 +74,7 @@ export class MessageUtils {
    * @param newContent New content to add as variation
    * @returns Updated message with the new variation
    */
-  static addVariation(message: Message, newContent: string): Message {
+  addVariation: (message: Message, newContent: string): Message => {
     // Create a copy of variations or initialize it
     const variations = [...(message.variations || [])];
     
@@ -89,7 +92,7 @@ export class MessageUtils {
       variations: variations,
       currentVariation: variationIndex
     };
-  }
+  },
   
   /**
    * Cycle to the next or previous variation
@@ -97,7 +100,7 @@ export class MessageUtils {
    * @param direction 'next' or 'prev'
    * @returns Updated message with new current variation
    */
-  static cycleVariation(message: Message, direction: 'next' | 'prev'): Message {
+  cycleVariation: (message: Message, direction: 'next' | 'prev'): Message => {
     if (!message.variations || message.variations.length <= 1) {
       return message;
     }
@@ -118,4 +121,4 @@ export class MessageUtils {
       currentVariation: newIndex
     };
   }
-}
+};
