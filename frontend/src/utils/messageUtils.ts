@@ -1,6 +1,7 @@
 // utils/messageUtils.ts
 import { Message } from '../types/messages';
-import { generateUUID } from './generateUUID';
+import { generateUUID } from './uuidUtils';
+import { substituteVariables } from './variableUtils';
 
 export const MessageUtils = {
   /**
@@ -53,17 +54,26 @@ export const MessageUtils = {
   },
   
   /**
-   * Create an assistant message
+   * Create an assistant message with variable substitution
    * @param content Optional initial content
+   * @param userName User name for substitution
+   * @param characterName Character name for substitution
    * @returns Message object
    */
-  createAssistantMessage: (content: string = ''): Message => {
+  createAssistantMessage: (
+    content: string = '', 
+    userName?: string | null,
+    characterName?: string | null
+  ): Message => {
+    // Apply variable substitution if userName or characterName are provided
+    const processedContent = substituteVariables(content, userName, characterName);
+    
     return {
       id: generateUUID(),
       role: 'assistant',
-      content,
+      content: processedContent,
       timestamp: Date.now(),
-      variations: content ? [content] : [],
+      variations: processedContent ? [processedContent] : [],
       currentVariation: 0
     };
   },

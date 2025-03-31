@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { Message } from '../types/messages';
 import RichTextEditor from './RichTextEditor';
-import DOMPurify from 'dompurify'; // Add this import for HTML sanitization
 
 interface ChatBubbleProps {
   message: Message;
@@ -85,7 +84,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     return processedText;
   }, [currentUser, characterName]);
 
-  // Enhanced streaming content processing with HTML sanitization
+  // Enhanced streaming content processing with simple HTML tag removal
   const getStreamingDisplay = useCallback((text: string): string => {
     // Replace variables first
     let processedText = text;
@@ -97,6 +96,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     }
     
     // Strip any HTML tags for cleaner streaming display
+    // Using a basic regex instead of DOMPurify for simplicity
     return processedText.replace(/<[^>]*>/g, '');
   }, [currentUser, characterName]);
 
