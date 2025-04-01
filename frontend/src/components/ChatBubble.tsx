@@ -57,7 +57,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
 
   // Enhanced cursor position tracking
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const cursorPosRef = useRef<number | null>(null);
 
   // Function to process content with variable replacements and highlighting
   const processContent = useCallback((text: string): string => {

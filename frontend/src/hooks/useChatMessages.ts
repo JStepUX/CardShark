@@ -129,7 +129,6 @@ export function useChatMessages(characterData: CharacterData | null) {
       }
 
       const currentMessage = prev.messages[messageIndex];
-      const currentContent = currentMessage.content || '';
       
       let updatedMessages = [...prev.messages];
       

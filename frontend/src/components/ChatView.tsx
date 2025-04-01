@@ -185,13 +185,7 @@ const ChatView: React.FC = () => {
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
-  // Add performance tracking ref
-  const streamingPerformanceRef = useRef({
-    startTime: 0,
-    endTime: 0,
-    tokens: 0,
-    tokensPerSecond: 0
-  });
+  // Remove unused performance tracking ref
 
   const {
     messages,
