@@ -3,6 +3,7 @@ import { CharacterCard } from '../types/schema';
 import { APIConfig } from '../types/api';
 import { templateService } from '../services/templateService';
 import { Template } from '../types/templateTypes';
+import { transformKoboldPayload, getKoboldStreamEndpoint } from '../utils/koboldTransformer';
 
 export class PromptHandler {
   private static readonly DEFAULT_PARAMS = {
@@ -402,7 +403,34 @@ ${character.data.mes_example || ''}
       }, null, 2)
     );
 
-    // Make the request to our backend
+    // Direct API call for KoboldCPP
+    if (apiConfig.provider === 'KoboldCPP') {
+      // Transform to KoboldCPP format
+      const koboldPayload = transformKoboldPayload(apiPayload);
+      
+      // Log for debugging (but redact API keys)
+      console.log('Transformed KoboldCPP payload:', JSON.stringify({
+        ...koboldPayload,
+        apiKey: koboldPayload.apiKey ? '[REDACTED]' : undefined
+      }, null, 2));
+      
+      // Get the endpoint URL
+      const endpoint = getKoboldStreamEndpoint(apiConfig.url || '');
+      console.log('Using KoboldCPP direct endpoint:', endpoint);
+      
+      // Make the direct request to KoboldCPP
+      return fetch(endpoint, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify(koboldPayload),
+        signal
+      });
+    }
+
+    // For other providers, use the original endpoint/approach
     return fetch('/api/generate', {
       method: 'POST',
       headers: { 
