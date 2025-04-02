@@ -21,8 +21,6 @@ export function useChatContinuation(
 
   // Prepare API config with default values if needed
   const prepareAPIConfig = (config?: APIConfig | null): APIConfig => {
-    // (Same implementation as in useChatMessages)
-    // This could also be moved to a utility function for reuse
     if (config) {
       const fullConfig = JSON.parse(JSON.stringify(config));
       
@@ -33,7 +31,6 @@ export function useChatContinuation(
           temperature: 1.05,
           top_p: 0.92,
           top_k: 100,
-          // Other default settings...
         };
       }
       
@@ -46,9 +43,7 @@ export function useChatContinuation(
       url: 'http://localhost:5001',
       enabled: false,
       templateId: 'mistral',
-      generation_settings: {
-        // Default settings...
-      }
+      generation_settings: {},
     };
   };
 
@@ -74,7 +69,6 @@ export function useChatContinuation(
         .slice(0, targetIndex + 1)
         .filter(msg => msg.role !== 'thinking')
         .map(({ role, content }) => {
-          // Explicitly create variable with correct literal type
           let validRole: 'user' | 'assistant' | 'system' = 'system';
           if (role === 'user') {
             validRole = 'user';
@@ -84,7 +78,6 @@ export function useChatContinuation(
           return { role: validRole, content };
         });
 
-      // Update context window
       const contextWindow = {
         type: 'continuation',
         timestamp: new Date().toISOString(),
@@ -97,7 +90,6 @@ export function useChatContinuation(
       
       setContextWindow(contextWindow);
 
-      // The continuation prompt should be minimal and use system role
       const continuationPrompt: {
         role: 'user' | 'assistant' | 'system';
         content: string;
@@ -106,19 +98,16 @@ export function useChatContinuation(
         content: "Continue from exactly where you left off without repeating anything. Do not summarize or restart."
       };
 
-      // Add our continuation instruction to the context
       contextMessages.push(continuationPrompt);
 
-      // Generate new content
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
       
-      // Set up abort controller for cancellation
       const abortController = new AbortController();
       currentGenerationRef.current = abortController;
-      
+
       const response = await PromptHandler.generateChatResponse(
         characterData,
-        message.content, // Pass original message content for context
+        message.content,
         contextMessages,
         formattedAPIConfig,
         abortController.signal
@@ -132,7 +121,8 @@ export function useChatContinuation(
       let newContent = message.content; // Start with existing content
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
-
+      
+      // During streaming, ONLY update the current message content - don't modify variations yet
       for await (const chunk of PromptHandler.streamResponse(response)) {
         // Batch updates for smoother performance
         if (!bufferTimer) {
@@ -141,7 +131,7 @@ export function useChatContinuation(
               const content = newContent + buffer;
               buffer = '';
               
-              // Update state with new content
+              // Update UI with temporary content without modifying variations
               const updatedMessages = [...messages];
               updatedMessages[targetIndex] = {
                 ...updatedMessages[targetIndex],
@@ -164,42 +154,47 @@ export function useChatContinuation(
         bufferTimer = null;
       }
 
-      // Final update
+      // Final update - add as new variation only at the END of streaming
       if (buffer.length > 0) {
         newContent += buffer;
-        
-        const updatedMessages = [...messages];
-        const targetMsg = updatedMessages[targetIndex];
-      
-        // Add as a new variation
-        const variations = [...(targetMsg.variations || [])];
-        if (!variations.includes(newContent)) {
-          variations.push(newContent);
-        }
-      
-        updatedMessages[targetIndex] = {
-          ...targetMsg,
-          content: newContent,
-          variations,
-          currentVariation: variations.length - 1
-        };
-
-        // Update state and context window
-        updateMessagesState(updatedMessages);
-        setContextWindow({
-          ...contextWindow,
-          type: 'continuation_complete',
-          finalResponse: newContent,
-          completionTime: new Date().toISOString(),
-          variationsCount: variations.length
-        });
-        
-        // Save completed messages
-        saveMessages(updatedMessages);
       }
+      
+      // Create updated message with new variation
+      const updatedMessages = [...messages];
+      const targetMsg = updatedMessages[targetIndex];
+      
+      // Create or update variations array
+      const variations = [...(targetMsg.variations || [])];
+      
+      // Add the full completed continuation as a single variation
+      if (!variations.includes(newContent)) {
+        variations.push(newContent);
+      }
+      
+      // Update the message with new content and variations
+      updatedMessages[targetIndex] = {
+        ...targetMsg,
+        content: newContent,
+        variations,
+        currentVariation: variations.length - 1
+      };
+
+      // Update state and context window
+      updateMessagesState(updatedMessages);
+      setContextWindow({
+        ...contextWindow,
+        type: 'continuation_complete',
+        finalResponse: newContent,
+        completionTime: new Date().toISOString(),
+        variationsCount: variations.length
+      });
+      
+      // Save completed messages
+      saveMessages(updatedMessages);
     } catch (err) {
       console.error("Continuation error:", err);
       setError(err instanceof Error ? err.message : "Continuation failed");
+      
       setContextWindow({
         type: 'continuation_error',
         timestamp: new Date().toISOString(),

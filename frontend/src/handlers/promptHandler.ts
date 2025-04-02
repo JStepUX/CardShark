@@ -3,7 +3,8 @@ import { CharacterCard } from '../types/schema';
 import { APIConfig } from '../types/api';
 import { templateService } from '../services/templateService';
 import { Template } from '../types/templateTypes';
-import { transformKoboldPayload, getKoboldStreamEndpoint } from '../utils/koboldTransformer';
+import { transformKoboldPayload, getKoboldStreamEndpoint, wakeKoboldServer } from '../utils/koboldTransformer';
+import { createKoboldStreamWrapper, detectCompletionSignal, extractContentFromText } from '../utils/streamUtils';
 
 export class PromptHandler {
   private static readonly DEFAULT_PARAMS = {
@@ -48,6 +49,24 @@ export class PromptHandler {
     });
     
     return result;
+  }
+
+  /**
+   * Utility function to strip HTML tags from content
+   * This ensures clean text is sent to the LLM without HTML markup
+   */
+  private static stripHtmlTags(content: string): string {
+    if (!content) return '';
+    
+    // Create a DOM element to safely parse and extract text
+    const temp = document.createElement('div');
+    temp.innerHTML = content;
+    
+    // Get text content (strips HTML tags)
+    const textContent = temp.textContent || temp.innerText || '';
+    
+    // Return non-empty text or original as fallback
+    return textContent.trim() || content;
   }
 
   /**
@@ -133,15 +152,18 @@ ${character.data.mes_example || ''}
     characterName: string,
     template: Template | null
   ): string {
+    // Strip HTML from the current message
+    const cleanMessage = this.stripHtmlTags(currentMessage);
+    
     if (!template) {
       // Default to a Mistral-like format if no template provided
-      return `${history}\n[INST] ${currentMessage} [/INST]\n${characterName}:`;
+      return `${history}\n[INST] ${cleanMessage} [/INST]\n${characterName}:`;
     }
 
     try {
       // Format user message
       const userFormatted = this.replaceVariables(template.userFormat, { 
-        content: currentMessage 
+        content: cleanMessage 
       });
 
       // Format assistant message start
@@ -155,7 +177,7 @@ ${character.data.mes_example || ''}
     } catch (error) {
       console.error('Error formatting prompt:', error);
       // Fallback to a basic format
-      return `${history}\n[INST] ${currentMessage} [/INST]\n${characterName}:`;
+      return `${history}\n[INST] ${cleanMessage} [/INST]\n${characterName}:`;
     }
   }
 
@@ -186,9 +208,12 @@ ${character.data.mes_example || ''}
           finalContent = msg.variations[msg.currentVariation];
         }
         
+        // Strip HTML tags to ensure clean text for the API
+        const cleanContent = this.stripHtmlTags(finalContent);
+        
         return {
           role: msg.role,
-          content: finalContent
+          content: cleanContent
         };
     });
     
@@ -278,17 +303,17 @@ ${character.data.mes_example || ''}
     const template = this.getTemplate(apiConfig.templateId);
     console.log('Using template:', template?.name || 'Default');
 
-    // Look for thinking content in system messages
+    // Look for thinking content in system messages and strip HTML
     const thinkingContent = history
       .filter(msg => msg.role === 'system' && msg.content.startsWith('<think>'))
-      .map(msg => msg.content)
+      .map(msg => this.stripHtmlTags(msg.content))
       .join('\n');
     
     // Create a special thinking prompt if thinking content exists
-    let enhancedPrompt = currentMessage;
+    let enhancedPrompt = this.stripHtmlTags(currentMessage);
     if (thinkingContent) {
       // Add thinking to the prompt in a way that encourages the model to use it
-      enhancedPrompt = `${thinkingContent}\n\nBased on the above reasoning, respond to: ${currentMessage}`;
+      enhancedPrompt = `${thinkingContent}\n\nBased on the above reasoning, respond to: ${enhancedPrompt}`;
     }
 
     // Create memory context
@@ -405,35 +430,82 @@ ${character.data.mes_example || ''}
 
     // Direct API call for KoboldCPP
     if (apiConfig.provider === 'KoboldCPP') {
-      // Transform to KoboldCPP format
-      const koboldPayload = transformKoboldPayload(apiPayload);
-      
-      // Log for debugging (but redact API keys)
-      console.log('Transformed KoboldCPP payload:', JSON.stringify({
-        ...koboldPayload,
-        apiKey: koboldPayload.apiKey ? '[REDACTED]' : undefined
-      }, null, 2));
-      
-      // Get the endpoint URL
-      const endpoint = getKoboldStreamEndpoint(apiConfig.url || '');
-      console.log('Using KoboldCPP direct endpoint:', endpoint);
-      
-      // Make the direct request to KoboldCPP
-      return fetch(endpoint, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
-        body: JSON.stringify(koboldPayload),
-        signal
-      });
+      try {
+        // Try to wake the server first if it might be sleeping
+        if (apiConfig.url) {
+          try {
+            await wakeKoboldServer(apiConfig.url);
+          } catch (err) {
+            console.warn('Failed to wake KoboldCPP server, continuing anyway', err);
+          }
+        }
+        
+        // Transform to KoboldCPP format
+        const koboldPayload = transformKoboldPayload(apiPayload);
+        
+        // Log for debugging (but redact API keys)
+        console.log('Transformed KoboldCPP payload:', JSON.stringify({
+          ...koboldPayload,
+          apiKey: koboldPayload.apiKey ? '[REDACTED]' : undefined
+        }, null, 2));
+        
+        // Get the endpoint URL
+        const endpoint = getKoboldStreamEndpoint(apiConfig.url || '');
+        console.log('Using KoboldCPP direct endpoint:', endpoint);
+        
+        // Make the direct request to KoboldCPP with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+        
+        // Merge the signals if both exist
+        const combinedSignal = signal 
+          ? { signal: AbortSignal.any([signal, controller.signal]) } 
+          : { signal: controller.signal };
+        
+        // Expanded logging about signals for debugging
+        console.log('KoboldCPP request with signal:', {
+          hasUserSignal: !!signal,
+          hasTimeoutSignal: !!controller.signal,
+          usingCombinedSignal: !!signal
+        });
+        
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          body: JSON.stringify(koboldPayload),
+          ...combinedSignal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        // Add special handling to improve response parsing for KoboldCPP
+        const originalBody = response.body;
+        if (originalBody) {
+          // Use the new utility function to create the stream wrapper
+          return new Response(
+            createKoboldStreamWrapper(originalBody, signal),
+            response
+          );
+        }
+        
+        return response;
+      } catch (err) {
+        // Convert fetch errors to proper Response objects
+        console.error('KoboldCPP fetch error:', err);
+        return new Response(
+          JSON.stringify({ error: { message: err instanceof Error ? err.message : 'KoboldCPP connection failed' } }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // For other providers, use the original endpoint/approach
     return fetch('/api/generate', {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(apiPayload),
@@ -444,7 +516,6 @@ ${character.data.mes_example || ''}
   static async *streamResponse(response: Response): AsyncGenerator<string, void, unknown> {
     if (!response.body) throw new Error('No response body');
     
-    // Use ES2024's Promise.withResolvers for cleaner streaming implementation
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     
@@ -452,21 +523,39 @@ ${character.data.mes_example || ''}
       console.log('Starting to read SSE stream');
       let buffer = '';
       let chunkSize = 0;
+      let lastChunkTime = Date.now();
+      const MAX_IDLE_TIME = 3000; // 3 seconds timeout for detecting end of stream
       
       while (true) {
-        // Use withResolvers to handle the read operation cleanly
-        const { promise, resolve, reject } = Promise.withResolvers<ReadableStreamReadResult<Uint8Array>>();
+        // Check for timeout since last chunk - new addition to detect stalled streams
+        const currentTime = Date.now();
+        if (chunkSize > 0 && (currentTime - lastChunkTime) > MAX_IDLE_TIME) {
+          console.log(`Stream appears complete (${MAX_IDLE_TIME}ms without data)`);
+          break;
+        }
         
-        // Read the next chunk
-        reader.read()
-          .then(resolve)
-          .catch(reject);
+        // Read the next chunk with timeout
+        let readResult: ReadableStreamReadResult<Uint8Array>;
+        try {
+          const readPromise = reader.read();
+          const timeoutPromise = new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
+            setTimeout(() => reject(new Error('Stream read timeout')), MAX_IDLE_TIME);
+          });
+          
+          readResult = await Promise.race([readPromise, timeoutPromise]);
+          lastChunkTime = Date.now(); // Update last chunk time
+        } catch (err) {
+          if (err instanceof Error && err.message === 'Stream read timeout') {
+            console.log('Stream read timeout - assuming completion');
+            break;
+          }
+          throw err;
+        }
         
-        // Wait for the read operation to complete
-        const { value, done } = await promise;
+        const { value, done } = readResult;
         
-        if (done) {
-          console.log('Stream complete');
+        if (done) { // Continue processing other chunks, don't break yet
+          console.log('Stream complete (done flag)');
           break;
         }
         
@@ -482,7 +571,6 @@ ${character.data.mes_example || ''}
         
         for (const line of lines) {
           if (!line.trim()) continue;
-          
           if (line.startsWith('data: ')) {
             try {
               const dataText = line.slice(6); // Remove 'data: ' prefix
@@ -490,29 +578,66 @@ ${character.data.mes_example || ''}
               // Handle "[DONE]" specifically
               if (dataText.includes('[DONE]')) {
                 console.log('Received [DONE] signal');
-                continue;
+                continue; // Continue processing other chunks, don't break yet
               }
               
-              const data = JSON.parse(dataText);
+              // Check for completion signals using the utility function
+              const isCompletionSignal = detectCompletionSignal(dataText);
               
-              if (data.error) {
-                console.error('Error from SSE stream:', data.error);
-                throw new Error(data.error.message || 'Error from generation API');
+              if (isCompletionSignal) {
+                console.log(`Detected specific completion signal: ${dataText}`);
+                // Don't terminate yet, continue processing this chunk and mark for completion after
+                setTimeout(() => { lastChunkTime = 0; }, 100);
               }
               
-              if (data.token) {
-                yield data.token;
-              } else if (data.content) {
-                yield data.content;
-              }
+              // Extract and yield content
+              const content = extractContentFromText(dataText);
+              if (content) yield content;
             } catch (e) {
-              console.error('Error parsing SSE data:', e, line);
-              // Continue processing other lines even if one fails
+              console.error('Error processing SSE line:', e, line);
             }
           }
         }
       }
+      
+      // Final processing of any remaining buffer content
+      if (buffer.trim()) {
+        try {
+          if (buffer.startsWith('data: ')) {
+            const dataText = buffer.slice(6);
+            if (!dataText.includes('[DONE]')) {
+              try {
+                const data = JSON.parse(dataText);
+                if (data.token) yield data.token;
+                else if (data.content) yield data.content;
+                else if (data.choices && data.choices.length > 0) {
+                  const content = data.choices[0].delta?.content || data.choices[0].text || '';
+                  if (content) yield content;
+                }
+              } catch (e) {
+                console.error('Error parsing final buffer JSON:', e);
+                // Try direct string extraction if JSON parsing fails
+                if (dataText && typeof dataText === 'string') {
+                  console.log('Attempting direct extraction from final buffer');
+                  const contentMatch = dataText.match(/"content":"([^"]+)"/);
+                  const textMatch = dataText.match(/"text":"([^"]+)"/);
+                  if (contentMatch && contentMatch[1]) {
+                    yield contentMatch[1];
+                  } else if (textMatch && textMatch[1]) {
+                    yield textMatch[1];
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error processing final buffer:', e);
+        }
+      }
+      
+      console.log('Stream processing complete');
     } finally {
+      // Release the reader lock when done
       reader.releaseLock();
     }
   }

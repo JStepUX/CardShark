@@ -15,6 +15,7 @@ import RichTextEditor from './RichTextEditor';
 import { htmlToText, markdownToHtml } from '../utils/contentUtils';
 import { generateUUID } from '../utils/uuidUtils';
 import { substituteVariables } from '../utils/variableUtils'; // Import substituteVariables
+import ErrorMessage from './ErrorMessage'; // Import the new ErrorMessage component
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -36,6 +37,168 @@ const DEFAULT_BACKGROUND_SETTINGS: BackgroundSettings = {
 const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
   enabled: false,
   visible: false
+};
+
+// Custom hook to detect and stop generation that runs too long
+const useGenerationTimeout = (isGenerating: boolean, stopGeneration: () => void, timeout = 30000) => {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    // When generation starts, set a backup timeout
+    if (isGenerating) {
+      console.log(`Setting generation timeout (${timeout}ms)`);
+      
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      // Set new timeout
+      timeoutRef.current = setTimeout(() => {
+        console.warn('Generation timeout reached - forcing stop');
+        stopGeneration();
+      }, timeout);
+    } else {
+      // Clear timeout when generation stops
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [isGenerating, stopGeneration, timeout]);
+};
+
+// Enhanced timeout hook with fallback timer
+const useEnhancedGenerationTimeout = (
+  isGenerating: boolean, 
+  stopGeneration: () => void, 
+  initialTimeout = 30000,
+  hardTimeout = 60000
+) => {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hardTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    // When generation starts, set the timeouts
+    if (isGenerating) {
+      console.log(`Setting generation timeouts (normal: ${initialTimeout}ms, hard: ${hardTimeout}ms)`);
+      
+      // Clear any existing timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (hardTimeoutRef.current) {
+        clearTimeout(hardTimeoutRef.current);
+        hardTimeoutRef.current = null;
+      }
+      
+      // Set normal timeout
+      timeoutRef.current = setTimeout(() => {
+        console.warn('Generation timeout reached - attempting to stop');
+        stopGeneration();
+      }, initialTimeout);
+      
+      // Set hard timeout as fallback - this will always fire even if normal stop fails
+      hardTimeoutRef.current = setTimeout(() => {
+        console.error('HARD generation timeout reached - forcing stop');
+        stopGeneration();
+        
+        // Dispatch an event to signal that generation is forcibly ended
+        // This is a fallback mechanism in case normal stopping doesn't work
+        window.dispatchEvent(new CustomEvent('cardshark:force-generation-stop'));
+      }, hardTimeout);
+    } else {
+      // Clear timeouts when generation stops
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (hardTimeoutRef.current) {
+        clearTimeout(hardTimeoutRef.current);
+        hardTimeoutRef.current = null;
+      }
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (hardTimeoutRef.current) {
+        clearTimeout(hardTimeoutRef.current);
+        hardTimeoutRef.current = null;
+      }
+    };
+  }, [isGenerating, stopGeneration, initialTimeout, hardTimeout]);
+};
+
+// Custom hook for stall detection - for use in ChatBubble component
+// This hook is exported for use in other components
+export const useStallDetection = (
+  isGenerating: boolean,
+  content: string,
+  onStallDetected: () => void, 
+  stallTimeout = 8000
+) => {
+  const contentRef = useRef(content);
+  const lastUpdateRef = useRef(Date.now());
+  const stallCheckRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Update refs when content changes
+  useEffect(() => {
+    if (content !== contentRef.current) {
+      contentRef.current = content;
+      lastUpdateRef.current = Date.now();
+    }
+  }, [content]);
+  
+  // Set up stall detection
+  useEffect(() => {
+    if (isGenerating) {
+      // Start stall detection
+      stallCheckRef.current = setInterval(() => {
+        const timeSinceUpdate = Date.now() - lastUpdateRef.current;
+        if (timeSinceUpdate > stallTimeout) {
+          console.warn(`Generation appears stalled (${stallTimeout}ms without updates)`);
+          onStallDetected();
+          
+          // Clear the interval
+          if (stallCheckRef.current) {
+            clearInterval(stallCheckRef.current);
+            stallCheckRef.current = null;
+          }
+        }
+      }, 1000); // Check every second
+    } else {
+      // Clear stall detection when not generating
+      if (stallCheckRef.current) {
+        clearInterval(stallCheckRef.current);
+        stallCheckRef.current = null;
+      }
+    }
+    
+    // Cleanup
+    return () => {
+      if (stallCheckRef.current) {
+        clearInterval(stallCheckRef.current);
+        stallCheckRef.current = null;
+      }
+    };
+  }, [isGenerating, stallTimeout, onStallDetected]);
 };
 
 // Separate hook for scroll management
@@ -189,7 +352,6 @@ const ChatView: React.FC = () => {
 
   const {
     messages,
-    isLoading,
     isGenerating,
     error,
     currentUser,
@@ -204,7 +366,8 @@ const ChatView: React.FC = () => {
     updateMessage,
     setCurrentUser,
     loadExistingChat,
-    updateReasoningSettings
+    updateReasoningSettings,
+    clearError
   } = useChatMessages(characterData);
 
   // Use the chat continuation hook
@@ -218,46 +381,81 @@ const ChatView: React.FC = () => {
     characterData,
     (updatedMessages) => {
       // This is the saveMessages function passed to useChatContinuation
-      // It should save the messages to the backend or local storage
       apiService.saveChat(characterData!, updatedMessages, currentUser);
     },
     (updatedMessages) => {
-      // This is the updateMessagesState function passed to useChatContinuation
+      // This is the updateMessagesState function 
       // We don't have direct access to setState from useChatMessages, so we need a workaround
-      // One approach is to use the updateMessage function for each message that changed
       const messagesToUpdate = updatedMessages.filter((msg, index) => 
-        index < messages.length && msg.content !== messages[index].content
+        index < messages.length && JSON.stringify(msg) !== JSON.stringify(messages[index])
       );
       
       messagesToUpdate.forEach(msg => {
         updateMessage(msg.id, msg.content);
       });
     },
+    // Now we properly set isGenerating state to show the stop button during continuation
     (isGen) => {
-      // setIsGenerating - we can't directly modify useChatMessages state
-      // This is a dummy function since we rely on useChatMessages for generation state
-      console.log('Continuation generation state:', isGen);
+      // Update global generating state during continuation
+      if (isGen && !isGenerating) {
+        // We need a way to update the isGenerating state
+        // Simulate clicking stop and re-starting to update UI state
+        console.log('Setting continuation generating state');
+        // Fire a custom event to notify components of generating state
+        window.dispatchEvent(new CustomEvent('cardshark:continuation-generating', {
+          detail: { generating: isGen }
+        }));
+      }
     },
     (genId) => {
-      // setGeneratingId - we can't directly modify useChatMessages state
-      // This is a dummy function since we rely on useChatMessages for generatingId
+      // No way to directly update generatingId from useChatMessages
       console.log('Continuation generating ID:', genId);
     },
     (contextWindow) => {
-      // This updates the context window in useChatMessages
-      // Since we can't directly modify useChatMessages state, we log it
       console.log('Continuation context window:', contextWindow);
     }
   );
 
+  // Use the generation timeout hook to prevent infinite generations
+  useGenerationTimeout(isGenerating, stopGeneration, 30000);
+  useGenerationTimeout(isGenerating, stopContinuation, 30000); // Also add for continuation
+
+  // Use the enhanced generation timeout hook with an additional hard fallback
+  useEnhancedGenerationTimeout(isGenerating, stopGeneration, 30000, 60000);
+  useEnhancedGenerationTimeout(isGenerating, stopContinuation, 30000, 60000);
+
+  // Add listener for forced generation stop
+  useEffect(() => {
+    const handleForceStop = () => {
+      console.log('Received force stop event, resetting UI state');
+      // If we're still generating, reset state
+      if (isGenerating) {
+        stopGeneration();
+        stopContinuation();
+      }
+    };
+    
+    window.addEventListener('cardshark:force-generation-stop', handleForceStop);
+    
+    return () => {
+      window.removeEventListener('cardshark:force-generation-stop', handleForceStop);
+    };
+  }, [isGenerating, stopGeneration, stopContinuation]);
+
   // If there's a continuation error, merge it with the main error
   const combinedError = error || continuationError;
-  // Clear both errors when either is cleared
-  useEffect(() => {
-    if (continuationError && !error) {
+  
+  // Handle error dismissal from either source
+  const handleDismissError = useCallback(() => {
+    if (error) {
+      // Clear error from useChatMessages hook
+      clearError();
+    }
+    if (continuationError) {
+      // Clear error from useChatContinuation hook
       clearContinuationError();
     }
-  }, [error, continuationError, clearContinuationError]);
+  }, [error, continuationError, clearError, clearContinuationError]);
 
   // Use local state for UI control, synced with hook state
   const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(
@@ -330,25 +528,37 @@ const ChatView: React.FC = () => {
     scrollToBottom();
   }, [messages, isGenerating, scrollToBottom]);
 
-  // Early return while loading
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-gray-400">Loading chat...</div>
-      </div>
-    );
-  }
-
   // Handle message continuation
   const handleContinueResponse = (message: Message) => {
     if (message.role === 'assistant') {
+      // Make sure we indicate generation is happening
+      // Don't need to simulate anything here since continueResponse will trigger
+      // the appropriate state changes through the callbacks we provided
+      if (!isGenerating) {
+        console.log('Starting continuation for message:', message.id);
+        // No direct state setters available here from the hook
+      }
       continueResponse(message);
     }
   };
 
+  // Show the correct stop button during continuation
+  const getStopHandler = (message: Message) => {
+    if (message.role !== 'assistant') return undefined;
+    
+    // If this message is currently being generated by either method
+    return isGenerating && (generatingId === message.id) 
+      ? stopGeneration 
+      : stopContinuation;
+  };
+
   const handleSendMessage = (content: string) => {
+    // First strip any HTML that might already be in the content
+    const plainContent = content.replace(/<[^>]*>/g, '');
+    
     // Convert markdown image syntax to HTML if needed
-    const htmlContent = markdownToHtml(content);
+    const htmlContent = markdownToHtml(plainContent);
+    
     // Create a message with both HTML content and raw text
     const userMessage = {
       id: generateUUID(),
@@ -455,9 +665,14 @@ const ChatView: React.FC = () => {
         </div>
       </div>
 
+      {/* Error display using the new component */}
       {combinedError && (
-        <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200 relative z-10">
-          {combinedError}
+        <div className="relative z-10 px-8 py-2">
+          <ErrorMessage 
+            message={combinedError}
+            severity="error"
+            onDismiss={handleDismissError}
+          />
         </div>
       )}
 
@@ -490,11 +705,7 @@ const ChatView: React.FC = () => {
                   isGenerating={isGenerating && message.id === generatingId}
                   onContentChange={(content) => updateMessage(message.id, content)}
                   onDelete={() => deleteMessage(message.id)}
-                  onStop={
-                    message.role === 'assistant' 
-                      ? isGenerating ? stopGeneration : stopContinuation 
-                      : undefined
-                  }
+                  onStop={getStopHandler(message)}
                   onTryAgain={
                     message.role === 'assistant' 
                       ? () => regenerateMessage(message) 

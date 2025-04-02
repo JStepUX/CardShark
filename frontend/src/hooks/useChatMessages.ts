@@ -164,6 +164,41 @@ export function useChatMessages(characterData: CharacterData | null) {
     });
   }, [characterData]);
 
+  // Add a listener for forced stop events
+  useEffect(() => {
+    const handleForceStop = () => {
+      console.log('Force stop event received in useChatMessages');
+      if (state.isGenerating) {
+        setState(prev => ({
+          ...prev,
+          isGenerating: false,
+          generatingId: null,
+          
+          // If we have a current generation in progress, mark it as complete
+          messages: prev.messages.map(msg =>
+            msg.id === prev.generatingId
+              ? { ...msg, status: 'complete' }
+              : msg
+          ),
+          
+          // Update context window to reflect force stopped status
+          lastContextWindow: {
+            ...prev.lastContextWindow,
+            type: 'generation_force_stopped',
+            timestamp: new Date().toISOString(),
+            message: 'Generation was force stopped due to timeout'
+          }
+        }));
+      }
+    };
+    
+    window.addEventListener('cardshark:force-generation-stop', handleForceStop);
+    
+    return () => {
+      window.removeEventListener('cardshark:force-generation-stop', handleForceStop);
+    };
+  }, [state.isGenerating, state.generatingId]);
+
   // Load context window on mount
   useEffect(() => {
     const loadContextWindow = async () => {
@@ -554,13 +589,22 @@ export function useChatMessages(characterData: CharacterData | null) {
       let newContent = '';
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
+      let receivedChunks = 0;
 
       for await (const chunk of PromptHandler.streamResponse(response)) {
+        receivedChunks++;
+        
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
               const content = newContent + buffer;
               buffer = '';
+              
+              // Log buffer updates for debugging
+              if (receivedChunks % 10 === 0) {
+                console.log(`Buffer update: processed ${receivedChunks} chunks so far`);
+              }
+              
               setState(prev => {
                 const updatedMessages = [...prev.messages];
                 const assistantIndex = updatedMessages.findIndex(msg => msg.id === assistantMessage.id);
@@ -580,13 +624,21 @@ export function useChatMessages(characterData: CharacterData | null) {
         buffer += chunk;
       }
 
+      // Log final stream statistics
+      console.log(`Stream complete: received ${receivedChunks} total chunks`);
+
       if (bufferTimer) {
         clearInterval(bufferTimer);
         bufferTimer = null;
       }
 
+      // Process any remaining buffer
       if (buffer.length > 0) {
         newContent += buffer;
+        
+        // Log final content length for debugging
+        console.log(`Final response length: ${newContent.length} characters`);
+        
         setState(prev => {
           const updatedMessages = [...prev.messages];
           const assistantIndex = updatedMessages.findIndex(msg => msg.id === assistantMessage.id);
@@ -606,7 +658,8 @@ export function useChatMessages(characterData: CharacterData | null) {
             ...prev.lastContextWindow,
             type: 'generation_complete',
             finalResponse: newContent,
-            completionTime: new Date().toISOString()
+            completionTime: new Date().toISOString(),
+            totalChunks: receivedChunks
           };
 
           return {
@@ -620,6 +673,19 @@ export function useChatMessages(characterData: CharacterData | null) {
 
         await saveChat();
         await appendMessage({ ...assistantMessage, content: newContent, timestamp: Date.now() });
+      } else {
+        console.warn('Stream completed but buffer was empty - this is unusual');
+        setState(prev => ({
+          ...prev,
+          isGenerating: false,
+          generatingId: null,
+          lastContextWindow: {
+            ...prev.lastContextWindow,
+            type: 'generation_empty',
+            completionTime: new Date().toISOString(),
+            totalChunks: receivedChunks
+          }
+        }));
       }
 
     } catch (err) {
@@ -921,31 +987,38 @@ export function useChatMessages(characterData: CharacterData | null) {
     });
   };
   
-  const stopGeneration = () => {
-    if (currentGenerationRef.current) {
-      console.log('Stopping generation - aborting controller');
-      
-      setState(prev => {
-        const updatedContextWindow = {
-          ...prev.lastContextWindow,
-          type: 'generation_stopping',
-          stopTime: new Date().toISOString()
-        };
-        
-        return {
-          ...prev,
-          lastContextWindow: updatedContextWindow,
-          isGenerating: false
-        };
-      });
-      
-      currentGenerationRef.current.abort();
-      currentGenerationRef.current = null;
-    } else {
-      console.warn('No active generation to stop');
+  const stopGeneration = useCallback(() => {
+    console.log('Stop generation called');
+    if (!state.isGenerating) {
+      console.log('Not currently generating, nothing to stop');
+      return;
     }
-  };
-  
+    
+    if (currentGenerationRef.current) {
+      console.log('Aborting generation with controller');
+      try {
+        currentGenerationRef.current.abort();
+      } catch (err) {
+        console.error('Error aborting generation:', err);
+      }
+      currentGenerationRef.current = null;
+    }
+    
+    // Always reset state, even if abort controller failed
+    setState(prev => ({
+      ...prev,
+      isGenerating: false,
+      generatingId: null,
+      
+      // Update context window
+      lastContextWindow: {
+        type: 'generation_stopped',
+        timestamp: new Date().toISOString(),
+        messageId: prev.generatingId
+      }
+    }));
+  }, [state.isGenerating, state.generatingId]);
+
   const setCurrentUser = (user: UserProfile | null) => {
     ChatStorage.saveCurrentUser(user);
     
