@@ -268,13 +268,13 @@ const MessagesView: React.FC = () => {
 
   // --- Render JSX ---
   return (
-    <div className="h-full flex flex-col bg-gradient-to-b from-zinc-950 to-black text-gray-200">
+    <div className="h-full flex flex-col bg-stone-900 text-gray-200">
       {/* Header Section */}
       <div className="p-6 border-b border-zinc-800">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-100">Greeting Manager</h2>
+          <h2 className="text-lg font-semibold text-gray-100">Greeting Manager</h2>
           {/* Action Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Generate Greeting Button */}
             <button
               onClick={handleGenerateGreeting}

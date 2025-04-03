@@ -290,11 +290,11 @@ const InputArea: React.FC<{
           )}
         </div>
 
-        <div className="flex-1 h-32"> {/* Explicitly set height directly on this container */}
+        <div className="flex-1 h-32 flex flex-col overflow-hidden"> {/* Added flex flex-col and overflow-hidden */}
           <RichTextEditor
             content={inputValue}
             onChange={setInputValue}
-            className="bg-stone-950 border border-stone-800 rounded-lg h-full" /* Use h-full instead of fixed h-32 */
+            className="bg-stone-950 border border-stone-800 rounded-lg flex-1 overflow-y-auto" /* Added flex-1 and overflow-y-auto */
             placeholder="Type your message..."
             onKeyDown={handleKeyPress}
             preserveWhitespace={true}

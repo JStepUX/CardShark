@@ -58,10 +58,19 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   // Enhanced cursor position tracking
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Helper function to trim leading newlines while preserving content
+  const trimLeadingNewlines = useCallback((content: string) => {
+    if (message.role !== 'assistant') return content; // Only trim assistant messages
+    return content.replace(/^\n+/, ''); // Remove leading newlines
+  }, [message.role]);
+
   // Function to process content with variable replacements and highlighting
   const processContent = useCallback((text: string): string => {
+    // First trim leading newlines
+    const trimmedContent = trimLeadingNewlines(text);
+
     // Create a cache key based on content and variables
-    const cacheKey = `${text}_${currentUser || ''}_${characterName || ''}`;
+    const cacheKey = `${trimmedContent}_${currentUser || ''}_${characterName || ''}`;
 
     // Check if we have this content processed already
     if (highlightCache.current.has(cacheKey)) {
@@ -69,7 +78,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     }
 
     // Replace variables while preserving asterisks and other syntax
-    let processedText = text;
+    let processedText = trimmedContent;
     if (currentUser) {
       processedText = processedText.replace(/\{\{user\}\}/gi, currentUser);
     }
@@ -81,12 +90,15 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     highlightCache.current.set(cacheKey, processedText);
 
     return processedText;
-  }, [currentUser, characterName]);
+  }, [currentUser, characterName, trimLeadingNewlines]);
 
   // Enhanced streaming content processing with simple HTML tag removal
   const getStreamingDisplay = useCallback((text: string): string => {
+    // Also trim leading newlines for streaming content
+    const trimmedContent = trimLeadingNewlines(text);
+
     // Replace variables first
-    let processedText = text;
+    let processedText = trimmedContent;
     if (currentUser) {
       processedText = processedText.replace(/\{\{user\}\}/gi, currentUser);
     }
@@ -97,7 +109,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     // Strip any HTML tags for cleaner streaming display
     // Using a basic regex instead of DOMPurify for simplicity
     return processedText.replace(/<[^>]*>/g, '');
-  }, [currentUser, characterName]);
+  }, [currentUser, characterName, trimLeadingNewlines]);
 
   // Track whether this is the first time we're displaying the content
   const [isFirstRender, setIsFirstRender] = useState(true);
@@ -106,7 +118,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   useEffect(() => {
     previousContent.current = message.content;
 
-    // Apply variable substitution
+    // Apply variable substitution and trim leading newlines
     if (!isGenerating || message.role !== 'assistant') {
       setHtmlContent(processContent(message.content));
       setIsFirstRender(true); // Reset for future streaming
@@ -119,7 +131,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         setTimeout(() => setIsFirstRender(false), 50);
       }
     }
-  }, [message.content, isGenerating, processContent, getStreamingDisplay, message.role]);
+  }, [message.content, isGenerating, processContent, getStreamingDisplay, message.role, isFirstRender]);
 
   // Improved handle input with better debouncing
   const handleContentChange = useCallback((newContent: string) => {
