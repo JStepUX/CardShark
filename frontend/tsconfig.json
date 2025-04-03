@@ -18,7 +18,9 @@
       "@/*": ["./src/*"],
       "@features/*": ["./src/features/*"],
       "@shared/*": ["./src/shared/*"],
-      "@core/*": ["./src/core/*"]
+      "@core/*": ["./src/core/*"],
+      "@components/*": ["./src/components/*"],
+      "@types/*": ["./src/types/*"]
     },
     "esModuleInterop": true
   },
