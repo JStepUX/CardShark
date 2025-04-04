@@ -119,14 +119,14 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   }, [content, editor]);
 
   // Handle key events
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (_e: React.KeyboardEvent) => {
     if (onKeyDown) {
-      onKeyDown(e);
+      onKeyDown(_e);
     }
   };
 
   // Handle clicks on the container to focus the editor
-  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleContainerClick = (_e: React.MouseEvent<HTMLDivElement>) => {
     if (editor && !readOnly && !editor.isFocused) {
       editor.commands.focus();
     }

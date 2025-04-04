@@ -301,98 +301,105 @@ const UserSelect: React.FC<UserSelectProps> = ({
 
         {/* --- User Grid - Scrollable Area --- */}
         <div className="flex-1 overflow-y-auto p-4">
-          {isLoading && users.length === 0 ? (
+          {isLoading ? (
             <div className="text-center text-gray-400 p-4">Loading users...</div>
-          ) : !isLoading && users.length === 0 && !error ? (
-              <div className="text-center text-gray-400 p-4">No users found. Click 'New User' below to create one.</div>
           ) : (
-            // --- Grid Layout ---
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {/* --- Create New User Card --- */}
-              <div
-                key="new-user-card"
-                className={`
+            <>
+              {/* Show message if no users found but don't hide the grid */}
+              {!isLoading && users.length === 0 && !error && (
+                <div className="text-center text-gray-400 p-4 mb-4">
+                  No users found. Create a new user to get started.
+                </div>
+              )}
+              
+              {/* Always show the grid with at least the New User card */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {/* --- Create New User Card --- Always visible */}
+                <div
+                  key="new-user-card"
+                  className={`
                     relative aspect-[3/4] sm:aspect-square bg-stone-950 rounded-lg border-2 border-dashed
                     border-stone-800 hover:border-stone-700 transition-all duration-200 ease-in-out
                     flex flex-col items-center justify-center cursor-pointer
                     text-gray-400 hover:text-gray-200 hover:scale-[1.02] group p-2
                     ${isSubmitting ? 'opacity-50 cursor-default' : ''}
                     ${deletingFilename ? 'pointer-events-none opacity-50' : ''}
-                `}
-                onClick={() => !isSubmitting && !deletingFilename && setShowNewUserDialog(true)}
-                role="button"
-                tabIndex={0}
-                aria-label="Create a new user profile"
-              >
-                <UserPlus size={32} className="transition-transform group-hover:scale-110 mb-1"/>
-                <span className="mt-1 text-sm text-center px-1">New User</span>
-              </div>
+                  `}
+                  onClick={() => !isSubmitting && !deletingFilename && setShowNewUserDialog(true)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Create a new user profile"
+                >
+                  <UserPlus size={32} className="transition-transform group-hover:scale-110 mb-1"/>
+                  <span className="mt-1 text-sm text-center px-1">New User</span>
+                </div>
 
-              {/* --- User Cards --- */}
-              {filteredUsers.map((user) => {
-                const isConfirmingDelete = confirmDeleteFilename === user.filename;
-                const isDeleting = deletingFilename === user.filename;
+                {/* Only map over users if there are any */}
+                {filteredUsers.map((user) => {
+                  const isConfirmingDelete = confirmDeleteFilename === user.filename;
+                  const isDeleting = deletingFilename === user.filename;
 
-                return (
-                  // --- Individual Card Container ---
-                  <div
-                    key={user.filename}
-                    className={`
-                      relative group aspect-[3/4] sm:aspect-square cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800
-                      transition-all ${isDeleting ? `duration-${DELETE_ANIMATION_DURATION} ease-out` : 'duration-200 ease-in-out'}
-                      ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
-                      hover:shadow-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-stone-900
-                      ${currentUser === user.name && !isDeleting && !isConfirmingDelete ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-stone-900' : ''}
-                      ${isConfirmingDelete ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-stone-900' : ''}
-                    `}
-                    onClick={() => handleSelectUser(user)}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Select user ${user.name}`}
-                  >
-                    {/* --- Delete Button (Conditionally Rendered) --- */}
-                    {!isDeleting && (
-                        <button
-                          title={isConfirmingDelete ? "Confirm Delete" : "Delete user profile"}
-                          onClick={(e) => handleTrashIconClick(e, user.filename)}
-                          tabIndex={-1}
-                          className={`absolute top-1.5 left-1.5 z-10 p-1 rounded-full backdrop-blur-sm
-                                      bg-black/40 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100
-                                      transition-all duration-200 ease-in-out
-                                      hover:bg-red-700/70 hover:scale-110 focus:outline-none
-                                      focus:opacity-100 focus:bg-red-700/70 focus:scale-110 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800
-                                      ${isConfirmingDelete ? '!opacity-100 !bg-red-600/80 scale-110' : ''}
-                                      ${isConfirmingDelete ? 'tabindex-0' : 'group-hover:tabindex-0 group-focus-within:tabindex-0'}
-                                    `}
-                            aria-label={isConfirmingDelete ? `Confirm delete ${user.name}` : `Delete ${user.name}`}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                    )}
-                    {/* --- End Delete Button --- */}
+                  return (
+                    // --- Individual Card Container ---
+                    <div
+                      key={user.filename}
+                      className={`
+                        relative group aspect-[3/4] sm:aspect-square cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800
+                        transition-all ${isDeleting ? `duration-${DELETE_ANIMATION_DURATION} ease-out` : 'duration-200 ease-in-out'}
+                        ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
+                        hover:shadow-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-stone-900
+                        ${currentUser === user.name && !isDeleting && !isConfirmingDelete ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-stone-900' : ''}
+                        ${isConfirmingDelete ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-stone-900' : ''}
+                      `}
+                      onClick={() => handleSelectUser(user)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Select user ${user.name}`}
+                    >
+                      {/* --- Delete Button (Conditionally Rendered) --- */}
+                      {!isDeleting && (
+                          <button
+                            title={isConfirmingDelete ? "Confirm Delete" : "Delete user profile"}
+                            onClick={(e) => handleTrashIconClick(e, user.filename)}
+                            tabIndex={-1}
+                            className={`absolute top-1.5 left-1.5 z-10 p-1 rounded-full backdrop-blur-sm
+                                        bg-black/40 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100
+                                        transition-all duration-200 ease-in-out
+                                        hover:bg-red-700/70 hover:scale-110 focus:outline-none
+                                        focus:opacity-100 focus:bg-red-700/70 focus:scale-110 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800
+                                        ${isConfirmingDelete ? '!opacity-100 !bg-red-600/80 scale-110' : ''}
+                                        ${isConfirmingDelete ? 'tabindex-0' : 'group-hover:tabindex-0 group-focus-within:tabindex-0'}
+                                      `}
+                              aria-label={isConfirmingDelete ? `Confirm delete ${user.name}` : `Delete ${user.name}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                      )}
+                      {/* --- End Delete Button --- */}
 
-                    {/* --- User Image Container --- */}
-                    <div className="absolute inset-0 bg-stone-950">
-                      <img
-                        key={`${user.filename}-img`}
-                        src={`/api/user-image/serve/${encodeURIComponent(user.filename)}`}
-                        alt={user.name}
-                        className={`w-full h-full object-cover object-center transition-transform duration-300 ${isDeleting ? '' : 'group-hover:scale-105 group-focus:scale-105'}`}
-                        loading="lazy"
-                        onError={(e) => {
-                          console.error(`Failed to load image for user: ${user.name} (${user.filename})`);
-                          (e.target as HTMLImageElement).style.visibility = 'hidden';
-                        }}
-                      />
-                    </div>
-                    {/* --- Name Overlay --- */}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium text-center truncate rounded-b-lg pointer-events-none">
-                      {user.name}
-                    </div>
-                  </div> // --- End Individual Card ---
-                );
-              })} {/* End map */}
-            </div> // --- End Grid Layout ---
+                      {/* --- User Image Container --- */}
+                      <div className="absolute inset-0 bg-stone-950">
+                        <img
+                          key={`${user.filename}-img`}
+                          src={`/api/user-image/serve/${encodeURIComponent(user.filename)}`}
+                          alt={user.name}
+                          className={`w-full h-full object-cover object-center transition-transform duration-300 ${isDeleting ? '' : 'group-hover:scale-105 group-focus:scale-105'}`}
+                          loading="lazy"
+                          onError={(e) => {
+                            console.error(`Failed to load image for user: ${user.name} (${user.filename})`);
+                            (e.target as HTMLImageElement).style.visibility = 'hidden';
+                          }}
+                        />
+                      </div>
+                      {/* --- Name Overlay --- */}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium text-center truncate rounded-b-lg pointer-events-none">
+                        {user.name}
+                      </div>
+                    </div> // --- End Individual Card ---
+                  );
+                })} {/* End map */}
+              </div> 
+            </>
           )}
         </div> {/* --- End Scrollable Area --- */}
 
