@@ -4,7 +4,8 @@ import { Search, FileJson, SplitSquareVertical } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
 import { CharacterCard } from '../types/schema';
-import HighlightedTextArea from './HighlightedTextArea';
+import HighlightedTextArea from './HighlightedTextArea'; // Keep for Scenario field for now
+import RichTextEditor from './RichTextEditor';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { Dialog } from './Dialog';
 
@@ -191,11 +192,12 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             {/* Description Field */}
             <div>
               <label className="block text-sm font-medium mb-2">Description</label>
-              <HighlightedTextArea
-                className={`bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`}
-                placeholder="Character description"
-                value={getFieldValue('description')}
-                onChange={(value) => handleFieldChange('description', value)}
+              <RichTextEditor
+                className={`bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`} // Apply styles to container
+                placeholder="Character description (supports Markdown)"
+                content={getFieldValue('description')}
+                onChange={(html) => handleFieldChange('description', html)}
+                preserveWhitespace={true} // Preserve newlines/whitespace
               />
             </div>
 
@@ -213,22 +215,24 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             {/* Personality Field */}
             <div>
               <label className="block text-sm font-medium mb-2">Personality</label>
-              <HighlightedTextArea
-                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 h-32 resize-y`}
-                placeholder="Key personality traits"
-                value={getFieldValue('personality')}
-                onChange={(value) => handleFieldChange('personality', value)}
+              <RichTextEditor
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-32`} // Apply styles, manage height
+                placeholder="Key personality traits (supports Markdown)"
+                content={getFieldValue('personality')}
+                onChange={(html) => handleFieldChange('personality', html)}
+                preserveWhitespace={true}
               />
             </div>
 
             {/* Example Dialogue Field */}
             <div>
               <label className="block text-sm font-medium mb-2">Example Dialogue</label>
-              <HighlightedTextArea
-                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 h-64 resize-y overflow-auto`}
-                placeholder="Examples of character dialogue and interactions"
-                value={getFieldValue('mes_example')}
-                onChange={(value) => handleFieldChange('mes_example', value)}
+              <RichTextEditor
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`} // Apply styles, manage height
+                placeholder="Examples of character dialogue and interactions (supports Markdown)"
+                content={getFieldValue('mes_example')}
+                onChange={(html) => handleFieldChange('mes_example', html)}
+                preserveWhitespace={true} // Crucial for dialogue formatting
               />
             </div>
 
@@ -236,11 +240,12 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             <div>
               <label className="block text-sm font-medium mb-2">System Prompt</label>
               <div className="relative w-full">
-                <HighlightedTextArea
-                  className={`w-full h-64 bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 resize-y overflow-auto text-base leading-relaxed`}
-                  placeholder="AI instructions"
-                  value={getFieldValue('system_prompt')}
-                  onChange={(value) => handleFieldChange('system_prompt', value)}
+                <RichTextEditor
+                  className={`w-full h-64 bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg text-base leading-relaxed`} // Apply styles, manage height
+                  placeholder="AI instructions (supports Markdown)"
+                  content={getFieldValue('system_prompt')}
+                  onChange={(html) => handleFieldChange('system_prompt', html)}
+                  preserveWhitespace={true} // Important for prompt structure
                 />
               </div>
             </div>

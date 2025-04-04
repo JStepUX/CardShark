@@ -8,7 +8,7 @@ import {
   ToggleRight
 } from 'lucide-react';
 import { LoreEntry, WorldInfoLogic } from '../types/schema';
-import HighlightedTextArea from './HighlightedTextArea';
+import RichTextEditor from './RichTextEditor';
 
 interface LoreCardProps {
   item: LoreEntry;
@@ -211,11 +211,12 @@ export const LoreCard: React.FC<LoreCardProps> = ({
         {/* Content */}
         <div>
           <label className="block text-sm text-gray-400 mb-1">Content</label>
-          <HighlightedTextArea
-            value={item.content}
-            onChange={(value) => onUpdate(item.id, { content: value })}
-            className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800 h-32 resize-y"
-            placeholder="Enter lore content"
+          <RichTextEditor
+            content={item.content}
+            onChange={(html) => onUpdate(item.id, { content: html })}
+            className="w-full bg-zinc-950 text-white rounded border border-zinc-800 h-32" // Apply styles, manage height
+            placeholder="Enter lore content (supports Markdown)"
+            preserveWhitespace={true} // Preserve formatting
           />
         </div>
 

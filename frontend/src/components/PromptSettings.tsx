@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePrompts } from '../hooks/usePrompts';
 import { RefreshCw, Save, Plus, Download, Upload, AlertCircle, Info, Trash2 } from 'lucide-react';
-import HighlightedTextArea from './HighlightedTextArea';
+import RichTextEditor from './RichTextEditor'; // Import RichTextEditor
 import { StandardPromptKey, PromptVariable, PromptCategory } from '../types/promptTypes';
 import { Dialog } from './Dialog';
 import { 
@@ -114,14 +114,15 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
         </div>
       )}
       
-      <HighlightedTextArea
-        value={value}
-        onChange={(newValue) => {
-          setValue(newValue);
-          setIsEdited(newValue !== getPrompt(promptKey));
+      <RichTextEditor
+        content={value}
+        onChange={(html) => { // Use html from editor
+          setValue(html);
+          setIsEdited(html !== getPrompt(promptKey));
         }}
-        className="w-full p-4 bg-stone-950 rounded-lg h-56 font-mono"
-        placeholder="Enter prompt template..."
+        className="w-full bg-stone-950 rounded-lg h-56 font-mono" // Apply styles
+        placeholder="Enter prompt template (supports Markdown)..."
+        preserveWhitespace={true} // Preserve formatting
       />
     </div>
   );
@@ -215,11 +216,12 @@ const NewPromptDialog: React.FC<NewPromptDialogProps> = ({
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Prompt Template
           </label>
-          <HighlightedTextArea
-            value={template}
-            onChange={setTemplate}
-            className="w-full p-4 bg-stone-950 border border-stone-700 rounded-lg h-40 font-mono"
-            placeholder="Enter prompt template with variables like {{char}}, {{user}}, etc."
+          <RichTextEditor
+            content={template}
+            onChange={setTemplate} // Pass the HTML content
+            className="w-full bg-stone-950 border border-stone-700 rounded-lg h-40 font-mono" // Apply styles
+            placeholder="Enter prompt template with variables like {{char}}, {{user}}, etc. (supports Markdown)"
+            preserveWhitespace={true} // Preserve formatting
           />
         </div>
       </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Plus, Trash2, Sparkles } from 'lucide-react'; // Icons
 import { useCharacter } from '../contexts/CharacterContext'; // Character data context
 import { useAPIConfig } from '../contexts/APIConfigContext'; // API configuration context
-import HighlightedTextArea from './HighlightedTextArea'; // Assuming this component exists
+import RichTextEditor from './RichTextEditor'; // Import the RichTextEditor
 import { ChatStorage } from '../services/chatStorage'; // Service to call backend
 
 // Interface defining the structure of a message within this component's state
@@ -42,12 +42,13 @@ const MessageCard: React.FC<{
         <Trash2 className="h-5 w-5" />
       </button>
     </div>
-    {/* Text area for editing the message content */}
-    <HighlightedTextArea
-      value={message.content}
-      onChange={(value) => onUpdate(message.id, { content: value })}
-      className="w-full bg-zinc-950 text-gray-100 rounded px-3 py-2 min-h-[100px] border border-zinc-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y outline-none"
-      placeholder="Enter message content..."
+    {/* Rich text editor for editing the message content */}
+    <RichTextEditor
+      content={message.content}
+      onChange={(html) => onUpdate(message.id, { content: html })} // Pass HTML to update handler
+      className="w-full bg-zinc-950 text-gray-100 rounded min-h-[100px] border border-zinc-700 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500" // Apply styles, use focus-within for border
+      placeholder="Enter message content (supports Markdown)..."
+      preserveWhitespace={true} // Preserve formatting
     />
   </div>
 ));
