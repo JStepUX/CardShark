@@ -7,6 +7,7 @@ export interface BackgroundSettings {
   transparency: number; // 0-100
   fadeLevel: number; // 0-100
   disableAnimation?: boolean; // New option to disable animation for GIFs
+  moodEnabled?: boolean; // Enable mood-based dynamic background
 }
 
 interface ChatBackgroundSettingsProps {
@@ -58,7 +59,8 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
       background: null,
       transparency: 85,
       fadeLevel: 30,
-      disableAnimation: false
+      disableAnimation: false,
+      moodEnabled: false
     });
   };
   
@@ -141,11 +143,39 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
         </div>
       </div>
       
-      {/* Background Selection */}
-      <BackgroundSelector
-        selected={localSettings.background}
-        onSelect={handleBackgroundSelect}
-      />
+      {/* Background Type Selection */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Background Type</h3>
+        <div className="flex gap-2 p-2 bg-stone-800 rounded-lg">
+          <button
+            onClick={() => updateSettings({ moodEnabled: false })}
+            className={`flex-1 px-3 py-2 rounded ${!localSettings.moodEnabled ? 'bg-blue-600 text-white' : 'bg-stone-700 text-gray-300 hover:bg-stone-600'}`}
+          >
+            Static Background
+          </button>
+          <button
+            onClick={() => updateSettings({ moodEnabled: true, background: null })}
+            className={`flex-1 px-3 py-2 rounded ${localSettings.moodEnabled ? 'bg-blue-600 text-white' : 'bg-stone-700 text-gray-300 hover:bg-stone-600'}`}
+          >
+            Mood Background
+          </button>
+        </div>
+        
+        {/* Mood description */}
+        {localSettings.moodEnabled && (
+          <div className="p-3 bg-stone-800 rounded-lg text-sm text-gray-300 border-l-4 border-blue-600">
+            <p>The background will dynamically change color based on the character's mood detected from their messages.</p>
+          </div>
+        )}
+      </div>
+      
+      {/* Background Selection - only show if mood is not enabled */}
+      {!localSettings.moodEnabled && (
+        <BackgroundSelector
+          selected={localSettings.background}
+          onSelect={handleBackgroundSelect}
+        />
+      )}
       
       {/* Transparency Slider */}
       <div className="space-y-2">

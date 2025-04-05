@@ -7,10 +7,14 @@ import UserSelect from './UserSelect';
 import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
 import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSettings';
+import MoodBackground from './MoodBackground';
+import MoodIndicator from './MoodIndicator'; // Import the MoodIndicator component
 import { useChatMessages } from '../hooks/useChatMessages';
+import { useEmotionDetection } from '../hooks/useEmotionDetection';
 import { useChatContinuation } from '../hooks/useChatContinuation'; // Import the continuation hook
 import { apiService } from '../services/apiService';
 import { Message, UserProfile } from '../types/messages';
+import { EmotionState } from '../hooks/useEmotionDetection'; // Import EmotionState type
 import RichTextEditor from './RichTextEditor';
 import { htmlToText, markdownToHtml } from '../utils/contentUtils';
 import { generateUUID } from '../utils/uuidUtils';
@@ -30,7 +34,9 @@ const BACKGROUND_SETTINGS_KEY = 'cardshark_background_settings';
 const DEFAULT_BACKGROUND_SETTINGS: BackgroundSettings = {
   background: null,
   transparency: 85,
-  fadeLevel: 30
+  fadeLevel: 30,
+  disableAnimation: false,
+  moodEnabled: false
 };
 
 // Default reasoning settings
@@ -247,7 +253,8 @@ const InputArea: React.FC<{
   isGenerating: boolean;
   currentUser: UserProfile | null;
   onUserSelect: () => void;
-}> = ({ onSend, isGenerating, currentUser, onUserSelect }) => {
+  emotion: EmotionState; // Changed from string | null to EmotionState
+}> = ({ onSend, isGenerating, currentUser, onUserSelect, emotion }) => {
   const [inputValue, setInputValue] = useState('');
   const [imageError, setImageError] = useState(false);
 
@@ -301,19 +308,24 @@ const InputArea: React.FC<{
           />
         </div>
 
-        <button
-          onClick={() => {
-            if (inputValue.trim() && !isGenerating) {
-              onSend(inputValue.trim());
-              setInputValue('');
-            }
-          }}
-          disabled={!inputValue.trim() || isGenerating}
-          className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
-                   transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Send size={20} />
-        </button>
+        <div className="flex flex-col items-center gap-2">
+          {/* Add mood indicator directly above send button */}
+          <MoodIndicator emotion={emotion} size={24} showLabel={false} />
+          
+          <button
+            onClick={() => {
+              if (inputValue.trim() && !isGenerating) {
+                onSend(inputValue.trim());
+                setInputValue('');
+              }
+            }}
+            disabled={!inputValue.trim() || isGenerating}
+            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
+                     transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send size={20} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -572,17 +584,32 @@ const ChatView: React.FC = () => {
     generateResponse(userMessage.content);
   };
 
+  // Get current emotion for the indicator
+  const { currentEmotion } = useEmotionDetection(messages, characterData?.data?.name);
+
   return (
     <div className="h-full relative flex flex-col overflow-hidden">
-      {/* Background Image */}
-      {backgroundSettings.background?.url && (
-        <div
-          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-          style={{ 
-            backgroundImage: `url(${backgroundSettings.background.url})`,
-            filter: `blur(${backgroundSettings.fadeLevel / 3}px)`
-          }}
-        />
+      {/* Mood-based Background */}
+      {backgroundSettings.moodEnabled ? (
+        <div className="absolute inset-0 z-0">
+          <MoodEmotionBackground
+            messages={messages}
+            characterName={characterData?.data?.name}
+            transparency={backgroundSettings.transparency}
+            fadeLevel={backgroundSettings.fadeLevel}
+          />
+        </div>
+      ) : (
+        /* Static Background Image */
+        backgroundSettings.background?.url && (
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${backgroundSettings.background.url})`,
+              filter: `blur(${backgroundSettings.fadeLevel / 3}px)`
+            }}
+          />
+        )
       )}
       
       {/* Header */}
@@ -592,11 +619,14 @@ const ChatView: React.FC = () => {
                ? `rgba(28, 25, 23, ${1 - backgroundSettings.transparency / 100})` 
                : undefined 
            }}>
-        <h2 className="text-lg font-semibold">
-          {characterData?.data?.name
-            ? `Chatting with ${characterData.data.name}`
-            : 'Chat'}
-        </h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-semibold">
+            {characterData?.data?.name
+              ? `Chatting with ${characterData.data.name}`
+              : 'Chat'}
+          </h2>
+        </div>
+        
         <div className="flex items-center gap-4">
           {/* Reasoning settings toggles */}
           <div className="flex items-center gap-2">
@@ -742,6 +772,7 @@ const ChatView: React.FC = () => {
           isGenerating={isGenerating}
           currentUser={currentUser}
           onUserSelect={() => setShowUserSelect(true)}
+          emotion={currentEmotion}
         />
       </div>
 
@@ -783,6 +814,27 @@ const ChatView: React.FC = () => {
         </div>
       )}
     </div>
+  );
+};
+
+// Wrapper component for MoodBackground that connects to emotion detection
+const MoodEmotionBackground: React.FC<{
+  messages: Message[];
+  characterName?: string;
+  transparency: number;
+  fadeLevel: number;
+}> = ({ messages, characterName, transparency, fadeLevel }) => {
+  const { currentEmotion } = useEmotionDetection(messages, characterName);
+  
+  return (
+    <MoodBackground
+      emotion={currentEmotion}
+      backgroundUrl={null}
+      transparency={transparency}
+      fadeLevel={fadeLevel}
+    >
+      <div></div> {/* Empty div to satisfy the children prop requirement */}
+    </MoodBackground>
   );
 };
 
