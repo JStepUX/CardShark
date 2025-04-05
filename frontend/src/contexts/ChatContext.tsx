@@ -158,7 +158,13 @@ export const ChatProvider: React.FC<{
               messageCount: response.messages.messages.length
             });
           } else if (characterData?.data?.first_mes) {
-            const firstMessage = MessageUtils.createAssistantMessage(characterData?.data?.first_mes);
+            // Substitute variables in first_mes
+            const characterName = characterData.data.name || 'Character';
+            const userName = currentUser?.name || 'User';
+            const substitutedContent = characterData.data.first_mes
+              .replace(/\{\{char\}\}/g, characterName)
+              .replace(/\{\{user\}\}/g, userName);
+            const firstMessage = MessageUtils.createAssistantMessage(substitutedContent);
             setMessages([firstMessage]);
             setLastContextWindow({
               type: 'initial_message',
@@ -169,7 +175,13 @@ export const ChatProvider: React.FC<{
             saveChat([firstMessage]);
           }
         } else if (characterData?.data?.first_mes) {
-          const firstMessage = MessageUtils.createAssistantMessage(characterData.data.first_mes);
+          // Substitute variables in first_mes (fallback)
+          const characterName = characterData.data.name || 'Character';
+          const userName = currentUser?.name || 'User';
+          const substitutedContent = characterData.data.first_mes
+            .replace(/\{\{char\}\}/g, characterName)
+            .replace(/\{\{user\}\}/g, userName);
+          const firstMessage = MessageUtils.createAssistantMessage(substitutedContent);
           setMessages([firstMessage]);
           setLastContextWindow({
             type: 'initial_message_fallback',
@@ -586,7 +598,13 @@ export const ChatProvider: React.FC<{
       });
       
       if (characterData?.data.first_mes) {
-        const firstMessage = MessageUtils.createAssistantMessage(characterData.data.first_mes);
+        // Substitute variables in first_mes
+        const characterName = characterData.data.name || 'Character';
+        const userName = currentUser?.name || 'User';
+        const substitutedContent = characterData.data.first_mes
+          .replace(/\{\{char\}\}/g, characterName)
+          .replace(/\{\{user\}\}/g, userName);
+        const firstMessage = MessageUtils.createAssistantMessage(substitutedContent);
         
         setMessages([firstMessage]);
         setLastContextWindow({
