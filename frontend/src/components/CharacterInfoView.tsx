@@ -4,7 +4,6 @@ import { Search, FileJson, SplitSquareVertical } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
 import { CharacterCard } from '../types/schema';
-import HighlightedTextArea from './HighlightedTextArea'; // Keep for Scenario field for now
 import RichTextEditor from './RichTextEditor';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { Dialog } from './Dialog';
@@ -204,11 +203,12 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             {/* Scenario Field */}
             <div>
               <label className="block text-sm font-medium mb-2">Scenario</label>
-              <HighlightedTextArea
-                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg px-3 py-2 h-32 resize-y`}
-                placeholder="Current situation or context"
-                value={getFieldValue('scenario')}
-                onChange={(value) => handleFieldChange('scenario', value)}
+              <RichTextEditor
+                className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-32`}
+                placeholder="Current situation or context (supports Markdown)"
+                content={getFieldValue('scenario')}
+                onChange={(html) => handleFieldChange('scenario', html)}
+                preserveWhitespace={true} // Preserve newlines/whitespace
               />
             </div>
 
