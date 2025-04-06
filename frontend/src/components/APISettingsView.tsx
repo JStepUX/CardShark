@@ -1,29 +1,28 @@
 // src/components/APISettingsView.tsx
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Save } from 'lucide-react';
 import DirectoryPicker from './DirectoryPicker';
 import { APICard } from './APICard';
-import { 
-  APIProvider, 
-  APIConfig, 
-  createAPIConfig 
+import {
+  APIProvider,
+  APIConfig,
+  createAPIConfig
 } from '../types/api';
-import { Settings } from '../types/settings';
+import { SyntaxHighlightSettings, DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS } from '../types/settings';
 import { SettingsTabs, SettingsTab } from './SettingsTabs';
 import TemplateManager from './TemplateManager';
 import { TemplateProvider } from '../contexts/TemplateContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
-import PromptSettings from './PromptSettings'; // Add this import
+import { useSettings } from '../contexts/SettingsContext';
+import PromptSettings from './PromptSettings';
+import HighlightingSettings from './HighlightingSettings';
 
-interface APISettingsViewProps {
-  settings: Settings; // Use the Settings type directly
-  onUpdate: (update: Partial<Settings>) => void; // Match the type from Layout
-}
+interface APISettingsViewProps {}
 
-export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUpdate }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts'>('general');
+export const APISettingsView: React.FC<APISettingsViewProps> = () => {
+  const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts' | 'highlighting'>('general');
   const { setAPIConfig } = useAPIConfig();
-  // Remove or use the isRefetching state
+  const { settings, updateSettings } = useSettings();
   const [isRefetching, setIsRefetching] = useState(false);
 
   const handleAPIUpdate = (id: string, updates: Partial<APIConfig>) => {
@@ -33,7 +32,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUp
       return;
     }
     
-    onUpdate({ 
+    updateSettings({
         apis: {
             ...settings.apis,
             [id]: { // No need for the 'as string' type assertion since id is already a string
@@ -77,7 +76,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUp
   const handleAddAPI = () => {
     const newConfig = createAPIConfig(APIProvider.KOBOLD);
     const configId: string = newConfig.id || `api-${Date.now()}`;
-    onUpdate({
+    updateSettings({
       apis: {
         ...settings.apis,
         [configId]: newConfig
@@ -88,7 +87,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUp
   const handleRemoveAPI = (id: string) => {
     const newApis: Record<string, APIConfig> = { ...settings.apis };
     delete newApis[id];
-    onUpdate({ apis: newApis });
+    updateSettings({ apis: newApis });
   };
 
   const handleProviderChange = (id: string, provider: APIProvider) => {
@@ -98,10 +97,46 @@ export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUp
   };
 
   const handleDirectoryChange = (directory: string | null) => {
-    onUpdate({
+    updateSettings({
       character_directory: directory,
       save_to_character_directory: true
     });
+  };
+
+  const handleHighlightingUpdate = (highlightSettings: SyntaxHighlightSettings) => {
+    // Make a specific API call to ensure settings are saved to disk
+    // This ensures we see any errors that might occur during the save process
+    const saveHighlightSettings = async () => {
+      try {
+        const response = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ syntaxHighlighting: highlightSettings })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Failed to save syntax highlighting settings:", errorData);
+          throw new Error(`Failed to save settings: ${errorData.message || response.statusText}`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+          console.log("Successfully saved syntax highlighting settings to disk");
+          // Update local state after confirmed save
+          updateSettings({ syntaxHighlighting: highlightSettings });
+        } else {
+          throw new Error("Server returned failure status");
+        }
+      } catch (err) {
+        console.error("Error saving syntax highlighting settings:", err);
+        // Still update local state for better UX, but show an error message
+        updateSettings({ syntaxHighlighting: highlightSettings });
+        // TODO: Add a toast or notification here about the save failure
+      }
+    };
+    
+    saveHighlightSettings();
   };
 
   // Add visual indicator when API settings are being refetched
@@ -131,7 +166,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUp
                     <input
                       type="checkbox"
                       checked={settings.save_to_character_directory}
-                      onChange={(e) => onUpdate({ save_to_character_directory: e.target.checked })}
+                      onChange={(e) => updateSettings({ save_to_character_directory: e.target.checked })}
                       className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-300">
@@ -189,10 +224,29 @@ export const APISettingsView: React.FC<APISettingsViewProps> = ({ settings, onUp
             <TemplateManager />
           </TemplateProvider>
         </SettingsTab>
-        
         <SettingsTab id="prompts">
           <div className="h-full overflow-y-auto">
             <PromptSettings />
+          </div>
+        </SettingsTab>
+
+        <SettingsTab id="highlighting">
+          <div className="h-full overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-zinc-950 p-4 border-b border-zinc-800 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Syntax Highlighting Settings</h2>
+              <button
+                onClick={() => {/* Auto-saves when changed */}}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={true}
+              >
+                <Save size={18} />
+                Auto-saved
+              </button>
+            </div>
+            <HighlightingSettings
+              settings={settings.syntaxHighlighting || DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS}
+              onUpdate={handleHighlightingUpdate}
+            />
           </div>
         </SettingsTab>
       </SettingsTabs>

@@ -35,6 +35,29 @@ class SettingsManager:
                 "apiKey": "",
                 "templateId": "mistral",  # Use templateId only
                 "lastConnectionStatus": None
+            },
+            # Add default syntax highlighting settings
+            "syntaxHighlighting": {
+                "bold": {
+                    "textColor": "#f97316",
+                    "backgroundColor": "transparent"
+                },
+                "italic": {
+                    "textColor": "#ce3bf7",
+                    "backgroundColor": "transparent"
+                },
+                "code": {
+                    "textColor": "#a3e635",
+                    "backgroundColor": "rgba(30, 41, 59, 0.5)"
+                },
+                "quote": {
+                    "textColor": "#f59e0b",
+                    "backgroundColor": "transparent"
+                },
+                "variable": {
+                    "textColor": "#ec4899",
+                    "backgroundColor": "rgba(236, 72, 153, 0.1)"
+                }
             }
         }
         
@@ -363,6 +386,20 @@ class SettingsManager:
                     current_api = self.settings.get('api', {})
                     self.settings['api'] = {**current_api, **value}
                     return self._save_settings(self.settings)
+            
+            # Special handling for syntax highlighting settings
+            if key == 'syntaxHighlighting':
+                if isinstance(value, dict):
+                    self.logger.log_step(f"Updating syntax highlighting settings: {value}")
+                    # Replace entire syntax highlighting settings or merge with existing
+                    current_highlighting = self.settings.get('syntaxHighlighting', {})
+                    self.settings['syntaxHighlighting'] = {**current_highlighting, **value}
+                    success = self._save_settings(self.settings)
+                    if success:
+                        self.logger.log_step("Syntax highlighting settings saved successfully")
+                    else:
+                        self.logger.log_warning("Failed to save syntax highlighting settings")
+                    return success
             
             # Update the setting
             self.settings[key] = value

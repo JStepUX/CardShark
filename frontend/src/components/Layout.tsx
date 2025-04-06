@@ -1,6 +1,7 @@
 // frontend/src/components/Layout.tsx (Modified)
 import React, { useRef, useState, useEffect } from "react";
 import { useCharacter } from "../contexts/CharacterContext";
+import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
 import LoreView from "./LoreView";
 import MessagesView from "./MessagesView";
@@ -10,7 +11,6 @@ import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
 import CharacterGallery from "./CharacterGallery";
 import ComparisonPanel from "./ComparisonPanel";
-import { Settings, DEFAULT_SETTINGS } from "../types/settings";
 import ChatView from "./ChatView";
 import SideNav from "./SideNav";
 
@@ -26,7 +26,7 @@ const Layout: React.FC = () => {
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
   const [backendStatus, setBackendStatus] = useState<"running" | "disconnected">("disconnected");
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const { settings } = useSettings();
   const [newImage, setNewImage] = useState<File | string | null>(null);
   
   // Character context
@@ -44,22 +44,7 @@ const Layout: React.FC = () => {
   // Comparison context
   const { isCompareMode } = useComparison();
 
-  // Load settings on mount
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const response = await fetch("/api/settings");
-        if (!response.ok) throw new Error("Failed to load settings");
-        const data = await response.json();
-        if (data.success) {
-          setSettings(data.settings);
-        }
-      } catch (err) {
-        console.error("Failed to load settings:", err);
-      }
-    };
-    loadSettings();
-  }, []);
+  // We no longer need to load settings here as it's handled by the SettingsContext
 
   // Backend status check
   useEffect(() => {
@@ -140,10 +125,7 @@ const Layout: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
-      // Get current settings
-      const settingsResponse = await fetch("/api/settings");
-      const settingsData = await settingsResponse.json();
-      const settings = settingsData.settings;
+      // Settings are already available from context
       
       // Prepare the file
       let fileToSave: File;
@@ -174,9 +156,9 @@ const Layout: React.FC = () => {
       formData.append("metadata", JSON.stringify(characterData));
       
       // Add save directory if enabled
-      const usingSaveDirectory = Boolean(settings.save_to_character_directory) && 
+      const usingSaveDirectory = Boolean(settings.save_to_character_directory) &&
                                settings.character_directory;
-      if (usingSaveDirectory) {
+      if (usingSaveDirectory && settings.character_directory) {
         formData.append("save_directory", settings.character_directory);
       }
       
@@ -258,26 +240,15 @@ const Layout: React.FC = () => {
     }
   };
 
-  // Settings update handler
-  const handleSettingsUpdate = async (updates: Partial<Settings>) => {
-    try {
-      const response = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-      
-      if (!response.ok) throw new Error("Failed to save settings");
-      
-      const data = await response.json();
-      if (data.success) {
-        setSettings((prev) => ({ ...prev, ...updates }));
-        setSettingsChangeCount((prev) => prev + 1);
-      }
-    } catch (err) {
-      console.error("Failed to save settings:", err);
-    }
+  // Settings change tracking
+  const incrementSettingsChangeCount = () => {
+    setSettingsChangeCount((prev) => prev + 1);
   };
+  
+  // Track settings changes
+  useEffect(() => {
+    incrementSettingsChangeCount();
+  }, [settings]);
 
   // Render content based on current view
   const renderContent = () => {
@@ -291,12 +262,7 @@ const Layout: React.FC = () => {
       case "gallery":
         return <CharacterGallery settingsChangeCount={settingsChangeCount} />;
       case "settings":
-        return (
-          <APISettingsView
-            settings={settings}
-            onUpdate={handleSettingsUpdate}
-          />
-        );
+        return <APISettingsView />;
       default:
         return <CharacterInfoView />;
     }

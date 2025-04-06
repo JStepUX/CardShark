@@ -8,6 +8,29 @@ export interface ReasoningSettings {
   autoExpandContext: boolean;
 }
 
+export interface SyntaxHighlightSettings {
+  bold: {
+    textColor: string;
+    backgroundColor: string;
+  };
+  italic: {
+    textColor: string;
+    backgroundColor: string;
+  };
+  code: {
+    textColor: string;
+    backgroundColor: string;
+  };
+  quote: {
+    textColor: string;
+    backgroundColor: string;
+  };
+  variable: {
+    textColor: string;
+    backgroundColor: string;
+  };
+}
+
 export interface Settings {
   // App Settings
   character_directory: string | null;  // Updated to allow null
@@ -35,9 +58,11 @@ export interface Settings {
   
   // API Configurations
   apis: Record<string, APIConfig>;
-  
   // Reasoning settings
   reasoning: ReasoningSettings;
+  
+  // Syntax highlighting settings
+  syntaxHighlighting?: SyntaxHighlightSettings;
 }
 
 export const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
@@ -45,6 +70,29 @@ export const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
   visible: true,
   instructions: "Think carefully about what has occurred in the roleplay up to this point. Step inside {{char}}'s shoes and explain what next steps {{char}} would take and why.",
   autoExpandContext: true
+};
+
+export const DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS: SyntaxHighlightSettings = {
+  bold: {
+    textColor: '#f97316', // Orange for bold
+    backgroundColor: 'transparent',
+  },
+  italic: {
+    textColor: '#3b82f6', // Blue for italic
+    backgroundColor: 'transparent',
+  },
+  code: {
+    textColor: '#a3e635', // Lime for code
+    backgroundColor: 'rgba(30, 41, 59, 0.5)', // Semi-transparent dark blue
+  },
+  quote: {
+    textColor: '#f59e0b', // Amber for quotes
+    backgroundColor: 'transparent',
+  },
+  variable: {
+    textColor: '#ec4899', // Pink for variables
+    backgroundColor: 'rgba(236, 72, 153, 0.1)', // Semi-transparent pink
+  },
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -58,8 +106,11 @@ export const DEFAULT_SETTINGS: Settings = {
   apis: {
     ['default_kobold']: createAPIConfig(APIProvider.KOBOLD)
   },
-  
   // Default reasoning settings
-  reasoning: DEFAULT_REASONING_SETTINGS
+  reasoning: DEFAULT_REASONING_SETTINGS,
+  
+  // Default syntax highlighting settings
+  syntaxHighlighting: DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS
 };
+
 

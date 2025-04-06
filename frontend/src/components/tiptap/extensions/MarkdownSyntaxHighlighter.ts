@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, EditorState } from 'prosemirror-state';
 import { DecorationSet, Decoration } from 'prosemirror-view';
+import { getHighlightSettings } from './highlightSettings';
 import { Node as ProsemirrorNode } from 'prosemirror-model';
 
 export const MarkdownSyntaxHighlighter = Extension.create({
@@ -30,7 +31,7 @@ export const MarkdownSyntaxHighlighter = Extension.create({
                       pos + match.index + match[0].length,
                       { 
                         class: 'md-bold-syntax',
-                        style: 'font-weight: bold; color: #f97316;' 
+                        style: `font-weight: bold; color: ${getHighlightSettings().bold.textColor}; background-color: ${getHighlightSettings().bold.backgroundColor === 'transparent' ? 'transparent' : getHighlightSettings().bold.backgroundColor};`
                       }
                     )
                   );
@@ -45,7 +46,7 @@ export const MarkdownSyntaxHighlighter = Extension.create({
                       pos + match.index + match[0].length,
                       { 
                         class: 'md-italic-syntax',
-                        style: 'font-style: italic; color: #3b82f6;' 
+                        style: `font-style: italic; color: ${getHighlightSettings().italic.textColor}; background-color: ${getHighlightSettings().italic.backgroundColor === 'transparent' ? 'transparent' : getHighlightSettings().italic.backgroundColor};`
                       }
                     )
                   );
@@ -60,7 +61,7 @@ export const MarkdownSyntaxHighlighter = Extension.create({
                       pos + match.index + match[0].length,
                       { 
                         class: 'md-code-syntax',
-                        style: 'font-family: monospace; color: #a3e635; background-color: rgba(30, 41, 59, 0.5); padding: 0.125rem 0.25rem; border-radius: 0.25rem;'
+                        style: `font-family: monospace; color: ${getHighlightSettings().code.textColor}; background-color: ${getHighlightSettings().code.backgroundColor === 'transparent' ? 'rgba(30, 41, 59, 0.5)' : getHighlightSettings().code.backgroundColor}; padding: 0.125rem 0.25rem; border-radius: 0.25rem;`
                       }
                     )
                   );
@@ -75,7 +76,7 @@ export const MarkdownSyntaxHighlighter = Extension.create({
                       pos + match.index + match[0].length,
                       { 
                         class: 'md-quote-syntax',
-                        style: 'color: #f59e0b;'
+                        style: `color: ${getHighlightSettings().quote.textColor}; background-color: ${getHighlightSettings().quote.backgroundColor === 'transparent' ? 'transparent' : getHighlightSettings().quote.backgroundColor};`
                       }
                     )
                   );
@@ -124,7 +125,7 @@ export const MarkdownSyntaxHighlighter = Extension.create({
                         pos + match.index + match[0].length,
                         { 
                           class: 'md-variable-syntax',
-                          style: 'color: #ec4899; background-color: rgba(236, 72, 153, 0.1); border-radius: 0.25rem; padding: 0 0.25rem;',
+                          style: `color: ${getHighlightSettings().variable.textColor}; background-color: ${getHighlightSettings().variable.backgroundColor === 'transparent' ? 'rgba(236, 72, 153, 0.1)' : getHighlightSettings().variable.backgroundColor}; border-radius: 0.25rem; padding: 0 0.25rem;`,
                           'data-variable': 'true',
                           'data-variable-name': variableName
                         }

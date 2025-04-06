@@ -1,7 +1,7 @@
 // src/components/SettingsTabs.tsx
 import React, { useState } from 'react';
 
-type Tab = 'general' | 'api' | 'templates' | 'prompts';
+type Tab = 'general' | 'api' | 'templates' | 'prompts' | 'highlighting';
 
 interface SettingsTabsProps {
   defaultTab?: Tab;
@@ -79,6 +79,16 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
           }`}
         >
           Prompts
+        </button>
+        <button
+          onClick={() => handleTabClick('highlighting')}
+          className={`px-6 py-3 text-sm font-medium ${
+            activeTab === 'highlighting'
+              ? 'text-blue-500 border-b-2 border-blue-500'
+              : 'text-gray-400 hover:text-gray-200'
+          }`}
+        >
+          Highlighting
         </button>
       </div>
 
