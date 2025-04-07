@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { X } from 'lucide-react';
 import ChatSelector from './ChatSelector';
 import { CharacterCard } from '../types/schema';
