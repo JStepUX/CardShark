@@ -1052,7 +1052,7 @@ export function useChatMessages(characterData: CharacterData | null) {
         error: null
       }));
       
-      const result = await ChatStorage.loadChat(characterData, chatId);
+      const result = await ChatStorage.loadChat(chatId, characterData);
       
       if (result?.success && result.messages) {
         setState(prev => ({
