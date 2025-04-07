@@ -1,5 +1,6 @@
 # backend/api_handler.py
 # Description: API handler for interacting with LLM API endpoints
+import traceback
 import requests # type: ignore
 import json
 import re
@@ -156,25 +157,90 @@ class ApiHandler:
     #    """Clean response text from artifacts and special characters."""
     #    # Remove any non-ascii characters at the end (like "ρκε" in the example)
     #    text = re.sub(r'[^\x00-\x7F]+$', '', text)
-    #    
+    #
     #    # Remove any trailing special tokens like </s>
     #    text = re.sub(r'</s>$', '', text)
-    #    
+    #
     #    # Trim whitespace
     #    text = text.strip()
-    #    
+    #
     #    return text
+
+    async def generate_with_config(self, api_config: Dict, generation_params: Dict) -> Dict:
+        """Generate a response from the API without streaming."""
+        try:
+            from backend.api_provider_adapters import get_provider_adapter
+            
+            provider = api_config.get('provider', 'KoboldCPP')
+            url = api_config.get('url')
+            api_key = api_config.get('apiKey')
+            generation_settings = api_config.get('generation_settings', {})
+            
+            if not url:
+                raise ValueError("API URL is missing in api_config")
+                
+            prompt = generation_params.get('prompt')
+            memory = generation_params.get('memory')
+            stop_sequence = generation_params.get('stop_sequence', [])
+            
+            if not prompt:
+                raise ValueError("Prompt is missing in generation_params")
+                
+            # Use requests directly for non-streaming request
+            adapter = get_provider_adapter(provider, self.logger)
+            endpoint = adapter.get_endpoint_url(url)
+            headers = adapter.prepare_headers(api_key)
+            data = adapter.prepare_request_data(prompt, memory, stop_sequence, generation_settings)
+            
+            # Remove streaming flag for non-streaming request
+            if 'stream' in data:
+                data['stream'] = False
+                
+            self.logger.log_step(f"Making non-streaming request to {endpoint}")
+            
+            response = requests.post(endpoint, headers=headers, json=data, timeout=30)
+            
+            if response.status_code != 200:
+                raise ValueError(f"API returned error {response.status_code}: {response.text}")
+                
+            result = response.json()
+            
+            # Extract content based on provider
+            content = ""
+            if provider == 'KoboldCPP':
+                content = result.get('text', '')
+            elif provider in ['OpenAI', 'OpenRouter']:
+                content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+            elif provider == 'Claude':
+                content = result.get('content', [{}])[0].get('text', '')
+            else:
+                # Generic fallback
+                content = str(result)
+                
+            return {
+                'content': content,
+                'provider': provider,
+                'model': result.get('model', api_config.get('model', 'unknown'))
+            }
+            
+        except Exception as e:
+            self.logger.log_error(f"Error in generate_with_config: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
+            return {'error': str(e)}
 
     def stream_generate(self, request_data: Dict) -> Generator[bytes, None, None]:
         """Stream generate tokens from the API."""
         try:
+            from backend.api_provider_adapters import get_provider_adapter
+            
             # Extract API config and generation params from the request
             api_config = request_data.get('api_config', {})
             generation_params = request_data.get('generation_params', {})
 
-            # Extract from API config - using templateId consistently
+            # Extract from API config
             url = api_config.get('url')
             api_key = api_config.get('apiKey')
+            provider = api_config.get('provider', 'KoboldCPP')
             templateId = api_config.get('templateId')  # Use templateId, not template
             template_format = api_config.get('template_format')  # Get template format information
             generation_settings = api_config.get('generation_settings', {})
@@ -283,100 +349,42 @@ class ApiHandler:
 
                 except Exception as e:
                     self.logger.log_error(f"Error saving context window: {str(e)}")
-            
             # Validate required fields
             if not url:
                 raise ValueError("API URL is missing in api_config")
             if not prompt:
                 raise ValueError("Prompt is missing in generation_params")
 
-            # Prepare headers
-            headers = {
-                'Content-Type': 'application/json',
-                'Accept': 'text/event-stream'
-            }
-            if api_key:
-                headers['Authorization'] = f'Bearer {api_key}'
+            # Get the appropriate adapter for this provider
+            adapter = get_provider_adapter(provider, self.logger)
+            self.logger.log_step(f"Using adapter for provider: {provider}")
+            url = url.rstrip('/') + '/api/extra/generate/stream'
 
-            # Ensure URL has protocol and correct endpoint
-            if not url.startswith(('http://', 'https://')):
-                url = f'http://{url}'
-                
-            # Different endpoints for different APIs
-            if '/api/extra/generate/stream' not in url and '/api/generate' not in url:
-                # Append the appropriate endpoint if not already there
-                url = url.rstrip('/') + '/api/extra/generate/stream'
-
-            # Prepare request data by combining generation settings with required fields
-            # Get generation settings from api_config or use defaults from generation_params
-            combined_settings = {**generation_settings}
-            # Add required parameters
-            data = {
-                **combined_settings,
-                "prompt": prompt,
-                "memory": memory,
-                "stop_sequence": stop_sequence,
-                "quiet": quiet,
-                "trim_stop": True  # Add trim_stop parameter to ensure clean output
-            }
-            
-            # Log the request data for debugging
+            # Use the adapter to stream the response
             self.logger.log_step("Request data prepared with generation settings")
             self.logger.log_step(f"Prompt length: {len(prompt) if prompt else 0} chars")
             self.logger.log_step(f"Memory length: {len(memory) if memory else 0} chars")
-            self.logger.log_step(f"Using settings: max_length={data.get('max_length')}, temperature={data.get('temperature')}, top_p={data.get('top_p')}")
-            self.logger.log_step(f"API URL: {url}")
-            self.logger.log_step(f"Streaming to URL: {url}")
+            self.logger.log_step(f"Using provider: {provider}")
             
-            # Make the streaming request
-            with requests.post(url, headers=headers, json=data, stream=True) as response:
-                if response.status_code != 200:
-                    error_msg = f"Generation failed with status {response.status_code}"
-                    yield f"data: {json.dumps({'error': {'message': error_msg}})}\n\n".encode('utf-8')
-                    self.logger.log_error(error_msg)
-                    try:
-                        error_body = response.text
-                        self.logger.log_error(f"Error response: {error_body}")
-                    except:
-                        pass
-                    return
-
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                        
-                    try:
-                        line_text = line.decode('utf-8')
-                        if line_text.startswith('data: '):
-                            # Extract the data portion (after "data: ")
-                            data_portion = line_text[6:]
-                            
-                            # Parse the response to ensure it's valid JSON
-                            try:
-                                content = json.loads(data_portion)
-                                
-                                # Pass through the content directly without cleaning
-                                # This prevents slowdowns from unnecessary text processing
-                                if isinstance(content, str):
-                                    formatted_content = {'content': content}
-                                else:
-                                    formatted_content = content
-                                    
-                                # Send properly formatted SSE without any extra processing
-                                yield f"data: {json.dumps(formatted_content)}\n\n".encode('utf-8')
-                                
-                            except json.JSONDecodeError:
-                                # If not valid JSON, just pass through the raw content
-                                # This is probably plain text from KoboldCPP
-                                formatted_content = {'content': data_portion}
-                                yield f"data: {json.dumps(formatted_content)}\n\n".encode('utf-8')
-                            
-                    except Exception as e:
-                        self.logger.log_error(f"Error processing line: {e}")
-                        continue
-
-                # Send completion message
-                yield b"data: [DONE]\n\n"
+            # Use our adapter system to handle the stream generation
+            return adapter.stream_generate(
+                url,
+                api_key,
+                prompt,
+                memory,
+                stop_sequence,
+                generation_settings
+            )
+            
+        except ValueError as ve:
+            error_msg = str(ve)
+            self.logger.log_error(error_msg)
+            yield f"data: {json.dumps({'error': {'type': 'ValueError', 'message': error_msg}})}\n\n".encode('utf-8')
+        except Exception as e:
+            error_msg = f"Stream generation failed: {str(e)}"
+            self.logger.log_error(error_msg)
+            self.logger.log_error(traceback.format_exc())
+            yield f"data: {json.dumps({'error': {'type': 'ServerError', 'message': error_msg}})}\n\n".encode('utf-8')
 
         except ValueError as ve:
             error_msg = str(ve)
