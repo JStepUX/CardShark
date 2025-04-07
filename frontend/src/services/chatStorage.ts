@@ -18,7 +18,14 @@ export class ChatStorage {
 
   // Create a new chat
   static async createNewChat(characterData: CharacterData) {
+    console.debug(`ChatStorage.createNewChat called for ${characterData?.data?.name}`);
     return apiService.createNewChat(characterData);
+  }
+
+  // List all available chats for a character
+  static async listCharacterChats(characterData: CharacterData) {
+    console.debug(`ChatStorage.listCharacterChats called for ${characterData?.data?.name}`);
+    return apiService.listCharacterChats(characterData);
   }
 
   // Save full chat state

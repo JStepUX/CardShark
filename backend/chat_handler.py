@@ -580,6 +580,81 @@ class ChatHandler:
             self.logger.log_error(traceback.format_exc())
             return None
 
+    def list_character_chats(self, character_data: Dict) -> List[Dict]:
+        """List all available chat files for a character."""
+        try:
+            chat_dir = self._get_chat_path(character_data)
+            character_name = character_data.get('data', {}).get('name', 'unknown')
+            char_name = self._sanitize_filename(character_name)
+            
+            # Find all chat files for this character
+            chat_files = list(chat_dir.glob(f"chat_{char_name}_*.jsonl"))
+            
+            # Sort by modification time (newest first)
+            chat_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+            
+            chat_list = []
+            for file_path in chat_files:
+                try:
+                    # Extract the timestamp from the filename
+                    filename = file_path.name
+                    timestamp_str = filename.replace(f"chat_{char_name}_", "").replace(".jsonl", "")
+                    
+                    # Parse the file to get metadata
+                    chat_id = None
+                    chat_preview = ""
+                    message_count = 0
+                    
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        # Read the first line for metadata
+                        first_line = f.readline().strip()
+                        if first_line:
+                            metadata = json.loads(first_line)
+                            chat_id = metadata.get('chat_metadata', {}).get('chat_id')
+                            create_date = metadata.get('create_date', '')
+                        
+                        # Count messages and get preview
+                        for i, line in enumerate(f):
+                            if line.strip():
+                                message_count += 1
+                                # Get preview from first few user/assistant messages
+                                if i < 5 and not chat_preview:
+                                    try:
+                                        msg = json.loads(line)
+                                        if not msg.get('is_system', False) and msg.get('mes'):
+                                            # Truncate message for preview
+                                            preview_text = msg.get('mes', '')[:50].replace('\n', ' ')
+                                            if preview_text:
+                                                chat_preview = preview_text + "..."
+                                    except:
+                                        pass
+                    
+                    # Format the time for display
+                    try:
+                        display_date = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S").strftime("%b %d, %Y %I:%M %p")
+                    except:
+                        display_date = timestamp_str
+                    
+                    chat_list.append({
+                        'id': chat_id or f"{char_name}_{timestamp_str}",
+                        'filename': filename,
+                        'path': str(file_path),
+                        'timestamp': timestamp_str,
+                        'display_date': display_date,
+                        'message_count': message_count,
+                        'preview': chat_preview
+                    })
+                except Exception as e:
+                    self.logger.log_error(f"Error processing chat file {file_path}: {str(e)}")
+                    continue
+            
+            return chat_list
+            
+        except Exception as e:
+            self.logger.log_error(f"Failed to list chats: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
+            return []
+
     def get_all_chats(self, character_data: Dict) -> List[Dict]:
         """Get a list of all chat sessions for a character."""
         try:

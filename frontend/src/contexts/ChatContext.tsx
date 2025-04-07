@@ -604,6 +604,7 @@ export const ChatProvider: React.FC<{
         const substitutedContent = characterData.data.first_mes
           .replace(/\{\{char\}\}/g, characterName)
           .replace(/\{\{user\}\}/g, userName);
+        
         const firstMessage = MessageUtils.createAssistantMessage(substitutedContent);
         
         setMessages([firstMessage]);
@@ -626,7 +627,7 @@ export const ChatProvider: React.FC<{
         error: err instanceof Error ? err.message : 'Failed to create new chat'
       });
     }
-  }, [characterData, appendMessage]);
+  }, [characterData, appendMessage, currentUser]);
   
   // Save the createNewChat function to the ref after it's been created
   useEffect(() => {

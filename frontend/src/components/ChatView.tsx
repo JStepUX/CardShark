@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, User, Plus, RefreshCw, Eye, Wallpaper } from 'lucide-react';
+import { Send, User, Plus, Eye, Wallpaper, MessageSquare } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import ChatBubble from './ChatBubble';
 import ThoughtBubble from './ThoughtBubble';
@@ -20,6 +20,7 @@ import { htmlToText, markdownToHtml } from '../utils/contentUtils';
 import { generateUUID } from '../utils/uuidUtils';
 import { substituteVariables } from '../utils/variableUtils'; // Import substituteVariables
 import ErrorMessage from './ErrorMessage'; // Import the new ErrorMessage component
+import { ChatStorage } from '../services/chatStorage'; // Make sure this is imported
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -524,9 +525,16 @@ const ChatView: React.FC = () => {
       console.error('Error clearing context window:', err);
     }
     
-    // Trigger the new chat creation with the special command
-    // Variable substitution will happen through the event listener
-    generateResponse('/new');
+    // Create a new chat file on the backend
+    try {
+      const result = await ChatStorage.createNewChat(characterData);
+      if (result?.success) {
+        // Trigger the new chat creation with the special command
+        generateResponse('/new');
+      }
+    } catch (err) {
+      console.error('Error creating new chat:', err);
+    }
   };
 
   const handleLoadChat = (chatId: string) => {
@@ -680,11 +688,12 @@ const ChatView: React.FC = () => {
 
           <button
             onClick={() => setShowChatSelector(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            <RefreshCw size={18} />
-            Load
+            <MessageSquare size={18} />
+            Load Chat
           </button>
+
           <button
             onClick={handleNewChat}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -791,8 +800,8 @@ const ChatView: React.FC = () => {
       <ChatSelectorDialog
         isOpen={showChatSelector}
         onClose={() => setShowChatSelector(false)}
-        onSelectChat={handleLoadChat}
-        characterName={characterData?.data?.name || ''}
+        onSelect={handleLoadChat}
+        characterData={characterData}
       />
 
       {/* Context Window Modal */}

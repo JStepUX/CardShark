@@ -1036,63 +1036,63 @@ export function useChatMessages(characterData: CharacterData | null) {
     saveChat();
   };
   
-  const loadExistingChat = async (chatId: string) => {
-    if (!characterData) return;
+  const loadExistingChat = useCallback(async (chatId: string) => {
+    if (!characterData) {
+      setState(prev => ({
+        ...prev,
+        error: "No character data available"
+      }));
+      return;
+    }
     
     try {
-      await ChatStorage.clearContextWindow();
-      
       setState(prev => ({
         ...prev,
         isLoading: true,
-        error: null,
-        lastContextWindow: {
-          type: 'loading_chat',
-          timestamp: new Date().toISOString(),
-          chatId,
-          characterName: characterData.data?.name || 'Unknown'
-        }
+        error: null
       }));
       
-      const data = await ChatStorage.loadChat(characterData, chatId);
+      const result = await ChatStorage.loadChat(characterData, chatId);
       
-      if (data.success && data.messages) {
-        const userFromChat = data.messages.metadata?.chat_metadata?.lastUser;
-        
+      if (result?.success && result.messages) {
         setState(prev => ({
           ...prev,
-            messages: data.messages.messages || [],
-            currentUser: userFromChat || prev.currentUser,
-            lastContextWindow: {
-            type: 'chat_loaded',
-            timestamp: new Date().toISOString(),
-            chatId,
-            messageCount: (data.messages.messages || []).length,
-            user: userFromChat?.name || 'Not specified',
-            characterName: characterData.data?.name || 'Unknown'
-            }
-            }));
-
-            lastCharacterId.current = ChatStorage.getCharacterId(characterData);
-            } else {
-            throw new Error(data.message || 'Failed to load chat data');
-            }
-            } catch (err) {
-            console.error('Error loading chat:', err);
-            setState(prev => ({
-                ...prev,
-                error: err instanceof Error ? err.message : 'Failed to load chat',
-                lastContextWindow: {
-                type: 'chat_load_error',
-                timestamp: new Date().toISOString(),
-                chatId,
-                error: err instanceof Error ? err.message : 'Failed to load chat'
-                }
-            }));
-            } finally {
-            setState(prev => ({ ...prev, isLoading: false }));
-            }
-            };
+          messages: [],
+          currentUser: null
+        }));
+        
+        if (Array.isArray(result.messages.messages) && result.messages.messages.length > 0) {
+          setState(prev => ({
+            ...prev,
+            messages: result.messages.messages,
+            currentUser: result.messages.metadata?.chat_metadata?.lastUser || prev.currentUser
+          }));
+        } else if (characterData?.data?.first_mes) {
+          const firstMessage = createAssistantMessage(characterData.data.first_mes);
+          setState(prev => ({
+            ...prev,
+            messages: [firstMessage]
+          }));
+        }
+      } else {
+        setState(prev => ({
+          ...prev,
+          error: "Failed to load chat"
+        }));
+      }
+    } catch (err) {
+      console.error('Error loading chat:', err);
+      setState(prev => ({
+        ...prev,
+        error: err instanceof Error ? err.message : "Unknown error loading chat"
+      }));
+    } finally {
+      setState(prev => ({
+        ...prev,
+        isLoading: false
+      }));
+    }
+  }, [characterData]);
 
   const updateReasoningSettings = (settings: ReasoningSettings) => {
     try {

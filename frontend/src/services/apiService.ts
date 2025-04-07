@@ -165,7 +165,66 @@ class ApiService {
       chat_id: chatId
     });
   }
+
+  /**
+   * Lists all available chats for a character
+   */
+  async listCharacterChats(characterData: any) {
+    return this.post('/api/list-character-chats', { character_data: characterData });
+  }
 }
 
 // Export a singleton instance
 export const apiService = new ApiService();
+
+/**
+ * Create a new chat for a character
+ */
+export const createNewChat = async (characterData: CharacterData): Promise<any> => {
+  try {
+    const response = await fetch('/api/create-new-chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        character_data: characterData
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create new chat: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating new chat:', error);
+    throw error;
+  }
+}
+
+/**
+ * List all available chats for a character
+ */
+export const listCharacterChats = async (characterData: CharacterData): Promise<any> => {
+  try {
+    const response = await fetch('/api/list-character-chats', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        character_data: characterData
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to list character chats: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error listing character chats:', error);
+    throw error;
+  }
+}

@@ -21,10 +21,11 @@ import requests # type: ignore
 import re
 import traceback
 from fastapi.responses import FileResponse, JSONResponse # type: ignore
-from typing import Optional
+from typing import Optional, Dict, List
 import webbrowser
 from threading import Timer
 import time
+from datetime import datetime
 
 # Local imports
 from backend.log_manager import LogManager  # Change to relative import
@@ -1968,6 +1969,36 @@ async def extract_lore(file: UploadFile = File(...)):
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": str(e)}
+        )
+
+@app.post("/api/list-character-chats")
+async def list_character_chats(request: Request):
+    """List all available chat files for a character."""
+    try:
+        data = await request.json()
+        character_data = data.get('character_data')
+        
+        if not character_data:
+            raise HTTPException(status_code=400, detail="Character data is required")
+            
+        chat_list = chat_handler.list_character_chats(character_data)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "chats": chat_list
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error listing character chats: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to list character chats: {str(e)}"
+            }
         )
 
 if __name__ == "__main__":

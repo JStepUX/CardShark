@@ -1,143 +1,56 @@
-import { useState, useEffect } from 'react';
-import { Dialog } from './Dialog';
-
-interface ChatInfo {
-  id: string;
-  filename: string;
-  created: string;
-  last_modified: string;
-  message_count: number;
-  character: string;
-  user_name?: string;
-  api_provider?: string;
-  api_model?: string;
-}
+import React, { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
+import ChatSelector from './ChatSelector';
+import { CharacterCard } from '../types/schema';
 
 interface ChatSelectorDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectChat: (chatId: string) => void;
-  characterName: string;
+  onSelect: (chatId: string) => void;
+  characterData: CharacterCard | null;
 }
 
-export function ChatSelectorDialog({
-  isOpen,
+const ChatSelectorDialog: React.FC<ChatSelectorDialogProps> = ({ 
+  isOpen, 
   onClose,
-  onSelectChat,
-  characterName
-}: ChatSelectorDialogProps) {
-  const [chats, setChats] = useState<ChatInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  onSelect,
+  characterData
+}) => {
+  // If dialog is not open, don't render anything
+  if (!isOpen) return null;
 
-  // Load chat list when dialog opens
-  useEffect(() => {
-    if (isOpen && characterName) {
-      loadChats();
-    }
-  }, [isOpen, characterName]);
-
-  const loadChats = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const response = await fetch(`/api/list-chats?character_name=${encodeURIComponent(characterName)}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to load chats: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setChats(data.chats || []);
-      } else {
-        throw new Error(data.message || 'Failed to load chat list');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chat list');
-      console.error('Error loading chats:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Format date in a more concise way (no seconds)
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString(undefined, {
-        year: 'numeric',
-        month: '2-digit', 
-        day: '2-digit',
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch (e) {
-      return dateString;
-    }
+  // Handle chat selection
+  const handleSelectChat = (chatId: string) => {
+    // Call the onSelect callback with the chat ID
+    onSelect(chatId);
+    
+    // Close the dialog
+    onClose();
   };
 
   return (
-    <Dialog
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Select Chat History"
-      showCloseButton={true}
-    >
-      <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-        {isLoading ? (
-          <div className="text-center py-8 text-gray-400">Loading chats...</div>
-        ) : error ? (
-          <div className="text-center py-4 text-red-500">{error}</div>
-        ) : chats.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            No chat history found for this character.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {chats.map((chat) => (
-              <button
-                key={chat.id}
-                onClick={() => onSelectChat(chat.id)}
-                className="w-full text-left p-4 bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors"
-              >
-                <div className="flex justify-between">
-                  <div className="flex-1 space-y-1 min-w-0">
-                    {/* Row 1: Character | User */}
-                    <div className="text-sm font-semibold truncate">
-                      {chat.character || characterName} | {chat.user_name || 'User'}
-                    </div>
-                    
-                    {/* Row 2: Date/time */}
-                    <div className="text-xs text-gray-400">
-                      {formatDate(chat.created)}
-                    </div>
-                    
-                    {/* Row 3: API Provider - API Model (if available) */}
-                    {(chat.api_provider || chat.api_model) && (
-                      <div className="text-xs text-gray-500 truncate">
-                        {chat.api_provider || 'Unknown API'}
-                        {chat.api_model ? ` - ${chat.api_model}` : ''}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex-shrink-0 self-start">
-                    <div className="text-xs bg-blue-900 px-2 py-1 rounded-full text-gray-200">
-                      {chat.message_count} messages
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+      <div className="relative bg-stone-900 rounded-lg shadow-lg max-w-xl w-full max-h-[90vh] overflow-hidden">
+        <div className="flex justify-between items-center p-4 border-b border-stone-800">
+          <h2 className="text-xl font-semibold text-white">
+            {characterData?.data?.name ? `Load Chat with ${characterData.data.name}` : 'Load Chat'}
+          </h2>
+          <button 
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-white hover:bg-stone-700 rounded-full"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="p-2">
+          {isOpen && (
+            <ChatSelector onSelect={handleSelectChat} />
+          )}
+        </div>
       </div>
-    </Dialog>
+    </div>
   );
-}
+};
 
 export default ChatSelectorDialog;
