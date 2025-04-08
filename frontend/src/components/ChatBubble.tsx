@@ -268,7 +268,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         ) : (
           // For viewing/editing - use TipTap with proper newline handling
           <RichTextEditor
-            content={message.content}
+            content={htmlContent} // Use processed content with substitutions
             onChange={handleContentChange}
             readOnly={isGenerating}
             className="chat-bubble-editor"

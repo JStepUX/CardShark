@@ -394,7 +394,7 @@ const ChatView: React.FC = () => {
     cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
     stopGeneration: () => void;
     deleteMessage: (messageId: string) => void;
-    updateMessage: (messageId: string, content: string) => void;
+    updateMessage: (messageId: string, content: string, isStreamingUpdate?: boolean) => void;
     setCurrentUser: (user: UserProfile | null) => void;
     loadExistingChat: (chatId: string) => Promise<void>;
     updateReasoningSettings: (settings: ReasoningSettings) => void;
@@ -422,7 +422,8 @@ const ChatView: React.FC = () => {
       );
       
       messagesToUpdate.forEach(msg => {
-        updateMessage(msg.id, msg.content);
+        // Pass true for isStreamingUpdate to prevent immediate saves during continuation
+        updateMessage(msg.id, msg.content, true);
       });
     },
     // Now we properly set isGenerating state to show the stop button during continuation
@@ -706,15 +707,18 @@ const ChatView: React.FC = () => {
             Context
           </button>
 
-          {/* Debug button - Add this for temporary troubleshooting */}
+          {/* Debug button - Add this for temporary troubleshooting }
           <button
             onClick={async () => {
               try {
                 // Log character data to help debug
                 console.log("Character data for API call:", characterData);
                 
-                // Get character ID using the proper method from ChatStorage
-                const charId = characterData ? ChatStorage.getCharacterId(characterData) : '';
+                // Ensure we have character data before proceeding
+                if (!characterData) {
+                  console.error("No character data available for debug call");
+                  return;
+                }
                 
                 // Make a direct API call to check response
                 const response = await fetch('/api/list-character-chats', {
@@ -723,11 +727,16 @@ const ChatView: React.FC = () => {
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
-                    character_id: charId,
-                    char_name: characterData?.data?.name || '',
+                    character_data: characterData, // Send the complete character data object
                     format: 'jsonl'
                   }),
                 });
+                
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  throw new Error(`API error (${response.status}): ${errorText}`);
+                }
+                
                 const data = await response.json();
                 console.log("API response (list-character-chats):", data);
               } catch (err) {
@@ -738,7 +747,7 @@ const ChatView: React.FC = () => {
             title="Debug Chat Loading"
           >
             Debug
-          </button>
+          </button>*/}
 
           <button
             onClick={() => setShowChatSelector(true)}

@@ -371,7 +371,7 @@ export function useChatMessages(characterData: CharacterData | null) {
     }
   };
   
-  const updateMessage = (messageId: string, content: string) => {
+  const updateMessage = (messageId: string, content: string, isStreamingUpdate?: boolean) => {
     setState(prev => {
       const msgIndex = prev.messages.findIndex(msg => msg.id === messageId);
       if (msgIndex === -1) return prev;
@@ -379,7 +379,7 @@ export function useChatMessages(characterData: CharacterData | null) {
       const messageToUpdate = prev.messages[msgIndex];
       if (messageToUpdate.content === content) return prev;
       
-      const updatedMessage = addVariation(messageToUpdate, content);
+      const updatedMessage = MessageUtils.addVariation(messageToUpdate, content);
       
       const newMessages = [...prev.messages];
       newMessages[msgIndex] = updatedMessage;
@@ -398,7 +398,8 @@ export function useChatMessages(characterData: CharacterData | null) {
       const isCompletedEdit = messageToUpdate.content !== content && 
         (!messageToUpdate.variations || messageToUpdate.variations.indexOf(content) === -1);
       
-      if (isCompletedEdit) {
+      // Only trigger immediate save for manual edits, not streaming updates
+      if (isCompletedEdit && !isStreamingUpdate) {
         console.log(`Completed edit detected for message ${messageId}, saving now`);
         saveChat(newMessages);
         appendMessage({...newMessages[msgIndex], timestamp: Date.now()});
@@ -955,6 +956,121 @@ export function useChatMessages(characterData: CharacterData | null) {
       currentGenerationRef.current = null;
     }
   };
+
+  const generateVariation = useCallback(async (messageToVary: Message) => {
+    if (!characterData?.data || !apiConfig || state.isGenerating) {
+      console.warn('Variation generation conditions not met.', {
+        hasChar: !!characterData?.data,
+        hasApiConfig: !!apiConfig,
+        isGenerating: state.isGenerating,
+      });
+      return;
+    }
+
+    const { id: messageId, content: previousContentHtml, role } = messageToVary;
+    const previousContentText = htmlToText(previousContentHtml); // Get plain text of previous response
+
+    if (role !== 'assistant') {
+      console.warn('Cannot generate variations for non-assistant messages.');
+      return;
+    }
+
+    const messageIndex = state.messages.findIndex(msg => msg.id === messageId);
+    if (messageIndex < 1 || state.messages[messageIndex - 1].role !== 'user') {
+      console.error('Could not find preceding user message to generate variation.');
+      setState(prev => ({ ...prev, error: 'Cannot generate variation: context unclear.' }));
+      return;
+    }
+    const originalUserMessage = state.messages[messageIndex - 1];
+    const originalUserMessageText = htmlToText(originalUserMessage.content); // Get plain text
+
+    // Construct the special prompt message mimicking 'refreshVariation'
+    // This message will be passed as the 'currentMessage' to generateChatResponse
+    const variationPromptMessage = `Create a new response to the message: "${originalUserMessageText}". Your previous response was: "${previousContentText}". Create a completely different response that captures your character (${characterData.data.name}) but explores a new direction. Avoid repeating phrases from your previous response.`;
+
+    setState(prev => ({
+      ...prev,
+      isGenerating: true,
+      generatingId: messageId, // Mark the message being varied
+      error: null,
+    }));
+
+    const abortController = new AbortController();
+    currentGenerationRef.current = abortController;
+
+    try {
+      const preparedApiConfig = prepareAPIConfig(apiConfig);
+
+      // Prepare history up to the user message *before* the assistant message we're varying
+      const historyForVariation = state.messages.slice(0, messageIndex);
+
+      // Call the static generateChatResponse method
+      const response = await PromptHandler.generateChatResponse(
+        characterData,
+        variationPromptMessage, // Pass the specially crafted prompt here
+        historyForVariation,
+        preparedApiConfig,
+        abortController.signal
+      );
+
+      if (!response.ok || !response.body) {
+        const errorText = await response.text();
+        throw new Error(`API Error (${response.status}): ${errorText || response.statusText}`);
+      }
+
+      let accumulatedContent = '';
+      // Use the static streamResponse method
+      for await (const chunk of PromptHandler.streamResponse(response)) {
+        if (abortController.signal.aborted) {
+          throw new DOMException('Aborted by user', 'AbortError');
+        }
+        accumulatedContent += chunk;
+      }
+
+      const finalContent = markdownToHtml(accumulatedContent.trim()); // Convert final markdown to HTML
+
+      // Update State with New Variation
+      setState(prev => {
+        const msgIndex = prev.messages.findIndex(msg => msg.id === messageId);
+        if (msgIndex === -1) return prev; // Message might have been deleted
+
+        const originalMessage = prev.messages[msgIndex];
+        // Use the imported MessageUtils.addVariation
+        const updatedMessage = MessageUtils.addVariation(originalMessage, finalContent);
+
+        const newMessages = [...prev.messages];
+        newMessages[msgIndex] = updatedMessage;
+
+        // Save the updated chat state
+        saveChat(newMessages); // Save the whole chat with the updated message
+        appendMessage(updatedMessage); // Ensure this specific message update is persisted if needed
+
+        return {
+          ...prev,
+          messages: newMessages,
+          isGenerating: false,
+          generatingId: null,
+          lastContextWindow: { // Update context window for success
+            type: 'variation_success',
+            timestamp: new Date().toISOString(),
+            characterName: characterData.data.name,
+            originalMessageId: messageId,
+            newVariationContent: finalContent,
+            totalVariations: updatedMessage.variations?.length || 1
+          }
+        };
+      });
+
+    } catch (err) {
+      handleGenerationError(err, messageId); // Use existing error handler
+    } finally {
+      if (currentGenerationRef.current === abortController) {
+        currentGenerationRef.current = null;
+      }
+      // Ensure isGenerating is false even if error handling missed something
+      setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
+    }
+  }, [characterData, apiConfig, state.messages, state.currentUser, state.isGenerating, prepareAPIConfig, handleGenerationError, saveChat, appendMessage]);
   
   const cycleVariation = (messageId: string, direction: 'next' | 'prev') => {
     setState(prev => {
@@ -1127,6 +1243,7 @@ export function useChatMessages(characterData: CharacterData | null) {
     addMessage,
     generateResponse,
     regenerateMessage,
+    generateVariation,
     cycleVariation,
     stopGeneration,
     setCurrentUser,
@@ -1163,22 +1280,4 @@ const createAssistantMessage = (content: string = ''): Message => {
   };
 };
 
-const addVariation = (message: Message, newContent: string): Message => {
-  const htmlContent = markdownToHtml(newContent);
-  
-  const variations = [...(message.variations || [])];
-  
-  if (!variations.includes(htmlContent)) {
-    variations.push(htmlContent);
-  }
-  
-  const variationIndex = variations.indexOf(htmlContent);
-  
-  return {
-    ...message,
-    content: htmlContent,
-    rawContent: htmlToText(htmlContent),
-    variations: variations,
-    currentVariation: variationIndex
-  };
-};
+// Removed duplicate local addVariation function. Using MessageUtils.addVariation instead.
