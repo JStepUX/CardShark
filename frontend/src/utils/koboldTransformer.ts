@@ -15,7 +15,6 @@ function stripHtml(html: string): string {
 
 /**
  * Transforms the CardShark API payload format to match KoboldCPP's expected format
- * while maintaining compatibility with the existing streaming response handling
  */
 export function transformKoboldPayload(payload: any) {
   // Extract necessary data from the nested structure
@@ -25,55 +24,37 @@ export function transformKoboldPayload(payload: any) {
   // Extract key parameters and strip any HTML
   const prompt = stripHtml(generation_params.prompt || '');
   
-  // Extract character data for the memory field
-  const characterData = generation_params.character_data?.data || {};
-  
-  // Construct the memory field from character data
-  let memory = stripHtml(generation_params.memory || '');
-  
-  // If memory field is empty, construct it from character data
-  if (!memory && characterData) {
-    memory = [
-      characterData.system_prompt || '',
-      `Persona: ${characterData.description || ''}`,
-      `Personality: ${characterData.personality || ''}`,
-      `Scenario: ${characterData.scenario || ''}`
-    ].filter(Boolean).join('\n');
-  }
-  
-  // Get stop sequences
-  const stopSequence = generation_params.stop_sequence || [];
-  
-  // Ensure max_length is set to a reasonable value
-  const max_length = generationSettings.max_length || 320;
+  // Extract and process dynatemp settings
+  const {
+    dynatemp_enabled,
+    dynatemp_min,
+    dynatemp_max,
+    dynatemp_exponent,
+    ...otherSettings
+  } = generationSettings;
   
   // Create a KoboldCPP-compatible payload
   return {
     // Core parameters
     prompt,
-    memory,
-    stop_sequence: stopSequence,
+    memory: stripHtml(generation_params.memory || ''),
+    stop_sequence: generation_params.stop_sequence || [],
     
-    // Include all generation settings
-    ...generationSettings,
+    // Include other generation settings
+    ...otherSettings,
     
-    // Explicitly set max_length to prevent infinite generation
-    max_length,
+    // Format dynatemp settings for Kobold
+    dynatemp_range: dynatemp_enabled ? dynatemp_max - dynatemp_min : 0,
+    dynatemp_exponent: dynatemp_exponent || 1,
     
-    // Standard parameters that KoboldCPP expects
+    // Standard parameters
     n: 1,
     quiet: true,
     trim_stop: true,
     use_default_badwordsids: false,
     bypass_eos: false,
-    
-    // Add a parameter to signal end of generation
     do_sample: true,
-    
-    // Force KoboldCPP to send finish_reason
     send_finish_reason: true,
-    
-    // Always enable streaming
     stream: true
   };
 }

@@ -1,4 +1,5 @@
 // services/apiService.ts
+import { APIConfig } from '@/types';
 import { getApiBaseUrl } from '../utils/apiConfig';
 
 /**
@@ -228,3 +229,41 @@ export const listCharacterChats = async (characterData: CharacterData): Promise<
     throw error;
   }
 }
+
+/**
+ * Generate a response using the dynatemp settings
+ */
+export const generateResponse = async (prompt: string, config: APIConfig) => {
+  // Build the request payload
+  const payload = {
+    prompt,
+    ...(config.generation_settings?.dynatemp_enabled && {
+      dynatemp_config: {
+        dynatemp_range: [
+          config.generation_settings.dynatemp_min, 
+          config.generation_settings.dynatemp_max
+        ],
+        dynatemp_exponent: config.generation_settings.dynatemp_exponent
+      }
+    }),
+  };
+
+  try {
+    const response = await fetch('/api/generate-response', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to generate response: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error generating response:', error);
+    throw error;
+  }
+};

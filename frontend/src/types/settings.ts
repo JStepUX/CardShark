@@ -31,6 +31,16 @@ export interface SyntaxHighlightSettings {
   };
 }
 
+export interface GenerationSettings {
+  temperature: number;
+  top_p: number;
+  top_k: number;
+  dynatemp_enabled: boolean;
+  dynatemp_min: number;
+  dynatemp_max: number;
+  dynatemp_exponent: number;
+}
+
 export interface Settings {
   // App Settings
   character_directory: string | null;  // Updated to allow null

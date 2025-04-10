@@ -100,7 +100,11 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     rep_pen: config.generation_settings?.rep_pen ?? 1.07,
     rep_pen_range: config.generation_settings?.rep_pen_range ?? 360,
     rep_pen_slope: config.generation_settings?.rep_pen_slope ?? 0.7,
-    sampler_order: config.generation_settings?.sampler_order ?? [6, 0, 1, 3, 4, 2, 5]
+    sampler_order: config.generation_settings?.sampler_order ?? [6, 0, 1, 3, 4, 2, 5],
+    dynatemp_enabled: config.generation_settings?.dynatemp_enabled ?? false,
+    dynatemp_min: config.generation_settings?.dynatemp_min ?? 0.0,
+    dynatemp_max: config.generation_settings?.dynatemp_max ?? 2.0,
+    dynatemp_exponent: config.generation_settings?.dynatemp_exponent ?? 1.0
   });
 
   // Update local state when config changes from outside
@@ -119,12 +123,16 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
         rep_pen: config.generation_settings.rep_pen ?? 1.07,
         rep_pen_range: config.generation_settings.rep_pen_range ?? 360,
         rep_pen_slope: config.generation_settings.rep_pen_slope ?? 0.7,
-        sampler_order: config.generation_settings.sampler_order ?? [6, 0, 1, 3, 4, 2, 5]
+        sampler_order: config.generation_settings.sampler_order ?? [6, 0, 1, 3, 4, 2, 5],
+        dynatemp_enabled: config.generation_settings.dynatemp_enabled ?? false,
+        dynatemp_min: config.generation_settings.dynatemp_min ?? 0.0,
+        dynatemp_max: config.generation_settings.dynatemp_max ?? 2.0,
+        dynatemp_exponent: config.generation_settings.dynatemp_exponent ?? 1.0
       });
     }
   }, [config.generation_settings, config]);
 
-  const handleSettingChange = (key: keyof typeof settings, value: number) => {
+  const handleSettingChange = (key: keyof typeof settings, value: any) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     onUpdate({ generation_settings: newSettings });
@@ -315,6 +323,60 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
                 );
               })}
             </div>
+          </div>
+
+          {/* DynaTemp Settings */}
+          <div className="space-y-4">
+            <h4 className="text-sm text-gray-400">Dynamic Temperature Settings</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="dynatemp-enabled"
+                  checked={settings.dynatemp_enabled}
+                  onChange={(e) => handleSettingChange('dynatemp_enabled', e.target.checked)}
+                  className="mr-2 h-4 w-4 rounded bg-stone-700 border-stone-500 focus:ring-blue-500"
+                />
+                <label htmlFor="dynatemp-enabled" className="text-sm font-medium text-gray-300">
+                  Enable Dynamic Temperature
+                </label>
+              </div>
+            </div>
+            
+            {settings.dynatemp_enabled && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pl-6">
+                <NumberField
+                  label="Min Temperature"
+                  value={settings.dynatemp_min}
+                  onChange={val => handleSettingChange('dynatemp_min', val)}
+                  min={0.0}
+                  max={2.0}
+                  step={0.05}
+                  tooltip="Minimum temperature value at the start of generation"
+                  width="w-full"
+                />
+                <NumberField
+                  label="Max Temperature"
+                  value={settings.dynatemp_max}
+                  onChange={val => handleSettingChange('dynatemp_max', val)}
+                  min={0.0}
+                  max={2.0}
+                  step={0.05}
+                  tooltip="Maximum temperature value at the end of generation"
+                  width="w-full"
+                />
+                <NumberField
+                  label="Curve Exponent"
+                  value={settings.dynatemp_exponent}
+                  onChange={val => handleSettingChange('dynatemp_exponent', val)}
+                  min={0.1}
+                  max={3.0}
+                  step={0.1}
+                  tooltip="Curve steepness for temperature progression (higher = steeper curve)"
+                  width="w-full"
+                />
+              </div>
+            )}
           </div>
         </div>
     </div>
