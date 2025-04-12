@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 CardShark
 
 Copyright (C) 2025 VirtualAlias
@@ -18,3 +19,6 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
+=======
+AGPL
+>>>>>>> 6a5c51c6fb6da1281f427e216065c037da1d2635
