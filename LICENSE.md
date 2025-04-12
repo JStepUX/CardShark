@@ -1,1 +1,1 @@
-Nani
+AGPL
