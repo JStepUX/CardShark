@@ -55,7 +55,7 @@ export class PromptHandler {
    * Utility function to strip HTML tags from content
    * This ensures clean text is sent to the LLM without HTML markup
    */
-  private static stripHtmlTags(content: string): string {
+  public static stripHtmlTags(content: string): string { // Changed to public
     if (!content) return '';
     
     // Create a DOM element to safely parse and extract text
@@ -74,7 +74,7 @@ export class PromptHandler {
    * @param templateId The ID of the template to retrieve
    * @returns The template or null if not found
    */
-  private static getTemplate(templateId?: string): Template | null {
+  public static getTemplate(templateId?: string): Template | null { // Changed to public
     // If templateId is provided, try to get that template
     if (templateId) {
       console.log(`Looking up template with ID: ${templateId}`);
@@ -269,7 +269,7 @@ ${character.data.mes_example || ''}
   }
 
   // Get stop sequences from template or use defaults
-  private static getStopSequences(template: Template | null, characterName: string): string[] {
+  public static getStopSequences(template: Template | null, characterName: string): string[] { // Changed to public
     const defaultStopSequences = [
       // Provide standard stop sequences for chat models
       "\n\nUser:",

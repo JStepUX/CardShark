@@ -104,6 +104,7 @@ class ApiProviderAdapter:
                        generation_settings: Dict[str, Any]) -> Generator[bytes, None, None]:
         """Generate a streaming response from the provider's API"""
         try:
+            self.logger.log_step("Adapter: Entered base stream_generate method") # <<< ADDED LOG
             # Get the endpoint URL
             url = self.get_endpoint_url(base_url)
             self.logger.log_step(f"Using endpoint URL: {url}")
@@ -138,11 +139,23 @@ class ApiProviderAdapter:
                 self.logger.log_step(f"Headers keys: {', '.join(headers.keys())}")
             
             # Prepare request data
+            self.logger.log_step("Attempting to call adapter.prepare_request_data...") # Log before
             data = self.prepare_request_data(prompt, memory, stop_sequence, generation_settings)
-            self.logger.log_step(f"Prepared request data with {len(str(data))} chars")
+            self.logger.log_step("adapter.prepare_request_data finished.") # Log after
+            # Log length separately in case str(data) fails
+            try:
+                data_len = len(str(data))
+                self.logger.log_step(f"Prepared request data length: {data_len} chars")
+            except Exception as e:
+                 self.logger.log_error(f"Error calculating length of prepared data: {e}")
+                 # Optionally re-raise or handle if this error is critical
+            
             
             # Make the streaming request
-            with requests.post(url, headers=headers, json=data, stream=True) as response:
+            self.logger.log_step(f"Attempting to POST stream request to: {url}") # Log before request
+            # Add a specific timeout (e.g., 60 seconds)
+            with requests.post(url, headers=headers, json=data, stream=True, timeout=60) as response:
+                self.logger.log_step(f"POST stream request returned status: {response.status_code}") # Log after request returns
                 if response.status_code != 200:
                     error_msg = self._handle_error(response)
                     self.logger.log_error(f"API error: {error_msg}")

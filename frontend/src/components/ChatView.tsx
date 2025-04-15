@@ -616,6 +616,9 @@ const ChatView: React.FC = () => {
 
   // Fix the character ID access
 
+  // Debug: Log messages array before rendering
+  console.log("DEBUG: Chat messages", messages);
+
   return (
     <div className="h-full relative flex flex-col overflow-hidden">
       {/* Mood-based Background */}
@@ -789,6 +792,7 @@ const ChatView: React.FC = () => {
         }}
       >
         <div className="flex flex-col space-y-4">
+
           {messages.map((message) => (
             <React.Fragment key={message.id}>
               {message.role === 'thinking' && reasoningSettings.visible ? (

@@ -16,6 +16,7 @@ export interface IMessage {
   isFirst?: boolean;
   order?: number;
   parentMessageId?: string;
+  status?: 'streaming' | 'complete' | 'aborted' | 'error' | 'generating_variation'; // Added status field
 }
 
 /**

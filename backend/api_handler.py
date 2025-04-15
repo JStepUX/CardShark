@@ -265,6 +265,7 @@ class ApiHandler:
     def stream_generate(self, request_data: Dict) -> Generator[bytes, None, None]:
         """Stream generate tokens from the API."""
         try:
+            self.logger.log_step("Backend: Entered api_handler.stream_generate") # <<< Use self.logger
             from backend.api_provider_adapters import get_provider_adapter
             
             # Extract API config and generation params from the request
@@ -401,7 +402,8 @@ class ApiHandler:
             self.logger.log_step(f"Using provider: {provider}")
             
             # Use our adapter system to handle the stream generation
-            return adapter.stream_generate(
+            self.logger.log_step(f"Attempting to call adapter.stream_generate for {provider}...")
+            adapter_generator = adapter.stream_generate(
                 url,
                 api_key,
                 prompt,
@@ -409,7 +411,18 @@ class ApiHandler:
                 stop_sequence,
                 generation_settings
             )
-            
+            self.logger.log_step(f"Adapter call returned generator: {type(adapter_generator)}")
+
+            # Explicitly iterate over the adapter's generator and yield chunks
+            self.logger.log_step("Iterating over adapter generator in api_handler...")
+            chunk_count = 0
+            for chunk in adapter_generator:
+                chunk_count += 1
+                if chunk_count % 50 == 0: # Log every 50 chunks
+                     self.logger.log_step(f"Yielding chunk {chunk_count} from adapter generator...")
+                yield chunk
+            self.logger.log_step(f"Finished iterating adapter generator. Total chunks yielded: {chunk_count}")
+            # No explicit return needed here as yielding handles the generator response
         except ValueError as ve:
             error_msg = str(ve)
             self.logger.log_error(error_msg)

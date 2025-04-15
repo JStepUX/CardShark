@@ -1208,8 +1208,9 @@ async def save_chat_state(request: Request):
 async def generate_message(request: Request):
     """Handle streaming message generation request."""
     try:
+        logger.log_step("Backend: Entered /api/generate endpoint") # <<< ADDED LOG
         data = await request.json()  # Get the full request body as JSON
-        logger.log_step("Received generation request")
+        logger.log_step("Backend: Received /api/generate request data")
 
         # Extract API config and generation params
         api_config = data.get('api_config', {})

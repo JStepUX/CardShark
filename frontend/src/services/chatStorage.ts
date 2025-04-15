@@ -368,7 +368,7 @@ export class ChatStorage {
       
       const characterId = this.getCharacterId(character);
       
-      const response = await fetch('/api/append-message', {
+      const response = await fetch('/api/append-chat-message', { // Corrected endpoint path
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
