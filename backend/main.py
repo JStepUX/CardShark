@@ -109,47 +109,79 @@ async def generate_greeting(request: Request):
                 }
             )
         
-        # Extract character information
-        char_name = character_data.get('data', {}).get('name', 'Character')
-        description = character_data.get('data', {}).get('description', '')
-        personality = character_data.get('data', {}).get('personality', '')
-        scenario = character_data.get('data', {}).get('scenario', '')
-        first_message = character_data.get('data', {}).get('first_mes', '')
-        examples = character_data.get('data', {}).get('mes_example', '')
+        # --- Align with Chat Generation Logic ---
+        
+        # Extract character info
+        char_data = character_data.get('data', {})
+        char_name = char_data.get('name', 'Character')
         
         logger.log_step(f"Generating greeting for character: {char_name}")
-        
-        # Create specialized prompt
-        prompt = f"""
-        You are tasked with crafting a new, engaging first message for {char_name} using the information provided below. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark.
 
-        Description: {description}
-        Personality: {personality}
-        Scenario: {scenario}
+        # 1. Get Template (similar to /api/generate)
+        template_id = api_config.get('templateId', 'mistral') # Default to mistral
+        # Get all templates and find the one with the matching ID
+        all_templates = template_handler.get_all_templates()
+        template = next((t for t in all_templates if t.get('id') == template_id), None)
+        if not template:
+            logger.log_warning(f"Template '{template_id}' not found in available templates, using default structure.")
+            # Define a basic default template structure if lookup fails
+            template = {
+                'memoryFormat': "{{system}}\nPersona: {{description}}\nPersonality: {{personality}}\n[Scenario: {{scenario}}]\n{{examples}}\n***",
+                'userFormat': "[INST] {{content}} [/INST]",
+                'assistantFormat': "{{char}}: {{content}}",
+                'stopSequences': ["User:", "Human:", f"{char_name}:", "[INST]", "[/INST]"]
+            }
+            
+        # Helper to replace variables in template strings
+        def replace_vars(text, variables):
+            for key, value in variables.items():
+                text = text.replace(f"{{{{{key}}}}}", str(value) or '')
+            return text
 
-        Use the following as reference points:
-        Current First Message: {first_message}
-        Example Messages: 
-        {examples}
-
-        Craft a new introductory message that starts the conversation in a fresh and engaging way, ensuring variety from the existing scenario.
-        """
-        
-        # Create context window for tracking
-        context_window = {
-            "type": "greeting_generation",
-            "timestamp": time.time(),
-            "character_name": char_name
+        # 2. Build Memory using Template Format
+        memory_vars = {
+            'system': char_data.get('system_prompt', ''),
+            'description': char_data.get('description', ''),
+            'personality': char_data.get('personality', ''),
+            'scenario': char_data.get('scenario', ''),
+            'examples': char_data.get('mes_example', '')
         }
+        memory = replace_vars(template.get('memoryFormat', ''), memory_vars).strip()
+        logger.log_step(f"Built memory context (length: {len(memory)})")
+
+        # 3. Build Prompt (using a dedicated instruction, formatted with template structure)
+        # Use the specialized instruction from the original endpoint
+        greeting_instruction = f"""You are tasked with crafting a new, engaging first message for {char_name}. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark. Use the character's description, personality, and examples provided in the memory context. Craft a new introductory message that starts the conversation in a fresh and engaging way."""
+
+        # Format the instruction like a user message in the template
+        prompt_instruction_formatted = replace_vars(template.get('userFormat', '[INST] {{content}} [/INST]'), {'content': greeting_instruction})
         
-        # Prepare generation parameters
+        # Format the start of the assistant response
+        assistant_start_formatted = replace_vars(template.get('assistantFormat', '{{char}}: {{content}}'), {'char': char_name, 'content': ''})
+
+        # Combine memory, formatted instruction, and assistant start
+        # Note: We don't include chat history for greeting generation
+        prompt = f"{memory}\n{prompt_instruction_formatted}\n{assistant_start_formatted}".strip()
+        logger.log_step(f"Built prompt (length: {len(prompt)})")
+
+        # 4. Get Stop Sequences from Template
+        stop_sequence = [seq.replace('{{char}}', char_name) for seq in template.get('stopSequences', [])]
+        if not stop_sequence: # Add defaults if template is missing them
+             stop_sequence = ["User:", "Human:", f"{char_name}:", "[INST]", "[/INST]", "</s>"]
+        # Ensure common EOS tokens are present
+        if "</s>" not in stop_sequence: stop_sequence.append("</s>")
+        if "<|im_end|>" not in stop_sequence: stop_sequence.append("<|im_end|>")
+
+        logger.log_step(f"Using stop sequences: {stop_sequence}")
+
+        # Prepare generation parameters for api_handler
         gen_params = {
-            "memory": f"{description}\n{personality}\n{scenario}",
-            "prompt": prompt.strip(),
-            "stop_sequence": ["User:", "Human:", f"{char_name}:"],
-            "context_window": context_window,
-            "character_data": character_data,
-            "chat_history": []
+            "memory": memory, # Pass the template-formatted memory (though Kobold might use 'prompt' field mainly)
+            "prompt": prompt, # Pass the full combined prompt
+            "stop_sequence": stop_sequence,
+            # Add other relevant params from api_config if needed, e.g., generation_settings
+            # "generation_settings": api_config.get('generation_settings', {}) # Pass through settings
+            # Note: context_window, character_data, chat_history are not strictly needed by api_handler.generate_with_config
         }
         
         # Use existing generation handler

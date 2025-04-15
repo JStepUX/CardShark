@@ -3,6 +3,100 @@ import { Message, UserProfile } from '../types/messages';
 
 export class ChatStorage {
   /**
+   * Generates a greeting for a character using the configured API
+   * @param characterData The character data to generate a greeting for
+   * @param apiConfig The API configuration to use for generation
+   * @returns A promise that resolves to the generated greeting
+   */
+  static async generateGreeting(characterData: any, apiConfig: any): Promise<{ success: boolean; greeting?: string; message?: string }> {
+    try {
+      // Use the dedicated greeting generation endpoint
+      const response = await fetch("/api/generate-greeting", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          character_data: characterData,
+          api_config: apiConfig
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `API responded with status ${response.status}`);
+      }
+
+      // For this endpoint, we expect a direct JSON response rather than a stream
+      const data = await response.json();
+      
+      if (!data.success || !data.greeting) {
+        throw new Error(data.message || "Failed to generate greeting");
+      }
+      
+      return {
+        success: true,
+        greeting: data.greeting
+      };
+    } catch (error) {
+      console.error('Error generating greeting:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+  
+  /**
+   * Generates a greeting for a character using the configured API (STREAMING VERSION)
+   * @param characterData The character data to generate a greeting for
+   * @param apiConfig The API configuration to use for generation
+   * @returns A promise that resolves to the generated greeting
+   */
+  static async generateGreetingStream(characterData: any, apiConfig: any): Promise<{ success: boolean; greeting?: string; message?: string }> {
+    // NOTE: Replaced streaming logic with non-streaming logic from generateGreeting
+    // as the /api/generate-greeting/stream endpoint doesn't exist in main.py
+    try {
+      // Use the dedicated greeting generation endpoint
+      const response = await fetch("/api/generate-greeting", { // Changed endpoint
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          character_data: characterData,
+          api_config: apiConfig
+          // Note: The non-streaming backend endpoint builds its own prompt/memory
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})); // Try to parse error JSON
+        throw new Error(errorData.message || `API responded with status ${response.status}`);
+      }
+
+      // For this endpoint, we expect a direct JSON response
+      const data = await response.json();
+
+      if (!data.success || !data.greeting) {
+        // Use the message from the backend if available
+        throw new Error(data.message || "Failed to generate greeting (backend error)");
+      }
+
+      return {
+        success: true,
+        greeting: data.greeting
+      };
+    } catch (error) {
+      console.error('Error generating greeting:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
    * Extracts a character ID from various possible locations in a character object
    */
   static getCharacterId(character: CharacterCard): string {

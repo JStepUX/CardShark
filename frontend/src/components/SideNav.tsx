@@ -110,15 +110,8 @@ const SideNav: React.FC<SideNavProps> = ({
                 isCollapsed={isCollapsed}
                 currentView={currentView}
                 view="info"
-                label="Basic Info"
+                label="Basic Info & Greetings"
                 onClick={() => onViewChange("info")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="messages"
-                label="Greeting Manager"
-                onClick={() => onViewChange("messages")}
               />
               <NavButton
                 isCollapsed={isCollapsed}
@@ -195,15 +188,8 @@ const SideNav: React.FC<SideNavProps> = ({
                 isCollapsed={isCollapsed}
                 currentView={currentView}
                 view="info"
-                label="Basic Info"
+                label="Basic Info & Greetings"
                 onClick={() => onViewChange("info")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="messages"
-                label="Greetings"
-                onClick={() => onViewChange("messages")}
               />
               <NavButton
                 isCollapsed={isCollapsed}

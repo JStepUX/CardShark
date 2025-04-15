@@ -7,6 +7,7 @@ import { CharacterCard } from '../types/schema';
 import RichTextEditor from './RichTextEditor';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { Dialog } from './Dialog';
+import MessagesView from './MessagesView';
 
 // Dedicated modal version of JsonViewer without redundant title
 const JsonViewerModal: React.FC<{
@@ -263,6 +264,9 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             </div>
 
             <div className="h-8" /> {/* Bottom spacing */}
+
+            {/* Render the MessagesView component for greeting management */}
+            <MessagesView />
           </div>
         </div>
       </div>

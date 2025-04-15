@@ -189,27 +189,23 @@ const MessagesView: React.FC = () => {
     setError(null); // Clear previous errors
 
     try {
-      console.log("Requesting greeting generation with config:", apiConfig);
-      // Call backend service function
-      const result = await ChatStorage.generateGreeting(characterData, apiConfig);
+      // Use streaming greeting generation
+      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig);
 
       if (result.success && result.greeting) {
-        // Add the successfully generated greeting to the local state
         setMessages(prev => {
           const newGreeting: Message = {
             id: crypto.randomUUID(),
-            content: result.greeting!, // Use non-null assertion as success implies greeting exists
-            isFirst: prev.length === 0, // Only set first if the list was previously empty
-            order: prev.length, // Append to end
+            content: result.greeting!,
+            isFirst: prev.length === 0,
+            order: prev.length,
           };
           return [...prev, newGreeting];
         });
       } else {
-        // Throw error if backend reported failure or missing greeting
         throw new Error(result.message || 'Greeting generation failed on the backend.');
       }
     } catch (err) {
-      console.error('Greeting generation failed:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred during generation.');
     } finally {
       setIsGeneratingGreeting(false); // Clear loading state regardless of outcome

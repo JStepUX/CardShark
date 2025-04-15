@@ -55,3 +55,6 @@ site-Home/
 
 *.spec
 crawlsite.py
+
+# windsurf rules
+.windsurfrules

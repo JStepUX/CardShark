@@ -42,14 +42,49 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
     let count = 0;
     const searchText = caseSensitive ? findText : findText.toLowerCase();
 
+    // Search flat fields
     searchableFields.forEach(field => {
       const text = characterData.data[field];
       if (typeof text === 'string') {
+        // Always do a direct substring search, ignoring any quotes or formatting
         const searchIn = caseSensitive ? text : text.toLowerCase();
         const matches = searchIn.split(searchText).length - 1;
         count += matches;
       }
     });
+
+    // Search alternate_greetings (array of strings)
+    if (Array.isArray(characterData.data.alternate_greetings)) {
+      characterData.data.alternate_greetings.forEach((greeting: string) => {
+        if (typeof greeting === 'string') {
+          const searchIn = caseSensitive ? greeting : greeting.toLowerCase();
+          const matches = searchIn.split(searchText).length - 1;
+          count += matches;
+        }
+      });
+    }
+
+    // Search group_only_greetings (array of strings)
+    if (Array.isArray(characterData.data.group_only_greetings)) {
+      characterData.data.group_only_greetings.forEach((greeting: string) => {
+        if (typeof greeting === 'string') {
+          const searchIn = caseSensitive ? greeting : greeting.toLowerCase();
+          const matches = searchIn.split(searchText).length - 1;
+          count += matches;
+        }
+      });
+    }
+
+    // Search character_book.entries (array of lore objects with 'content')
+    if (characterData.data.character_book && Array.isArray(characterData.data.character_book.entries)) {
+      characterData.data.character_book.entries.forEach((entry: any) => {
+        if (entry && typeof entry.content === 'string') {
+          const searchIn = caseSensitive ? entry.content : entry.content.toLowerCase();
+          const matches = searchIn.split(searchText).length - 1;
+          count += matches;
+        }
+      });
+    }
 
     setMatchCount(count);
   }, [findText, caseSensitive, characterData]);
@@ -59,18 +94,63 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
 
     const updatedData = { ...characterData };
 
+    // Replace in flat fields
     searchableFields.forEach(field => {
       const text = updatedData.data[field];
       if (typeof text === 'string') {
         if (caseSensitive) {
           updatedData.data[field] = text.split(findText).join(replaceText);
         } else {
-          // Case-insensitive replace while preserving case
-          const parts = text.split(new RegExp(findText, 'i'));
-          updatedData.data[field] = parts.join(replaceText);
+          const regex = new RegExp(findText, 'gi');
+          updatedData.data[field] = text.replace(regex, replaceText);
         }
       }
     });
+
+    // Replace in alternate_greetings
+    if (Array.isArray(updatedData.data.alternate_greetings)) {
+      updatedData.data.alternate_greetings = updatedData.data.alternate_greetings.map((greeting: string) => {
+        if (typeof greeting === 'string') {
+          if (caseSensitive) {
+            return greeting.split(findText).join(replaceText);
+          } else {
+            const regex = new RegExp(findText, 'gi');
+            return greeting.replace(regex, replaceText);
+          }
+        }
+        return greeting;
+      });
+    }
+
+    // Replace in group_only_greetings
+    if (Array.isArray(updatedData.data.group_only_greetings)) {
+      updatedData.data.group_only_greetings = updatedData.data.group_only_greetings.map((greeting: string) => {
+        if (typeof greeting === 'string') {
+          if (caseSensitive) {
+            return greeting.split(findText).join(replaceText);
+          } else {
+            const regex = new RegExp(findText, 'gi');
+            return greeting.replace(regex, replaceText);
+          }
+        }
+        return greeting;
+      });
+    }
+
+    // Replace in character_book.entries
+    if (updatedData.data.character_book && Array.isArray(updatedData.data.character_book.entries)) {
+      updatedData.data.character_book.entries = updatedData.data.character_book.entries.map((entry: any) => {
+        if (entry && typeof entry.content === 'string') {
+          if (caseSensitive) {
+            return { ...entry, content: entry.content.split(findText).join(replaceText) };
+          } else {
+            const regex = new RegExp(findText, 'gi');
+            return { ...entry, content: entry.content.replace(regex, replaceText) };
+          }
+        }
+        return entry;
+      });
+    }
 
     onReplace(updatedData);
     onClose();
