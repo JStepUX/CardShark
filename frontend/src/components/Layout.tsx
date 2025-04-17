@@ -1,27 +1,32 @@
 // frontend/src/components/Layout.tsx (Modified)
 import React, { useRef, useState, useEffect } from "react";
+import { Outlet } from "react-router-dom"; // Import Outlet
 import { useCharacter } from "../contexts/CharacterContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
-import LoreView from "./LoreView";
-import MessagesView from "./MessagesView";
-import CharacterInfoView from "./CharacterInfoView";
-import APISettingsView from "./APISettingsView";
+// Remove direct view imports if they are only rendered via routes now
+// import LoreView from "./LoreView";
+// import MessagesView from "./MessagesView";
+// import CharacterInfoView from "./CharacterInfoView";
+// import APISettingsView from "./APISettingsView";
 import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
-import CharacterGallery from "./CharacterGallery";
+// import CharacterGallery from "./CharacterGallery"; // Rendered via Outlet
 import ComparisonPanel from "./ComparisonPanel";
-import ChatView from "./ChatView";
+// import ChatView from "./ChatView"; // Rendered via Outlet
 import SideNav from "./SideNav";
+// import WorldCardsView from '../views/WorldCardsView'; // Rendered via Outlet
+// import WorldCardsPlayView from '../views/WorldCardsPlayView'; // Rendered via Outlet
 
-import { View } from '../types/navigation';
-
+// Remove View type if no longer needed
+// import { View } from '../types/navigation';
 const Layout: React.FC = () => {
   // File handling refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // State management
-  const [currentView, setCurrentView] = useState<View>("gallery");
+  // Remove currentView state, router handles the view
+  // const [currentView, setCurrentView] = useState<View>("gallery");
   const [showBackyardDialog, setShowBackyardDialog] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
@@ -250,23 +255,8 @@ const Layout: React.FC = () => {
     incrementSettingsChangeCount();
   }, [settings]);
 
-  // Render content based on current view
-  const renderContent = () => {
-    switch (currentView) {
-      case "lore":
-        return <LoreView />;
-      case "messages":
-        return <MessagesView />;
-      case "chat":
-        return <ChatView />;
-      case "gallery":
-        return <CharacterGallery settingsChangeCount={settingsChangeCount} />;
-      case "settings":
-        return <APISettingsView />;
-      default:
-        return <CharacterInfoView />;
-    }
-  };
+  // Remove renderContent function, Outlet handles rendering
+  // const renderContent = () => { ... };
 
   return (
     <div className="h-screen w-screen flex bg-stone-950 text-gray-100 overflow-hidden">
@@ -277,11 +267,10 @@ const Layout: React.FC = () => {
         onChange={handleFileUpload}
         className="hidden"
       />
-      
+
       {/* Side Navigation */}
+      {/* Props currentView and onViewChange are removed from SideNavProps */}
       <SideNav
-        currentView={currentView}
-        onViewChange={setCurrentView}
         onFileUpload={() => fileInputRef.current?.click()}
         onUrlImport={() => setShowBackyardDialog(true)}
         onSave={handleSave}
@@ -302,7 +291,8 @@ const Layout: React.FC = () => {
               Loading character data...
             </div>
           )}
-          {renderContent()}
+          {/* Render the matched nested route component here */}
+          <Outlet />
         </div>
         
         {/* Comparison panel (conditional) */}

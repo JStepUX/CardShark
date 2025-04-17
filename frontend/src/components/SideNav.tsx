@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { 
-  ImagePlus, 
-  Link, 
-  Save, 
-  ChevronLeft, 
+import { NavLink } from 'react-router-dom'; // Import NavLink
+import {
+  ImagePlus,
+  Link,
+  Save,
+  ChevronLeft,
   ChevronRight,
   FolderOpen,
   FileText,
   MessageSquare,
   Book,
   MessageCircle,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Globe
 } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { View } from '../types/navigation';
+// Remove View import if no longer needed elsewhere
+// import { View } from '../types/navigation';
 import DropdownMenu from './DropDownMenu';
 import ImagePreview from './ImagePreview';
 import TokenCounter from './TokenCounter';
@@ -25,12 +28,14 @@ const NAV_ICONS = {
   messages: MessageSquare,
   lore: Book,
   chat: MessageCircle,
-  settings: SettingsIcon
+  settings: SettingsIcon,
+  worldcards: Globe
 } as const;
 
 interface SideNavProps {
-  currentView: View;
-  onViewChange: (view: View) => void;
+  // Remove props related to internal view state management
+  // currentView: View;
+  // onViewChange: (view: View) => void;
   onFileUpload: () => void;
   onUrlImport: () => void;
   onSave: () => void;
@@ -40,8 +45,9 @@ interface SideNavProps {
 }
 
 const SideNav: React.FC<SideNavProps> = ({
-  currentView,
-  onViewChange,
+  // Remove props from destructuring
+  // currentView,
+  // onViewChange,
   onFileUpload,
   onUrlImport,
   onSave,
@@ -99,44 +105,17 @@ const SideNav: React.FC<SideNavProps> = ({
 
             {/* Navigation */}
             <nav className="flex flex-col items-center space-y-2 w-10">
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="gallery"
-                label="Character Folder"
-                onClick={() => onViewChange("gallery")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="info"
-                label="Basic Info & Greetings"
-                onClick={() => onViewChange("info")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="lore"
-                label="Lore Manager"
-                onClick={() => onViewChange("lore")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="chat"
-                label="Chat"
-                onClick={() => onViewChange("chat")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="settings"
-                label="Settings"
-                onClick={() => onViewChange("settings")}
-              />
+              {/* Replace NavButton with NavLink */}
+              <NavLinkHelper isCollapsed={isCollapsed} to="/gallery" label="Character Folder" Icon={NAV_ICONS.gallery} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/info" label="Basic Info & Greetings" Icon={NAV_ICONS.info} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore Manager" Icon={NAV_ICONS.lore} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/chat" label="Chat" Icon={NAV_ICONS.chat} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/worldcards" label="Worlds" Icon={NAV_ICONS.worldcards} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/settings" label="Settings" Icon={NAV_ICONS.settings} />
 
               {/* Divider and Save Button */}
               <div className="w-8 border-t border-stone-800 my-2" />
+              {/* Save button remains a regular button */}
               <button
                 onClick={onSave}
                 className="w-10 h-10 bg-purple-700 rounded-lg flex items-center justify-center hover:bg-purple-600 transition-colors"
@@ -177,41 +156,13 @@ const SideNav: React.FC<SideNavProps> = ({
 
             {/* Navigation */}
             <nav className="space-y-2">
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="gallery"
-                label="Character Folder"
-                onClick={() => onViewChange("gallery")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="info"
-                label="Basic Info & Greetings"
-                onClick={() => onViewChange("info")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="lore"
-                label="Lore"
-                onClick={() => onViewChange("lore")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="chat"
-                label="Chat"
-                onClick={() => onViewChange("chat")}
-              />
-              <NavButton
-                isCollapsed={isCollapsed}
-                currentView={currentView}
-                view="settings"
-                label="Settings"
-                onClick={() => onViewChange("settings")}
-              />
+              {/* Replace NavButton with NavLink */}
+              <NavLinkHelper isCollapsed={isCollapsed} to="/gallery" label="Character Folder" Icon={NAV_ICONS.gallery} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/info" label="Basic Info & Greetings" Icon={NAV_ICONS.info} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore" Icon={NAV_ICONS.lore} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/chat" label="Chat" Icon={NAV_ICONS.chat} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/worldcards" label="Worlds" Icon={NAV_ICONS.worldcards} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/settings" label="Settings" Icon={NAV_ICONS.settings} />
             </nav>
 
             {/* Image Preview and Footer */}
@@ -244,30 +195,31 @@ const SideNav: React.FC<SideNavProps> = ({
   );
 };
 
-// Helper component for nav buttons
-const NavButton: React.FC<{
+// Helper component using NavLink
+const NavLinkHelper: React.FC<{
   isCollapsed: boolean;
-  currentView: View;
-  view: View;
+  to: string;
   label: string;
-  onClick: () => void;
-}> = ({ isCollapsed, currentView, view, label, onClick }) => {
-  const Icon = NAV_ICONS[view];
-
+  Icon: React.ElementType; // Lucide icon component
+}> = ({ isCollapsed, to, label, Icon }) => {
   return (
-    <button
-      className={`w-full px-4 py-2 rounded-lg transition-colors flex items-center gap-3
-        ${currentView === view 
-          ? "bg-stone-800 text-white" 
-          : "text-gray-300 hover:text-white hover:bg-stone-700"
-        }
-        ${isCollapsed ? "justify-center w-10 !px-0" : ""}`}
-      onClick={onClick}
-      title={isCollapsed ? label : undefined}
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `w-full px-4 py-2 rounded-lg transition-colors flex items-center gap-3
+         ${isActive
+           ? "bg-stone-800 text-white"
+           : "text-gray-300 hover:text-white hover:bg-stone-700"
+         }
+         ${isCollapsed ? "justify-center w-10 !px-0" : ""}`
+      }
+      aria-label={label}
+      title={label}
+      end // Use 'end' prop for exact matching on index routes like gallery if needed
     >
-      <Icon className={`flex-shrink-0 ${isCollapsed ? "w-5 h-5" : "w-4 h-4"}`} />
+      <Icon className="w-5 h-5" />
       {!isCollapsed && <span>{label}</span>}
-    </button>
+    </NavLink>
   );
 };
 

@@ -79,7 +79,34 @@ def signal_handler(signum, frame):
 def main():
     root_dir = os.path.dirname(os.path.abspath(__file__))
     os.environ['PYTHONPATH'] = root_dir  # Set PYTHONPATH
-    
+
+    # Launch koboldcpp if present and not already running
+    import psutil
+    koboldcpp_dir = os.path.join(root_dir, 'backend', 'koboldcpp')
+    candidates = ['koboldcpp_186.exe', 'koboldcpp.exe']
+    exe_path = None
+    running = False
+    for proc in psutil.process_iter(['name']):
+        try:
+            pname = proc.info['name']
+            if pname and pname.lower() in [c.lower() for c in candidates]:
+                running = True
+                print(f"KoboldCPP is already running as process: {pname}")
+                break
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    if not running:
+        for candidate in candidates:
+            path = os.path.join(koboldcpp_dir, candidate)
+            if os.path.isfile(path):
+                exe_path = path
+                break
+        if exe_path:
+            print(f"Launching: {os.path.basename(exe_path)}")
+            subprocess.Popen(['start', '', exe_path], shell=True)
+        else:
+            print("No koboldcpp executable found in backend/koboldcpp/")
+
     # Start backend
     backend_thread = Thread(target=run_backend)
     backend_thread.daemon = True

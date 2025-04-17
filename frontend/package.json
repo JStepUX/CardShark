@@ -20,6 +20,7 @@
     "@tiptap/extension-placeholder": "^2.1.10",
     "@tiptap/react": "^2.1.10",
     "@tiptap/starter-kit": "^2.1.10",
+    "@types/react-router-dom": "^5.3.3",
     "cropperjs": "^1.6.1",
     "lucide-react": "^0.263.1",
     "prosemirror-model": "^1.19.3",
@@ -28,7 +29,8 @@
     "react": "^18.2.0",
     "react-cropper": "^2.3.3",
     "react-dom": "^18.2.0",
-    "react-intersection-observer": "^9.15.0"
+    "react-intersection-observer": "^9.15.0",
+    "react-router-dom": "^7.5.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.4",

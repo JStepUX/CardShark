@@ -52,6 +52,8 @@ context/
 backgrounds/
 Characters/
 site-Home/
+koboldcpp/
+worlds/
 
 *.spec
 crawlsite.py

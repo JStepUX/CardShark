@@ -41,6 +41,7 @@ from backend.network_server import run_server
 from backend.template_handler import TemplateHandler
 from backend.background_handler import BackgroundHandler
 from backend.lore_handler import LoreHandler
+from backend.world_state_manager import WorldStateManager
 
 def get_frontend_path() -> Path:
     if getattr(sys, 'frozen', False):  # Running as PyInstaller EXE
@@ -73,12 +74,307 @@ template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds()
 lore_handler = LoreHandler(logger, default_position=0)
+world_state_manager = WorldStateManager(logger)
 
 # API Endpoints
+
+from fastapi.responses import JSONResponse
+
+@app.post("/api/world-state/save")
+async def save_world_state(request: Request, world: Optional[str] = None): # Add world query parameter
+    """Saves the world state JSON for a specific world."""
+    try:
+        # Determine world name - prioritize query param, fallback to name in body? (Decide on priority)
+        world_name = world
+        data = await request.json()
+        if not world_name:
+             world_name = data.get('name') # Fallback to name in JSON body if query param missing
+
+        if not world_name:
+            raise HTTPException(status_code=400, detail="World name is required either as query parameter 'world' or in the JSON body 'name'.")
+
+        logger.log_step(f"Received save request for world: {world_name}")
+        success = world_state_manager.save_world_state(world_name, data)
+        if success:
+            return JSONResponse(status_code=200, content={"success": True, "message": f"World state for '{world_name}' saved successfully"})
+        else:
+            return JSONResponse(status_code=500, content={"success": False, "message": f"Failed to save world state for '{world_name}'"})
+    except Exception as e:
+        logger.log_error(f"Error in save_world_state for world '{world_name}': {str(e)}")
+        return JSONResponse(status_code=500, content={"success": False, "message": f"Error saving world state: {str(e)}"})
+# --- NEW ENDPOINT TO LOAD WORLD STATE ---
+@app.get("/api/world-state/load/{world_name}")
+async def load_world_state_api(world_name: str):
+    """Loads the world state JSON for a specific world."""
+    try:
+        logger.log_step(f"Received load request for world: {world_name}")
+        state = world_state_manager.load_world_state(world_name)
+        if not state:
+             # If state is empty (file not found or empty), return 404
+             raise HTTPException(status_code=404, detail=f"World state for '{world_name}' not found.")
+
+        return JSONResponse(status_code=200, content=state)
+
+    except HTTPException as http_exc:
+        # Re-raise known HTTP errors
+        logger.log_error(f"HTTP error loading world state for '{world_name}': {http_exc.detail}")
+        raise http_exc
+    except ValueError as ve: # Catch invalid world name from manager
+        logger.log_error(f"Invalid world name provided for loading: {world_name} - {str(ve)}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.log_error(f"Error loading world state for '{world_name}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal server error loading world state: {str(e)}")
+# --- END NEW ENDPOINT ---
+
+
+# --- NEW ENDPOINT START ---
+@app.post("/api/worlds/{world_name}/upload-png")
+async def upload_world_png(world_name: str, file: UploadFile = File(...)):
+    """Upload a PNG image for a specific world."""
+    try:
+        logger.log_step(f"Received PNG upload request for world: {world_name}")
+
+        # Define the target directory for world images
+        # Ensure world_name is sanitized to prevent path traversal issues
+        safe_world_name = re.sub(r'[^\w\-]+', '_', world_name) # Basic sanitization
+        if not safe_world_name:
+             raise HTTPException(status_code=400, detail="Invalid world name provided.")
+
+        worlds_dir = Path("worlds")
+        world_image_dir = worlds_dir / safe_world_name / "images"
+        world_image_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate a unique filename to avoid conflicts (optional but recommended)
+        # For simplicity now, using original filename, but consider UUIDs later
+        # Ensure filename is also sanitized
+        safe_filename = re.sub(r'[^\w\.\-]+', '_', file.filename)
+        if not safe_filename.lower().endswith(".png"):
+             raise HTTPException(status_code=400, detail="Only PNG files are allowed.")
+
+        file_path = world_image_dir / safe_filename
+
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        logger.log_step(f"Saved world PNG to: {file_path}")
+
+        # Return the path or URL to the saved image
+        # Construct the API path for the new serving endpoint
+        api_file_path = f"/api/worlds/images/{safe_world_name}/{safe_filename}"
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"World PNG '{safe_filename}' uploaded successfully for '{safe_world_name}'.",
+                "filePath": api_file_path # Use the constructed API path
+            }
+        )
+
+    except HTTPException as http_exc:
+        logger.log_error(f"HTTP error uploading world PNG: {http_exc.detail}")
+        raise http_exc # Re-raise HTTPException
+    except Exception as e:
+        logger.log_error(f"Error uploading world PNG for '{world_name}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+# --- NEW ENDPOINT END ---
+
+
 @app.get("/api/uploads/{filename}")
 async def get_uploaded_image(filename: str):
     """Serve uploaded images."""
     try:
+        uploads_dir = Path("uploads")
+        file_path = uploads_dir / filename
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        return FileResponse(file_path)
+    except Exception as e:
+        logger.log_error(f"Error serving image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- NEW ENDPOINT TO SERVE WORLD IMAGES ---
+@app.get("/api/worlds/images/{world_name}/{filename}")
+async def get_world_image(world_name: str, filename: str):
+    """Serve images uploaded for specific worlds."""
+    try:
+        # Sanitize inputs
+        safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
+        safe_filename = re.sub(r'[^\w\.\-]+', '_', filename)
+
+        if not safe_world_name or not safe_filename:
+            raise HTTPException(status_code=400, detail="Invalid world name or filename.")
+
+        worlds_dir = Path("worlds")
+        file_path = worlds_dir / safe_world_name / "images" / safe_filename
+
+        if not file_path.is_file(): # Check if it's actually a file
+            logger.log_warning(f"World image not found at: {file_path}")
+            raise HTTPException(status_code=404, detail="World image not found")
+
+        logger.log_step(f"Serving world image from: {file_path}")
+        return FileResponse(file_path)
+
+    except HTTPException as http_exc:
+        # Log and re-raise known HTTP errors
+        logger.log_error(f"HTTP error serving world image: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        logger.log_error(f"Error serving world image '{filename}' for world '{world_name}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        # Return a generic 500 error for unexpected issues
+        raise HTTPException(status_code=500, detail="Internal server error while serving image.")
+# --- END NEW ENDPOINT ---
+
+
+# --- NEW ENDPOINT FOR MAIN WORLD CARD UPLOAD ---
+@app.post("/api/worlds/{world_name}/upload-card")
+async def upload_world_card_image(world_name: str, file: UploadFile = File(...)):
+    """Upload the main PNG card image for a specific world."""
+    try:
+        logger.log_step(f"Received main card PNG upload request for world: {world_name}")
+
+        # Basic sanitization
+        safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
+        if not safe_world_name:
+             raise HTTPException(status_code=400, detail="Invalid world name provided.")
+
+        # Ensure it's a PNG
+        if not file.filename or not file.filename.lower().endswith(".png"):
+             raise HTTPException(status_code=400, detail="Only PNG files are allowed for the world card.")
+
+        # Define the target directory and fixed filename
+        worlds_dir = Path("worlds")
+        world_dir = worlds_dir / safe_world_name
+        world_dir.mkdir(parents=True, exist_ok=True)
+        file_path = world_dir / "world_card.png" # Use a fixed name
+
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        logger.log_step(f"Saved main world card PNG to: {file_path}")
+
+        # Construct the API path to serve the file
+        api_file_path = f"/api/worlds/{safe_world_name}/card"
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"Main world card PNG uploaded successfully for '{safe_world_name}'.",
+                "filePath": api_file_path
+            }
+        )
+
+    except HTTPException as http_exc:
+        logger.log_error(f"HTTP error uploading main world card PNG: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        logger.log_error(f"Error uploading main world card PNG for '{world_name}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+# --- END NEW ENDPOINT ---
+
+
+# --- NEW ENDPOINT TO LIST WORLDS ---
+@app.get("/api/worlds/list")
+async def list_worlds():
+    """Scans the worlds directory and returns a list of available worlds."""
+    worlds_data = []
+    worlds_base_dir = Path("worlds")
+
+    if not worlds_base_dir.is_dir():
+        logger.log_warning(f"Worlds base directory not found at: {worlds_base_dir}")
+        return JSONResponse(status_code=200, content=[]) # Return empty list if base dir doesn't exist
+
+    try:
+        for world_dir in worlds_base_dir.iterdir():
+            if world_dir.is_dir():
+                world_name = world_dir.name # Use directory name as the world identifier/name
+                card_image_path = world_dir / "world_card.png"
+                state_file_path = world_dir / "world_state.json"
+
+                # Basic info from JSON (optional for now, primarily need the image)
+                display_name = world_name # Default to directory name
+                description = ""
+                if state_file_path.is_file():
+                    try:
+                        with open(state_file_path, "r", encoding="utf-8") as f:
+                            state_data = json.load(f)
+                            display_name = state_data.get("name", world_name) # Use name from JSON if available
+                            description = state_data.get("description", "")
+                    except json.JSONDecodeError:
+                        logger.log_warning(f"Could not decode JSON for world: {world_name}")
+                    except Exception as e:
+                         logger.log_error(f"Error reading state file for {world_name}: {e}")
+
+
+                if card_image_path.is_file():
+                    # Construct the API URL to fetch the card image
+                    card_image_url = f"/api/worlds/{world_name}/card"
+                    worlds_data.append({
+                        "id": world_name, # Use directory name as unique ID
+                        "name": display_name,
+                        "description": description,
+                        "cardImageUrl": card_image_url
+                    })
+                else:
+                    logger.log_warning(f"World card image not found for world: {world_name} at {card_image_path}")
+                    # Optionally include worlds even without a card image? For now, only include those with cards.
+                    # worlds_data.append({
+                    #     "id": world_name,
+                    #     "name": display_name,
+                    #     "description": description,
+                    #     "cardImageUrl": None # Indicate no image
+                    # })
+
+
+        logger.log_step(f"Found {len(worlds_data)} worlds with card images.")
+        return JSONResponse(status_code=200, content=worlds_data)
+
+    except Exception as e:
+        logger.log_error(f"Error listing worlds: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error while listing worlds.")
+# --- END NEW ENDPOINT ---
+
+# --- NEW ENDPOINT TO SERVE MAIN WORLD CARD ---
+@app.get("/api/worlds/{world_name}/card")
+async def get_world_card_image(world_name: str):
+    """Serve the main card image for a specific world."""
+    try:
+        # Sanitize world name
+        safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
+        if not safe_world_name:
+            raise HTTPException(status_code=400, detail="Invalid world name.")
+
+        worlds_dir = Path("worlds")
+        file_path = worlds_dir / safe_world_name / "world_card.png" # Fixed name
+
+        if not file_path.is_file():
+            logger.log_warning(f"Main world card image not found at: {file_path}")
+            # Optionally, return a default image or 404
+            raise HTTPException(status_code=404, detail="Main world card image not found")
+
+        logger.log_step(f"Serving main world card image from: {file_path}")
+        return FileResponse(file_path)
+
+    except HTTPException as http_exc:
+        logger.log_error(f"HTTP error serving main world card image: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        logger.log_error(f"Error serving main world card image for '{world_name}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error while serving image.")
+# --- END NEW ENDPOINT ---
+
         uploads_dir = Path("uploads")
         file_path = uploads_dir / filename
         
@@ -170,858 +466,7 @@ async def generate_greeting(request: Request):
              stop_sequence = ["User:", "Human:", f"{char_name}:", "[INST]", "[/INST]", "</s>"]
         # Ensure common EOS tokens are present
         if "</s>" not in stop_sequence: stop_sequence.append("</s>")
-        if "<|im_end|>" not in stop_sequence: stop_sequence.append("<|im_end|>")
-
-        logger.log_step(f"Using stop sequences: {stop_sequence}")
-
-        # Prepare generation parameters for api_handler
-        gen_params = {
-            "memory": memory, # Pass the template-formatted memory (though Kobold might use 'prompt' field mainly)
-            "prompt": prompt, # Pass the full combined prompt
-            "stop_sequence": stop_sequence,
-            # Add other relevant params from api_config if needed, e.g., generation_settings
-            # "generation_settings": api_config.get('generation_settings', {}) # Pass through settings
-            # Note: context_window, character_data, chat_history are not strictly needed by api_handler.generate_with_config
-        }
-        
-        # Use existing generation handler
-        result = await api_handler.generate_with_config(api_config, gen_params)
-        
-        if not result or not result.get('content'):
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "success": False,
-                    "message": "Failed to generate greeting - no content returned from API"
-                }
-            )
-        
-        # Clean up the response
-        greeting = result.get('content', '').strip()
-        
-        # Remove any character name prefixes
-        greeting = re.sub(rf'^{re.escape(char_name)}\s*:', '', greeting, flags=re.IGNORECASE).strip()
-        
-        # Log success
-        logger.log_step(f"Successfully generated greeting ({len(greeting)} chars)")
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "greeting": greeting
-            }
-        )
-        
-    except Exception as e:
-        logger.log_error(f"Error generating greeting: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-        
-    except Exception as e:
-        logger.log_error(f"Error generating greeting: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to generate greeting: {str(e)}"
-            }
-        )
-
-# ============================================================
-# CHARACTER DELETION ENDPOINT
-# ============================================================
-@app.delete("/api/character/{path:path}")
-async def delete_character(path: str):
-    """Move a character file to the system's trash/recycling bin."""
-    logger.log_step(f"Received request to delete character: {path}")
-
-    try:
-        # **Security Validation:** Ensure the path is within the allowed directory
-        char_dir_setting = settings_manager.get_setting('character_directory')
-        if not char_dir_setting:
-            logger.log_error("Character directory setting is not configured.")
-            raise HTTPException(status_code=400, detail="Character directory not configured on server.")
-
-        allowed_dir = Path(char_dir_setting).resolve()
-        # Decode the path parameter which might be URL-encoded by the browser/fetch
-        decoded_path = requests.utils.unquote(path)
-        file_path = Path(decoded_path).resolve()
-
-        logger.log_step(f"Resolved path for deletion: {file_path}")
-        logger.log_step(f"Allowed character directory: {allowed_dir}")
-
-
-        # Check 1: Is the file path within the allowed directory?
-        # Use Path.is_relative_to (requires Python 3.9+)
-        # Fallback for older Python: check if allowed_dir is one of the parents of file_path
-        try:
-             is_relative = file_path.is_relative_to(allowed_dir)
-        except AttributeError: # Fallback for Python < 3.9
-             is_relative = str(file_path).startswith(str(allowed_dir))
-
-        if not is_relative:
-             logger.log_warning(f"Attempt to delete file outside allowed directory: {file_path}")
-             raise HTTPException(status_code=403, detail="Access denied: Cannot delete files outside the character directory.")
-
-        # Check 2: Does the file exist and is it a file?
-        if not file_path.is_file():
-            logger.log_warning(f"File not found or is not a file: {file_path}")
-            raise HTTPException(status_code=404, detail="Character file not found.")
-
-        # Check 3: Is it a PNG file? (Recommended)
-        if file_path.suffix.lower() != ".png":
-             logger.log_warning(f"Attempt to delete non-PNG file: {file_path}")
-             raise HTTPException(status_code=400, detail="Invalid file type. Only PNG files can be deleted.")
-
-        # Perform the deletion (move to trash)
-        logger.log_step(f"Attempting to move to trash: {file_path}")
-        send2trash.send2trash(str(file_path))
-        logger.log_step(f"Successfully moved to trash: {file_path}")
-
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": f"Character '{file_path.name}' moved to trash."
-            }
-        )
-
-    except FileNotFoundError:
-         # This might occur if the file is deleted between the check and the send2trash call
-         logger.log_warning(f"File not found during send2trash operation: {path}")
-         raise HTTPException(status_code=404, detail="Character file not found.")
-    except PermissionError:
-         logger.log_error(f"Permission error deleting file: {path}")
-         raise HTTPException(status_code=403, detail="Permission denied to delete the file.")
-    except HTTPException as http_exc:
-         # Re-raise HTTPExceptions directly (like 404, 403 from checks)
-         raise http_exc
-    except Exception as e:
-        # Catch any other unexpected errors during the process
-        logger.log_error(f"Error deleting character '{path}': {str(e)}")
-        logger.log_error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to delete character: {str(e)}")
-# ============================================================
-# END CHARACTER DELETION ENDPOINT
-# ============================================================
-
-# --- Determine Base Path and User Directory Path ---
-
-# Check if the application is running as a bundled executable (PyInstaller)
-# The '_MEIPASS' attribute is set by PyInstaller in the temporary environment
-IS_BUNDLED = hasattr(sys, '_MEIPASS')
-
-if IS_BUNDLED:
-    # If bundled, the base path is the directory containing the executable
-    # sys.executable points to the path of the running executable
-    base_path = Path(sys.executable).parent
-    # The user directory is expected to be directly inside the executable's directory
-    USER_DIR_PATH = base_path / "users"
-    logger.log_step(f"[Startup Info] Running bundled. User Directory Path set relative to EXE: {USER_DIR_PATH}")
-else:
-    # If not bundled (running as a script), calculate path relative to the script file
-    # Assumes script is in 'backend/' and users are in '../frontend/users' relative to script
-    script_path = Path(__file__).parent
-    USER_DIR_PATH = (script_path / "../frontend/users").resolve()
-    logger.log_step(f"[Startup Info] Running as script. User Directory Path set relative to script: {USER_DIR_PATH}")
-
-# Optional: Log the final determined path for verification
-print(f"[Startup Info] Final User Directory Path for Deletion Checks: {USER_DIR_PATH}")
-logger.log_step(f"[Startup Info] Final User Directory Path: {USER_DIR_PATH}")
-
-# Create the directory if it doesn't exist (important for first run or bundled app)
-try:
-    USER_DIR_PATH.mkdir(parents=True, exist_ok=True)
-    logger.log_step(f"Ensured user directory exists: {USER_DIR_PATH}")
-except Exception as e:
-    logger.log_error(f"Could not create or access user directory: {USER_DIR_PATH} - Error: {e}")
-    # Depending on severity, you might want to exit or raise a critical error here
-
-
-# ============================================================
-# USER FILE DELETION ENDPOINT
-# (The function definition and its internal logic remain the same,
-# as it correctly uses the USER_DIR_PATH variable calculated above)
-# ============================================================
-@app.delete("/api/user/{path:path}")
-async def delete_user_file(path: str):
-    logger.log_step(f"Received request to delete user file (raw path from URL): '{path}'")
-    try:
-        # --- Path Validation and Security ---
-        allowed_user_dir = USER_DIR_PATH # Uses the path calculated above
-        decoded_path = requests.utils.unquote(path)
-        file_path = Path(decoded_path).resolve()
-
-        # Add the debug logging back temporarily if needed
-        logger.log_step(f"DEBUG: Allowed Directory Path (allowed_user_dir): '{str(allowed_user_dir)}'")
-        logger.log_step(f"DEBUG: Requested File Path (file_path):          '{str(file_path)}'")
-
-        # Check 1: Is the file path within the allowed USER directory?
-        try:
-             is_within_allowed_dir = file_path.is_relative_to(allowed_user_dir)
-             logger.log_step(f"DEBUG: Check 'file_path.is_relative_to(allowed_user_dir)' result: {is_within_allowed_dir}")
-        except AttributeError:
-             is_within_allowed_dir = str(file_path).startswith(str(allowed_user_dir))
-             logger.log_step(f"DEBUG: Check 'str(file_path).startswith(str(allowed_user_dir))' result: {is_within_allowed_dir}")
-
-        if not is_within_allowed_dir:
-             logger.log_warning(f"SECURITY CHECK FAILED: Attempt to delete file outside allowed USER directory.")
-             raise HTTPException(
-                 status_code=403,
-                 detail="Access denied: Cannot delete files outside the designated user directory."
-             )
-
-        # ... (Rest of the checks: is_file, allowed_extensions) ...
-        if not file_path.is_file():
-            # ... (raise 404) ...
-            logger.log_warning(f"User file not found or is not a file at path: {file_path}")
-            raise HTTPException(status_code=404, detail="User file not found.")
-
-        allowed_extensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"]
-        if file_path.suffix.lower() not in allowed_extensions:
-            # ... (raise 400) ...
-            logger.log_warning(f"Attempt to delete non-allowed file type: {file_path}")
-            raise HTTPException(
-                 status_code=400,
-                 detail=f"Invalid file type. Only files with extensions {', '.join(allowed_extensions)} can be deleted."
-             )
-
-        # Perform Deletion
-        logger.log_step(f"All checks passed. Attempting to move user file to trash: {file_path}")
-        try:
-            send2trash.send2trash(str(file_path))
-            logger.log_step(f"Successfully moved user file to trash: {file_path}")
-        except Exception as trash_error:
-             # ... (raise 500) ...
-             logger.log_error(f"Error during send2trash operation for {file_path}: {trash_error}")
-             raise HTTPException(
-                 status_code=500,
-                 detail=f"Failed to move file to trash: {trash_error}"
-             )
-
-        # Return Success
-        return JSONResponse(
-            status_code=200,
-            content={ "success": True, "message": f"User file '{file_path.name}' moved to trash." }
-        )
-
-    # ... (Exception handling remains the same) ...
-    except HTTPException as http_exc:
-         raise http_exc
-    except PermissionError:
-         # ... (raise 403) ...
-         logger.log_error(f"OS Permission error deleting user file: {path}")
-         raise HTTPException(status_code=403, detail="Permission denied by the operating system to delete the user file.")
-    except Exception as e:
-         # ... (raise 500) ...
-         logger.log_error(f"Unexpected error occurred while deleting user file '{path}': {str(e)}")
-         logger.log_error(traceback.format_exc())
-         raise HTTPException(
-            status_code=500,
-            detail="An unexpected server error occurred while attempting to delete the user file."
-         )
-# ============================================================
-# END USER FILE DELETION ENDPOINT
-# ============================================================
-
-@app.get("/api/backgrounds")
-async def get_backgrounds():
-    """List all background images."""
-    try:
-        backgrounds = background_handler.get_all_backgrounds()
-        modified_backgrounds = [
-            {**background}
-            for background in backgrounds
-        ]
-        print(f"Current backgrounds: {modified_backgrounds}")
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "backgrounds": modified_backgrounds
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error listing backgrounds: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.post("/api/backgrounds/upload")
-async def upload_background(file: UploadFile = File(...)):
-    """Upload a new background image."""
-    try:
-        # Verify the file is an image including GIF
-        content_type = file.content_type.lower()
-        if not content_type.startswith('image/'):
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "File must be an image"
-                }
-            )
-            
-        # Check against allowed image types
-        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-        if content_type not in allowed_types:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": f"Unsupported image format. Allowed formats: {', '.join(t.split('/')[1] for t in allowed_types)}"
-                }
-            )
-        
-        # Read file content
-        content = await file.read()
-        result = background_handler.save_background(content, file.filename)
-        
-        if not result:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "Invalid image file"
-                }
-            )
-        
-        # For GIFs, add an isAnimated flag in the response
-        if file.filename.lower().endswith('.gif'):
-            result["isAnimated"] = True
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "background": result
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error uploading background: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.get("/api/backgrounds/{filename}")
-async def get_background_image(filename: str):
-    """Serve a background image."""
-    try:
-        logger.log_step(f"Requested background image: {filename}")
-        
-        # Use the background_handler's directory path for consistency
-        file_path = background_handler.backgrounds_dir / filename
-        
-        logger.log_step(f"Looking for file at: {file_path}")
-        if not file_path.exists():
-            logger.log_warning(f"Background image not found: {file_path}")
-            raise HTTPException(status_code=404, detail="Image not found")
-            
-        return FileResponse(file_path)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.log_error(f"Error serving background image: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/api/backgrounds/{filename}")
-async def delete_background(filename: str):
-    """Delete a background image."""
-    try:
-        success = background_handler.delete_background(filename)
-        
-        if not success:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "success": False,
-                    "message": "Background not found"
-                }
-            )
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Background deleted successfully"
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error deleting background: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.get("/api/templates")
-async def get_templates():
-    """Get all custom templates."""
-    try:
-        templates = template_handler.get_all_templates()
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "templates": templates
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error getting templates: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.post("/api/templates")
-async def save_templates(request: Request):
-    """Save templates to the file system."""
-    try:
-        data = await request.json()
-        templates = data.get('templates', [])
-        
-        if not templates:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "No templates provided"
-                }
-            )
-        
-        success = template_handler.save_templates(templates)
-        
-        return JSONResponse(
-            status_code=200 if success else 500,
-            content={
-                "success": success,
-                "message": "Templates saved successfully" if success else "Failed to save templates"
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error saving templates: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.delete("/api/templates/{template_id}")
-async def delete_template(template_id: str):
-    """Delete a template from the file system."""
-    try:
-        success = template_handler.delete_template(template_id)
-        
-        return JSONResponse(
-            status_code=200 if success else 404,
-            content={
-                "success": success,
-                "message": "Template deleted successfully" if success else "Template not found"
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error deleting template: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.post("/api/templates/{template_id}")
-async def save_template(template_id: str, request: Request):
-    """Save a specific template to the file system."""
-    try:
-        data = await request.json()
-        template = data.get('template')
-        
-        if not template:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "No template provided"
-                }
-            )
-        
-        # Ensure the template ID matches the URL parameter
-        template['id'] = template_id
-        
-        success = template_handler.save_template(template)
-        
-        return JSONResponse(
-            status_code=200 if success else 500,
-            content={
-                "success": success,
-                "message": "Template saved successfully" if success else "Failed to save template"
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error saving template: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-    
-@app.get("/api/context-window")
-async def get_context_window():
-    """Get the saved context window data."""
-    try:
-        # Get base directory
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        
-        # Create context directory if it doesn't exist
-        context_dir = base_dir / 'context'
-        context_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Context file path
-        context_file = context_dir / 'latest_context.json'
-        
-        if not context_file.exists():
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "context": None
-                }
-            )
-        
-        # Read and return the context data
-        with open(context_file, 'r', encoding='utf-8') as f:
-            context_data = json.load(f)
-            
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "context": context_data
-            }
-        )
-        
-    except Exception as e:
-        logger.log_error(f"Error reading context window: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.post("/api/context-window")
-async def save_context_window(request: Request):
-    """Save context window data."""
-    try:
-        data = await request.json()
-        context_data = data.get('context')
-        
-        if context_data is None:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "No context data provided"
-                }
-            )
-        
-        # Get base directory
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        
-        # Create context directory if it doesn't exist
-        context_dir = base_dir / 'context'
-        context_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Context file path
-        context_file = context_dir / 'latest_context.json'
-        
-        # Write the context data
-        with open(context_file, 'w', encoding='utf-8') as f:
-            json.dump(context_data, f, indent=2)
-            
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Context saved successfully"
-            }
-        )
-        
-    except Exception as e:
-        logger.log_error(f"Error saving context window: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.delete("/api/context-window")
-async def delete_context_window():
-    """Delete saved context window data."""
-    try:
-        # Get base directory
-        base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
-        
-        # Context file path
-        context_file = base_dir / 'context' / 'latest_context.json'
-        
-        if context_file.exists():
-            context_file.unlink()
-            
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Context deleted successfully"
-            }
-        )
-        
-    except Exception as e:
-        logger.log_error(f"Error deleting context window: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.get("/api/users_dir")  # Define the route
-def get_users_dir() -> Path:  # Define the function
-    """Get the users directory path."""
-    # Determine base directory based on environment
-    if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle
-        base_dir = Path(sys.executable).parent
-    else:
-        # Running from source
-        base_dir = Path.cwd()
-
-    # Create users directory if it doesn't exist
-    users_dir = base_dir / 'users'
-    users_dir.mkdir(parents=True, exist_ok=True)
-
-    logger.log_step(f"Users directory: {users_dir}")
-    return users_dir
-
-# Then update the user image routes to use this helper function
-
-@app.get("/api/users")
-async def get_users():
-    """List user profiles from the users directory."""
-    try:
-        users_dir = get_users_dir()
-        
-        logger.log_step(f"Scanning users directory: {users_dir}")
-        
-        # List all PNG files in users directory
-        png_files = []
-        for file in users_dir.glob("*.png"):
-            logger.log_step(f"Found user PNG: {file.name}")
-            png_files.append({
-                "name": file.stem,
-                "filename": file.name,
-                "path": str(file),
-                "size": file.stat().st_size,
-                "modified": file.stat().st_mtime
-            })
-            
-        # Sort alphabetically by name
-        png_files.sort(key=lambda x: x["name"].lower())
-        
-        logger.log_step(f"Found {len(png_files)} user profiles")
-        
-        return {
-            "success": True,
-            "users": png_files
-        }
-        
-    except Exception as e:
-        logger.log_error(f"Error scanning users: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to scan users: {str(e)}"
-        )
-
-@app.post("/api/user-image/create")
-async def upload_user_image(
-    file: UploadFile = File(...),
-    metadata: str = Form(...)
-):
-    """Save a user profile image with metadata."""
-    try:
-        # Read file content
-        content = await file.read()
-        metadata_dict = json.loads(metadata)
-        
-        # Validate metadata
-        validated_metadata = validator.normalize(metadata_dict)
-        
-        # Get users directory
-        users_dir = get_users_dir()
-        
-        logger.log_step(f"Users directory: {users_dir}")  # Debug log
-
-        # Generate safe filename from name
-        name = validated_metadata.get("data", {}).get("name", "user")
-        safe_name = re.sub(r'[<>:"/\\|?*]', '_', name)
-        filename = f"{safe_name}.png"
-        save_path = users_dir / filename
-        
-        # Handle filename conflicts with incrementing counter
-        counter = 1
-        while save_path.exists():
-            save_path = users_dir / f"{safe_name}_{counter}.png"
-            counter += 1
-            
-        logger.log_step(f"Saving user profile to: {save_path}")
-        
-        # Write metadata to PNG
-        try:
-            updated_content = png_handler.write_metadata(content, validated_metadata)
-            
-            with open(save_path, 'wb') as f:
-                f.write(updated_content)
-                
-            if not save_path.exists():
-                raise HTTPException(
-                    status_code=500, 
-                    detail="File write failed"
-                )
-                
-            logger.log_step("Successfully saved user profile")
-            
-            # Return the filename and full path for debugging
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "filename": save_path.name,
-                    "path": str(save_path),
-                    "name": name
-                }
-            )
-            
-        except Exception as e:
-            logger.log_error(f"Error writing PNG: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to write PNG: {str(e)}"
-            )
-                
-    except Exception as e:
-        logger.log_error(f"Error saving user profile: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
-
-@app.get("/api/user-image/serve/{filename}")
-async def get_user_image(filename: str):
-    """Serve user profile images by filename only."""
-    try:
-        # Get users directory
-        users_dir = get_users_dir()
-        file_path = users_dir / filename
-
-        logger.log_step(f"Attempting to serve user image: {file_path}")
-
-        if not filename or filename == 'undefined':
-            logger.log_error("Invalid filename requested")
-            raise HTTPException(status_code=400, detail="Invalid filename")
-
-        # Validate the file exists and is within users directory
-        if not file_path.exists():
-            logger.log_error(f"User image not found: {file_path}")
-            raise HTTPException(status_code=404, detail="Image not found")
-            
-        if not file_path.is_file():
-            logger.log_error(f"Not a file: {file_path}")
-            raise HTTPException(status_code=404, detail="Not a file")
-        
-        logger.log_step(f"Serving user image file: {file_path}")
-            
-        # Serve the file
-        return FileResponse(
-            file_path,
-            media_type="image/png",
-            filename=filename
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.log_error(f"Error serving user image: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/append-chat-message")
-async def append_chat_message(request: Request):
-    """Append a single message to the current chat."""
-    try:
-        data = await request.json()
-        character_data = data.get('character_data')  # Changed from character_name
-        message = data.get('message')
-        
-        if not character_data or not message:
-            raise HTTPException(status_code=400, detail="Missing required fields")
-            
-        success = chat_handler.append_message(character_data, message)
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": success,
-                "message": "Message appended successfully" if success else "Failed to append message"
-            }
-        )
-        
-    except Exception as e:
-        logger.log_error(f"Error appending message: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to append message: {str(e)}"
-            }
-        )
-
-# Add these API routes to your main.py file
-
-@app.post("/api/load-latest-chat")
-async def load_latest_chat(request: Request):
-    """Load the most recent chat for a character."""
-    try:
+        if "</s>" not in stop_sequence: stop_sequence.append("</s>")
         data = await request.json()
         character_data = data.get('character_data')
         
@@ -1716,6 +1161,180 @@ async def health_check():
     """Simple health check endpoint."""
     return {"status": "ok", "message": "Server is running"}
 
+@app.get("/api/templates")
+async def get_templates():
+    """Get all available templates."""
+    try:
+        templates = template_handler.get_all_templates()
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "templates": templates
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error getting templates: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.get("/api/users")
+async def get_users():
+    """Get all available users."""
+    try:
+        # Define the users directory (typically in the same location as characters)
+        users_dir = Path(__file__).parent.parent / "frontend" / "users"
+        if not users_dir.exists():
+            users_dir.mkdir(parents=True, exist_ok=True)
+            logger.log_step(f"Created users directory: {users_dir}")
+        
+        # List all PNG files in the users directory
+        users = []
+        for file_path in users_dir.glob("*.png"):
+            users.append({
+                "name": file_path.stem,
+                "path": str(file_path),
+                "size": file_path.stat().st_size,
+                "modified": file_path.stat().st_mtime
+            })
+        
+        # Sort alphabetically by name
+        users.sort(key=lambda x: x["name"].lower())
+        
+        logger.log_step(f"Found {len(users)} users")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "users": users
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error getting users: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.get("/api/user-image/serve/{filename}")
+async def serve_user_image(filename: str):
+    """Serve a user image file."""
+    try:
+        # Define the users directory
+        users_dir = Path(__file__).parent.parent / "frontend" / "users"
+        file_path = users_dir / filename
+        
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="User image not found")
+            
+        return FileResponse(file_path)
+        
+    except Exception as e:
+        logger.log_error(f"Error serving user image: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/user-image/create")
+async def create_user_image(file: UploadFile = File(...), metadata: str = Form(...)):
+    """Create a new user image with metadata."""
+    try:
+        # Parse metadata
+        metadata_dict = json.loads(metadata)
+        
+        # Get user name from metadata
+        user_name = metadata_dict.get("data", {}).get("name", "Unknown")
+        if not user_name:
+            raise HTTPException(status_code=400, detail="User name is required")
+            
+        # Clean filename
+        safe_name = re.sub(r'[<>:"/\\|?*]', '_', user_name)
+        filename = f"{safe_name}.png"
+        
+        # Define the users directory
+        users_dir = Path(__file__).parent.parent / "frontend" / "users"
+        users_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename if file exists
+        file_path = users_dir / filename
+        base_name = file_path.stem
+        extension = file_path.suffix
+        counter = 1
+        while file_path.exists():
+            file_path = users_dir / f"{base_name}_{counter}{extension}"
+            counter += 1
+            
+        # Save the file
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+            
+        logger.log_step(f"Created user image: {file_path}")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"User image created successfully",
+                "filename": file_path.name
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error creating user image: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
+@app.delete("/api/user/{filename}")
+async def delete_user(filename: str):
+    """Delete a user image file."""
+    try:
+        # Define the users directory
+        users_dir = Path(__file__).parent.parent / "frontend" / "users"
+        file_path = users_dir / filename
+        
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="User image not found")
+            
+        # Delete the file
+        file_path.unlink()
+        
+        logger.log_step(f"Deleted user image: {file_path}")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"User image deleted successfully"
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Error deleting user image: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+
 @app.post("/api/upload-image")
 async def upload_image(file: UploadFile = File(...)):
     """Handle image upload for rich text editor."""
@@ -2034,6 +1653,80 @@ async def list_character_chats(request: Request):
             }
         )
 
+@app.post("/api/load-latest-chat")
+async def load_latest_chat(request: Request):
+    """Load the most recent chat for a character."""
+    try:
+        data = await request.json()
+        character_data = data.get('character_data')
+        
+        if not character_data:
+            raise HTTPException(status_code=400, detail="Character data is required")
+            
+        result = chat_handler.load_latest_chat(character_data)
+        
+        if not result:
+            # Return a successful response with empty messages if no chat exists
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "messages": {"messages": [], "metadata": None}
+                }
+            )
+            
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "messages": result
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Failed to load latest chat: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e),
+                "messages": None
+            }
+        )
+
+@app.post("/api/append-chat-message")
+async def append_chat_message(request: Request):
+    """Append a single message to the current chat."""
+    try:
+        data = await request.json()
+        character_data = data.get('character_data')
+        message = data.get('message')
+        
+        if not character_data or not message:
+            raise HTTPException(status_code=400, detail="Character data and message are required")
+            
+        success = chat_handler.append_message(character_data, message)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": success,
+                "message": "Message appended successfully" if success else "Failed to append message"
+            }
+        )
+        
+    except Exception as e:
+        logger.log_error(f"Failed to append message: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
+        
 if __name__ == "__main__":
     # Check for command-line arguments
     parser = argparse.ArgumentParser(description="CardShark Character Card Editor")

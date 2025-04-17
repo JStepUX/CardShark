@@ -4,12 +4,11 @@ import { CharacterData } from '../contexts/CharacterContext';
 import { Message, UserProfile, ChatState, IMessage } from '../types/messages'; // Import IMessage
 import { PromptHandler } from '../handlers/promptHandler';
 import { APIConfigContext } from '../contexts/APIConfigContext';
-import { APIConfig, APIProvider } from '../types/api';
+import { APIConfig } from '../types/api';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
 import { htmlToText } from '../utils/contentUtils';
 import { generateUUID } from '../utils/generateUUID';
-import { Template } from '../types/templateTypes';
 
 // --- Interfaces ---
 interface ReasoningSettings {
@@ -31,7 +30,6 @@ const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
 };
 const REASONING_SETTINGS_KEY = 'cardshark_reasoning_settings';
 const CONTEXT_WINDOW_KEY = 'cardshark_context_window';
-const CURRENT_USER_KEY = 'cardshark_current_user'; // Assuming this key is used by ChatStorage
 
 // --- Helper Functions ---
 const createUserMessage = (content: string): Message => ({
@@ -206,7 +204,8 @@ export function useChatMessages(characterData: CharacterData | null) {
   }, [characterData]);
 
   // --- Persistence ---
-  const saveChat = useCallback((messageList = state.messages) => {
+  // saveChat now requires explicit messageList and user arguments
+  const saveChat = useCallback((messageList: Message[], user: UserProfile | null) => {
     if (!characterData?.data?.name || !autoSaveEnabled.current) return;
     const messagesToSave = messageList.filter(msg => msg.role !== 'thinking');
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -214,13 +213,13 @@ export function useChatMessages(characterData: CharacterData | null) {
       try {
         if (characterData) {
           const apiInfo = apiConfig ? { provider: apiConfig.provider, model: apiConfig.model, url: apiConfig.url, template: apiConfig.templateId, enabled: apiConfig.enabled } : null;
-          await ChatStorage.saveChat(characterData, messagesToSave, state.currentUser, apiInfo);
+          await ChatStorage.saveChat(characterData, messagesToSave, user, apiInfo);
           console.debug(`Saved ${messagesToSave.length} messages`);
         }
       } catch (err) { console.error('Error saving chat:', err); }
       finally { saveTimeoutRef.current = null; }
     }, 1000);
-  }, [characterData, state.messages, state.currentUser, apiConfig]);
+  }, [characterData, apiConfig]);
 
   const appendMessage = useCallback(async (message: Message) => {
     if (message.role === 'thinking' || !characterData?.data?.name) return;
@@ -408,7 +407,7 @@ export function useChatMessages(characterData: CharacterData | null) {
 
     setGeneratingStart(userMessage, assistantMessage);
     await appendMessage(userMessage);
-    setState(prev => { saveChat(prev.messages); return prev; }); // Save state with placeholders
+    setState(prev => { saveChat(prev.messages, prev.currentUser); return prev; }); // Save state with placeholders
 
     try {
       let reasoningResult: string | null = null;
@@ -456,13 +455,13 @@ export function useChatMessages(characterData: CharacterData | null) {
         (finalContent, receivedChunks) => {
           // Use accumulatedContent (tokens) for assistant
           setGenerationComplete(assistantMessage.id, finalContent, 'generation_complete', receivedChunks);
-          setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; });
+          setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; });
         },
-        (error) => { handleGenerationError(error, assistantMessage.id); setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; }); }
+        (error) => { handleGenerationError(error, assistantMessage.id); setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; }); }
       );
     } catch (err) {
       if (!state.error) handleGenerationError(err, assistantMessage.id);
-      setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; });
+      setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; });
     } finally {
       currentGenerationRef.current = null;
       setState(prev => prev.generatingId === assistantMessage.id ? {...prev, isGenerating: false, generatingId: null} : prev);
@@ -508,13 +507,13 @@ export function useChatMessages(characterData: CharacterData | null) {
         (finalContent, receivedChunks) => {
           accumulatedContent = finalContent;
           setGenerationComplete(messageId, finalContent, 'regeneration_complete', receivedChunks);
-          setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
+          setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
         },
-        (error) => { handleGenerationError(error, messageId, 'regeneration'); setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; }); }
+        (error) => { handleGenerationError(error, messageId, 'regeneration'); setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; }); }
       );
     } catch (err) {
       handleGenerationError(err, messageId, 'regeneration');
-      setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
+      setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
     } finally {
       currentGenerationRef.current = null;
       setState(prev => prev.generatingId === messageId ? {...prev, isGenerating: false, generatingId: null} : prev);
@@ -565,13 +564,13 @@ export function useChatMessages(characterData: CharacterData | null) {
         (finalContent, receivedChunks) => {
           accumulatedContent = finalContent;
           setGenerationComplete(messageId, finalContent, 'variation_complete', receivedChunks, originalContent);
-          setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
+          setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
         },
-        (error) => { handleGenerationError(error, messageId, 'variation'); setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; }); }
+        (error) => { handleGenerationError(error, messageId, 'variation'); setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; }); }
       );
     } catch (err) {
       handleGenerationError(err, messageId, 'variation');
-      setState(prev => { saveChat(prev.messages); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
+      setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
     } finally {
       currentGenerationRef.current = null;
       setState(prev => prev.generatingId === messageId ? {...prev, isGenerating: false, generatingId: null} : prev);
@@ -594,7 +593,7 @@ export function useChatMessages(characterData: CharacterData | null) {
         }
         return msg;
       });
-      if (updatedMessage) { saveChat(updatedMessages); appendMessage(updatedMessage); }
+      if (updatedMessage) { saveChat(updatedMessages, prev.currentUser); appendMessage(updatedMessage); }
       const targetMessage = prev.messages.find(msg => msg.id === messageId);
       const updatedContextWindow = { type: 'variation_cycled', timestamp: new Date().toISOString(), messageId, direction, newVariationIndex: nextIdx, totalVariations: targetMessage?.variations?.length || 0, characterName: characterData?.data?.name || 'Unknown' };
       return { ...prev, messages: updatedMessages, lastContextWindow: updatedContextWindow };
@@ -627,7 +626,7 @@ export function useChatMessages(characterData: CharacterData | null) {
         const firstMessage = createAssistantMessage(characterData.data.first_mes, 'complete');
         setState(prev => ({ ...prev, messages: [firstMessage], lastContextWindow: { type: 'initial_message', timestamp: new Date().toISOString(), firstMessage: firstMessage.content } }));
         hasInitializedChat.current = true;
-        saveChat([firstMessage]);
+        saveChat([firstMessage], state.currentUser);
       } else {
         setState(prev => ({ ...prev, error: result.error || 'Failed to load chat', messages: [] }));
         hasInitializedChat.current = false;
@@ -657,12 +656,12 @@ export function useChatMessages(characterData: CharacterData | null) {
    const deleteMessage = (messageId: string) => {
      setState(prev => {
        const newMessages = prev.messages.filter(msg => msg.id !== messageId);
-       saveChat(newMessages);
+       saveChat(newMessages, prev.currentUser);
        return { ...prev, messages: newMessages, lastContextWindow: { type: 'message_deleted', timestamp: new Date().toISOString(), messageId, remainingMessages: newMessages.length, characterName: characterData?.data?.name || 'Unknown' } };
      });
    };
 
-   const updateMessage = (messageId: string, newContent: string) => {
+   const updateMessage = (messageId: string, newContent: string, isStreamingUpdate?: boolean) => {
      setState(prev => {
        let updatedMessage: Message | null = null;
        const newMessages = prev.messages.map(msg => {
@@ -672,7 +671,11 @@ export function useChatMessages(characterData: CharacterData | null) {
          }
          return msg;
        });
-       if (updatedMessage) { saveChat(newMessages); appendMessage(updatedMessage); }
+       // Only save and append if not a streaming update
+       if (updatedMessage && !isStreamingUpdate) {
+         saveChat(newMessages, prev.currentUser);
+         appendMessage(updatedMessage);
+       }
        return { ...prev, messages: newMessages, lastContextWindow: { type: 'message_edited', timestamp: new Date().toISOString(), messageId, newContent: newContent, characterName: characterData?.data?.name || 'Unknown' } };
      });
    };
@@ -687,11 +690,11 @@ export function useChatMessages(characterData: CharacterData | null) {
        if (characterData.data.first_mes) {
          const firstMessage = createAssistantMessage(characterData.data.first_mes, 'complete');
          setState(prev => ({ ...prev, messages: [firstMessage], isLoading: false, lastContextWindow: { ...prev.lastContextWindow, type: 'new_chat_complete', firstMessage: firstMessage.content } }));
-         saveChat([firstMessage]);
+         saveChat([firstMessage], state.currentUser);
          hasInitializedChat.current = true;
        } else {
           setState(prev => ({ ...prev, messages: [], isLoading: false, lastContextWindow: { ...prev.lastContextWindow, type: 'new_chat_complete_empty' } }));
-          saveChat([]);
+          saveChat([], state.currentUser);
           hasInitializedChat.current = true;
        }
      } catch (err) {
@@ -720,7 +723,7 @@ export function useChatMessages(characterData: CharacterData | null) {
         } else if (characterData.data.first_mes) {
           const firstMessage = createAssistantMessage(characterData.data.first_mes, 'complete');
           setState(prev => ({ ...prev, messages: [firstMessage], lastContextWindow: { type: 'initial_message', timestamp: new Date().toISOString(), firstMessage: firstMessage.content } }));
-          saveChat([firstMessage]);
+          saveChat([firstMessage], state.currentUser);
         } else { setState(prev => ({ ...prev, messages: [] })); }
         hasInitializedChat.current = true;
       } catch (err) {

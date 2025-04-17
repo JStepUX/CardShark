@@ -6,6 +6,9 @@ class ErrorType(Enum):
     INVALID_FORMAT = "INVALID_FORMAT"  
     PROCESSING_ERROR = "PROCESSING_ERROR"
     METADATA_ERROR = "METADATA_ERROR"
+    WORLD_NOT_FOUND = "WORLD_NOT_FOUND"
+    WORLD_STATE_INVALID = "WORLD_STATE_INVALID"
+    LOCATION_EXTRACTION_FAILED = "LOCATION_EXTRACTION_FAILED"
 
 class ErrorMessages:
     FILE_NOT_FOUND = "File not found: {path}"
@@ -13,6 +16,9 @@ class ErrorMessages:
     PROCESSING_FAILED = "Failed to process file: {error}"
     INVALID_FORMAT = "Invalid file format: {format}"
     INVALID_JSON = "Invalid JSON structure: {error}"
+    WORLD_NOT_FOUND = "World not found: {world_name}"
+    WORLD_STATE_INVALID = "World state validation failed: {error}"
+    LOCATION_EXTRACTION_FAILED = "Failed to extract locations from character lore: {error}"
 
 class CardSharkError(Exception):
     def __init__(self, message: str, error_type: ErrorType):

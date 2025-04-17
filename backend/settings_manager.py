@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Any
+import traceback
 
 class SettingsManager:
     def __init__(self, logger):
@@ -25,6 +26,7 @@ class SettingsManager:
         """Load settings from file, creating default if doesn't exist."""
         default_settings = {
             "character_directory": "",
+            "worldcards_directory": "",  # Default directory for world cards
             "last_export_directory": "",
             "save_to_character_directory": False,
             "theme": "dark",
@@ -108,6 +110,7 @@ class SettingsManager:
             
         except Exception as e:
             self.logger.log_error(f"Error loading settings: {str(e)}")
+            self.logger.log_error(traceback.format_exc()) # Add traceback
             return default_settings
 
     def update_settings_with_apis(self, data):
@@ -254,6 +257,7 @@ class SettingsManager:
             
         except Exception as e:
             self.logger.log_error(f"Error updating API settings: {str(e)}")
+            self.logger.log_error(traceback.format_exc()) # Add traceback
             return False
 
     def _save_settings(self, settings: Dict[str, Any]) -> bool:
@@ -320,6 +324,7 @@ class SettingsManager:
             
         except Exception as e:
             self.logger.log_error(f"Error saving settings: {str(e)}")
+            self.logger.log_error(traceback.format_exc()) # Add traceback
             return False
 
     def _validate_directory(self, directory: str) -> bool:
@@ -351,6 +356,7 @@ class SettingsManager:
             
         except Exception as e:
             self.logger.log_error(f"Error validating directory: {str(e)}")
+            self.logger.log_error(traceback.format_exc()) # Add traceback
             return False
 
     def get_setting(self, key: str) -> Any:
@@ -407,4 +413,5 @@ class SettingsManager:
             
         except Exception as e:
             self.logger.log_error(f"Error updating setting '{key}': {str(e)}")
+            self.logger.log_error(traceback.format_exc()) # Add traceback
             return False
