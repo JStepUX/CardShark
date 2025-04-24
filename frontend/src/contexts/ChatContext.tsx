@@ -646,7 +646,6 @@ export const ChatProvider: React.FC<{
     }, 50); // Short delay to ensure state is updated first
   }, [characterData, saveChat]);
 
-
   // Generate response with support for /new command
   const generateResponse = useCallback(async (prompt: string) => {
     if (!characterData || isGenerating) return;
@@ -727,38 +726,35 @@ export const ChatProvider: React.FC<{
       );
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        // Throw error using response status and text
+        throw new Error(`API Error: ${response.status} ${await response.text()}`);
       }
 
-      // Process streaming response
+      // Process streaming response using the async generator
       let content = '';
       let buffer = '';
       let isFirstChunk = true;
 
       bufferTimer = setInterval(() => {
         if (buffer.length > 0) {
-          let processedBuffer = buffer; // Define processedBuffer here
-          
-          // Trim leading whitespace only for the first chunk
+          let processedBuffer = buffer;
           if (isFirstChunk && content === '') {
             processedBuffer = processedBuffer.replace(/^\s+/, '');
             isFirstChunk = false;
           }
-          
-          const newContent = content + processedBuffer; // Use processedBuffer instead of buffer
+          const newContent = content + processedBuffer;
           buffer = '';
-          
           setMessages((prev: Message[]) => {
             const updatedMessages = prev.map(msg =>
               msg.id === assistantMessage.id ? { ...msg, content: newContent } : msg
             );
             return updatedMessages;
           });
-          
           content = newContent;
         }
       }, 50);
       
+      // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
         buffer += chunk;
       }
@@ -820,7 +816,8 @@ export const ChatProvider: React.FC<{
     prepareAPIConfig,
     reasoningSettings.enabled,
     apiConfig,
-    updateAndSaveMessages // Add the helper function here
+    updateAndSaveMessages,
+    messages
   ]);
   
   // Regenerate message
@@ -894,9 +891,10 @@ export const ChatProvider: React.FC<{
 
       // Generate new content
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
-      // Set up abort controller for cancellation
       const abortController = new AbortController();
       currentGenerationRef.current = abortController;
+      
+      // Call generateChatResponse which returns a Response object
       const response = await PromptHandler.generateChatResponse(
         characterData,
         promptText,
@@ -906,16 +904,17 @@ export const ChatProvider: React.FC<{
       );
 
       if (!response.ok) {
-        throw new Error("Generation failed - check API settings");
+        // Throw error using response status and text
+        throw new Error(`Generation failed - check API settings: ${response.status} ${await response.text()}`);
       }
 
-      // Stream response
+      // Stream response using the async generator
       let newContent = '';
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
 
+      // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        // Batch updates for smoother performance
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
@@ -923,18 +922,19 @@ export const ChatProvider: React.FC<{
               buffer = '';
               setMessages((prev: Message[]) => {
                 const updatedMessages = [...prev];
-                updatedMessages[targetIndex] = {
-                  ...updatedMessages[targetIndex],
-                  content
-                };
+                // Ensure targetIndex is valid before updating
+                if (targetIndex >= 0 && targetIndex < updatedMessages.length) {
+                   updatedMessages[targetIndex] = {
+                     ...updatedMessages[targetIndex],
+                     content
+                   };
+                }
                 return updatedMessages;
               });
               newContent = content;
             }
-          }, 50); // Render updates at ~20fps for smooth animation
+          }, 50);
         }
-
-        // Add new content to buffer
         buffer += chunk;
       }
 
@@ -944,7 +944,7 @@ export const ChatProvider: React.FC<{
         bufferTimer = null;
       }
 
-      // Final update.  Define finalMessages *here*.
+      // Final update.  Define finalMessages here before using it
       if (buffer.length > 0) {
         newContent += buffer;
       }
@@ -1059,6 +1059,8 @@ export const ChatProvider: React.FC<{
   
       // Generate new content
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
+      
+      // Call generateChatResponse which returns a Response object
       const response = await PromptHandler.generateChatResponse(
         characterData,
         message.content, // Pass original message content for context
@@ -1068,27 +1070,25 @@ export const ChatProvider: React.FC<{
       );
   
       if (!response.ok) {
-        throw new Error("Continuation failed - check API settings");
+        // Throw error using response status and text
+        throw new Error(`Continuation failed - check API settings: ${response.status} ${await response.text()}`);
       }
   
-      // Stream response
+      // Stream response using the async generator
       let newContent = message.content; // Start with existing content
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
       
-      // While streaming, ONLY update the current message content - don't save or create variations yet
+      // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        // Batch updates for smoother performance
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
               const content = newContent + buffer;
               buffer = '';
-  
-              // ONLY update state for display purposes, no saving or variations
               setMessages((prev: Message[]) => {
                 const updatedMessages = [...prev];
-                if (targetIndex < updatedMessages.length) {
+                if (targetIndex >= 0 && targetIndex < updatedMessages.length) {
                   updatedMessages[targetIndex] = {
                     ...updatedMessages[targetIndex],
                     content
@@ -1100,8 +1100,6 @@ export const ChatProvider: React.FC<{
             }
           }, 50);
         }
-  
-        // Add new content to buffer
         buffer += chunk;
       }
   
@@ -1278,7 +1276,7 @@ export const ChatProvider: React.FC<{
         characterName: characterData.data?.name || 'Unknown'
       });
       
-      const data = await ChatStorage.loadChat(characterData, chatId);
+      const data = await ChatStorage.loadChat(chatId, characterData);
       
       if (data.success && data.messages) {
         const userFromChat = data.messages.metadata?.chat_metadata?.lastUser;

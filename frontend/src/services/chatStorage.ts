@@ -200,9 +200,7 @@ export class ChatStorage {
         },
         body: JSON.stringify({
           chat_id: chatId,
-          character_data: character, // Send full character object
-          character_id: characterId,
-          char_name: character.data?.name || ''
+          character_data: character // Send the full character object
         }),
       });
 
@@ -282,7 +280,7 @@ export class ChatStorage {
     try {
       console.log(`Saving chat with ${messages.length} messages for character:`, character.data?.name);
       
-      const characterId = this.getCharacterId(character);
+      // Removed unused characterId declaration
       
       const response = await fetch('/api/save-chat', {
         method: 'POST',
@@ -291,11 +289,10 @@ export class ChatStorage {
         },
         body: JSON.stringify({
           character_data: character, // Send full character object
-          character_id: characterId,
-          char_name: character.data?.name || '',
           messages: messages,
-          user: currentUser,
+          lastUser: currentUser, // Corrected key name
           api_info: apiInfo
+          // Removed character_id and char_name as they are not expected by this specific endpoint
         }),
       });
 

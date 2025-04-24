@@ -16,6 +16,7 @@ import { useAPIConfig } from '../contexts/APIConfigContext';
 import { useSettings } from '../contexts/SettingsContext';
 import PromptSettings from './PromptSettings';
 import HighlightingSettings from './HighlightingSettings';
+import KoboldCPPManager from './KoboldCPPManager';
 
 interface APISettingsViewProps {}
 
@@ -192,6 +193,11 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                 <Plus size={18} />
                 Add API
               </button>
+            </div>
+            
+            {/* KoboldCPP Manager */}
+            <div className="mb-8">
+              <KoboldCPPManager />
             </div>
             
             {/* API Cards */}

@@ -5,3 +5,6 @@ python-multipart>=0.0.6      # File uploads
 pyinstaller>=6.0.0           # Create executable
 pydantic>=2.4.2             # Data validation
 send2Trash>=1.8.3           # Native delete functionality
+psutil>=5.9.0               # Process management for KoboldCPP
+sse-starlette>=1.6.5        # Server-sent events for streaming progress
+requests>=2.31.0            # HTTP requests

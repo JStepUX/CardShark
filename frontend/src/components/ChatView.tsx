@@ -46,113 +46,6 @@ const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
   visible: false
 };
 
-// Custom hook to detect and stop generation that runs too long
-const useGenerationTimeout = (isGenerating: boolean, stopGeneration: () => void, timeout = 30000) => {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  useEffect(() => {
-    // When generation starts, set a backup timeout
-    if (isGenerating) {
-      console.log(`Setting generation timeout (${timeout}ms)`);
-      
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
-      // Set new timeout
-      timeoutRef.current = setTimeout(() => {
-        console.warn('Generation timeout reached - forcing stop');
-        stopGeneration();
-      }, timeout);
-    } else {
-      // Clear timeout when generation stops
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [isGenerating, stopGeneration, timeout]);
-};
-
-// Enhanced timeout hook with fallback timer
-const useEnhancedGenerationTimeout = (
-  isGenerating: boolean, 
-  stopGeneration: () => void, 
-  initialTimeout = 30000,
-  hardTimeout = 60000
-) => {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hardTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  useEffect(() => {
-    // When generation starts, set the timeouts
-    if (isGenerating) {
-      console.log(`Setting generation timeouts (normal: ${initialTimeout}ms, hard: ${hardTimeout}ms)`);
-      
-      // Clear any existing timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
-      if (hardTimeoutRef.current) {
-        clearTimeout(hardTimeoutRef.current);
-        hardTimeoutRef.current = null;
-      }
-      
-      // Set normal timeout
-      timeoutRef.current = setTimeout(() => {
-        console.warn('Generation timeout reached - attempting to stop');
-        stopGeneration();
-      }, initialTimeout);
-      
-      // Set hard timeout as fallback - this will always fire even if normal stop fails
-      hardTimeoutRef.current = setTimeout(() => {
-        console.error('HARD generation timeout reached - forcing stop');
-        stopGeneration();
-        
-        // Dispatch an event to signal that generation is forcibly ended
-        // This is a fallback mechanism in case normal stopping doesn't work
-        window.dispatchEvent(new CustomEvent('cardshark:force-generation-stop'));
-      }, hardTimeout);
-    } else {
-      // Clear timeouts when generation stops
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
-      if (hardTimeoutRef.current) {
-        clearTimeout(hardTimeoutRef.current);
-        hardTimeoutRef.current = null;
-      }
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
-      if (hardTimeoutRef.current) {
-        clearTimeout(hardTimeoutRef.current);
-        hardTimeoutRef.current = null;
-      }
-    };
-  }, [isGenerating, stopGeneration, initialTimeout, hardTimeout]);
-};
-
 // Custom hook for stall detection - for use in ChatBubble component
 // This hook is exported for use in other components
 export const useStallDetection = (
@@ -283,7 +176,7 @@ const InputArea: React.FC<{
         >
           {currentUser && !imageError ? (
             <img
-              src={`/api/user-image/serve/${encodeURIComponent(currentUser.filename)}`}
+              src={`/api/user-image/${encodeURIComponent(currentUser.filename)}`}
               alt={currentUser.name}
               className="w-full h-full object-cover"
               onError={() => {
@@ -447,14 +340,6 @@ const ChatView: React.FC = () => {
       console.log('Continuation context window:', contextWindow);
     }
   );
-
-  // Use the generation timeout hook to prevent infinite generations
-  useGenerationTimeout(isGenerating, stopGeneration, 30000);
-  useGenerationTimeout(isGenerating, stopContinuation, 30000); // Also add for continuation
-
-  // Use the enhanced generation timeout hook with an additional hard fallback
-  useEnhancedGenerationTimeout(isGenerating, stopGeneration, 30000, 60000);
-  useEnhancedGenerationTimeout(isGenerating, stopContinuation, 30000, 60000);
 
   // Add listener for forced generation stop
   useEffect(() => {

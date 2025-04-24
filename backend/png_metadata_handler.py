@@ -103,11 +103,18 @@ class PngMetadataHandler:
             raise
 
           
-    def read_metadata(self, file_data: Union[bytes, BinaryIO]) -> Dict:
+    def read_metadata(self, file_data: Union[str, bytes, BinaryIO]) -> Dict:
         """Read character metadata from a PNG file, prioritizing EXIF."""
         try:
-            # Convert input to BytesIO
-            bio = BytesIO(file_data if isinstance(file_data, bytes) else file_data.read())
+            # Handle file path string, bytes, or file object
+            if isinstance(file_data, str):
+                with open(file_data, 'rb') as f:
+                    content = f.read()
+                bio = BytesIO(content)
+            elif isinstance(file_data, bytes):
+                bio = BytesIO(file_data)
+            else: # Assume BinaryIO
+                bio = BytesIO(file_data.read())
 
             # Open image and read metadata
             with Image.open(bio) as image:

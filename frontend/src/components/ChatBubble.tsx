@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Message } from '../types/messages';
 import RichTextEditor from './RichTextEditor';
+import { formatUserName } from '../utils/formatters'; // Import formatter
 
 interface ChatBubbleProps {
   message: Message;
@@ -171,7 +172,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     <div className={`w-full rounded-lg transition-colors ${bubbleClass}`}>
       <div className="px-4 pt-2 flex justify-between items-center">
         <div className="text-sm text-gray-500">
-          {message.role === 'user' ? currentUser : characterName || 'Character'}
+          {message.role === 'user' ? formatUserName(currentUser || '') : characterName || 'Character'}
           {copied && <span className="ml-2 text-green-500 text-xs">Copied!</span>}
         </div>
 

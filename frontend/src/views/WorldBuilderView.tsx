@@ -1,65 +1,66 @@
-import React, { useState, useEffect, useCallback } from 'react'; // Added useEffect, useCallback
-import { useNavigate, useParams } from 'react-router-dom'; // Added useParams
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { worldStateApi } from '../utils/worldStateApi';
+import { useCharacter } from '../contexts/CharacterContext';
+// Import WorldLocation directly
+import { FullWorldState, WorldLocation, NpcGridItem } from '../types/worldState';
+import { CharacterCard } from '../types/schema';
+import { Room } from '../types/room';
+import RoomMap from '../components/RoomMap';
+import RoomEditor from '../components/RoomEditor';
+import WorldSaveButton from '../components/WorldSaveButton';
+import { Dialog } from '../components/Dialog';
 import GalleryGrid from '../components/GalleryGrid';
-import RoomMap from "../components/RoomMap";
-import NpcSelectorModal from "../components/NpcSelectorModal";
-import WorldSaveButton from "../components/WorldSaveButton";
-import { useCharacter } from '../contexts/CharacterContext'; // Import character context hook
-import { CharacterCard } from '../types/schema'; // Import CharacterCard type from its source
+import NpcCard from '../components/NpcCard';
 
-type Direction = 'N' | 'S' | 'E' | 'W';
-const DIRS: Record<Direction, { dx: number; dy: number }> = {
-  N: { dx: 0, dy: -1 },
-  S: { dx: 0, dy: 1 },
-  E: { dx: 1, dy: 0 },
-  W: { dx: -1, dy: 0 },
-};
-
-import { Room, FullWorldState, NpcGridItem } from '../types/worldState'; // Import types
-
-// Direction type and DIRS constant are already defined above, remove duplicates
-
-// Remove local interface definitions for Room, FullWorldState, NpcGridItem
-// interface WorldCardData { ... }
-// interface Room { ... }
-// interface FullWorldState { ... }
-
-// Remove WorldStub and WorldBuilderViewProps
-// interface WorldStub { ... }
-// interface WorldBuilderViewProps { ... }
-
-// Keep local types specific to this component's rendering logic
-interface AddButtonItem { isAddButton: true; }
-type NpcOrAdd = NpcGridItem | AddButtonItem;
-
-function posKey(x: number, y: number) {
+function posKey(x: number, y: number): string {
   return `${x},${y}`;
 }
 
-const WorldBuilderView: React.FC = () => { // Remove props
-  // Initial room at (0,0)
-  const { worldId } = useParams<{ worldId: string }>(); // Get worldId from URL
+// Helper function to normalize NPC data format
+const normalizeNpc = (npc: any): NpcGridItem => {
+  // If npc is already a valid object with name and path, return it
+  if (typeof npc === 'object' && npc !== null && typeof npc.name === 'string' && typeof npc.path === 'string') {
+    return npc as NpcGridItem;
+  }
+  
+  // If npc is a string (path), create an object with path and derived name
+  if (typeof npc === 'string') { // Corrected 'is' to '==='
+    const pathParts = npc.split(/[\/\\]/);
+    const fileName = pathParts[pathParts.length - 1];
+    const name = fileName.replace(/\.\w+$/, ''); // Remove file extension
+    
+    return {
+      name: name || 'Unknown Character',
+      path: npc
+    };
+  }
+  
+  // Default fallback for unknown formats
+  return {
+    name: 'Unknown Character',
+    path: typeof npc === 'string' ? npc : ''
+  };
+};
+
+const WorldBuilderView: React.FC = () => {
+  // URL parameters
+  const { worldId } = useParams<{ worldId: string }>();
   const navigate = useNavigate();
-  const { setCharacterData: setContextCharacterData } = useCharacter(); // Get context setter
+  const { setCharacterData: setContextCharacterData } = useCharacter();
 
   // State for fetched world data
   const [worldData, setWorldData] = useState<FullWorldState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // State for builder specific data (rooms, selection etc.)
-  // Initialize rooms based on fetched data later in useEffect
-  const [roomsById, setRoomsById] = useState<{ [id: string]: Room }>({});
-  const [posToId, setPosToId] = useState<{ [key: string]: string }>({});
+  // State for builder specific data
+  const [roomsById, setRoomsById] = useState<Record<string, Room>>({});
+  const [posToId, setPosToId] = useState<Record<string, string>>({});
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-
-  // Remove initial room setup here, will be done in useEffect
-  // const [roomsById, setRoomsById] = useState<{ [id: string]: Room }>({ [initialRoom.id]: initialRoom });
-  // const [posToId, setPosToId] = useState<{ [key: string]: string }>({ [posKey(0, 0)]: initialRoom.id });
-  // const [selectedRoomId, setSelectedRoomId] = useState<string>(initialRoom.id);
-  // Remove global NPCs state; NPCs are now per-room
-// const [npcs, setNpcs] = useState<NpcGridItem[]>([]);
   const [npcModalOpen, setNpcModalOpen] = useState(false);
+  const [availableNpcs, setAvailableNpcs] = useState<NpcGridItem[]>([]);
+  // const [characterDirectory, setCharacterDirectory] = useState<string | null>(null); // Remove unused state
 
   const selectedRoom = selectedRoomId ? roomsById[selectedRoomId] : null;
 
@@ -74,40 +75,70 @@ const WorldBuilderView: React.FC = () => { // Remove props
       setIsLoading(true);
       setError(null);
       try {
-        // TODO: Replace with actual API endpoint if different
-        const response = await fetch(`/api/world-state/load/${encodeURIComponent(worldId)}`); // Use path parameter
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data: FullWorldState = await response.json(); // Adjust type based on actual API response
+        const data: FullWorldState = await worldStateApi.getWorldState(worldId);
         setWorldData(data);
 
-        // Initialize rooms from fetched data
-        const initialRooms: { [id: string]: Room } = {};
-        const initialPosToId: { [key: string]: string } = {};
-        let firstRoomId: string | null = null;
+        const initialRooms: Record<string, Room> = {};
+        const initialPosToId: Record<string, string> = {};
+        let initialSelectedRoomId: string | null = null;
+        let defaultRoomCreated = false;
 
-        if (data.rooms && data.rooms.length > 0) {
-           data.rooms.forEach(room => {
-             initialRooms[room.id] = room;
-             initialPosToId[posKey(room.x, room.y)] = room.id;
-             if (!firstRoomId) firstRoomId = room.id; // Select the first room initially
-           });
+        const locationsSource = data.locations || {};
+        const locationKeys = Object.keys(locationsSource);
+
+        if (locationKeys.length > 0) {
+          locationKeys.forEach((coordKey) => {
+            const loc: WorldLocation = locationsSource[coordKey];
+            if (!loc || !loc.coordinates || !loc.location_id || !loc.name) return;
+
+            const x = loc.coordinates[0];
+            const y = loc.coordinates[1];
+
+            const room: Room = {
+              id: loc.location_id,
+              name: loc.name,
+              description: loc.description || '',
+              x: x,
+              y: y,
+              neighbors: (loc as any).neighbors || {},
+              npcs: (loc.npcs || []).map(normalizeNpc).map((npc: NpcGridItem) => ({ path: npc.path, name: npc.name }))
+            };
+            initialRooms[room.id] = room;
+            initialPosToId[posKey(x, y)] = room.id;
+          });
+
+          const currentCoords = data.current_position?.split(',').map(Number);
+          if (currentCoords && currentCoords.length >= 2) {
+            const currentPosKey = posKey(currentCoords[0], currentCoords[1]);
+            initialSelectedRoomId = initialPosToId[currentPosKey] || null;
+          }
+
+          if (!initialSelectedRoomId) {
+            initialSelectedRoomId = initialRooms[Object.keys(initialRooms)[0]]?.id || null;
+          }
+
         } else {
-          // Handle case with no rooms - create a default starting room?
           const defaultRoom: Room = {
-             id: 'room-default-1', name: 'Starting Room', description: 'Configure this room.',
-             x: 0, y: 0, neighbors: {}, npcs: []
+             id: `room-${worldId}-start`,
+             name: 'Starting Room',
+             description: 'Configure this room.',
+             x: 0,
+             y: 0,
+             neighbors: {},
+             npcs: []
           };
           initialRooms[defaultRoom.id] = defaultRoom;
           initialPosToId[posKey(0,0)] = defaultRoom.id;
-          firstRoomId = defaultRoom.id;
-          // Consider saving this default room back immediately or on first edit
+          initialSelectedRoomId = defaultRoom.id;
+          defaultRoomCreated = true;
         }
 
         setRoomsById(initialRooms);
         setPosToId(initialPosToId);
-        setSelectedRoomId(firstRoomId); // Select the first room found or the default
+        setSelectedRoomId(initialSelectedRoomId);
+
+        if (defaultRoomCreated && data) {
+        }
 
       } catch (err: any) {
         console.error("Failed to fetch world details:", err);
@@ -122,141 +153,298 @@ const WorldBuilderView: React.FC = () => { // Remove props
     };
 
     fetchWorldDetails();
-  }, [worldId]); // Re-fetch if worldId changes
+  }, [worldId]);
+
+  useEffect(() => {
+    // Fetch settings first to get the character directory
+    const fetchSettingsAndNpcs = async () => {
+      let dirPath: string | null = null;
+      try {
+        const settingsResponse = await fetch('/api/settings');
+        if (!settingsResponse.ok) throw new Error('Failed to load settings');
+        const settingsData = await settingsResponse.json();
+        if (settingsData.success && settingsData.settings.character_directory) {
+          dirPath = settingsData.settings.character_directory;
+          // setCharacterDirectory(dirPath); // Remove unused state update
+        } else {
+          console.error("Character directory not set in settings.");
+          // Optionally set an error state here to inform the user
+          return; // Stop if directory is not set
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+        // Optionally set an error state here
+        return; // Stop if settings fetch fails
+      }
+
+      // Now fetch NPCs using the obtained directory path
+      if (dirPath) {
+        try {
+          const response = await fetch(`/api/characters?directory=${encodeURIComponent(dirPath)}`); // Add directory param
+          if (!response.ok) { // Check for non-2xx responses
+            const errorData = await response.json().catch(() => ({ message: `Server error (${response.status})` }));
+            throw new Error(errorData.message || `Failed to load characters. Status: ${response.status}`);
+          }
+          const data = await response.json();
+          if (data && Array.isArray(data.files)) {
+            const npcs = data.files.map((file: any) => normalizeNpc(file.path || file.name));
+            setAvailableNpcs(npcs);
+          } else if (data.success === false) {
+             throw new Error(data.message || 'Backend indicated failure to list characters.');
+          }
+        } catch (error) {
+          console.error("Failed to fetch available NPCs:", error);
+          // Optionally set an error state here
+          setAvailableNpcs([]); // Clear NPCs on error
+        }
+      }
+    };
+
+    fetchSettingsAndNpcs();
+  }, []); // Dependency array remains empty as we only want this on mount
 
 
   const handlePlayHere = (roomId: string | null) => {
-    if (!worldId || !roomId || !worldData) return;
+    if (!worldId || !roomId || !worldData || !roomsById[roomId]) return;
 
-    // Create a CharacterCard structure for the context
-    // Use fetched worldData where possible, defaults otherwise
+    const targetRoom = roomsById[roomId];
+    const targetPosition = `${targetRoom.x},${targetRoom.y},0`;
+
+    // --- START CHANGE ---
+    // Use the target room's description or name for context
+    const roomDescription = targetRoom.description || `You are in ${targetRoom.name}.`;
+    // Use introduction if available, otherwise description
+    const roomIntroduction = (targetRoom as any).introduction || targetRoom.description || `Welcome to ${targetRoom.name}.`;
+    // --- END CHANGE ---
+
     const characterCardForContext: CharacterCard = {
-      // Top-level fields (use defaults or map from worldData if available)
-      name: worldData.name || "", // Use world name
-      description: worldData.description || "", // Use world description
-      personality: "", // Default
-      scenario: "", // Default
-      first_mes: "", // Default
-      mes_example: "", // Default
-      creatorcomment: "", // Default
-      avatar: "none", // Default
-      chat: "", // Default - chat history likely separate
-      talkativeness: "0.5", // Default
-      fav: false, // Default
-      tags: [], // Default
-      spec: "chara_card_v2", // Default
-      spec_version: "2.0", // Default
-      create_date: "", // Default or map if available
+      name: worldData.name || "World Narrator", // Use world name or a default
+      description: roomDescription, // Use the room's description
+      personality: "",
+      scenario: `Exploring the world of ${worldData.name || 'Unknown'} at ${targetRoom.name}`, // More specific scenario
+      first_mes: roomIntroduction, // Use the room's introduction/description
+      mes_example: "",
+      // --- START CHANGE ---
+      // creatorcomment: "", // Removed access to worldData.creatorcomment
+      creatorcomment: "World Narrator context card", // Provide a default comment
+      // --- END CHANGE ---
+      avatar: "none",
+      chat: "",
+      talkativeness: "0.5",
+      fav: false,
+      tags: ["world", worldData.name || "unknown", targetRoom.name], // Add room name tag
+      spec: "chara_card_v2",
+      spec_version: "2.0",
+      // --- START CHANGE ---
+      // create_date: worldData.create_date || "", // Removed access to worldData.create_date
+      create_date: new Date().toISOString(), // Use current date as creation date for this context card
+      // --- END CHANGE ---
 
-      // Nested data object
       data: {
-        name: worldData.name || "",
-        description: worldData.description || "",
-        personality: "", // Default
-        scenario: "", // Default
-        first_mes: "", // Default
-        mes_example: "", // Default
-        creator_notes: "", // Default
-        system_prompt: "", // Default
-        post_history_instructions: "", // Default
-        tags: [], // Default
-        creator: "", // Default
-        character_version: "", // Default
-        alternate_greetings: [], // Default
-        // Map extensions if worldData has relevant info
+        name: worldData.name || "World Narrator",
+        description: roomDescription, // Use the room's description
+        personality: "",
+        scenario: `Exploring the world of ${worldData.name || 'Unknown'} at ${targetRoom.name}`, // More specific scenario
+        first_mes: roomIntroduction, // Use the room's introduction/description
+        mes_example: "",
+        // --- START CHANGE ---
+        // creator_notes: worldData.creatorcomment || "", // Removed access to worldData.creatorcomment
+        creator_notes: "Context card for world narration.", // Provide default notes
+        // --- END CHANGE ---
+        system_prompt: `You are the narrator describing the world of ${worldData.name || 'Unknown'}. The user is currently in ${targetRoom.name}. ${roomDescription}`, // Enhance system prompt
+        post_history_instructions: "Describe the surroundings, events, and potential actions based on the current location.", // Enhance post history instructions
+        tags: ["world", worldData.name || "unknown", targetRoom.name], // Add room name tag
+        // --- START CHANGE ---
+        // creator: worldData.creator || "", // Removed access to worldData.creator
+        creator: "System", // Set creator to System
+        // character_version: worldData.character_version || "1.0", // Removed access to worldData.character_version
+        character_version: "1.0", // Set default version
+        // --- END CHANGE ---
+        alternate_greetings: [], // Could potentially add room-specific greetings later
         extensions: {
           talkativeness: "0.5",
           fav: false,
-          world: worldData.name || "Unknown World", // Use world name here too
+          world: worldData.name || "Unknown World",
           depth_prompt: { prompt: "", depth: 4, role: "system" }
         },
-        group_only_greetings: [], // Default
-        character_book: { entries: [], name: "" }, // Default
-        spec: '' // Default
+        group_only_greetings: [],
+        character_book: {
+          entries: (worldData as any).worldItems?.map((item: any) => ({
+            keys: [item.name || "Unknown Item"],
+            content: item.description || ""
+          })) || [],
+          name: "World Items"
+        },
+        spec: ''
       }
     };
 
     setContextCharacterData(characterCardForContext);
-    navigate(`/worldcards/${worldId}/play`); // Navigate to the nested play route
+
+    navigate(`/worldcards/${encodeURIComponent(worldId)}/play?startPos=${targetPosition}`);
   };
 
-  // Add a new room in the given direction
   const handleCreateRoom = (x: number, y: number) => {
-  const newPosKey = posKey(x, y);
-  if (posToId[newPosKey]) {
-    setSelectedRoomId(posToId[newPosKey]);
-    return;
-  }
-  const newId = `room-${Object.keys(roomsById).length + 1}`;
-  const newRoom: Room = {
-    id: newId,
-    name: `Room ${Object.keys(roomsById).length + 1}`,
-    description: "New room. Configure its properties here.",
-    x,
-    y,
-    neighbors: {},
-    npcs: [],
-  };
-  setRoomsById(prev => ({ ...prev, [newId]: newRoom }));
-  setPosToId(prev => ({ ...prev, [newPosKey]: newId }));
-  setSelectedRoomId(newId);
-};
+    if (!worldId) return;
 
-  // Get available directions for expansion from the selected room
-  function getAvailableDirections(room: Room): Direction[] {
-    return (['N', 'S', 'E', 'W'] as Direction[]).filter(dir => {
-      const { dx, dy } = DIRS[dir];
-      const key = posKey(room.x + dx, room.y + dy);
-      return !posToId[key];
+    const newRoomId = `room-${worldId}-${Date.now()}`;
+    const newRoom: Room = {
+      id: newRoomId,
+      name: `New Room (${x},${y})`,
+      description: '',
+      x: x,
+      y: y,
+      neighbors: {},
+      npcs: []
+    };
+
+    const newPosKey = posKey(x, y);
+
+    setRoomsById(prev => ({ ...prev, [newRoomId]: newRoom }));
+    setPosToId(prev => ({ ...prev, [newPosKey]: newRoomId }));
+    setSelectedRoomId(newRoomId);
+  };
+
+  // Re-enable handleUpdateRoom function
+  const handleUpdateRoom = (roomId: string, updates: Partial<Room>) => {
+    setRoomsById(prev => {
+      const roomToUpdate = prev[roomId];
+      if (!roomToUpdate) return prev;
+      // Ensure NPCs are preserved if not part of the update
+      const updatedRoom = { ...roomToUpdate, ...updates };
+      if (!updates.npcs) {
+         updatedRoom.npcs = roomToUpdate.npcs;
+      }
+      return {
+        ...prev,
+        [roomId]: updatedRoom
+      };
     });
-  }
+  };
 
-  function oppositeDir(dir: Direction): Direction {
-    switch (dir) {
-      case 'N': return 'S';
-      case 'S': return 'N';
-      case 'E': return 'W';
-      case 'W': return 'E';
+  const handleDeleteRoom = (roomId: string) => {
+    if (!roomId || Object.keys(roomsById).length <= 1) {
+      console.warn("Cannot delete the last room.");
+      return;
     }
-  }
 
-  // Add NPC to grid
-  const handleNpcSelect = (character: { name: string; path: string }) => {
-    setRoomsById(prev => ({
-      ...prev,
-      [selectedRoomId!]: { // Add non-null assertion if selectedRoomId is guaranteed here
-        ...prev[selectedRoomId!],
-        npcs: [...(prev[selectedRoomId!].npcs || []), character],
-      },
-    }));
-    setNpcModalOpen(false);
+    const roomToDelete = roomsById[roomId];
+    if (!roomToDelete) return;
+
+    const { x, y } = roomToDelete;
+    const currentPosKey = posKey(x, y);
+
+    setRoomsById(prev => {
+      const newState = { ...prev };
+      delete newState[roomId];
+      return newState;
+    });
+    setPosToId(prev => {
+      const newState = { ...prev };
+      delete newState[currentPosKey];
+      return newState;
+    });
+
+    if (selectedRoomId === roomId) {
+      const remainingRoomIds = Object.keys(roomsById).filter(id => id !== roomId);
+      setSelectedRoomId(remainingRoomIds[0] || null);
+    }
   };
 
-  // Remove NPC by index
-  const handleRemoveNpc = (idx: number) => {
-    setRoomsById(prev => ({
-      ...prev,
-      [selectedRoomId!]: { // Add non-null assertion
-        ...prev[selectedRoomId!],
-        npcs: (prev[selectedRoomId!].npcs || []).filter((_, i) => i !== idx),
-      },
-    }));
+  const handleOpenNpcModal = () => {
+    if (!selectedRoomId) return;
+    setNpcModalOpen(true);
   };
 
-  // Compose the world state for saving
-  // Compose the world state for saving - use fetched worldData
-  const worldStateForSave = {
-    ...(worldData || {}), // Spread existing data
-    name: worldData?.name || 'Unnamed World', // Use fetched name
-    description: worldData?.description || '', // Use fetched description
-    rooms: Object.values(roomsById), // Use current room state
-    current_position: selectedRoomId, // Add the currently selected room ID
-    // Ensure other necessary fields from worldData are preserved if not spread
-    id: worldData?.id,
-    cardImageUrl: worldData?.cardImageUrl,
+  // Update handleAddNpcToRoom to handle path resolution more robustly
+  const handleAddNpcToRoom = useCallback((npc: NpcGridItem) => {
+    if (!selectedRoomId) return;
+
+    // Ensure we have a proper path before adding
+    if (!npc.path) {
+      console.error("Cannot add NPC without a valid path");
+      return;
+    }
+
+    setRoomsById(prev => {
+      const room = prev[selectedRoomId];
+      if (!room) return prev;
+      
+      // Check if this NPC is already in the room to avoid duplicates
+      if (room.npcs.some(n => n.path === npc.path)) {
+        console.log(`NPC ${npc.name} is already in this room`);
+        return prev;
+      }
+      
+      return {
+        ...prev,
+        [selectedRoomId]: {
+          ...room,
+          npcs: [...room.npcs, { path: npc.path, name: npc.name }]
+        }
+      };
+    });
+    
+    // Provide visual feedback that NPC was added
+    // You could display a toast or other notification here
+    console.log(`Added ${npc.name} to room ${selectedRoomId}`);
+  }, [selectedRoomId]);
+
+  const handleRemoveNpcFromRoom = (npcPath: string) => {
+    if (!selectedRoomId) return;
+
+    setRoomsById(prev => {
+      const room = prev[selectedRoomId];
+      if (!room) return prev;
+      return {
+        ...prev,
+        [selectedRoomId]: {
+          ...room,
+          npcs: room.npcs.filter(n => n.path !== npcPath)
+        }
+      };
+    });
   };
 
-  // Handle loading and error states
+  const prepareWorldStateForSave = (): FullWorldState | null => {
+    if (!worldData || !selectedRoomId) return null;
+
+    const currentRoom = roomsById[selectedRoomId];
+    const currentPositionString = currentRoom ? `${currentRoom.x},${currentRoom.y},0` : worldData.current_position || "0,0,0";
+
+    const locations: Record<string, WorldLocation> = {};
+    Object.values(roomsById).forEach(room => {
+      const coordKey = `${room.x},${room.y},0`;
+      locations[coordKey] = {
+        location_id: room.id,
+        name: room.name,
+        description: room.description,
+        coordinates: [room.x, room.y, 0],
+        npcs: room.npcs.map(npc => npc.path),
+        zone_id: (worldData.locations?.[coordKey] as any)?.zone_id,
+        room_type: (worldData.locations?.[coordKey] as any)?.room_type,
+        notes: (worldData.locations?.[coordKey] as any)?.notes,
+        background: (worldData.locations?.[coordKey] as any)?.background,
+        events: (worldData.locations?.[coordKey] as any)?.events || [],
+        explicit_exits: (worldData.locations?.[coordKey] as any)?.explicit_exits,
+        lore_source: (worldData.locations?.[coordKey] as any)?.lore_source,
+        connected: true,
+      };
+    });
+
+    const worldStateForSave: FullWorldState = {
+      ...worldData,
+      current_position: currentPositionString,
+      locations: locations,
+      unconnected_locations: worldData.unconnected_locations || {},
+      player: worldData.player || { health: 100, stamina: 100, level: 1, experience: 0 },
+      visited_positions: worldData.visited_positions || [],
+      rooms: undefined,
+    };
+
+    return worldStateForSave;
+  };
+
   if (isLoading) {
     return <div className="p-6">Loading world builder...</div>;
   }
@@ -269,11 +457,10 @@ const WorldBuilderView: React.FC = () => { // Remove props
 
   return (
     <div className="flex flex-col h-full w-full">
-      {/* Breadcrumb */}
       <div className="flex items-center gap-2 px-6 py-4 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950">
         <button
           className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-          onClick={() => navigate('/worldcards')} // Navigate back to gallery
+          onClick={() => navigate('/worldcards')}
         >
           Worlds
         </button>
@@ -281,140 +468,74 @@ const WorldBuilderView: React.FC = () => { // Remove props
         <span className="font-semibold text-stone-900 dark:text-stone-100">{worldData.name}</span>
         <div className="ml-auto">
           <WorldSaveButton
-            worldName={worldData.name} // Pass worldName as expected by the component
-            worldState={worldStateForSave}
-            // Assuming pngFile handling needs review based on how images are managed now
-            // Pass null for now if image isn't readily available as a File object here
+            worldName={worldData.name}
+            worldState={prepareWorldStateForSave()}
             pngFile={null}
           />
         </div>
       </div>
       <div className="flex flex-1 overflow-hidden">
-        {/* Room Map */}
-        <div className="flex flex-col items-center justify-center flex-1 p-6 overflow-auto">
-          {selectedRoomId ? ( // Conditionally render RoomMap
-             <RoomMap
-               roomsById={roomsById}
-               posToId={posToId}
-               selectedRoomId={selectedRoomId}
-               onCreateRoom={handleCreateRoom}
-               onRoomClick={setSelectedRoomId}
-             />
-           ) : (
-             <div>No room selected or map data unavailable.</div> // Placeholder
-           )}
+        <div className="flex flex-col items-center justify-center flex-1 p-6 overflow-auto bg-stone-100 dark:bg-stone-900">
+          <RoomMap
+            roomsById={roomsById}
+            posToId={posToId}
+            selectedRoomId={selectedRoomId}
+            onSelectRoom={setSelectedRoomId}
+            onCreateRoom={handleCreateRoom}
+          />
         </div>
-        {/* Room Detail/Config Panel */}
-        <div className="w-[430px] max-w-full border-l border-stone-200 dark:border-stone-800 bg-stone-950 p-6 overflow-y-auto">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-white mb-2">{selectedRoom.name || "Room Name"}</h2>
-            <label className="block text-sm text-gray-400 mb-1" htmlFor="room-position">Grid Position Name</label>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-yellow-400"><svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1h2a1 1 0 110 2h-2v2h2a1 1 0 110 2h-2v2h2a1 1 0 110 2h-2v1a1 1 0 11-2 0v-1H7a1 1 0 110-2h2v-2H7a1 1 0 110-2h2V6H7a1 1 0 110-2h2V3a1 1 0 011-1z"/></svg></span>
-              <input
-                id="room-position"
-                className="w-full px-3 py-2 rounded border border-stone-700 bg-stone-900 text-white focus:outline-none focus:border-yellow-400"
-                value={selectedRoom.name}
-                onChange={e => setRoomsById(prev => {
-                  if (!selectedRoomId) return prev; // Guard clause
-                  return {
-                    ...prev,
-                    [selectedRoomId]: {
-                      ...prev[selectedRoomId],
-                      name: e.target.value
-                    }
-                  };
-                })}
-              />
-            </div>
-            <label className="block text-sm text-gray-400 mb-1" htmlFor="room-description">Description <span className="text-xs text-gray-500">(will be included in context on arriving on this grid position)</span></label>
-            <textarea
-              id="room-description"
-              className="w-full px-3 py-2 rounded border border-stone-700 bg-stone-900 text-white focus:outline-none focus:border-yellow-400 min-h-[80px] mb-4"
-              value={selectedRoom.description || ""}
-              onChange={e => setRoomsById(prev => {
-                 if (!selectedRoomId) return prev; // Guard clause
-                 return {
-                   ...prev,
-                   [selectedRoomId]: {
-                     ...prev[selectedRoomId],
-                     description: e.target.value
-                   }
-                 };
-              })}
-            />
-            <button
-              className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 transition mt-2"
-              onClick={() => handlePlayHere(selectedRoomId)}
-            >
-              Play Here
-            </button>
-          </div>
-          {/* NPCs Section */}
-          <div className="mb-6">
-            <div className="font-semibold text-white text-lg mb-2">NPCs ({(selectedRoom.npcs?.length || 0)})</div>
-            <GalleryGrid<NpcOrAdd> // Explicitly type GalleryGrid if needed
-              items={[...(selectedRoom?.npcs || []), { isAddButton: true }]}
-              columns={3}
-              className="gap-3"
-              renderItem={(npcOrAdd: NpcOrAdd, idx: number) => {
-                if ('isAddButton' in npcOrAdd) {
-                  return (
-                    <button
-                      key="add-npc"
-                      onClick={() => setNpcModalOpen(true)}
-                      className="relative aspect-[3/4] bg-stone-900 border-2 border-dashed border-stone-700 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-yellow-400 hover:text-yellow-400 transition-all duration-200"
-                      tabIndex={0}
-                      aria-label="Add Character"
-                    >
-                      <span className="text-3xl leading-none mb-1">+</span>
-                      <span className="text-sm">Add Character</span>
-                    </button>
-                  );
-                }
-                const npc = npcOrAdd as NpcGridItem;
-                return (
-                  <div
-                    key={npc.name + idx}
-                    className="relative group aspect-[3/4] cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800 flex items-end justify-center"
-                  >
-                    <div className="absolute inset-0 bg-stone-950">
-                      <img
-                        src={`/api/character-image/${encodeURIComponent(npc.path)}`}
-                        alt={npc.name}
-                        className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
-                        loading="lazy"
-                      />
-                    </div>
-                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-xs font-medium text-center truncate rounded-b-lg pointer-events-none">
-                      {npc.name}
-                    </span>
-                    <button
-                      onClick={e => { e.stopPropagation(); handleRemoveNpc(idx); }}
-                      className="absolute top-2 right-2 bg-stone-800 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition z-20"
-                      title="Remove NPC"
-                      tabIndex={-1}
-                    >
-                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                  </div>
-                );
-              }}
-            />
 
-            <NpcSelectorModal
-              isOpen={npcModalOpen}
-              onClose={() => setNpcModalOpen(false)}
-              onSelect={handleNpcSelect}
+        <div className="w-1/3 max-w-md border-l border-stone-200 dark:border-stone-800 flex flex-col bg-white dark:bg-stone-950">
+          {selectedRoom ? (
+            <RoomEditor
+              key={selectedRoom.id}
+              room={selectedRoom}
+              // Create a new function that captures the selectedRoomId
+              onUpdate={(updates) => handleUpdateRoom(selectedRoom.id, updates)}
+              onDelete={() => handleDeleteRoom(selectedRoom.id)}
+              onPlayHere={() => handlePlayHere(selectedRoom.id)}
+              onAddNpc={handleOpenNpcModal}
+              onRemoveNpc={handleRemoveNpcFromRoom}
             />
-          </div>
-          {/* Custom Events Section */}
-          <div>
-            <div className="font-semibold text-white text-lg mb-2 mt-6">Custom Events</div>
-            <div className="bg-stone-900 border border-stone-700 rounded p-4 text-gray-400 min-h-[60px]">(No events yet)</div>
-          </div>
+          ) : (
+            <div className="p-6 text-center text-stone-500 dark:text-stone-400">
+              Select a room on the map to edit it, or click an empty space to create one.
+            </div>
+          )}
         </div>
       </div>
+
+      <Dialog
+        isOpen={npcModalOpen}
+        onClose={() => setNpcModalOpen(false)}
+        title={`Add NPC to ${selectedRoom?.name || 'Room'}`}
+        className="max-w-3xl"
+      >
+        <p className="text-sm text-stone-400 mb-4">
+          Select an NPC character card to add to this location.
+        </p>
+        <div className="max-h-[60vh] overflow-y-auto pr-2 -mr-2 mb-4">
+          <GalleryGrid
+            items={availableNpcs}
+            emptyMessage="No character cards found."
+            renderItem={(npc, idx) => (
+              <NpcCard
+                key={npc.path || idx}
+                npc={npc}
+                onClick={() => handleAddNpcToRoom(npc)}
+              />
+            )}
+          />
+        </div>
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={() => setNpcModalOpen(false)}
+            className="px-4 py-2 bg-stone-600 hover:bg-stone-500 text-white rounded text-sm"
+          >
+            Done
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 };

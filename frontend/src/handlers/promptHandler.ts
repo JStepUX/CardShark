@@ -1,40 +1,10 @@
 // handlers/promptHandler.ts
 import { CharacterCard } from '../types/schema';
-import { APIConfig } from '../types/api';
 import { templateService } from '../services/templateService';
 import { Template } from '../types/templateTypes';
-import { transformKoboldPayload, getKoboldStreamEndpoint, wakeKoboldServer } from '../utils/koboldTransformer';
-import { createKoboldStreamWrapper, detectCompletionSignal, extractContentFromText } from '../utils/streamUtils';
 
 export class PromptHandler {
-  private static readonly DEFAULT_PARAMS = {
-    n: 1,
-    max_context_length: 6144,
-    max_length: 220,
-    rep_pen: 1.07,
-    temperature: 1.05,
-    top_p: 0.92,
-    top_k: 100,
-    top_a: 0,
-    typical: 1,
-    tfs: 1,
-    rep_pen_range: 360,
-    rep_pen_slope: 0.7,
-    sampler_order: [6, 0, 1, 3, 4, 2, 5],
-    trim_stop: true,
-    min_p: 0,
-    dynatemp_range: 0.45,
-    dynatemp_exponent: 1,
-    smoothing_factor: 0,
-    banned_tokens: [],
-    render_special: false,
-    logprobs: false,
-    presence_penalty: 0,
-    logit_bias: {},
-    quiet: true,
-    use_default_badwordsids: false,
-    bypass_eos: false
-  } as const;
+  // Removed unused DEFAULT_PARAMS
 
   // Simple variable replacement function
   private static replaceVariables(template: string, variables: Record<string, string>): string {
@@ -268,8 +238,152 @@ ${character.data.mes_example || ''}
     }
   }
 
+  /**
+   * Generates a chat response using the provided parameters.
+   * Overloaded method to support different parameter combinations used throughout the app.
+   */
+  public static async generateChatResponse(
+    characterCard: CharacterCard,
+    prompt: string,
+    contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
+    apiConfig?: any,
+    signal?: AbortSignal
+  ): Promise<Response> {
+    try {
+      // Extract character name from the card
+      const characterName = characterCard.data.name || 'Character';
+      const templateId = apiConfig?.templateId;
+      
+      // Format the prompt with the provided context messages
+      const formattedPrompt = this.formatPromptWithContextMessages(
+        characterCard, 
+        prompt, 
+        contextMessages, 
+        templateId
+      );
+      
+      const template = this.getTemplate(templateId);
+      const stopSequences = this.getStopSequences(template, characterName);
+      
+      // Make the actual API request
+      const response = await fetch('/api/chat/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: formattedPrompt,
+          stop_sequences: stopSequences,
+          ...(apiConfig || {})
+        }),
+        signal // Pass the abort signal for cancellation
+      });
+      
+      return response;
+    } catch (error) {
+      console.error('Error generating chat response:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Helper method to format prompt with context messages
+   */
+  private static formatPromptWithContextMessages(
+    character: CharacterCard,
+    prompt: string,
+    contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
+    templateId?: string
+  ): string {
+    const template = this.getTemplate(templateId);
+    const characterName = character.data.name || 'Character';
+    
+    // Create the memory context
+    const memoryContext = this.createMemoryContext(character, template);
+    
+    // Format the history from context messages
+    let history = '';
+    if (contextMessages.length > 0) {
+      history = contextMessages
+        .map(msg => {
+          if (!template) {
+            // Fallback formatting if no template
+            if (msg.role === 'assistant') {
+              return `${characterName}: ${msg.content}`;
+            } else if (msg.role === 'system') {
+              return `[System: ${msg.content}]`;
+            } else {
+              return `User: ${msg.content}`;
+            }
+          }
+          
+          if (msg.role === 'assistant') {
+            return this.replaceVariables(template.assistantFormat || '{{char}}: {{content}}', { 
+              content: msg.content, 
+              char: characterName 
+            });
+          } else if (msg.role === 'system' && template.systemFormat) {
+            return this.replaceVariables(template.systemFormat, {
+              content: msg.content
+            });
+          } else {
+            return this.replaceVariables(template.userFormat || 'User: {{content}}', { 
+              content: msg.content 
+            });
+          }
+        })
+        .join('\n');
+    }
+    
+    // Combine everything into a complete prompt
+    const fullPrompt = `${memoryContext}\n\n${history}\n\n${
+      template?.userFormat 
+        ? this.replaceVariables(template.userFormat, { content: prompt })
+        : `User: ${prompt}`
+    }\n\n${
+      template?.assistantFormat 
+        ? this.replaceVariables(template.assistantFormat, { content: '', char: characterName })
+        : `${characterName}:`
+    }`;
+    
+    return fullPrompt;
+  }
+
+  /**
+   * Async generator for streaming content from a response.
+   * Use this method to iterate over streaming content from an API response.
+   */
+  public static async *streamResponse(response: Response): AsyncGenerator<string, void, unknown> {
+    if (!response.ok) {
+      throw new Error(`API responded with status ${response.status}`);
+    }
+    
+    if (!response.body) {
+      throw new Error('Response body is empty');
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+        
+        // Decode the chunk and yield it
+        const chunk = decoder.decode(value, { stream: true });
+        yield chunk;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   // Get stop sequences from template or use defaults
-  public static getStopSequences(template: Template | null, characterName: string): string[] { // Changed to public
+  public static getStopSequences(template: Template | null, characterName: string): string[] {
     const defaultStopSequences = [
       // Provide standard stop sequences for chat models
       "\n\nUser:",

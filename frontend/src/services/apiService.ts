@@ -6,6 +6,18 @@ import { getApiBaseUrl } from '../utils/apiConfig';
  * A service class for handling all API calls with proper development/production URL handling
  */
 class ApiService {
+  /**
+   * Generates a room introduction using the LLM API
+   * @param payload The payload for the room intro (context, npcs, prompt)
+   * @param apiConfig The API configuration to use
+   * @returns The LLM-generated room intro
+   */
+  async generateRoomIntro(payload: any, apiConfig: APIConfig) {
+    return this.post('/api/generate-room-intro', {
+      ...payload,
+      apiConfig
+    });
+  }
   private baseUrl: string;
 
   constructor() {

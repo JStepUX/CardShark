@@ -14,6 +14,10 @@ frontend_datas = [
 
 backend_datas = [
     ('backend/*.py', 'backend'),
+    ('backend/handlers/*.py', 'backend/handlers'),
+    ('backend/worldcards/*', 'backend/worldcards'),
+    ('backend/models/*', 'backend/models'),
+    ('backend/utils/*', 'backend/utils'),
 ]
 
 # Combine all data files
@@ -43,22 +47,36 @@ hidden_imports = [
     
     # Backend modules - only include ones that exist
     'backend',
-    'backend.api_handler.py',
-    'backend.background_handler.py',
-    'backend.backyard_handler.py',
-    'backend.character_validator.py',
-    'backend.chat_handler.py',
-    'backend.errors.py',
-    'backend.log_manager.py',
-    'backend.network_server.py',
-    'backend.png_handler.py',
-    'backend.png_debug_handler.py',
-    'backend.png_metadata_handler.py',
-    'backend.settings_manager.py',
-    'backend.test_module.py',
-    'backend.template_handler.py',
-    'backend.batch_converter.py',
+    'backend.api_handler',
+    'backend.api_provider_adapters',
+    'backend.background_handler',
+    'backend.backyard_handler',
+    'backend.batch_converter',
+    'backend.character_validator',
+    'backend.chat_handler',
+    'backend.errors',
+    'backend.log_manager',
+    'backend.lore_handler',
+    'backend.network_server',
+    'backend.png_handler',
+    'backend.png_debug_handler',
+    'backend.png_metadata_handler',
+    'backend.room_card_endpoint',
+    'backend.settings_manager',
+    'backend.template_handler',
+    'backend.test_module',
+    'backend.world_state_manager',
     
+    # Handlers subdirectory
+    'backend.handlers',
+    'backend.handlers.world_card_chat_handler',
+    'backend.handlers.world_state_handler',
+    'backend.handlers.background_api',
+    
+    # Models, Utils, and WorldCards subdirectories
+    'backend.models',
+    'backend.utils',
+    'backend.worldcards',
     
     # Important dependencies
     'email_validator',

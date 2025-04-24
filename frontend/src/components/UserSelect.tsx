@@ -2,8 +2,28 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, UserPlus, ImagePlus, Trash2 } from 'lucide-react';
 import { Dialog } from './Dialog';
+import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import { createEmptyCharacterCard } from '../types/schema';
 import { UserProfile } from '../types/messages'; // *** IMPORT the shared type ***
+
+/**
+ * Helper function to properly encode file paths for API requests
+ * This handles special characters that can cause issues
+ */
+const encodeFilePath = (path: string): string => {
+  if (!path) return '';
+  
+  // Only use the filename portion, not the full path
+  const fileName = path.split(/[\/\\]/).pop() || path;
+  
+  try {
+    // Just encode the filename portion
+    return encodeURIComponent(fileName);
+  } catch (error) {
+    console.error(`Failed to encode path: ${path}`, error);
+    return 'unknown';
+  }
+};
 
 interface UserSelectProps {
   isOpen: boolean;
@@ -11,9 +31,6 @@ interface UserSelectProps {
   onSelect: (user: UserProfile) => void; // Uses the imported UserProfile type
   currentUser?: string; // This prop remains a string (the name) for comparison
 }
-
-// --- Animation Duration (milliseconds) ---
-const DELETE_ANIMATION_DURATION = 300;
 
 const UserSelect: React.FC<UserSelectProps> = ({
   isOpen,
@@ -27,11 +44,12 @@ const UserSelect: React.FC<UserSelectProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewUserDialog, setShowNewUserDialog] = useState(false);
 
-  // --- State for Delete Functionality ---
+  // State for delete functionality using the DeleteConfirmationDialog
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [confirmDeleteFilename, setConfirmDeleteFilename] = useState<string | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [deletingFilename, setDeletingFilename] = useState<string | null>(null);
-  // --- End Delete State ---
 
   // New user form state
   const [newUserName, setNewUserName] = useState('');
@@ -54,11 +72,10 @@ const UserSelect: React.FC<UserSelectProps> = ({
     try {
       setIsLoading(true);
       setError(null);
-      // --- Reset delete states on load ---
+      // Reset delete states on load
       setDeleteError(null);
-      setConfirmDeleteFilename(null);
+      setUserToDelete(null);
       setDeletingFilename(null);
-      // --- End Reset ---
 
       const response = await fetch('/api/users');
       if (!response.ok) throw new Error('Failed to load users');
@@ -66,11 +83,11 @@ const UserSelect: React.FC<UserSelectProps> = ({
       const data = await response.json();
       console.log('Loaded users data:', data); // Debug log
 
-      if (data.success && Array.isArray(data.users)) {
+      if (data.success && Array.isArray(data.files)) { // Check for data.files
         // Map the fetched data to the imported UserProfile type
-        const mappedUsers: UserProfile[] = data.users.map((user: any): UserProfile => ({
+        const mappedUsers: UserProfile[] = data.files.map((user: any): UserProfile => ({ // Map data.files
           name: user.name || 'Unnamed User', // Provide default if name is missing
-          filename: user.path || user.filename || '', // Provide default if filename/path is missing
+          filename: user.name || '', // Use user.name which should be the base filename (e.g., "Ghost.png")
           size: user.size || 0,
           modified: user.modified || Date.now(),
           id: ''
@@ -97,89 +114,100 @@ const UserSelect: React.FC<UserSelectProps> = ({
         setSearchTerm('');
         setError(null);
         setDeleteError(null);
-        setConfirmDeleteFilename(null);
+        setUserToDelete(null);
         setDeletingFilename(null);
     }
   }, [isOpen, loadUsers]);
 
-  // --- Handler for clicking the trash icon ---
-  const handleTrashIconClick = (event: React.MouseEvent, filename: string) => {
-    event.stopPropagation();
-    setDeleteError(null);
-
-    if (deletingFilename) return;
-
-    if (confirmDeleteFilename === filename) {
-      setConfirmDeleteFilename(null);
-      initiateDeleteAnimation(filename);
-    } else {
-      setConfirmDeleteFilename(filename);
-    }
+  // Handler for clicking the trash icon - now opens the confirmation dialog
+  const handleTrashIconClick = (event: React.MouseEvent, user: UserProfile) => {
+    event.stopPropagation(); // Prevent card click
+    setDeleteError(null); // Clear previous delete error
+    setUserToDelete(user);
+    setIsDeleteConfirmOpen(true);
   };
 
-  // --- Start animation and schedule API call ---
-  const initiateDeleteAnimation = (filename: string) => {
-     console.log(`Initiating delete animation for user file: ${filename}`);
-     setDeletingFilename(filename);
-
-     setTimeout(() => {
-       handleConfirmDeleteApiCall(filename);
-     }, DELETE_ANIMATION_DURATION);
-  };
-
-  // --- Handle the actual API call after animation delay ---
-  const handleConfirmDeleteApiCall = async (filename: string) => {
-    // Log which file we are trying to delete
-    console.log(`Performing API delete for user file: ${filename}`);
+  // Handle the actual API call to delete the user after confirmation
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    
+    setIsDeleting(true);
+    setDeletingFilename(userToDelete.filename);
+    
     try {
-      // *** THIS IS THE CORRECTED LINE ***
-      // Use the new dedicated endpoint for deleting user files
-      const response = await fetch(`/api/user/${encodeURIComponent(filename)}`, {
+      // Extract filename for better error messages
+      const fileName = userToDelete.filename.split(/[\/\\]/).pop() || userToDelete.filename;
+      
+      console.log(`Performing API delete for user file: ${userToDelete.filename}`);
+      
+      // Use our improved path encoding function
+      const encodedPath = encodeFilePath(userToDelete.filename);
+      const response = await fetch(`/api/user/${encodedPath}`, {
         method: 'DELETE',
       });
-      // *** END OF CORRECTION ***
-
-      // Process the response (check for errors, parse JSON)
-      const result = await response.json().catch(() => ({
-          message: response.ok ? 'Deleted successfully' : `Server error (${response.status})`
-      }));
-
-      // If the response status code indicates failure
-      if (!response.ok) {
-        throw new Error(result.detail || result.message || `Failed to delete (${response.status})`);
+      
+      // Improved error handling
+      let result;
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        // Handle case where response is not valid JSON
+        result = { message: response.ok ? 'Success' : `Failed to parse server response (${response.status})` };
       }
-
-      // Log success and clear error message
-      console.log(`Successfully deleted user file via API: ${filename}`);
-      setDeleteError(null);
-
-      // Remove user from local state AFTER successful API call
-      setUsers(prevUsers => prevUsers.filter(user => user.filename !== filename));
-
+      
+      // Check for success with better error messages
+      if (!response.ok) {
+        // Create more informative error message
+        let errorMessage = result.detail || result.message || `Failed (${response.status})`;
+        
+        // Add more context for specific error codes
+        if (response.status === 404) {
+          errorMessage = `User not found: ${fileName}. The user profile may have been deleted already.`;
+        } else if (response.status === 403) {
+          errorMessage = `Permission denied when deleting: ${fileName}. Check file permissions.`;
+        } else if (response.status >= 500) {
+          errorMessage = `Server error while deleting: ${fileName}. Please try again later.`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      console.log(`Successfully deleted user file via API: ${userToDelete.filename}`);
+      
+      // Remove user from state AFTER successful API call
+      setUsers(prevUsers => prevUsers.filter(user => user.filename !== userToDelete.filename));
+      
     } catch (err) {
-      // Log error and display message
-      console.error(`API Deletion failed for user file ${filename}:`, err);
+      console.error(`API Deletion failed for user file ${userToDelete.filename}:`, err);
       setDeleteError(err instanceof Error ? err.message : 'Unknown deletion error.');
-
-      // Reset states on failure
+      // Reset deleting state on failure
       setDeletingFilename(null);
-      setConfirmDeleteFilename(null);
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
+      // Keep userToDelete set until animation completes
+      setTimeout(() => {
+        setUserToDelete(null);
+      }, 300);
     }
   };
-
-
-  // --- User Selection Handler ---
-  const handleSelectUser = (user: UserProfile) => {
-      if (deletingFilename === user.filename || confirmDeleteFilename === user.filename) {
-          return;
-      }
-      setConfirmDeleteFilename(null);
-      setDeleteError(null);
-      onSelect(user);
+  
+  // Cancel deletion
+  const handleCancelDelete = () => {
+    setIsDeleteConfirmOpen(false);
+    setUserToDelete(null);
   };
 
+  // User Selection Handler - avoid selecting users being deleted
+  const handleSelectUser = (user: UserProfile) => {
+    if (deletingFilename === user.filename) {
+      return;
+    }
+    setDeleteError(null);
+    onSelect(user);
+  };
 
-  // --- New User Creation Logic ---
+  // New User Creation Logic
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -252,13 +280,11 @@ const UserSelect: React.FC<UserSelectProps> = ({
     setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
-  // --- End New User Logic ---
-
 
   if (!isOpen) return null;
 
   return (
-    // --- Main Modal Container ---
+    // Main Modal Container
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-2xl max-h-[90vh] bg-stone-900 rounded-lg shadow-xl flex flex-col">
         {/* Header */}
@@ -299,7 +325,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
             </div>
         )}
 
-        {/* --- User Grid - Scrollable Area --- */}
+        {/* User Grid - Scrollable Area */}
         <div className="flex-1 overflow-y-auto p-4">
           {isLoading ? (
             <div className="text-center text-gray-400 p-4">Loading users...</div>
@@ -314,7 +340,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
               
               {/* Always show the grid with at least the New User card */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {/* --- Create New User Card --- Always visible */}
+                {/* Create New User Card - Always visible */}
                 <div
                   key="new-user-card"
                   className={`
@@ -336,52 +362,46 @@ const UserSelect: React.FC<UserSelectProps> = ({
 
                 {/* Only map over users if there are any */}
                 {filteredUsers.map((user) => {
-                  const isConfirmingDelete = confirmDeleteFilename === user.filename;
                   const isDeleting = deletingFilename === user.filename;
 
                   return (
-                    // --- Individual Card Container ---
+                    // Individual Card Container
                     <div
                       key={user.filename}
                       className={`
                         relative group aspect-[3/4] sm:aspect-square cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800
-                        transition-all ${isDeleting ? `duration-${DELETE_ANIMATION_DURATION} ease-out` : 'duration-200 ease-in-out'}
+                        transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
                         ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
                         hover:shadow-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-stone-900
-                        ${currentUser === user.name && !isDeleting && !isConfirmingDelete ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-stone-900' : ''}
-                        ${isConfirmingDelete ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-stone-900' : ''}
+                        ${currentUser === user.name && !isDeleting ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-stone-900' : ''}
                       `}
                       onClick={() => handleSelectUser(user)}
                       role="button"
                       tabIndex={0}
                       aria-label={`Select user ${user.name}`}
                     >
-                      {/* --- Delete Button (Conditionally Rendered) --- */}
+                      {/* Delete Button (Conditionally Rendered) */}
                       {!isDeleting && (
                           <button
-                            title={isConfirmingDelete ? "Confirm Delete" : "Delete user profile"}
-                            onClick={(e) => handleTrashIconClick(e, user.filename)}
+                            title="Delete user profile"
+                            onClick={(e) => handleTrashIconClick(e, user)}
                             tabIndex={-1}
-                            className={`absolute top-1.5 left-1.5 z-10 p-1 rounded-full backdrop-blur-sm
-                                        bg-black/40 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100
-                                        transition-all duration-200 ease-in-out
-                                        hover:bg-red-700/70 hover:scale-110 focus:outline-none
-                                        focus:opacity-100 focus:bg-red-700/70 focus:scale-110 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800
-                                        ${isConfirmingDelete ? '!opacity-100 !bg-red-600/80 scale-110' : ''}
-                                        ${isConfirmingDelete ? 'tabindex-0' : 'group-hover:tabindex-0 group-focus-within:tabindex-0'}
-                                      `}
-                              aria-label={isConfirmingDelete ? `Confirm delete ${user.name}` : `Delete ${user.name}`}
+                            className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full backdrop-blur-sm
+                                      bg-black/40 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100
+                                      transition-all duration-200 ease-in-out
+                                      hover:bg-red-700/70 hover:scale-110 focus:outline-none
+                                      focus:opacity-100 focus:bg-red-700/70 focus:scale-110 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
+                              aria-label={`Delete ${user.name}`}
                           >
                             <Trash2 size={16} />
                           </button>
                       )}
-                      {/* --- End Delete Button --- */}
 
-                      {/* --- User Image Container --- */}
+                      {/* User Image Container */}
                       <div className="absolute inset-0 bg-stone-950">
                         <img
                           key={`${user.filename}-img`}
-                          src={`/api/user-image/serve/${encodeURIComponent(user.filename)}`}
+                          src={`/api/user-image/${encodeFilePath(user.filename)}`}
                           alt={user.name}
                           className={`w-full h-full object-cover object-center transition-transform duration-300 ${isDeleting ? '' : 'group-hover:scale-105 group-focus:scale-105'}`}
                           loading="lazy"
@@ -391,21 +411,21 @@ const UserSelect: React.FC<UserSelectProps> = ({
                           }}
                         />
                       </div>
-                      {/* --- Name Overlay --- */}
+                      {/* Name Overlay */}
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium text-center truncate rounded-b-lg pointer-events-none">
                         {user.name}
                       </div>
-                    </div> // --- End Individual Card ---
+                    </div> // End Individual Card
                   );
                 })} {/* End map */}
               </div> 
             </>
           )}
-        </div> {/* --- End Scrollable Area --- */}
+        </div> {/* End Scrollable Area */}
 
-      </div> {/* --- End Modal content container --- */}
+      </div> {/* End Modal content container */}
 
-      {/* --- Create New User Dialog --- */}
+      {/* Create New User Dialog */}
       <Dialog
           isOpen={showNewUserDialog}
           onClose={() => { setShowNewUserDialog(false); resetNewUserForm(); }}
@@ -447,7 +467,17 @@ const UserSelect: React.FC<UserSelectProps> = ({
         </div>
       </Dialog>
 
-    </div> // --- End Fixed Position Wrapper ---
+      {/* Delete confirmation dialog using our reusable component */}
+      <DeleteConfirmationDialog
+        isOpen={isDeleteConfirmOpen}
+        title="Delete User"
+        description="Are you sure you want to delete the user"
+        itemName={userToDelete?.name}
+        isDeleting={isDeleting}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
+    </div> // End Fixed Position Wrapper
   );
 };
 

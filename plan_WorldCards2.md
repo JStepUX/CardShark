@@ -69,6 +69,11 @@ Build an interactive, coordinate-based adventure system ("World Cards") leveragi
        background: Optional[str] = None
        events: List["EventDefinition"] = []
        npcs: List[str] = []  # List of character UUIDs
+        # NOTE: NPC combat stats (health, damage, etc.) are defined in
+        # backend/models/character_data.py (NpcCombatStats) and stored
+        # within the character card's metadata, not directly in the Location.
+        # The list here just references the character UUIDs.
+
        explicit_exits: Optional[Dict[str, ExitDefinition]] = None
        lore_source: Optional[str] = None  # Reference to lore entry if extracted from character
        connected: bool = True  # Whether this location is connected to the navigable map
@@ -1220,6 +1225,11 @@ Build an interactive, coordinate-based adventure system ("World Cards") leveragi
    - Implement turn-based combat mechanics
    - Add combat-specific UI components
    - Integrate with character stats and abilities
+    - Define loot tables in a `loot.csv` file (likely in `backend/data/`):
+      - Columns: `npc_id`, `item_id`, `item_name`, `drop_chance`, `min_quantity`, `max_quantity`, `item_type` (optional), `item_description` (optional).
+    - Implement backend logic (`LootHandler`?) to load and parse `loot.csv`.
+    - Integrate loot drop calculations upon NPC defeat.
+
 
 2. **Inventory System**
    - Add item data models and management

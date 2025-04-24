@@ -32,7 +32,7 @@ const WorldSaveButton: React.FC<WorldSaveButtonProps> = ({ worldName, worldState
       }
 
       // 2. Save world_state.json
-      const wsRes = await fetch(`/api/world-state/save?world=${encodeURIComponent(worldName)}`, {
+      const wsRes = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/state`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(worldState),

@@ -37,11 +37,11 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
       setLoading(true);
       setError(null);
       
-      const response = await ChatStorage.listCharacterChats(characterData);
+      const chats = await ChatStorage.listChats(characterData);
       
-      if (response.success && Array.isArray(response.chats)) {
+      if (Array.isArray(chats)) {
         // Transform the API response into our ChatInfo format
-        const chatInfoList: ChatInfo[] = response.chats.map((chat: any) => ({
+        const chatInfoList: ChatInfo[] = chats.map((chat: any) => ({
           id: chat.chat_id,
           title: formatChatTitle(chat.create_date, chat.last_message),
           lastModified: formatDate(chat.last_modified || chat.create_date),

@@ -2,8 +2,9 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
-import { Trash2 } from 'lucide-react';
+import { Trash2, AlertTriangle, X } from 'lucide-react';
 import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
+import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 
 // Interface for character file data received from the backend
 interface CharacterFile {
@@ -23,9 +24,26 @@ interface CharacterGalleryProps {
   lazyLoad?: boolean; // Force lazy load mode (for modal)
 }
 
-// --- Animation Duration (milliseconds) ---
-// Make sure this matches the duration used in Tailwind classes (e.g., duration-300)
-const DELETE_ANIMATION_DURATION = 300;
+/**
+ * Helper function to properly encode file paths for API requests
+ * This handles Windows backslashes and special characters that can cause issues
+ */
+const encodeFilePath = (path: string): string => {
+  // Windows-specific handling: convert backslashes to forward slashes
+  const normalizedPath = path.replace(/\\/g, '/');
+  
+  // Identify the filename portion for better error handling
+  const fileNameMatch = normalizedPath.match(/[^/]+$/);
+  const fileName = fileNameMatch ? fileNameMatch[0] : '';
+  
+  try {
+    return encodeURIComponent(normalizedPath);
+  } catch (error) {
+    console.error(`Failed to encode path: ${path}`, error);
+    // Fallback to just encoding the filename if full path encoding fails
+    return fileName ? encodeURIComponent(fileName) : 'unknown';
+  }
+};
 
 const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   settingsChangeCount = 0,
@@ -48,10 +66,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // State to track which card is pending initial delete confirmation
-  const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
-
-  // State to track which card is currently animating out
+  // State for character deletion using DeleteConfirmationDialog
+  const [characterToDelete, setCharacterToDelete] = useState<CharacterFile | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
 
   // Context hooks
@@ -94,11 +112,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setIsLoading(true);
       setError(null);
       setDeleteError(null);
-      setConfirmDeletePath(null);
       setDeletingPath(null); // Reset animation on reload
       setDisplayedCount(25);
 
-      const response = await fetch(`/api/characters?directory=${encodeURIComponent(directory)}`);
+      const response = await fetch(`/api/characters?directory=${encodeFilePath(directory)}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: `Server error (${response.status})` }));
         throw new Error(errorData.message || `Failed to load characters. Status: ${response.status}`);
@@ -130,7 +147,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   useEffect(() => {
     if ((lazyLoad || scrollContainerRef) && activeContainerRef.current) {
       const el = activeContainerRef.current;
-      const handler = (e: Event) => {
+      const handler = () => {
         // Only fire if visible
         if (el.offsetParent !== null) {
           handleScroll({ currentTarget: el } as unknown as React.UIEvent<HTMLDivElement>);
@@ -148,7 +165,6 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         setIsLoading(true);
         setError(null);
         setDeleteError(null);
-        setConfirmDeletePath(null);
         setDeletingPath(null);
         setCurrentDirectory(null);
         setCharacters([]);
@@ -183,23 +199,21 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       return;
     }
 
-    setConfirmDeletePath(null); // Reset delete confirm if main card clicked
     setDeleteError(null);
     const setLoading = isSecondarySelector ? setSecondaryIsLoading : setPrimaryLoading;
     setLoading(true);
     setError(null);
     try {
-      const imageResponse = await fetch(`/api/character-image/${encodeURIComponent(character.path)}`);
+      const imageResponse = await fetch(`/api/character-image/${encodeFilePath(character.path)}`);
       if (!imageResponse.ok) throw new Error(`Failed to load image (${imageResponse.status})`);
       const blob = await imageResponse.blob();
-      const formData = new FormData();
-      formData.append('file', blob, character.name + '.png');
-      const uploadResponse = await fetch('/api/upload-png', { method: 'POST', body: formData });
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || `Metadata processing failed (${uploadResponse.status})`);
+      // Fetch metadata separately using the new endpoint
+      const metadataResponse = await fetch(`/api/character-metadata/${encodeFilePath(character.path)}`);
+      if (!metadataResponse.ok) {
+        const errorData = await metadataResponse.json().catch(() => ({ message: `Failed to load metadata (${metadataResponse.status})` }));
+        throw new Error(errorData.message || `Failed to load metadata. Status: ${metadataResponse.status}`);
       }
-      const data = await uploadResponse.json();
+      const data = await metadataResponse.json();
       if (data.success && data.metadata) {
         const newImageUrl = URL.createObjectURL(blob);
         if (isSecondarySelector) {
@@ -220,61 +234,88 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   };
 
-  // Handler for clicking the trash icon
-  const handleTrashIconClick = (event: React.MouseEvent, path: string) => {
-    event.stopPropagation();
+  // Handler for clicking the trash icon - now opens the confirmation dialog
+  const handleTrashIconClick = (event: React.MouseEvent, character: CharacterFile) => {
+    event.stopPropagation(); // Prevent card click
     setDeleteError(null); // Clear previous delete error
-
-    if (confirmDeletePath === path) {
-      // Second click: Initiate Deletion Animation
-      setConfirmDeletePath(null); // Clear confirmation state
-      initiateDeleteAnimation(path); // Start animation + delayed API call
-    } else {
-      // First click: Set confirmation state
-      setConfirmDeletePath(path);
-      setDeletingPath(null); // Ensure not trying to animate if user changes mind
-    }
+    setCharacterToDelete(character);
+    setIsDeleteConfirmOpen(true);
   };
 
-  // Start animation and schedule API call
-  const initiateDeleteAnimation = (path: string) => {
-    console.log(`Initiating delete animation for: ${path}`);
-    setDeletingPath(path); // Trigger animation styles
-
-    // After the animation duration, make the API call
-    setTimeout(() => {
-      handleConfirmDeleteApiCall(path);
-    }, DELETE_ANIMATION_DURATION);
-  };
-
-  // Handle the actual API call after animation delay
-  const handleConfirmDeleteApiCall = async (path: string) => {
-    console.log(`Performing API delete for: ${path}`);
+  // Handle the actual API call to delete the character after confirmation
+  const handleConfirmDelete = async () => {
+    if (!characterToDelete) return;
+    
+    setIsDeleting(true);
+    setDeletingPath(characterToDelete.path);
+    
     try {
-      const response = await fetch(`/api/character/${encodeURIComponent(path)}`, {
+      // Extract filename from path as a fallback for error reporting
+      const fileName = characterToDelete.path.split(/[\/\\]/).pop() || characterToDelete.name;
+      
+      console.log(`Performing API delete for: ${characterToDelete.path}`);
+      
+      // Use our improved path encoding function
+      const encodedPath = encodeFilePath(characterToDelete.path);
+      const response = await fetch(`/api/character/${encodedPath}`, {
         method: 'DELETE',
       });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.detail || result.message || `Failed (${response.status})`);
+      
+      // Improved error handling
+      let result;
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        // Handle case where response is not valid JSON
+        result = { message: response.ok ? 'Success' : `Failed to parse server response (${response.status})` };
       }
-
-      console.log(`Successfully deleted via API: ${path}`);
-      setDeleteError(null);
-
+      
+      // Check for success
+      if (!response.ok) {
+        // Create more informative error message
+        let errorMessage = result.detail || result.message || `Failed (${response.status})`;
+        
+        // Add more context for specific error codes
+        if (response.status === 404) {
+          errorMessage = `File not found: ${fileName}. The file may have been moved or deleted already.`;
+        } else if (response.status === 403) {
+          errorMessage = `Permission denied when deleting: ${fileName}. Check file permissions.`;
+        } else if (response.status >= 500) {
+          errorMessage = `Server error while deleting: ${fileName}. Please try again later.`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      console.log(`Successfully deleted via API: ${characterToDelete.path}`);
+      
       // Remove character from state AFTER successful API call
-      setCharacters(prevCharacters => prevCharacters.filter(char => char.path !== path));
-      // Keep deletingPath set until the component re-renders without this item
-
+      setCharacters(prevCharacters => prevCharacters.filter(char => char.path !== characterToDelete.path));
+      
     } catch (err) {
-      console.error(`API Deletion failed for ${path}:`, err);
+      console.error(`API Deletion failed for ${characterToDelete.path}:`, err);
       setDeleteError(err instanceof Error ? err.message : 'Unknown deletion error.');
       // Reset deletingPath on failure so the card reappears
       setDeletingPath(null);
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
+      // Keep characterToDelete set until animation completes
+      setTimeout(() => {
+        setCharacterToDelete(null);
+      }, 300); // Match animation duration
     }
-    // Note: We don't reset deletingPath on success here.
-    // It implicitly gets cleared because the item is removed from the 'characters' array,
-    // causing the component to re-render without the element where deletingPath would be checked.
+  };
+  
+  // Cancel deletion
+  const handleCancelDelete = () => {
+    setIsDeleteConfirmOpen(false);
+    setCharacterToDelete(null);
+  };
+
+  // Function to dismiss the delete error message
+  const dismissDeleteError = () => {
+    setDeleteError(null);
   };
 
   // JSX Rendering
@@ -306,8 +347,17 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       {/* Error Display Area */}
       {deleteError && (
         <div className="flex-none p-3 m-4 bg-red-900 border border-red-700 text-white rounded-md text-sm flex justify-between items-center shadow-lg">
-          <span className="break-words"><strong>Deletion Error:</strong> {deleteError}</span>
-          <button onClick={() => setDeleteError(null)} className="ml-4 flex-shrink-0 px-2 py-0.5 bg-red-700 hover:bg-red-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-white" aria-label="Dismiss error">Dismiss</button>
+          <div className="flex items-start">
+            <AlertTriangle className="flex-shrink-0 w-5 h-5 mr-2 mt-0.5" />
+            <span className="break-words"><strong>Deletion Error:</strong> {deleteError}</span>
+          </div>
+          <button 
+            onClick={dismissDeleteError} 
+            className="ml-4 flex-shrink-0 p-1 bg-red-800 hover:bg-red-700 rounded text-xs focus:outline-none focus:ring-1 focus:ring-white"
+            aria-label="Dismiss error"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
@@ -334,14 +384,13 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           items={filteredCharacters.slice(0, displayedCount)}
           emptyMessage={error || "No characters found."}
           renderItem={(character) => {
-            const isConfirmingDelete = confirmDeletePath === character.path;
             const isDeleting = deletingPath === character.path;
             return (
               <div
                 key={character.path}
                 className={`
                   relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-[3/5]
-                  transition-all ${isDeleting ? `duration-${DELETE_ANIMATION_DURATION} ease-out` : 'duration-200 ease-in-out'}
+                  transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
                   ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
                   hover:shadow-xl 
                 `}
@@ -354,16 +403,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                 {/* Delete Button (Hide if animating out) */}
                 {!isDeleting && (
                   <button
-                    title={isConfirmingDelete ? "Confirm Delete" : "Move character to trash"}
-                    onClick={(e) => handleTrashIconClick(e, character.path)}
-                    className={`absolute top-1.5 left-1.5 z-10 p-1 rounded-full backdrop-blur-sm
-                                bg-black/40 text-white opacity-0 group-hover:opacity-100
-                                transition-all duration-200 ease-in-out
-                                hover:bg-red-700/70 hover:scale-110 focus:outline-none
-                                focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800
-                                ${isConfirmingDelete ? '!opacity-100 !bg-red-600/80 scale-110' : ''}
-                              `}
-                    aria-label={isConfirmingDelete ? `Confirm delete ${character.name}` : `Delete ${character.name}`}
+                    title="Delete character"
+                    onClick={(e) => handleTrashIconClick(e, character)}
+                    className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full backdrop-blur-sm
+                              bg-black/40 text-white opacity-0 group-hover:opacity-100
+                              transition-all duration-200 ease-in-out
+                              hover:bg-red-700/70 hover:scale-110 focus:outline-none
+                              focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
+                    aria-label={`Delete ${character.name}`}
                   >
                     <Trash2 size={16} />
                   </button>
@@ -372,11 +419,15 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                 {/* Character Image Container */}
                 <div className="w-full h-full bg-stone-950">
                   <img
-                    src={`/api/character-image/${encodeURIComponent(character.path)}`}
+                    src={`/api/character-image/${encodeFilePath(character.path)}`}
                     alt={character.name}
                     className={`w-full h-full object-cover object-center transition-transform duration-300 ${isDeleting ? '' : 'group-hover:scale-105'}`}
                     loading="lazy" // Ensures lazy loading for performance
-                    onError={() => { /* Optionally handle image load errors here */ }}
+                    onError={(e) => {
+                      console.error(`Failed to load image for: ${character.name}`);
+                      // Add visual feedback for failed images
+                      (e.target as HTMLImageElement).style.opacity = '0.5';
+                    }}
                   />
                 </div>
                 
@@ -397,6 +448,17 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           <div className="h-10" />
         )}
       </div>
+
+      {/* Delete confirmation dialog using our reusable component */}
+      <DeleteConfirmationDialog
+        isOpen={isDeleteConfirmOpen}
+        title="Delete Character"
+        description="Are you sure you want to delete the character"
+        itemName={characterToDelete?.name}
+        isDeleting={isDeleting}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 };

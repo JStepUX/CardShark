@@ -90,12 +90,58 @@ class ChatHandler:
         
         chats_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create character-specific directory
+        # Create character-specific directory with a cleaner name
         char_name = self._sanitize_filename(character_data.get('data', {}).get('name', 'unknown'))
-        chat_dir = chats_dir / f"{char_name}-{char_id}"
+        
+        # Load or create the folders mapping file
+        folders_map_path = chats_dir / 'folders.json'
+        folders_map = {}
+        if folders_map_path.exists():
+            try:
+                with open(folders_map_path, 'r', encoding='utf-8') as f:
+                    folders_map = json.load(f)
+            except Exception as e:
+                self.logger.log_error(f"Error loading folders.json: {str(e)}")
+        
+        # Check if this character ID already exists in the map
+        if char_id in folders_map:
+            clean_name = folders_map[char_id]
+            chat_dir = chats_dir / clean_name
+            
+            # Ensure directory exists (in case it was deleted or renamed)
+            if not chat_dir.exists():
+                chat_dir.mkdir(parents=True, exist_ok=True)
+            
+            self.logger.log_step(f"Using existing mapped chat directory: {chat_dir}")
+            return chat_dir
+        
+        # Character not in map, create a new clean folder name
+        # Check if the base name already exists in any form
+        existing_folders = [d.name for d in chats_dir.iterdir() if d.is_dir()]
+        existing_clean_names = list(folders_map.values())
+        
+        # Find the next available name
+        base_name = char_name
+        final_name = base_name
+        counter = 2
+        
+        while final_name in existing_folders or final_name in existing_clean_names:
+            final_name = f"{base_name} {counter}"
+            counter += 1
+        
+        # Create the directory
+        chat_dir = chats_dir / final_name
         chat_dir.mkdir(parents=True, exist_ok=True)
         
-        self.logger.log_step(f"Using chat directory: {chat_dir}")
+        # Update the folders map
+        folders_map[char_id] = final_name
+        try:
+            with open(folders_map_path, 'w', encoding='utf-8') as f:
+                json.dump(folders_map, f, indent=2)
+        except Exception as e:
+            self.logger.log_error(f"Error saving folders.json: {str(e)}")
+        
+        self.logger.log_step(f"Created new chat directory with clean name: {chat_dir}")
         return chat_dir
 
     def _get_or_create_chat_file(self, character_data: Dict, force_new: bool = False, chat_id: Optional[str] = None) -> Path:

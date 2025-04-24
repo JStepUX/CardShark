@@ -10,7 +10,8 @@ interface GameWorldIconBarProps {
   onInventory?: () => void;
   onSpells?: () => void;
   onMelee?: () => void;
-  onStats?: () => void;
+  onNpcs?: () => void; // Renamed from onStats
+  npcCount?: number; // Added npcCount prop
 }
 
 type GameWorldIconKey = "map" | "inventory" | "spells" | "melee" | "stats";
@@ -20,7 +21,7 @@ const icons: { key: GameWorldIconKey; icon: string; label: string }[] = [
   { key: "inventory", icon: inventoryIcon, label: "Inventory" },
   { key: "spells", icon: spellsIcon, label: "Spells" },
   { key: "melee", icon: meleeIcon, label: "Melee" },
-  { key: "stats", icon: statsIcon, label: "Stats" },
+  { key: "stats", icon: statsIcon, label: "NPCs" }, // Changed label
 ];
 
 const GameWorldIconBar: React.FC<GameWorldIconBarProps> = ({
@@ -28,14 +29,15 @@ const GameWorldIconBar: React.FC<GameWorldIconBarProps> = ({
   onInventory,
   onSpells,
   onMelee,
-  onStats,
+  onNpcs, // Renamed from onStats
+  npcCount, // Added npcCount
 }) => {
   const handlers: Record<GameWorldIconKey, (() => void) | undefined> = {
     map: onMap,
     inventory: onInventory,
     spells: onSpells,
     melee: onMelee,
-    stats: onStats,
+    stats: onNpcs, // Renamed handler key mapping
   };
 
   return (
@@ -43,9 +45,10 @@ const GameWorldIconBar: React.FC<GameWorldIconBarProps> = ({
       {icons.map(({ key, icon, label }) => (
         <button
           key={key}
-          onClick={handlers[key]}
-          className="flex flex-col items-center px-4 py-2 text-blue-200 hover:text-yellow-400 focus:outline-none group"
+          onClick={handlers[key]} // Uses the renamed handler for 'stats' key
+          className="flex flex-col items-center px-4 py-2 text-blue-200 hover:text-yellow-400 focus:outline-none group relative" // Added relative positioning for badge
           title={label}
+          disabled={key === 'stats' && !handlers[key]} // Optionally disable if no handler
         >
           <img
             src={icon}
@@ -53,7 +56,15 @@ const GameWorldIconBar: React.FC<GameWorldIconBarProps> = ({
             className="mb-1 group-hover:scale-110 transition-transform"
             style={{ width: 28, height: 28 }}
           />
-          <span className="text-xs font-medium tracking-wide">{label}</span>
+          <span className="text-xs font-medium tracking-wide flex items-center gap-1">
+            {label}
+            {key === 'stats' && npcCount !== undefined && npcCount > 0 && (
+              /* Tailwind replacement for Radix Badge */
+              <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold text-white bg-orange-600 rounded-full">
+                {npcCount}
+              </span>
+            )}
+          </span>
         </button>
       ))}
     </div>

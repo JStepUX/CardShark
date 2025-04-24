@@ -1,7 +1,7 @@
 // components/APIConfigurationPanel.tsx
 // Component for displaying and updating API configuration settings
 import React, { useState, useEffect } from 'react';
-import { ChevronUp, ChevronDown, Sliders } from 'lucide-react';
+import { ChevronUp, ChevronDown, Sliders, Save } from 'lucide-react';
 import { APIConfig } from '../types/api';
 
 interface APIConfigurationPanelProps {
@@ -18,28 +18,50 @@ const NumberField: React.FC<{
   step?: number;
   tooltip?: string;
   width?: string;
-}> = ({ label, value, onChange, min, max, step = 0.01, tooltip, width = 'w-32' }) => (
-  <div className={`${width}`}>
-    <label className="block text-sm font-medium text-gray-300 mb-1" title={tooltip}>
-      {label}
-    </label>
-    <input
-      type="number"
-      value={value}
-      onChange={(e) => {
-        const val = parseFloat(e.target.value);
-        if (!isNaN(val) && (min === undefined || val >= min) && (max === undefined || val <= max)) {
-          onChange(val);
-        }
-      }}
-      min={min}
-      max={max}
-      step={step}
-      className="w-full px-3 py-1.5 bg-stone-950 border border-stone-700 rounded-lg 
-                focus:ring-1 focus:ring-blue-500 text-sm"
-    />
-  </div>
-);
+}> = ({ label, value, onChange, min, max, step = 0.01, tooltip, width = 'w-32' }) => {
+  // Add local state to track input value as string
+  const [inputValue, setInputValue] = useState(value.toString());
+  
+  // Update local input value when external value changes
+  useEffect(() => {
+    setInputValue(value.toString());
+  }, [value]);
+
+  // Handle blur event for validation
+  const handleBlur = () => {
+    let val = parseFloat(inputValue);
+    
+    // If input is invalid, reset to previous valid value
+    if (isNaN(val)) {
+      setInputValue(value.toString());
+      return;
+    }
+    
+    // Apply min/max constraints
+    if (min !== undefined && val < min) val = min;
+    if (max !== undefined && val > max) val = max;
+    
+    // Update both local input and parent state
+    setInputValue(val.toString());
+    onChange(val);
+  };
+
+  return (
+    <div className={`${width}`}>
+      <label className="block text-sm font-medium text-gray-300 mb-1" title={tooltip}>
+        {label}
+      </label>
+      <input
+        type="text"
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        onBlur={handleBlur}
+        className="w-full px-3 py-1.5 bg-stone-950 border border-stone-700 rounded-lg 
+                  focus:ring-1 focus:ring-blue-500 text-sm"
+      />
+    </div>
+  );
+};
 
 const SamplerOrderItem: React.FC<{
   sampler: { id: number; label: string };
@@ -87,6 +109,8 @@ const SAMPLER_ORDER_OPTIONS = [
 
 const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, onUpdate }) => {
   const [expanded, setExpanded] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [originalSettings, setOriginalSettings] = useState<any>(null);
   const [settings, setSettings] = useState({
     max_length: config.generation_settings?.max_length ?? 220,
     max_context_length: config.generation_settings?.max_context_length ?? 6144,
@@ -110,7 +134,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
   // Update local state when config changes from outside
   useEffect(() => {
     if (config.generation_settings) {
-      setSettings({
+      const newSettings = {
         max_length: config.generation_settings.max_length ?? 220,
         max_context_length: config.generation_settings.max_context_length ?? 6144,
         temperature: config.generation_settings.temperature ?? 1.05,
@@ -128,14 +152,25 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
         dynatemp_min: config.generation_settings.dynatemp_min ?? 0.0,
         dynatemp_max: config.generation_settings.dynatemp_max ?? 2.0,
         dynatemp_exponent: config.generation_settings.dynatemp_exponent ?? 1.0
-      });
+      };
+      
+      setSettings(newSettings);
+      setOriginalSettings(JSON.stringify(newSettings));
+      setHasChanges(false);
     }
   }, [config.generation_settings, config]);
+
+  // Check for unsaved changes whenever settings are updated
+  useEffect(() => {
+    if (originalSettings) {
+      const currentSettings = JSON.stringify(settings);
+      setHasChanges(originalSettings !== currentSettings);
+    }
+  }, [settings, originalSettings]);
 
   const handleSettingChange = (key: keyof typeof settings, value: any) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
-    onUpdate({ generation_settings: newSettings });
   };
 
   const handleMoveSampler = (index: number, direction: 'up' | 'down') => {
@@ -147,19 +182,37 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     }
     const newSettings = { ...settings, sampler_order: newOrder };
     setSettings(newSettings);
-    onUpdate({ generation_settings: newSettings });
+  };
+
+  const handleSave = () => {
+    onUpdate({ generation_settings: settings });
   };
 
   return (
     <div className="space-y-4 mt-4 border-t border-stone-800 pt-4">
-      <button 
-        onClick={() => setExpanded(!expanded)} 
-        className="flex items-center gap-2 text-gray-300 hover:text-white w-full py-2"
-      >
-        <Sliders size={18} />
-        <span className="text-md font-medium">Generation Settings</span>
-        {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-      </button>
+      <div className="flex items-center justify-between">
+        <button 
+          onClick={() => setExpanded(!expanded)} 
+          className="flex items-center gap-2 text-gray-300 hover:text-white py-2"
+        >
+          <Sliders size={18} />
+          <span className="text-md font-medium">Generation Settings</span>
+          {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
+        
+        <button
+          onClick={handleSave}
+          disabled={!hasChanges}
+          className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-colors 
+            ${hasChanges 
+              ? 'bg-blue-600/40 hover:bg-blue-600/60 text-blue-200' 
+              : 'bg-gray-800/40 text-gray-500 cursor-not-allowed'}`}
+          title={hasChanges ? "Save changes" : "No changes to save"}
+        >
+          <Save size={16} />
+          <span>Save</span>
+        </button>
+      </div>
 
       <div className={`space-y-6 pt-2 transition-expand ${expanded ? 'expanded' : ''}`}>
           {/* Basic Settings */}

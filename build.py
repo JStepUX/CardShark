@@ -242,10 +242,21 @@ frontend_datas = [
 
 backend_datas = [
     ('backend/*.py', 'backend'),
+    ('backend/handlers/*.py', 'backend/handlers'),
+    ('backend/worldcards/*', 'backend/worldcards'),
+    ('backend/models/*', 'backend/models'),
+    ('backend/utils/*', 'backend/utils'),
+]
+
+# Add KoboldCPP directory (even if empty) to ensure it's created
+koboldcpp_dir = Path('KoboldCPP')
+koboldcpp_dir.mkdir(exist_ok=True)
+koboldcpp_datas = [
+    ('KoboldCPP', 'KoboldCPP'),
 ]
 
 # Combine all data files
-all_datas = frontend_datas + backend_datas
+all_datas = frontend_datas + backend_datas + koboldcpp_datas
 
 # Verified backend modules that exist in your project
 hidden_imports = [
@@ -271,22 +282,38 @@ hidden_imports = [
     
     # Backend modules - only include ones that exist
     'backend',
-    'backend.api_handler.py',
-    'backend.background_handler.py',
-    'backend.backyard_handler.py',
-    'backend.character_validator.py',
-    'backend.chat_handler.py',
-    'backend.errors.py',
-    'backend.log_manager.py',
-    'backend.network_server.py',
-    'backend.png_handler.py',
-    'backend.png_debug_handler.py',
-    'backend.png_metadata_handler.py',
-    'backend.settings_manager.py',
-    'backend.test_module.py',
-    'backend.template_handler.py',
-    'backend.batch_converter.py',
+    'backend.api_handler',
+    'backend.api_provider_adapters',
+    'backend.background_handler',
+    'backend.backyard_handler',
+    'backend.batch_converter',
+    'backend.character_validator',
+    'backend.chat_handler',
+    'backend.errors',
+    'backend.koboldcpp_manager',
+    'backend.koboldcpp_handler',
+    'backend.log_manager',
+    'backend.lore_handler',
+    'backend.network_server',
+    'backend.png_handler',
+    'backend.png_debug_handler',
+    'backend.png_metadata_handler',
+    'backend.room_card_endpoint',
+    'backend.settings_manager',
+    'backend.template_handler',
+    'backend.test_module',
+    'backend.world_state_manager',
     
+    # Handlers subdirectory
+    'backend.handlers',
+    'backend.handlers.world_card_chat_handler',
+    'backend.handlers.world_state_handler',
+    'backend.handlers.background_api',
+    
+    # Models, Utils, and WorldCards subdirectories
+    'backend.models',
+    'backend.utils',
+    'backend.worldcards',
     
     # Important dependencies
     'email_validator',
@@ -372,6 +399,11 @@ def build_executable():
             log(f"Error: frontend dist not found at {frontend_dist}", "ERROR")
             return False
             
+        # Create KoboldCPP directory if it doesn't exist
+        koboldcpp_dir = BASE_DIR / 'KoboldCPP'
+        koboldcpp_dir.mkdir(exist_ok=True)
+        log(f"Ensured KoboldCPP directory exists at {koboldcpp_dir}", "DEBUG")
+            
         log("Creating executable...")
         cmd = f'pyinstaller "{spec_file}" --clean --workpath "{BASE_DIR / "build"}" --distpath "{BASE_DIR / "dist"}"'
         
@@ -395,6 +427,11 @@ def build_executable():
         internal_dir = BASE_DIR / 'dist' / '_internal'
         if internal_dir.exists():
             log("Warning: _internal directory was created unexpectedly", "WARNING")
+        
+        # Create KoboldCPP directory in the dist folder
+        dist_koboldcpp_dir = BASE_DIR / 'dist' / 'KoboldCPP'
+        dist_koboldcpp_dir.mkdir(exist_ok=True)
+        log(f"Created KoboldCPP directory in dist folder: {dist_koboldcpp_dir}", "DEBUG")
             
         log(f"Executable successfully created at {exe_path}")
         return True
