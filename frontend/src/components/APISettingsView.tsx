@@ -17,6 +17,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import PromptSettings from './PromptSettings';
 import HighlightingSettings from './HighlightingSettings';
 import KoboldCPPManager from './KoboldCPPManager';
+import ModelDirectorySettings from './settings/ModelDirectorySettings';
 
 interface APISettingsViewProps {}
 
@@ -104,6 +105,12 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
     });
   };
 
+  const handleModelDirectoryChange = (directory: string) => {
+    updateSettings({
+      models_directory: directory
+    });
+  };
+
   const handleHighlightingUpdate = (highlightSettings: SyntaxHighlightSettings) => {
     // Make a specific API call to ensure settings are saved to disk
     // This ensures we see any errors that might occur during the save process
@@ -176,6 +183,14 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                   </label>
                 </div>
               )}
+            </div>
+            
+            {/* Model Directory Settings */}
+            <div className="mb-8">
+              <ModelDirectorySettings
+                directory={settings.models_directory || null}
+                onDirectoryChange={handleModelDirectoryChange}
+              />
             </div>
           </div>
         </SettingsTab>

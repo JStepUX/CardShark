@@ -83,11 +83,11 @@ const UserSelect: React.FC<UserSelectProps> = ({
       const data = await response.json();
       console.log('Loaded users data:', data); // Debug log
 
-      if (data.success && Array.isArray(data.files)) { // Check for data.files
+      if (data.success && Array.isArray(data.users)) { // Changed from data.files to data.users
         // Map the fetched data to the imported UserProfile type
-        const mappedUsers: UserProfile[] = data.files.map((user: any): UserProfile => ({ // Map data.files
+        const mappedUsers: UserProfile[] = data.users.map((user: any): UserProfile => ({ // Changed from data.files to data.users
           name: user.name || 'Unnamed User', // Provide default if name is missing
-          filename: user.name || '', // Use user.name which should be the base filename (e.g., "Ghost.png")
+          filename: user.filename || '', // Use user.filename from response (not user.name)
           size: user.size || 0,
           modified: user.modified || Date.now(),
           id: ''

@@ -106,3 +106,29 @@ class WorldStateManager:
             self.logger.log_error(f"Error loading world state for '{world_name}': {str(e)}")
             self.logger.log_error(traceback.format_exc()) # Add traceback
             return {}
+
+    def delete_world(self, world_name: str) -> bool:
+        """Deletes a world directory and all its contents."""
+        try:
+            # Basic sanitization to prevent path traversal
+            safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
+            if not safe_world_name:
+                raise ValueError("Invalid world name provided.")
+            
+            world_dir = self.worlds_base_dir / safe_world_name
+            
+            # Check if the directory exists
+            if not world_dir.exists() or not world_dir.is_dir():
+                self.logger.log_warning(f"World directory not found for '{world_name}' at {world_dir}")
+                return False
+            
+            # Recursively delete the directory and all its contents
+            import shutil
+            shutil.rmtree(world_dir)
+            
+            self.logger.log_step(f"World '{world_name}' deleted successfully from {world_dir}")
+            return True
+        except Exception as e:
+            self.logger.log_error(f"Error deleting world '{world_name}': {str(e)}")
+            self.logger.log_error(traceback.format_exc())
+            return False

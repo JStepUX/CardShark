@@ -201,44 +201,66 @@ class WorldStateHandler:
         sanitized_name = self._sanitize_world_name(world_name)
 
         try:
-            # 1. Read character data from PNG
-            # Ensure the path is absolute or relative to a known location
+            # 1. Read character data from PNG - handling possible paths
             char_path = Path(character_file_path)
-            if not char_path.is_absolute():
-                 # Assuming character paths might be relative to the character directory setting
-                 char_base = self.settings_manager.get_setting("character_directory")
-                 if char_base:
-                     char_path = (Path(char_base) / character_file_path).resolve()
-                 else:
-                     # Fallback if character_directory isn't set (e.g., relative to project root)
-                     char_path = Path.cwd() / character_file_path
+            
+            # Try multiple approaches to find the character file
+            possible_paths = [
+                char_path,  # Try as-is first (might be absolute)
+                Path.cwd() / character_file_path,  # Relative to current working directory
+            ]
+            
+            # Try character directory from settings if available
+            char_dir_setting = self.settings_manager.get_setting("character_directory")
+            if char_dir_setting:
+                char_dir = Path(char_dir_setting)
+                # Try both direct path and just the filename
+                possible_paths.append(char_dir / character_file_path)
+                if "/" in character_file_path or "\\" in character_file_path:
+                    # Also try just the filename portion if path contains slashes
+                    filename = Path(character_file_path).name
+                    possible_paths.append(char_dir / filename)
+            
+            # Check all possible paths
+            found = False
+            for path in possible_paths:
+                if path.exists():
+                    self.logger.log_step(f"Found character file at: {path}")
+                    char_path = path
+                    found = True
+                    break
+                    
+            if not found:
+                # If we get here, the file couldn't be found in any expected location
+                self.logger.log_error(f"Character file not found: {character_file_path}")
+                self.logger.log_error(f"Tried paths: {', '.join(str(p) for p in possible_paths)}")
+                raise CardSharkError(f"Character file not found: {character_file_path}", ErrorType.FILE_NOT_FOUND)
 
-            if not char_path.exists():
-                 raise CardSharkError(f"Character file not found: {character_file_path}", ErrorType.FILE_NOT_FOUND)
-
-            # Use PngMetadataHandler to read character data
+            # 2. Use PngMetadataHandler to read character data
+            self.logger.log_step(f"Reading metadata from character file: {char_path}")
             character_metadata = self.png_handler.read_metadata(str(char_path))
             if not character_metadata or 'data' not in character_metadata:
-                 raise CardSharkError(f"Failed to read metadata from character: {character_file_path}", ErrorType.METADATA_ERROR)
+                self.logger.log_error(f"Failed to read metadata from character file: {char_path}")
+                raise CardSharkError(f"Failed to read metadata from character: {character_file_path}", ErrorType.METADATA_ERROR)
 
             character_data = character_metadata['data']
             char_actual_name = character_data.get("name", "Unnamed Character")
             char_description = character_data.get("description", "No description provided.")
             # Get character UUID if available
-            char_uuid = character_metadata.get('uuid') # Assuming png_handler adds this
+            char_uuid = character_metadata.get('uuid', '')
 
-            # 2. Create starter location at [0,0,0] based on character
+            # Create starter location at [0,0,0] based on character
             start_location = Location(
                 name=f"{char_actual_name}'s Starting Point",
                 coordinates=[0, 0, 0],
                 location_id=f"origin_{char_uuid if char_uuid else 'char'}_0_0_0",
                 description=f"The journey begins, inspired by {char_actual_name}. {char_description}",
-                introduction=f"You are at the starting point associated with {char_actual_name}. {char_description}", # Added default introduction based on character
+                introduction=f"You are at the starting point associated with {char_actual_name}. {char_description}",
                 connected=True,
-                npcs=[str(char_path)] # Add character file path as NPC reference
+                npcs=[str(char_path)]  # Add character file path as NPC reference
             )
 
-            # 3. Extract potential locations from character lore (Phase 1.5)
+            # 3. Extract potential locations from character lore
             unconnected_locations_list = self.extract_locations_from_lore(character_metadata)
             unconnected_locations_dict = {loc.location_id: loc for loc in unconnected_locations_list}
 
@@ -249,7 +271,7 @@ class WorldStateHandler:
                 locations={"0,0,0": start_location},
                 visited_positions=["0,0,0"],
                 unconnected_locations=unconnected_locations_dict,
-                base_character_id=str(char_path) # Store character file path as reference
+                base_character_id=str(char_path)  # Store character file path as reference
                 # player state uses default factory
             )
 
@@ -277,7 +299,7 @@ class WorldStateHandler:
 
         except CardSharkError as cse:
             self.logger.log_error(f"CardSharkError initializing from character: {cse}")
-            raise cse # Re-raise specific errors
+            raise cse  # Re-raise specific errors
         except Exception as e:
             self.logger.log_error(f"Unexpected error initializing world '{world_name}' from character: {e}")
             self.logger.log_error(traceback.format_exc())
@@ -360,6 +382,32 @@ class WorldStateHandler:
              return False
         except Exception as e:
             self.logger.log_error(f"Unexpected error connecting location '{location_id}' in world '{world_name}': {e}")
+            self.logger.log_error(traceback.format_exc())
+            return False
+
+    def delete_world(self, world_name: str) -> bool:
+        """Deletes a world directory and all its contents."""
+        try:
+            # Sanitize world name for security
+            sanitized_name = self._sanitize_world_name(world_name)
+            if not sanitized_name:
+                raise ValueError("Invalid world name provided.")
+            
+            world_dir = self._get_world_path(sanitized_name)
+            
+            # Check if the directory exists
+            if not world_dir.exists() or not world_dir.is_dir():
+                self.logger.log_warning(f"World directory not found for '{world_name}' at {world_dir}")
+                return False
+            
+            # Recursively delete the directory and all its contents
+            import shutil
+            shutil.rmtree(world_dir)
+            
+            self.logger.log_step(f"World '{world_name}' deleted successfully from {world_dir}")
+            return True
+        except Exception as e:
+            self.logger.log_error(f"Error deleting world '{world_name}': {str(e)}")
             self.logger.log_error(traceback.format_exc())
             return False
 

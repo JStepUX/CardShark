@@ -9,6 +9,7 @@ import {
 } from '../types/api';
 import { Template } from '../types/templateTypes';
 import { templateService } from '../services/templateService';
+import { useSettings } from '../contexts/SettingsContext';
 import APIConfigurationPanel from './APIConfigurationPanel';
 
 interface APICardProps {
@@ -28,6 +29,7 @@ export const APICard: React.FC<APICardProps> = ({
   const [error, setError] = useState<string | undefined>();
   const [templates, setTemplates] = useState<Template[]>([]);
   const config = PROVIDER_CONFIGS[api.provider];
+  const { settings } = useSettings();
 
   // Load available templates on component mount
   useEffect(() => {
@@ -240,26 +242,20 @@ export const APICard: React.FC<APICardProps> = ({
         </div>
       )}
 
-      {/* Model Info */}
-      {api.model_info && (
-        <div className="p-3 bg-stone-900/50 rounded-lg space-y-1">
-          <div className="text-sm font-medium">Connected Model</div>
-          <div className="text-sm text-gray-400">
-            {api.model_info.name || api.model_info.id}
-            {api.model_info.provider && (
-              <span className="text-xs ml-1">
-                by {api.model_info.provider}
-              </span>
-            )}
-          </div>
+      {/* Connected Model Section */}
+      <div className="p-3 bg-stone-900/50 rounded-lg space-y-1">
+        <div className="text-sm font-medium">Connected Model</div>
+        <div className="text-sm text-gray-400">
+          {api.model ? api.model : "No model selected"}
         </div>
-      )}
+      </div>
       
       {/* Generation Settings Panel */}
       {api.provider === APIProvider.KOBOLD && (
         <APIConfigurationPanel 
           config={api}
           onUpdate={onUpdate}
+          modelsDirectory={settings.models_directory || ''}
         />
       )}
 

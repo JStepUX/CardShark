@@ -5,6 +5,7 @@ import { useComparison } from '../contexts/ComparisonContext';
 import { Trash2, AlertTriangle, X } from 'lucide-react';
 import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
+import KoboldCPPDrawerManager from './KoboldCPPDrawerManager';
 
 // Interface for character file data received from the backend
 interface CharacterFile {
@@ -459,6 +460,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         onCancel={handleCancelDelete}
         onConfirm={handleConfirmDelete}
       />
+
+      {/* KoboldCPP Drawer Manager - will conditionally show the bottom drawer */}
+      <KoboldCPPDrawerManager />
     </div>
   );
 };

@@ -55,7 +55,7 @@ app.add_middleware(
 logger = LogManager()
 settings_manager = SettingsManager(logger)
 # Load settings at startup
-settings_manager._load_settings()
+settings_manager.load_settings()
 validator = CharacterValidator(logger)
 png_handler = PngMetadataHandler(logger)
 debug_handler = PngDebugHandler(logger)
@@ -66,9 +66,8 @@ template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds() # Initialize default backgrounds
 lore_handler = LoreHandler(logger, default_position=0)
-world_state_handler = WorldStateHandler(logger, settings_manager)
-# Fix the initialization by passing a path instead of api_handler
-world_card_chat_handler = WorldCardChatHandler(logger, Path("./worlds"))
+world_state_handler = WorldStateHandler(logger)
+world_card_chat_handler = WorldCardChatHandler(logger, api_handler)
 
 # ---------- Initialize and register endpoints ----------
 

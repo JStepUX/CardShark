@@ -45,6 +45,7 @@ export interface Settings {
   // App Settings
   character_directory: string | null;  // Updated to allow null
   save_to_character_directory: boolean;
+  models_directory?: string;  // Directory for AI model files
   theme: 'dark' | 'light';
   version: string;
   

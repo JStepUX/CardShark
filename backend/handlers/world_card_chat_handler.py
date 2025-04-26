@@ -4,6 +4,7 @@ WorldCardChatHandler - Handles chat sessions for world cards
 
 import os
 import json
+import sys
 from pathlib import Path
 import uuid
 import time
@@ -19,10 +20,26 @@ class WorldCardChatHandler:
 
     def __init__(self, logger: LogManager, worlds_path=None):
         self.logger = logger
-        self.chats_base_dir = worlds_path if worlds_path else Path("./worlds")
+        self.chats_base_dir = worlds_path if worlds_path else self._get_worlds_base_dir()
         self.logger.log_step(f"WorldCardChatHandler initialized with chats base directory: {self.chats_base_dir}")
         # Ensure the base directory exists
         self.chats_base_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _get_worlds_base_dir(self) -> Path:
+        """Returns a consistent base directory for worlds at the project root level."""
+        # Create base directory path that's consistent at project root
+        if getattr(sys, 'frozen', False):
+            # Running as PyInstaller bundle
+            base_dir = Path(sys.executable).parent
+        else:
+            # Running from source
+            base_dir = Path.cwd()
+        
+        # Always use a consistent "worlds" directory at the project root level
+        worlds_dir = base_dir / 'worlds'
+        worlds_dir.mkdir(parents=True, exist_ok=True)
+        
+        return worlds_dir
     
     def get_world_chats_dir(self, world_name: str) -> Path:
         """Get the directory path for a specific world's chats."""
@@ -229,7 +246,7 @@ class WorldCardChatHandler:
                 "created": chat_data.get("metadata", {}).get("created_at", datetime.now().isoformat()),
                 "updated": datetime.now().isoformat(),
                 "messages": chat_data.get("messages", []),
-                "participants": list(set([msg.get("role") for msg in chat_data.get("messages", []) if msg.get("role")])),
+                "participants": list(set([msg.get("role") for msg in chat_data.get("messages", []) if msg.get("role")])),                
                 "location_id": chat_data.get("metadata", {}).get("location_id", ""),
                 "metadata": chat_data.get("metadata", {})
             }

@@ -33,11 +33,39 @@ export function transformKoboldPayload(payload: any) {
     ...otherSettings
   } = generationSettings;
   
+  // Process memory - construct from character data if empty
+  let memory = stripHtml(generation_params.memory || '');
+  const characterData = generation_params.character_data?.data;
+  
+  if (!memory && characterData) {
+    const memoryParts = [];
+    
+    // Add system prompt if available
+    if (characterData.system_prompt) {
+      memoryParts.push(characterData.system_prompt);
+    }
+    
+    // Add character details
+    if (characterData.description) {
+      memoryParts.push(`Persona: ${characterData.description}`);
+    }
+    
+    if (characterData.personality) {
+      memoryParts.push(`Personality: ${characterData.personality}`);
+    }
+    
+    if (characterData.scenario) {
+      memoryParts.push(`Scenario: ${characterData.scenario}`);
+    }
+    
+    memory = memoryParts.join('\n\n');
+  }
+  
   // Create a KoboldCPP-compatible payload
   return {
     // Core parameters
     prompt,
-    memory: stripHtml(generation_params.memory || ''),
+    memory,
     stop_sequence: generation_params.stop_sequence || [],
     
     // Include other generation settings

@@ -28,6 +28,8 @@ class KoboldCPPManager:
     def __init__(self):
         self.base_dir = self._get_base_dir()
         self.koboldcpp_dir = os.path.join(self.base_dir, 'KoboldCPP')
+        self.models_dir = None  # Will be set when scan_models is called
+        self.available_models = []  # List of available model files
         self.exe_path = None
         self.process = None
         self.current_version = None
@@ -360,8 +362,8 @@ class KoboldCPPManager:
                 callback({'status': 'error', 'error': str(e)})
             return {'status': 'error', 'error': str(e)}
     
-    def launch(self) -> Dict[str, Any]:
-        """Launch KoboldCPP"""
+    def launch(self, model: Optional[str] = None, additional_params: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Launch KoboldCPP with optional model and additional parameters"""
         try:
             if not self.exe_path or not os.path.isfile(self.exe_path):
                 return {'status': 'error', 'message': 'KoboldCPP executable not found'}
@@ -369,14 +371,24 @@ class KoboldCPPManager:
             if self.is_running():
                 return {'status': 'running', 'message': 'KoboldCPP is already running'}
             
-            # Launch KoboldCPP
-            logger.info(f"Launching KoboldCPP: {self.exe_path}")
+            # Prepare command
+            command = [self.exe_path]
+            
+            # Add model if specified
+            if model:
+                command += ["--model", model]
+            
+            # Add any additional parameters
+            if additional_params:
+                command += additional_params
+            
+            logger.info(f"Launching KoboldCPP with command: {' '.join(command)}")
             
             # Platform-specific launch configuration
             if platform.system() == 'Windows':
                 # On Windows, use subprocess.Popen with detached process group
                 self.process = subprocess.Popen(
-                    [self.exe_path], 
+                    command, 
                     creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
                     cwd=self.koboldcpp_dir,
                     shell=False,  # Don't use shell for security reasons
@@ -386,7 +398,7 @@ class KoboldCPPManager:
             else:
                 # On Unix-like systems
                 self.process = subprocess.Popen(
-                    [self.exe_path], 
+                    command, 
                     start_new_session=True,
                     cwd=self.koboldcpp_dir,
                     shell=False,  # Don't use shell for security reasons
@@ -439,18 +451,183 @@ class KoboldCPPManager:
                 'is_running': True
             }
         
-        # KoboldCPP exists but is not running
-        return {
-            'status': 'present', 
-            'message': 'KoboldCPP is installed but not running', 
-            'exe_path': self.exe_path,
-            'is_running': False
-        }
+        # KoboldCPP exists but is not running - attempt to launch it
+        logger.info("KoboldCPP is installed but not running. Attempting to launch...")
+        launch_result = self.launch()
+        
+        if launch_result.get('status') == 'launched':
+            return {
+                'status': 'running', 
+                'message': 'KoboldCPP has been automatically launched', 
+                'exe_path': self.exe_path,
+                'is_running': True,
+                'auto_launched': True
+            }
+        elif launch_result.get('status') == 'running':
+            return {
+                'status': 'running', 
+                'message': 'KoboldCPP is already running', 
+                'exe_path': self.exe_path,
+                'is_running': True
+            }
+        else:
+            # Launch failed - return present status with error message
+            error_message = launch_result.get('message', 'Unknown error during auto-launch')
+            logger.error(f"Auto-launch failed: {error_message}")
+            return {
+                'status': 'present', 
+                'message': f'KoboldCPP is installed but failed to auto-launch: {error_message}', 
+                'exe_path': self.exe_path,
+                'is_running': False,
+                'launch_error': error_message
+            }
     
     def get_status(self) -> Dict[str, Any]:
         """Get the current status of KoboldCPP"""
         status = self.check_and_launch()
         return status
+    
+    def scan_models_directory(self, models_dir: str) -> List[Dict[str, Any]]:
+        """
+        Scan a directory for compatible model files
+        
+        Args:
+            models_dir: Path to the directory containing model files
+            
+        Returns:
+            List of dictionaries with model information
+        """
+        logger.info(f"Scanning directory for models: {models_dir}")
+        self.models_dir = models_dir
+        self.available_models = []
+        
+        if not os.path.isdir(models_dir):
+            logger.warning(f"Models directory does not exist: {models_dir}")
+            return []
+        
+        # Common model extensions
+        model_extensions = ['.gguf', '.bin', '.ggml', '.safetensors']
+        
+        # Walk through the directory and find model files
+        for root, _, files in os.walk(models_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                file_ext = os.path.splitext(file_path)[1].lower()
+                
+                if file_ext in model_extensions:
+                    relative_path = os.path.relpath(file_path, models_dir)
+                    model_size_bytes = os.path.getsize(file_path)
+                    model_size_gb = model_size_bytes / (1024 * 1024 * 1024)  # Convert to GB
+                    
+                    # Get last modified time
+                    mod_time = os.path.getmtime(file_path)
+                    mod_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mod_time))
+                    
+                    model_info = {
+                        'name': file,
+                        'path': file_path,
+                        'relative_path': relative_path,
+                        'size_bytes': model_size_bytes,
+                        'size_gb': round(model_size_gb, 2),
+                        'last_modified': mod_time_str,
+                        'extension': file_ext
+                    }
+                    
+                    self.available_models.append(model_info)
+                    logger.debug(f"Found model: {file} ({round(model_size_gb, 2)} GB)")
+        
+        logger.info(f"Found {len(self.available_models)} models")
+        return self.available_models
+    
+    def get_available_models(self) -> List[Dict[str, Any]]:
+        """Get the list of available models"""
+        return self.available_models
+    
+    def launch_with_model(self, model_path: str, config: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Launch KoboldCPP with a specific model and configuration
+        
+        Args:
+            model_path: Path to the model file
+            config: Dictionary of configuration options
+                Supported keys:
+                - contextsize: int - Context size for the model
+                - threads: int - Number of threads to use
+                - gpulayers: int - Number of GPU layers to use
+                - usecublas: bool - Whether to use CuBLAS for GPU acceleration
+                - usevulkan: bool - Whether to use Vulkan for GPU acceleration
+                - usecpu: bool - Whether to use CPU only
+                - port: int - Port to listen on
+                - defaultgenamt: int - Default generation amount
+                - multiuser: int - Max number of users for multiuser mode
+                
+        Returns:
+            Dictionary with status information
+        """
+        # Default configuration
+        default_config = {
+            'contextsize': 4096,
+            'port': 5001,
+            'defaultgenamt': 128,
+            'skiplauncher': True  # Skip the launcher GUI
+        }
+        
+        # Merge with provided config
+        params = default_config.copy()
+        if config:
+            params.update(config)
+            
+        # Build command-line arguments
+        additional_params = []
+        
+        # Add all parameters
+        for key, value in params.items():
+            if isinstance(value, bool) and value:
+                additional_params.append(f"--{key}")
+            elif not isinstance(value, bool):
+                additional_params.append(f"--{key}")
+                additional_params.append(str(value))
+        
+        # Launch with model and additional parameters
+        return self.launch(model=model_path, additional_params=additional_params)
+    
+    def get_recommended_config(self, model_size_gb: float) -> Dict[str, Any]:
+        """
+        Get recommended configuration settings based on model size
+        
+        Args:
+            model_size_gb: Size of the model in GB
+            
+        Returns:
+            Dictionary with recommended configuration settings
+        """
+        config = {}
+        
+        # Context size recommendations
+        if model_size_gb <= 4:
+            config['contextsize'] = 8192
+        elif model_size_gb <= 7:
+            config['contextsize'] = 4096
+        elif model_size_gb <= 13:
+            config['contextsize'] = 2048
+        else:
+            config['contextsize'] = 1024
+            
+        # GPU acceleration based on model size
+        if model_size_gb > 10:
+            # Try to use GPU acceleration for larger models if possible
+            config['usevulkan'] = True
+            config['gpulayers'] = -1  # Auto-detect
+        
+        # Thread recommendations based on system
+        import multiprocessing
+        cpu_count = multiprocessing.cpu_count()
+        config['threads'] = min(8, max(4, cpu_count - 2))  # Leave some cores for the system
+        
+        # Generation amount based on context
+        config['defaultgenamt'] = min(256, config['contextsize'] // 16)
+        
+        return config
 
 # Create a single instance of the manager
 manager = KoboldCPPManager()

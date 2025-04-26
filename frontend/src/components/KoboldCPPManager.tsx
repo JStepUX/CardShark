@@ -243,10 +243,10 @@ const KoboldCPPManager: React.FC = () => {
         <>
           {/* Status indicator */}
           <div className="mb-4 p-4 rounded-lg border flex items-center gap-2" 
-               style={{ 
-                 backgroundColor: status.is_running ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                 borderColor: status.is_running ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
-               }}>
+            style={{ 
+              backgroundColor: status.is_running ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              borderColor: status.is_running ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+            }}>
             {status.is_running ? (
               <CheckCircle className="h-6 w-6 text-green-500" />
             ) : (
@@ -380,6 +380,17 @@ const KoboldCPPManager: React.FC = () => {
               </div>
             </div>
           )}
+          
+          {/* General information */}
+          <div className="mt-6 text-sm text-gray-400">
+            <p className="mb-2">
+              KoboldCPP is a local AI text generation server that runs entirely on your computer.
+              It provides a compatible API for text generation without requiring internet connectivity.
+            </p>
+            <p>
+              When installed and running, KoboldCPP will automatically be available as an API provider option.
+            </p>
+          </div>
         </>
       ) : (
         <div className="text-red-500 py-4">
@@ -400,17 +411,6 @@ const KoboldCPPManager: React.FC = () => {
           </button>
         </div>
       )}
-      
-      {/* General information */}
-      <div className="mt-6 text-sm text-gray-400">
-        <p className="mb-2">
-          KoboldCPP is a local AI text generation server that runs entirely on your computer.
-          It provides a compatible API for text generation without requiring internet connectivity.
-        </p>
-        <p>
-          When installed and running, KoboldCPP will automatically be available as an API provider option.
-        </p>
-      </div>
     </div>
   );
 };

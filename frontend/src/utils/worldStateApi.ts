@@ -30,8 +30,8 @@ export const worldStateApi = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        world_name: worldName,
-        character_file_path: characterFilePath,
+        name: worldName,
+        character_path: characterFilePath,
       }),
     });
 
@@ -46,7 +46,7 @@ export const worldStateApi = {
 
     return {
       success: true,
-      world_name: data.world_name,
+      world_name: worldName,
     };
   },
 
@@ -70,7 +70,9 @@ export const worldStateApi = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(state),
+      body: JSON.stringify({
+        state: state
+      }),
     });
 
     if (!response.ok) {
@@ -157,7 +159,8 @@ export const worldStateApi = {
    */
   loadLatestChat: async (worldName: string) => {
     try {
-      const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/chat/latest`);
+      // Use chat endpoint instead of world-cards endpoint
+      const response = await fetch(`/api/world-chat/${encodeURIComponent(worldName)}/latest`);
       
       if (response.status === 404) {
         console.log('No chat found for this world, will create a new one');
@@ -173,7 +176,8 @@ export const worldStateApi = {
       return data.chat;
     } catch (error) {
       console.error(`Error loading latest chat for world ${worldName}:`, error);
-      throw new Error(`Failed to load latest chat: ${error instanceof Error ? error.message : String(error)}`);
+      // Return null instead of throwing to avoid breaking the UI flow
+      return null;
     }
   },
 
@@ -187,11 +191,13 @@ export const worldStateApi = {
         ...chatData,
         metadata: {
           ...chatData.metadata,
-          chat_id: chatId // Ensure chatId is explicitly set in metadata
+          chat_id: chatId,
+          world_name: worldName // Ensure worldName is explicitly set in metadata
         }
       };
       
-      const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/chat/save`, {
+      // Use chat endpoint instead of world-cards endpoint
+      const response = await fetch(`/api/world-chat/${encodeURIComponent(worldName)}/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -200,14 +206,16 @@ export const worldStateApi = {
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to save chat: ${response.statusText}`);
+        console.error(`Failed to save chat: ${response.status} ${response.statusText}`);
+        return false;
       }
       
       const data = await response.json();
       return data.success === true;
     } catch (error) {
       console.error(`Error saving chat for world ${worldName}:`, error);
-      throw new Error(`Failed to save chat: ${error instanceof Error ? error.message : String(error)}`);
+      // Return false instead of throwing to avoid breaking the UI flow
+      return false;
     }
   },
 

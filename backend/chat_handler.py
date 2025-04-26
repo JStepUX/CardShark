@@ -72,7 +72,7 @@ class ChatHandler:
         # Get character ID or UUID
         char_id = self._get_character_uuid(character_data)
         
-        # Create base directory path that's consistent
+        # Create base directory path that's consistent at project root
         if getattr(sys, 'frozen', False):
             # Running as PyInstaller bundle
             base_dir = Path(sys.executable).parent
@@ -80,18 +80,10 @@ class ChatHandler:
             # Running from source
             base_dir = Path.cwd()
         
-        # Check if base_dir already contains a 'frontend' directory
-        if base_dir.name == 'frontend':
-            # Already in a frontend directory, just add 'chats'
-            chats_dir = base_dir / 'chats'
-        else:
-            # Not in a frontend directory, use the standard path
-            chats_dir = base_dir / 'chats'  # Removed the 'frontend' part
-        
+        # Always use a consistent "chats" directory at the project root level
+        # (Similar to how templates, backgrounds, users, etc. are organized)
+        chats_dir = base_dir / 'chats'
         chats_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Create character-specific directory with a cleaner name
-        char_name = self._sanitize_filename(character_data.get('data', {}).get('name', 'unknown'))
         
         # Load or create the folders mapping file
         folders_map_path = chats_dir / 'folders.json'
@@ -111,11 +103,13 @@ class ChatHandler:
             # Ensure directory exists (in case it was deleted or renamed)
             if not chat_dir.exists():
                 chat_dir.mkdir(parents=True, exist_ok=True)
-            
+                
             self.logger.log_step(f"Using existing mapped chat directory: {chat_dir}")
             return chat_dir
         
         # Character not in map, create a new clean folder name
+        char_name = self._sanitize_filename(character_data.get('data', {}).get('name', 'unknown'))
+        
         # Check if the base name already exists in any form
         existing_folders = [d.name for d in chats_dir.iterdir() if d.is_dir()]
         existing_clean_names = list(folders_map.values())

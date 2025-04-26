@@ -274,7 +274,7 @@ const WorldCardsPlayView: React.FC = () => {
 
         // Determine current location description for context
         const currentPositionKey = worldData.current_position;
-        const currentLoc = worldData.locations[currentPositionKey];
+        const currentLoc = worldData.locations && currentPositionKey ? worldData.locations[currentPositionKey] : null;
         const worldContextDescription = currentLoc?.description || `You are in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`;
         // Use introduction field if available, fall back to description
         const worldContextFirstMes = currentLoc?.introduction || currentLoc?.description || `Welcome to ${formatWorldName(worldData.name) || 'this world'}!`;

@@ -1,12 +1,22 @@
 // components/APIConfigurationPanel.tsx
 // Component for displaying and updating API configuration settings
 import React, { useState, useEffect } from 'react';
-import { ChevronUp, ChevronDown, Sliders, Save } from 'lucide-react';
+import { ChevronUp, ChevronDown, Sliders, Save, AlertCircle } from 'lucide-react';
 import { APIConfig } from '../types/api';
+
+// Model selection related types
+interface Model {
+  name: string;
+  path: string;
+  size_gb: number;
+  extension: string;
+  last_modified: string;
+}
 
 interface APIConfigurationPanelProps {
   config: APIConfig;
   onUpdate: (updates: Partial<APIConfig>) => void;
+  modelsDirectory?: string;
 }
 
 const NumberField: React.FC<{
@@ -18,7 +28,7 @@ const NumberField: React.FC<{
   step?: number;
   tooltip?: string;
   width?: string;
-}> = ({ label, value, onChange, min, max, step = 0.01, tooltip, width = 'w-32' }) => {
+}> = ({ label, value, onChange, min, max, tooltip, width = 'w-32' }) => {
   // Add local state to track input value as string
   const [inputValue, setInputValue] = useState(value.toString());
   
@@ -107,7 +117,7 @@ const SAMPLER_ORDER_OPTIONS = [
   { id: 5, label: 'Typical' }
 ];
 
-const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, onUpdate }) => {
+const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, onUpdate, modelsDirectory }) => {
   const [expanded, setExpanded] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [originalSettings, setOriginalSettings] = useState<any>(null);
@@ -130,6 +140,9 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     dynatemp_max: config.generation_settings?.dynatemp_max ?? 2.0,
     dynatemp_exponent: config.generation_settings?.dynatemp_exponent ?? 1.0
   });
+  
+  // Add state for selected model
+  const [selectedModel, setSelectedModel] = useState(config.model || '');
 
   // Update local state when config changes from outside
   useEffect(() => {
@@ -158,19 +171,28 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
       setOriginalSettings(JSON.stringify(newSettings));
       setHasChanges(false);
     }
-  }, [config.generation_settings, config]);
+    
+    // Update selected model when config changes
+    setSelectedModel(config.model || '');
+  }, [config.generation_settings, config.model, config]);
 
   // Check for unsaved changes whenever settings are updated
   useEffect(() => {
     if (originalSettings) {
       const currentSettings = JSON.stringify(settings);
-      setHasChanges(originalSettings !== currentSettings);
+      const modelChanged = selectedModel !== (config.model || '');
+      setHasChanges(originalSettings !== currentSettings || modelChanged);
     }
-  }, [settings, originalSettings]);
+  }, [settings, originalSettings, selectedModel, config.model]);
 
   const handleSettingChange = (key: keyof typeof settings, value: any) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
+  };
+  
+  // Model change handler
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
   };
 
   const handleMoveSampler = (index: number, direction: 'up' | 'down') => {
@@ -185,7 +207,10 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
   };
 
   const handleSave = () => {
-    onUpdate({ generation_settings: settings });
+    onUpdate({ 
+      generation_settings: settings,
+      model: selectedModel
+    });
   };
 
   return (
@@ -212,6 +237,16 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
           <Save size={16} />
           <span>Save</span>
         </button>
+      </div>
+
+      {/* Model Selection */}
+      <div className="space-y-4">
+        <ModelSelector
+          apiUrl={config.url || ''}
+          modelsDirectory={modelsDirectory}
+          selectedModel={selectedModel}
+          onChange={handleModelChange}
+        />
       </div>
 
       <div className={`space-y-6 pt-2 transition-expand ${expanded ? 'expanded' : ''}`}>
@@ -432,6 +467,136 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
             )}
           </div>
         </div>
+    </div>
+  );
+};
+
+// Model selector component 
+interface ModelSelectorProps {
+  apiUrl: string;
+  modelsDirectory?: string;
+  selectedModel?: string;
+  onChange: (model: string) => void;
+}
+
+const ModelSelector: React.FC<ModelSelectorProps> = ({ 
+  apiUrl, 
+  modelsDirectory,
+  selectedModel,
+  onChange 
+}) => {
+  const [models, setModels] = useState<Model[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Determine if this is likely a local KoboldCPP URL
+  const isLocalKobold = apiUrl && (
+    apiUrl.includes('localhost') || 
+    apiUrl.includes('127.0.0.1') ||
+    apiUrl.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/) // IP address pattern
+  );
+
+  useEffect(() => {
+    if (isLocalKobold && modelsDirectory) {
+      fetchLocalModels();
+    } else {
+      // For non-local APIs, we could potentially fetch available models
+      // from the provider API if they have such an endpoint
+      setModels([]);
+    }
+  }, [apiUrl, modelsDirectory]);
+  
+  const fetchLocalModels = async () => {
+    if (!modelsDirectory) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/koboldcpp/scan-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory: modelsDirectory })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || response.statusText);
+      }
+      
+      const data = await response.json();
+      setModels(data.models);
+    } catch (err) {
+      setError(`Error scanning models: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Filter models based on search term
+  const filteredModels = models.filter(model =>
+    model.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-gray-300 mb-1">
+        Model Selection
+        {isLocalKobold && !modelsDirectory && (
+          <span className="ml-2 text-yellow-500 text-xs">
+            Set models directory in General Settings first
+          </span>
+        )}
+      </label>
+
+      {isLocalKobold ? (
+        <>
+          {isLoading && (
+            <div className="flex justify-center py-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+            </div>
+          )}
+
+          {modelsDirectory ? (
+            <select
+              value={selectedModel || ''}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">Select a model</option>
+              {models.map((model) => (
+                <option key={model.path} value={model.path}>
+                  {model.name} ({model.size_gb.toFixed(1)} GB)
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="text-sm text-yellow-500 flex items-center gap-2 p-2 bg-yellow-900/20 rounded">
+              <AlertCircle size={16} />
+              <span>Please set a models directory in General Settings</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-sm text-red-500">{error}</div>
+          )}
+          
+          {models.length === 0 && !isLoading && modelsDirectory && !error && (
+            <div className="text-sm text-yellow-500">
+              No models found in the specified directory
+            </div>
+          )}
+        </>
+      ) : (
+        <input
+          type="text"
+          value={selectedModel || ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter model name (e.g., gpt-4, claude-3-opus-20240229)"
+          className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+        />
+      )}
     </div>
   );
 };

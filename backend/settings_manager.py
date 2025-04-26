@@ -27,6 +27,7 @@ class SettingsManager:
         default_settings = {
             "character_directory": "",
             "worldcards_directory": "",  # Default directory for world cards
+            "models_directory": "",      # Default directory for AI models
             "last_export_directory": "",
             "save_to_character_directory": False,
             "theme": "dark",
@@ -359,6 +360,34 @@ class SettingsManager:
             self.logger.log_error(traceback.format_exc()) # Add traceback
             return False
 
+    def _validate_models_directory(self, directory: str) -> bool:
+        """Validate if a directory exists and could contain model files."""
+        try:
+            if not directory:
+                return True  # Empty directory is valid (disables the feature)
+                
+            # Convert to Path and resolve
+            dir_path = Path(directory).resolve()
+            
+            # Check if directory exists
+            if not dir_path.exists():
+                self.logger.log_warning(f"Models directory does not exist: {directory}")
+                return False
+                
+            if not dir_path.is_dir():
+                self.logger.log_warning(f"Models path is not a directory: {directory}")
+                return False
+            
+            # For models directory, we don't strictly require model files to be present
+            # as users might scan an empty directory where they plan to download models
+            self.logger.log_step(f"Models directory validation passed: {directory}")
+            return True
+            
+        except Exception as e:
+            self.logger.log_error(f"Error validating models directory: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
+            return False
+
     def get_setting(self, key: str) -> Any:
         """Get a setting value."""
         return self.settings.get(key)
@@ -374,6 +403,12 @@ class SettingsManager:
             if key == 'character_directory':
                 if not self._validate_directory(value):
                     self.logger.log_warning(f"Invalid directory path: {value}")
+                    return False
+            
+            # Special handling for models_directory to ensure it exists
+            if key == 'models_directory':
+                if not self._validate_models_directory(value):
+                    self.logger.log_warning(f"Invalid models directory path: {value}")
                     return False
             
             # Special handling for API settings
@@ -414,4 +449,53 @@ class SettingsManager:
         except Exception as e:
             self.logger.log_error(f"Error updating setting '{key}': {str(e)}")
             self.logger.log_error(traceback.format_exc()) # Add traceback
+            return False
+        
+    def update_settings(self, new_settings: Dict[str, Any]) -> bool:
+        """Update multiple settings at once."""
+        try:
+            self.logger.log_step(f"Updating multiple settings")
+            
+            # Handle special case: APIs update
+            if 'apis' in new_settings:
+                self.update_settings_with_apis({'apis': new_settings['apis']})
+                # Create a copy without the 'apis' key to process other settings
+                remaining_settings = {k: v for k, v in new_settings.items() if k != 'apis'}
+                if not remaining_settings:
+                    # If only APIs were updated, we're done
+                    return True
+                new_settings = remaining_settings
+            
+            # Handle special case: API update
+            if 'api' in new_settings:
+                self.update_api_settings(new_settings['api'])
+                # Create a copy without the 'api' key to process other settings
+                remaining_settings = {k: v for k, v in new_settings.items() if k != 'api'}
+                if not remaining_settings:
+                    # If only API was updated, we're done
+                    return True
+                new_settings = remaining_settings
+            
+            # Update each setting individually
+            success = True
+            for key, value in new_settings.items():
+                if not self.update_setting(key, value):
+                    self.logger.log_warning(f"Failed to update setting '{key}'")
+                    success = False
+                    
+            return success
+            
+        except Exception as e:
+            self.logger.log_error(f"Error updating multiple settings: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
+            return False
+    
+    def save_settings(self) -> bool:
+        """Public method to save current settings to file."""
+        try:
+            self.logger.log_step("Saving settings to file")
+            return self._save_settings(self.settings)
+        except Exception as e:
+            self.logger.log_error(f"Error in save_settings: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
             return False
