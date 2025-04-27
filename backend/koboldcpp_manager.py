@@ -371,7 +371,10 @@ class KoboldCPPManager:
             if self.is_running():
                 return {'status': 'running', 'message': 'KoboldCPP is already running'}
             
-            # Prepare command
+            # Get the KoboldCPP directory
+            kobold_dir = os.path.dirname(self.exe_path)
+            
+            # Use absolute path for the executable to avoid any path resolution issues
             command = [self.exe_path]
             
             # Add model if specified
@@ -383,27 +386,29 @@ class KoboldCPPManager:
                 command += additional_params
             
             logger.info(f"Launching KoboldCPP with command: {' '.join(command)}")
+            logger.info(f"Working directory: {kobold_dir}")
             
             # Platform-specific launch configuration
             if platform.system() == 'Windows':
-                # On Windows, use subprocess.Popen with detached process group
+                # On Windows, use subprocess.Popen with CREATE_NEW_CONSOLE flag to show the console
+                # but don't capture output which can cause the process to hang
                 self.process = subprocess.Popen(
                     command, 
-                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                    cwd=self.koboldcpp_dir,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    cwd=kobold_dir,  # Set working directory to KoboldCPP directory
                     shell=False,  # Don't use shell for security reasons
-                    stderr=subprocess.PIPE,  # Capture stderr for debugging
-                    stdout=subprocess.PIPE  # Capture stdout for debugging
+                    stderr=None,  # Don't capture stderr to avoid blocking
+                    stdout=None   # Don't capture stdout to avoid blocking
                 )
             else:
                 # On Unix-like systems
                 self.process = subprocess.Popen(
                     command, 
                     start_new_session=True,
-                    cwd=self.koboldcpp_dir,
+                    cwd=kobold_dir,  # Set working directory to KoboldCPP directory
                     shell=False,  # Don't use shell for security reasons
-                    stderr=subprocess.PIPE,  # Capture stderr for debugging
-                    stdout=subprocess.PIPE  # Capture stdout for debugging
+                    stderr=None,  # Don't capture stderr
+                    stdout=None   # Don't capture stdout
                 )
                 
             # Short wait to let the process start
@@ -411,15 +416,24 @@ class KoboldCPPManager:
             
             # Check if process is still running after the wait
             if self.process.poll() is not None:
-                # Process terminated quickly - something went wrong
-                stdout, stderr = self.process.communicate()
-                error_message = stderr.decode('utf-8', errors='replace') if stderr else "Unknown error"
-                logger.error(f"KoboldCPP process failed to start: {error_message}")
+                logger.error("KoboldCPP process failed to start or exited too quickly")
                 return {
                     'status': 'error', 
-                    'message': f"KoboldCPP process failed to start: {error_message[:200]}..." if len(error_message) > 200 else error_message
+                    'message': "KoboldCPP process failed to start or exited too quickly"
                 }
             
+            # Wait a bit longer to see if the API becomes available
+            max_attempts = 10
+            for attempt in range(max_attempts):
+                try:
+                    response = requests.get("http://localhost:5001/api/v1/model", timeout=2)
+                    if response.status_code == 200:
+                        logger.info(f"KoboldCPP API is responding after {attempt + 1} attempts")
+                        break
+                except:
+                    logger.info(f"Waiting for KoboldCPP API to become available (attempt {attempt + 1}/{max_attempts})")
+                    time.sleep(3)  # Wait 3 seconds between attempts
+                
             logger.info("KoboldCPP launched successfully")
             return {
                 'status': 'launched', 
@@ -432,7 +446,7 @@ class KoboldCPPManager:
             return {'status': 'error', 'message': f"Error launching KoboldCPP: {str(e)}"}
     
     def check_and_launch(self) -> Dict[str, Any]:
-        """Check if KoboldCPP is installed and running, launch if installed but not running"""
+        """Check if KoboldCPP is installed and running, but don't auto-launch it"""
         # Check if executable exists
         if not self.exe_path:
             return {
@@ -451,36 +465,13 @@ class KoboldCPPManager:
                 'is_running': True
             }
         
-        # KoboldCPP exists but is not running - attempt to launch it
-        logger.info("KoboldCPP is installed but not running. Attempting to launch...")
-        launch_result = self.launch()
-        
-        if launch_result.get('status') == 'launched':
-            return {
-                'status': 'running', 
-                'message': 'KoboldCPP has been automatically launched', 
-                'exe_path': self.exe_path,
-                'is_running': True,
-                'auto_launched': True
-            }
-        elif launch_result.get('status') == 'running':
-            return {
-                'status': 'running', 
-                'message': 'KoboldCPP is already running', 
-                'exe_path': self.exe_path,
-                'is_running': True
-            }
-        else:
-            # Launch failed - return present status with error message
-            error_message = launch_result.get('message', 'Unknown error during auto-launch')
-            logger.error(f"Auto-launch failed: {error_message}")
-            return {
-                'status': 'present', 
-                'message': f'KoboldCPP is installed but failed to auto-launch: {error_message}', 
-                'exe_path': self.exe_path,
-                'is_running': False,
-                'launch_error': error_message
-            }
+        # KoboldCPP exists but is not running - return status without launching
+        return {
+            'status': 'present', 
+            'message': 'KoboldCPP is installed but not running', 
+            'exe_path': self.exe_path,
+            'is_running': False,
+        }
     
     def get_status(self) -> Dict[str, Any]:
         """Get the current status of KoboldCPP"""
@@ -564,13 +555,48 @@ class KoboldCPPManager:
         Returns:
             Dictionary with status information
         """
-        # Default configuration
-        default_config = {
-            'contextsize': 4096,
-            'port': 5001,
-            'defaultgenamt': 128,
-            'skiplauncher': True  # Skip the launcher GUI
-        }
+        # Import settings manager here to avoid circular imports
+        try:
+            from backend.main import settings_manager
+            api_settings = settings_manager.get_setting("apis")
+            
+            # Try to find KoboldCPP API settings
+            kobold_config = None
+            if api_settings and isinstance(api_settings, dict):
+                for api_id, api_config in api_settings.items():
+                    # Fix: Check for both "kobold" and "KoboldCPP" provider names (case-insensitive)
+                    provider = api_config.get("provider", "").lower()
+                    if provider == "kobold" or provider == "koboldcpp":
+                        kobold_config = api_config
+                        break
+            
+            # Get generation settings if available
+            if kobold_config and kobold_config.get("generation_settings"):
+                gen_settings = kobold_config["generation_settings"]
+                
+                # Default configuration with values from API settings
+                default_config = {
+                    'contextsize': gen_settings.get("max_context_length", 4096),
+                    'port': 5001,
+                    'defaultgenamt': gen_settings.get("max_length", 128)
+                }
+                logger.info(f"Using API settings for KoboldCPP: contextsize={default_config['contextsize']}, defaultgenamt={default_config['defaultgenamt']}")
+            else:
+                # Fallback to defaults if settings not found
+                default_config = {
+                    'contextsize': 4096,
+                    'port': 5001,
+                    'defaultgenamt': 128
+                }
+                logger.info("Using default settings for KoboldCPP")
+        except Exception as e:
+            logger.warning(f"Could not load API settings: {e}, using defaults")
+            # Default configuration
+            default_config = {
+                'contextsize': 4096,
+                'port': 5001,
+                'defaultgenamt': 128
+            }
         
         # Merge with provided config
         params = default_config.copy()
@@ -587,6 +613,10 @@ class KoboldCPPManager:
             elif not isinstance(value, bool):
                 additional_params.append(f"--{key}")
                 additional_params.append(str(value))
+        
+        # Add skiplauncher parameter to avoid GUI
+        if '--skiplauncher' not in additional_params:
+            additional_params.append('--skiplauncher')
         
         # Launch with model and additional parameters
         return self.launch(model=model_path, additional_params=additional_params)

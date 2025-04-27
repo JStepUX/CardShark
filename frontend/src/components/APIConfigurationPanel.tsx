@@ -1,6 +1,6 @@
 // components/APIConfigurationPanel.tsx
 // Component for displaying and updating API configuration settings
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronUp, ChevronDown, Sliders, Save, AlertCircle } from 'lucide-react';
 import { APIConfig } from '../types/api';
 
@@ -488,7 +488,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, _] = useState(''); // Changed setSearchTerm to _ to indicate intentionally unused
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
   
   // Determine if this is likely a local KoboldCPP URL
   const isLocalKobold = apiUrl && (
@@ -496,6 +500,30 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     apiUrl.includes('127.0.0.1') ||
     apiUrl.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/) // IP address pattern
   );
+
+  // Check if KoboldCPP is running
+  const checkKoboldStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/koboldcpp/status');
+      if (!response.ok) {
+        setIsRunning(false);
+        return;
+      }
+      const data = await response.json();
+      setIsRunning(data.is_running);
+    } catch (err) {
+      setIsRunning(false);
+    }
+  }, []);
+
+  // Poll for status updates
+  useEffect(() => {
+    if (isLocalKobold) {
+      checkKoboldStatus();
+      const interval = setInterval(checkKoboldStatus, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [isLocalKobold, checkKoboldStatus]);
 
   useEffect(() => {
     if (isLocalKobold && modelsDirectory) {
@@ -539,6 +567,77 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     model.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Handle connecting to KoboldCPP with the selected model
+  const handleConnect = async () => {
+    if (!selectedModel) {
+      setConnectionError("Please choose a model before connecting to KoboldCPP.");
+      return;
+    }
+
+    try {
+      setIsConnecting(true);
+      setConnectionError(null);
+
+      // Launch KoboldCPP with the selected model
+      const response = await fetch('/api/koboldcpp/launch-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model_path: selectedModel,
+          config: {
+            // Use default config settings
+            contextsize: 4096,
+            port: 5001,
+            defaultgenamt: 128
+            // Additional parameters could be added based on model size or user preferences
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || response.statusText);
+      }
+
+      // Wait for a moment before checking status
+      setTimeout(() => {
+        checkKoboldStatus();
+        setIsConnecting(false);
+      }, 2000);
+
+    } catch (err) {
+      setConnectionError(`Error connecting to KoboldCPP: ${err instanceof Error ? err.message : String(err)}`);
+      setIsConnecting(false);
+    }
+  };
+
+  // Handle disconnecting KoboldCPP
+  const handleDisconnect = async () => {
+    try {
+      setIsDisconnecting(true);
+      
+      // Simple mechanism to stop the KoboldCPP process
+      // This assumes you have a backend endpoint for this
+      const response = await fetch('/api/koboldcpp/stop', {
+        method: 'POST'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to stop KoboldCPP');
+      }
+      
+      // Wait a moment before checking status
+      setTimeout(() => {
+        checkKoboldStatus();
+        setIsDisconnecting(false);
+      }, 1000);
+      
+    } catch (err) {
+      console.error('Failed to disconnect:', err);
+      setIsDisconnecting(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -559,18 +658,61 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           )}
 
           {modelsDirectory ? (
-            <select
-              value={selectedModel || ''}
-              onChange={(e) => onChange(e.target.value)}
-              className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">Select a model</option>
-              {models.map((model) => (
-                <option key={model.path} value={model.path}>
-                  {model.name} ({model.size_gb.toFixed(1)} GB)
-                </option>
-              ))}
-            </select>
+            <>
+              <div className="flex gap-2 items-center">
+                <select
+                  value={selectedModel || ''}
+                  onChange={(e) => onChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+                  disabled={isRunning}
+                >
+                  <option value="">Select a model</option>
+                  {filteredModels.map((model) => (
+                    <option key={model.path} value={model.path}>
+                      {model.name} ({model.size_gb.toFixed(1)} GB)
+                    </option>
+                  ))}
+                </select>
+
+                {isRunning ? (
+                  <button
+                    onClick={handleDisconnect}
+                    disabled={isDisconnecting}
+                    className="whitespace-nowrap px-4 py-2 rounded-lg transition-colors bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleConnect}
+                    disabled={isConnecting || !selectedModel}
+                    className={`whitespace-nowrap px-4 py-2 rounded-lg transition-colors ${
+                      !selectedModel 
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        : isConnecting
+                          ? 'bg-blue-600/40 text-blue-200 cursor-wait' 
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {isConnecting ? 'Connecting...' : 'Connect'}
+                  </button>
+                )}
+              </div>
+
+              {/* Connection status indicator */}
+              {isRunning && (
+                <div className="mt-1 text-sm text-green-500 flex items-center">
+                  <div className="h-2 w-2 bg-green-500 rounded-full mr-2"></div>
+                  Connected: {selectedModel ? selectedModel.split('/').pop() : 'model loaded'}
+                </div>
+              )}
+
+              {connectionError && (
+                <div className="mt-2 text-sm text-red-500">
+                  {connectionError}
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-sm text-yellow-500 flex items-center gap-2 p-2 bg-yellow-900/20 rounded">
               <AlertCircle size={16} />

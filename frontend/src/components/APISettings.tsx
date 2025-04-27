@@ -79,15 +79,6 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
     }
   };
 
-  // Explicit disconnect handler
-  const handleDisconnect = () => {
-    onUpdate({
-      enabled: false,
-      lastConnectionStatus: undefined
-    });
-    setConnectionError(null);
-  };
-
   return (
     <div className="space-y-6">
       {/* Connection Status */}
@@ -106,15 +97,15 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
           )}
         </div>
         <button
-          onClick={settings.enabled ? handleDisconnect : handleTestConnection}
+          onClick={handleTestConnection}
           disabled={isConnecting}
           className={`px-4 py-2 rounded-lg transition-colors ${
-            settings.enabled
-              ? 'bg-red-600 hover:bg-red-700 text-white'
+            isConnecting 
+              ? 'bg-gray-600 text-gray-300 cursor-wait' 
               : 'bg-blue-600 hover:bg-blue-700 text-white'
           }`}
         >
-          {isConnecting ? 'Testing...' : settings.enabled ? 'Disconnect' : 'Test Connection'}
+          {isConnecting ? 'Testing...' : 'Test Connection'}
         </button>
       </div>
 

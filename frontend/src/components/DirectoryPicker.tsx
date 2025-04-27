@@ -12,6 +12,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
 }) => {
   const [inputValue, setInputValue] = useState(currentDirectory || '');
   const [error, setError] = useState<string | null>(null);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,15 +33,19 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
 
       const data = await response.json();
       
-      if (data.success) {
+      if (data.exists) {
         setError(null);
+        setValidationMessage(data.message || 'Directory validated successfully');
+        // Call the parent's change handler to update settings
         onDirectoryChange(inputValue.trim());
       } else {
         setError(data.message || 'Invalid directory');
+        setValidationMessage(null);
       }
     } catch (err) {
       console.error('Directory validation error:', err);
       setError('Failed to validate directory');
+      setValidationMessage(null);
     }
   };
 
@@ -53,6 +58,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
           onChange={(e) => {
             setInputValue(e.target.value);
             setError(null);
+            setValidationMessage(null);
           }}
           className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
                    rounded-lg focus:ring-1 focus:ring-blue-500"
@@ -70,6 +76,9 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
       </form>
       {error && (
         <p className="text-sm text-red-500">{error}</p>
+      )}
+      {validationMessage && (
+        <p className="text-sm text-green-500">{validationMessage}</p>
       )}
     </div>
   );

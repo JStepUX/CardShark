@@ -213,3 +213,38 @@ async def set_models_directory(directory: str = Body(..., embed=True)):
     if not success:
         raise HTTPException(status_code=400, detail="Failed to save models directory setting")
     return {"success": True, "directory": directory}
+
+@router.post("/stop")
+async def stop_koboldcpp():
+    """Stop running KoboldCPP process"""
+    try:
+        import psutil
+        import os
+
+        # Find KoboldCPP process
+        for proc in psutil.process_iter(['pid', 'name', 'exe']):
+            try:
+                if 'koboldcpp' in proc.info['name'].lower() or (
+                    proc.info['exe'] and 'koboldcpp' in os.path.basename(proc.info['exe']).lower()
+                ):
+                    # Terminate the process
+                    logger.info(f"Found KoboldCPP process (PID: {proc.pid}), attempting to terminate")
+                    proc.terminate()
+                    
+                    # Give it a moment to terminate gracefully
+                    try:
+                        proc.wait(timeout=3)
+                    except psutil.TimeoutExpired:
+                        # Force kill if it doesn't terminate gracefully
+                        logger.warning(f"KoboldCPP process (PID: {proc.pid}) did not terminate gracefully, force killing")
+                        proc.kill()
+                    
+                    return {"success": True, "message": "KoboldCPP stopped successfully"}
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+        
+        # If we get here, no process was found
+        return {"success": False, "message": "KoboldCPP process not found"}
+    except Exception as e:
+        logger.error(f"Error stopping KoboldCPP: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop KoboldCPP: {str(e)}")

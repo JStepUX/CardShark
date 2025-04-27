@@ -321,16 +321,6 @@ const KoboldCPPManager: React.FC = () => {
               </button>
             )}
             
-            {status.status === 'present' && !status.is_running && (
-              <button
-                onClick={launchKoboldCPP}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                <Play className="h-4 w-4" />
-                Launch KoboldCPP
-              </button>
-            )}
-            
             {/* Update button */}
             {versionInfo && versionInfo.update_available && status.status !== 'missing' && (
               <button

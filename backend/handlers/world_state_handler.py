@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional, List
 # from ..settings_manager import SettingsManager
 from ..models.world_state import WorldState, Location, UnconnectedLocation, PlayerState
 from ..png_metadata_handler import PngMetadataHandler # Reuse PNG handler for character reading
-from ..errors import CardSharkError, ErrorType
+from ..errors import CardSharkError, ErrorType, ErrorMessages
 
 # Placeholder for LocationExtractor - will be implemented in Phase 1.5
 # from ..utils.location_extractor import LocationExtractor
