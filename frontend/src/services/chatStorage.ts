@@ -174,20 +174,16 @@ export class ChatStorage {
 
   /**
    * Loads a specific chat by ID
+   * If chatId is null or undefined, it will load the active chat for the character
    */
-  static async loadChat(chatId: string, character: CharacterCard | null): Promise<any> {
+  static async loadChat(chatId: string | null, character: CharacterCard | null): Promise<any> {
     if (!character) {
       console.error('Cannot load chat: No character provided');
       return { success: false, error: 'No character selected' };
     }
 
-    if (!chatId) {
-      console.error('Cannot load chat: No chat ID provided');
-      return { success: false, error: 'No chat ID provided' };
-    }
-
     try {
-      console.log('Loading chat with ID:', chatId, 'for character:', character.data?.name);
+      console.log(`Loading chat${chatId ? ` with ID: ${chatId}` : ' (using active chat)'} for character: ${character.data?.name}`);
       
       // Extract character ID
       const characterId = this.getCharacterId(character);
@@ -199,8 +195,9 @@ export class ChatStorage {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          chat_id: chatId,
-          character_data: character // Send the full character object
+          chat_id: chatId, // Could be null to let backend use active chat
+          character_data: character, // Send the full character object
+          use_active: chatId === null // Signal to the backend to use the active chat
         }),
       });
 
@@ -279,8 +276,6 @@ export class ChatStorage {
 
     try {
       console.log(`Saving chat with ${messages.length} messages for character:`, character.data?.name);
-      
-      // Removed unused characterId declaration
       
       const response = await fetch('/api/save-chat', {
         method: 'POST',
@@ -388,6 +383,53 @@ export class ChatStorage {
       return data;
     } catch (error) {
       console.error('Error appending message:', error);
+      return { success: false, error: `Error: ${error}` };
+    }
+  }
+
+  /**
+   * Deletes a specific chat by ID
+   */
+  static async deleteChat(character: CharacterCard, chatId: string): Promise<any> {
+    if (!character) {
+      console.error('Cannot delete chat: No character provided');
+      return { success: false, error: 'No character selected' };
+    }
+
+    if (!chatId) {
+      console.error('Cannot delete chat: No chat ID provided');
+      return { success: false, error: 'No chat ID provided' };
+    }
+
+    try {
+      console.log('Deleting chat with ID:', chatId, 'for character:', character.data?.name);
+      
+      // Extract character ID
+      const characterId = this.getCharacterId(character);
+      
+      const response = await fetch('/api/delete-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          character_data: character, // Send full character object
+          character_id: characterId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to delete chat:', response.status, errorText);
+        return { success: false, error: `Failed to delete chat: ${response.status} ${errorText}` };
+      }
+
+      const data = await response.json();
+      console.log('Chat deleted successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error deleting chat:', error);
       return { success: false, error: `Error: ${error}` };
     }
   }

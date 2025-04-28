@@ -14,6 +14,7 @@ class ChatHandler:
         self.logger = logger
         self._current_chat_file = None
         self._character_ids = {}  # Cache of character IDs
+        self._active_chats = self._load_active_chats()  # Track active chats per character
 
     def _get_character_uuid(self, character_data: Dict) -> str:
         """Get or generate a UUID for a character."""
@@ -488,6 +489,9 @@ class ChatHandler:
                     json.dump(formatted_msg, f)
                     f.write('\n')
                     
+            # Update the active chat tracking
+            self._update_active_chat(character_data, chat_id)
+                    
             self.logger.log_step(f"Saved chat with {len(messages)} messages to {chat_file}")
             return True
             
@@ -499,17 +503,45 @@ class ChatHandler:
     def load_latest_chat(self, character_data: Dict) -> Optional[Dict]:
         """Load the most recent chat for a character."""
         try:
-            self.logger.log_step(f"Loading latest chat for character: {character_data.get('data', {}).get('name')}")
+            character_name = character_data.get('data', {}).get('name', 'unknown')
+            self.logger.log_step(f"Loading latest chat for character: {character_name}")
+            
+            # Check if there's an active chat ID for this character
+            active_chat_id = self._get_active_chat_id(character_data)
+            
+            if active_chat_id:
+                self.logger.log_step(f"Found active chat ID {active_chat_id} for {character_name}")
+                # Try to load the active chat
+                result = self.load_chat(character_data, active_chat_id)
+                if result:
+                    self.logger.log_step(f"Successfully loaded active chat for {character_name}")
+                    return result
+                else:
+                    self.logger.log_warning(f"Active chat {active_chat_id} for {character_name} not found, falling back to most recent")
             
             # Reset current chat file
             self._current_chat_file = None
             
             # Get chat directory and use it to get/create a chat file (will pick most recent)
             chat_file = self._get_or_create_chat_file(character_data, force_new=False)
-            self.logger.log_step(f"Loading chat from {chat_file}")
+            self.logger.log_step(f"Loading most recent chat from {chat_file}")
+            
+            # If we found a chat file, update the active chat tracking with its ID
+            if chat_file and chat_file.exists():
+                try:
+                    with open(chat_file, 'r', encoding='utf-8') as f:
+                        first_line = f.readline().strip()
+                        if first_line:
+                            metadata = json.loads(first_line)
+                            chat_id = metadata.get('chat_metadata', {}).get('chat_id')
+                            if chat_id:
+                                self._update_active_chat(character_data, chat_id)
+                except Exception as e:
+                    self.logger.log_error(f"Error reading chat ID from file: {str(e)}")
             
             # Load the chat content
-            return self._load_chat_file(chat_file)
+            result = self._load_chat_file(chat_file)
+            return result
             
         except Exception as e:
             self.logger.log_error(f"Failed to load chat: {str(e)}")
@@ -592,8 +624,17 @@ class ChatHandler:
             # Set as current chat file
             self._current_chat_file = matching_file
             
+            # Update active chat tracking - when a user explicitly loads a chat, make it the active one
+            self._update_active_chat(character_data, chat_id)
+            
             # Load the chat content
-            return self._load_chat_file(matching_file)
+            result = self._load_chat_file(matching_file)
+            
+            # If loaded successfully, confirm this is now the active chat
+            if result and result.get('success'):
+                self.logger.log_step(f"Set chat {chat_id} as active for character {character_data.get('data', {}).get('name')}")
+            
+            return result
             
         except Exception as e:
             self.logger.log_error(f"Failed to load chat by ID: {str(e)}")
@@ -608,11 +649,28 @@ class ChatHandler:
             # Force creation of a new chat file
             chat_file = self._get_or_create_chat_file(character_data, force_new=True)
             
-            # Return empty chat info
+            # Get the chat ID from the newly created file
+            chat_id = None
+            try:
+                with open(chat_file, 'r', encoding='utf-8') as f:
+                    first_line = f.readline().strip()
+                    if first_line:
+                        metadata = json.loads(first_line)
+                        chat_id = metadata.get('chat_metadata', {}).get('chat_id')
+                        
+                # Update the active chat tracking with this new chat ID
+                if chat_id:
+                    self._update_active_chat(character_data, chat_id)
+                    
+            except Exception as e:
+                self.logger.log_error(f"Error reading new chat ID: {str(e)}")
+            
+            # Return empty chat info with the chat_id
             return {
                 'success': True,
                 'messages': [],
-                'metadata': None
+                'metadata': None,
+                'chat_id': chat_id
             }
             
         except Exception as e:
@@ -757,3 +815,116 @@ class ChatHandler:
             self.logger.log_error(f"Failed to list chats: {str(e)}")
             self.logger.log_error(traceback.format_exc())
             return []
+
+    def delete_chat(self, character_data: Dict, chat_id: str) -> bool:
+        """Delete a specific chat file by chat ID."""
+        try:
+            self.logger.log_step(f"Deleting chat with ID {chat_id}")
+            
+            # Get chat directory
+            chat_dir = self._get_chat_path(character_data)
+            
+            # Find the file with the matching chat_id
+            found = False
+            
+            # Search through chat files to find the one with matching ID
+            chat_files = list(chat_dir.glob("*.jsonl"))
+            for file_path in chat_files:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        first_line = f.readline().strip()
+                        if first_line:
+                            metadata = json.loads(first_line)
+                            file_chat_id = metadata.get('chat_metadata', {}).get('chat_id')
+                            
+                            if file_chat_id == chat_id:
+                                # Remove file
+                                self.logger.log_step(f"Found chat file with ID {chat_id}: {file_path}")
+                                file_path.unlink()  # Delete the file
+                                found = True
+                                
+                                # Reset current chat file if it matches the deleted one
+                                if self._current_chat_file == file_path:
+                                    self._current_chat_file = None
+                                
+                                self.logger.log_step(f"Successfully deleted chat file: {file_path}")
+                                break
+                except Exception as e:
+                    self.logger.log_error(f"Error checking chat file {file_path}: {str(e)}")
+                    continue
+            
+            if not found:
+                self.logger.log_warning(f"Chat file with ID {chat_id} not found for deletion")
+                return False
+            
+            return True
+        except Exception as e:
+            self.logger.log_error(f"Failed to delete chat: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
+            return False
+
+    def _load_active_chats(self) -> Dict[str, str]:
+        """Load the mapping of character IDs to their current active chat IDs."""
+        try:
+            # Get base directory path
+            if getattr(sys, 'frozen', False):
+                base_dir = Path(sys.executable).parent
+            else:
+                base_dir = Path.cwd()
+            
+            chats_dir = base_dir / 'chats'
+            chats_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Load the active chats mapping file if it exists
+            active_chats_path = chats_dir / 'character_chats.json'
+            
+            if active_chats_path.exists():
+                with open(active_chats_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            
+            # Return empty dict if file doesn't exist yet
+            return {}
+        except Exception as e:
+            self.logger.log_error(f"Error loading active chats mapping: {str(e)}")
+            return {}
+    
+    def _save_active_chats(self) -> None:
+        """Save the mapping of character IDs to their current active chat IDs."""
+        try:
+            # Get base directory path
+            if getattr(sys, 'frozen', False):
+                base_dir = Path(sys.executable).parent
+            else:
+                base_dir = Path.cwd()
+            
+            chats_dir = base_dir / 'chats'
+            chats_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save the active chats mapping file
+            active_chats_path = chats_dir / 'character_chats.json'
+            
+            with open(active_chats_path, 'w', encoding='utf-8') as f:
+                json.dump(self._active_chats, f, indent=2)
+                
+            self.logger.log_step("Saved active chats mapping")
+        except Exception as e:
+            self.logger.log_error(f"Error saving active chats mapping: {str(e)}")
+    
+    def _update_active_chat(self, character_data: Dict, chat_id: str) -> None:
+        """Update the active chat ID for a character."""
+        try:
+            char_id = self._get_character_uuid(character_data)
+            self._active_chats[char_id] = chat_id
+            self._save_active_chats()
+            self.logger.log_step(f"Updated active chat for character {char_id} to {chat_id}")
+        except Exception as e:
+            self.logger.log_error(f"Error updating active chat: {str(e)}")
+    
+    def _get_active_chat_id(self, character_data: Dict) -> Optional[str]:
+        """Get the active chat ID for a character."""
+        try:
+            char_id = self._get_character_uuid(character_data)
+            return self._active_chats.get(char_id)
+        except Exception as e:
+            self.logger.log_error(f"Error getting active chat ID: {str(e)}")
+            return None

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useChat } from '../contexts/ChatContext';
 import { ChatStorage } from '../services/chatStorage';
-import { Plus, RefreshCw, MessageSquare } from 'lucide-react';
+import { Plus, RefreshCw, MessageSquare, Trash2, AlertTriangle, X } from 'lucide-react';
+import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 
 interface ChatInfo {
   id: string;
@@ -10,18 +11,24 @@ interface ChatInfo {
   lastModified: string;
   messageCount: number;
   preview?: string;
+  filename?: string; // For deletion and reference
 }
 
 interface ChatSelectorProps {
   onSelect?: (chatId: string) => void;
+  onClose?: () => void;
 }
 
-const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
+const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose }) => {
   const { characterData } = useCharacter();
   const { createNewChat, loadExistingChat } = useChat();
   const [availableChats, setAvailableChats] = useState<ChatInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingChat, setDeletingChat] = useState<ChatInfo | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Load available chats when character changes
   useEffect(() => {
@@ -36,17 +43,19 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
     try {
       setLoading(true);
       setError(null);
+      setDeleteError(null);
       
       const chats = await ChatStorage.listChats(characterData);
       
       if (Array.isArray(chats)) {
         // Transform the API response into our ChatInfo format
         const chatInfoList: ChatInfo[] = chats.map((chat: any) => ({
-          id: chat.chat_id,
-          title: formatChatTitle(chat.create_date, chat.last_message),
-          lastModified: formatDate(chat.last_modified || chat.create_date),
+          id: chat.id || chat.chat_id,
+          filename: chat.filename,
+          title: formatChatTitle(chat.create_date || chat.display_date, chat.preview || chat.last_message),
+          lastModified: formatDate(chat.last_modified || chat.create_date || chat.display_date),
           messageCount: chat.message_count || 0,
-          preview: chat.last_message || chat.preview || 'No messages'
+          preview: chat.preview || chat.last_message || 'No messages'
         }));
         
         setAvailableChats(chatInfoList);
@@ -67,8 +76,14 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
     try {
       setLoading(true);
       await createNewChat();
-      // Refresh the list after creating a new chat
-      loadAvailableChats();
+      
+      // If there's an onClose callback (e.g., closing the dialog after creating a new chat)
+      if (onClose) {
+        onClose();
+      } else {
+        // Otherwise refresh the list
+        await loadAvailableChats();
+      }
     } catch (err) {
       console.error('Error creating new chat:', err);
       setError(err instanceof Error ? err.message : 'Failed to create new chat');
@@ -86,12 +101,56 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
       if (onSelect) {
         onSelect(chatId);
       }
+      
+      // If there's an onClose callback (e.g., closing the dialog after selecting a chat)
+      if (onClose) {
+        onClose();
+      }
     } catch (err) {
       console.error('Error loading chat:', err);
       setError(err instanceof Error ? err.message : 'Failed to load chat');
     } finally {
       setLoading(false);
     }
+  };
+  
+  const handleDeleteClick = (e: React.MouseEvent, chat: ChatInfo) => {
+    e.stopPropagation(); // Prevent the chat from being selected
+    setDeletingChat(chat);
+    setIsDeleteConfirmOpen(true);
+  };
+  
+  const handleConfirmDelete = async () => {
+    if (!deletingChat || !characterData) return;
+    
+    setIsDeleting(true);
+    setDeleteError(null);
+    
+    try {
+      const result = await ChatStorage.deleteChat(characterData, deletingChat.id);
+      
+      if (result.success) {
+        // Remove the deleted chat from the list
+        setAvailableChats(prev => prev.filter(chat => chat.id !== deletingChat.id));
+        setIsDeleteConfirmOpen(false);
+      } else {
+        throw new Error(result.error || 'Failed to delete chat');
+      }
+    } catch (err) {
+      console.error('Error deleting chat:', err);
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete chat');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  const handleCancelDelete = () => {
+    setIsDeleteConfirmOpen(false);
+    setDeletingChat(null);
+  };
+
+  const dismissDeleteError = () => {
+    setDeleteError(null);
   };
 
   // Helper to format date from ISO string
@@ -160,7 +219,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
   };
 
   return (
-    <div className="chat-selector p-4 bg-stone-900 text-white rounded-lg">
+    <div className="chat-selector p-4 bg-stone-900 text-white rounded-lg max-w-3xl mx-auto">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">
           {characterData?.data?.name ? `Chats with ${characterData.data.name}` : 'Character Chats'}
@@ -168,7 +227,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
         <div className="flex gap-2">
           <button 
             onClick={loadAvailableChats}
-            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full"
+            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors"
             disabled={loading}
             title="Refresh chats"
           >
@@ -176,7 +235,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
           </button>
           <button 
             onClick={handleCreateNewChat}
-            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full"
+            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors"
             disabled={loading}
             title="New chat"
           >
@@ -186,31 +245,50 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
       </div>
 
       {error && (
-        <div className="error-message p-2 mb-4 bg-red-900/30 text-red-200 rounded">
-          {error}
+        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded flex items-center justify-between">
+          <div className="flex items-center">
+            <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button onClick={() => setError(null)} className="text-red-300 hover:text-red-100">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded flex items-center justify-between">
+          <div className="flex items-center">
+            <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+            <span><strong>Delete Error:</strong> {deleteError}</span>
+          </div>
+          <button onClick={dismissDeleteError} className="text-red-300 hover:text-red-100">
+            <X size={16} />
+          </button>
         </div>
       )}
 
       {loading ? (
-        <div className="loading p-4 text-center text-stone-400">
-          Loading chats...
+        <div className="loading p-8 text-center text-stone-400">
+          <div className="inline-block w-8 h-8 border-4 border-stone-600 border-t-orange-500 rounded-full animate-spin mb-4"></div>
+          <p>Loading chats...</p>
         </div>
       ) : availableChats.length === 0 ? (
-        <div className="no-chats p-4 text-center text-stone-400">
+        <div className="no-chats p-8 text-center text-stone-400">
           <p>No previous chats found</p>
           <button 
             onClick={handleCreateNewChat}
-            className="mt-2 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto"
+            className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors"
           >
             <Plus size={16} /> Start New Chat
           </button>
         </div>
       ) : (
-        <ul className="chat-list space-y-2 max-h-96 overflow-y-auto">
+        <ul className="chat-list space-y-2 max-h-96 overflow-y-auto pr-1">
           {availableChats.map((chat) => (
             <li 
               key={chat.id}
-              className="p-3 bg-stone-800 hover:bg-stone-700 rounded-lg cursor-pointer transition-colors"
+              className="p-3 bg-stone-800 hover:bg-stone-700 rounded-lg cursor-pointer transition-colors group relative"
               onClick={() => handleLoadChat(chat.id)}
             >
               <div className="flex items-start gap-3">
@@ -228,11 +306,32 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect }) => {
                     </p>
                   )}
                 </div>
+                
+                {/* Delete button that shows on hover */}
+                <button
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                  onClick={(e) => handleDeleteClick(e, chat)}
+                  aria-label="Delete chat"
+                  title="Delete chat"
+                >
+                  <Trash2 size={16} className="text-stone-300 hover:text-white" />
+                </button>
               </div>
             </li>
           ))}
         </ul>
       )}
+      
+      {/* Delete confirmation dialog */}
+      <DeleteConfirmationDialog
+        isOpen={isDeleteConfirmOpen}
+        title="Delete Chat"
+        description="Are you sure you want to delete this chat?"
+        itemName={deletingChat?.title}
+        isDeleting={isDeleting}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 };

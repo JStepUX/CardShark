@@ -82,13 +82,32 @@ class ChatEndpoints:
                 data = await request.json()
                 character_data = data.get("character_data")
                 chat_id = data.get("chat_id")
+                use_active = data.get("use_active", False)
                 
                 if not character_data:
                     self.logger.log_warning("No character data provided for load-chat")
                     raise HTTPException(status_code=400, detail="Missing character data")
                 
+                # If use_active is True, prioritize loading the active chat
+                if use_active:
+                    self.logger.log_step(f"Attempting to load active chat for character: {character_data.get('data', {}).get('name')}")
+                    active_chat_id = self.chat_handler._get_active_chat_id(character_data)
+                    
+                    if active_chat_id:
+                        self.logger.log_step(f"Found active chat ID: {active_chat_id}")
+                        chat_id = active_chat_id
+                    else:
+                        self.logger.log_warning("No active chat found, will attempt to load latest chat")
+                        result = self.chat_handler.load_latest_chat(character_data)
+                        if result:
+                            self.logger.log_step("Successfully loaded latest chat")
+                            return result
+                        else:
+                            self.logger.log_warning("No latest chat found")
+                            return {"success": False, "error": "No chat found for this character"}
+                
                 if not chat_id:
-                    self.logger.log_warning("No chat ID provided for load-chat")
+                    self.logger.log_warning("No chat ID provided for load-chat and no active chat found")
                     raise HTTPException(status_code=400, detail="Missing chat ID")
                 
                 self.logger.log_step(f"Loading chat with ID {chat_id}")
@@ -123,13 +142,68 @@ class ChatEndpoints:
                     self.logger.log_warning("Failed to create new chat")
                     return {"success": False, "error": "Failed to create new chat"}
                     
-                return result
+                return {"success": True, "chat_id": result.get("chat_id")}
             except HTTPException as http_exc:
                 raise http_exc
             except Exception as e:
                 self.logger.log_error(f"Error creating new chat: {str(e)}")
                 return {"success": False, "error": str(e)}
         
+        @router.post("/api/create-new-chat")
+        async def create_new_chat(request: Request):
+            """Create a new chat (alias for create-chat for frontend compatibility)."""
+            try:
+                data = await request.json()
+                character_data = data.get("character_data")
+                
+                if not character_data:
+                    self.logger.log_warning("No character data provided for create-new-chat")
+                    raise HTTPException(status_code=400, detail="Missing character data")
+                
+                self.logger.log_step("Creating new chat")
+                result = self.chat_handler.create_new_chat(character_data)
+                
+                if not result:
+                    self.logger.log_warning("Failed to create new chat")
+                    return {"success": False, "error": "Failed to create new chat"}
+                    
+                return {"success": True, "chat_id": result.get("chat_id")}
+            except HTTPException as http_exc:
+                raise http_exc
+            except Exception as e:
+                self.logger.log_error(f"Error creating new chat: {str(e)}")
+                return {"success": False, "error": str(e)}
+        
+        @router.post("/api/delete-chat")
+        async def delete_chat(request: Request):
+            """Delete a specific chat by ID."""
+            try:
+                data = await request.json()
+                character_data = data.get("character_data")
+                chat_id = data.get("chat_id")
+                
+                if not character_data:
+                    self.logger.log_warning("No character data provided for delete-chat")
+                    raise HTTPException(status_code=400, detail="Missing character data")
+                
+                if not chat_id:
+                    self.logger.log_warning("No chat ID provided for delete-chat")
+                    raise HTTPException(status_code=400, detail="Missing chat ID")
+                
+                self.logger.log_step(f"Deleting chat with ID {chat_id}")
+                success = self.chat_handler.delete_chat(character_data, chat_id)
+                
+                if not success:
+                    self.logger.log_warning(f"Failed to delete chat with ID {chat_id}")
+                    return {"success": False, "error": f"Failed to delete chat: {chat_id}"}
+                    
+                return {"success": True}
+            except HTTPException as http_exc:
+                raise http_exc
+            except Exception as e:
+                self.logger.log_error(f"Error deleting chat: {str(e)}")
+                return {"success": False, "error": str(e)}
+
         @router.post("/api/list-chats")
         async def list_chats(request: Request):
             """List all chats for a character."""

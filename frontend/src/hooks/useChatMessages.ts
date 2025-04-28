@@ -740,22 +740,37 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       setState(prev => ({ ...prev, messages: [], isLoading: false, error: null }));
       return;
     }
-    // chatId is usually effectiveCharacterData.data.name, but allow override
-    const idToLoad = chatId || effectiveCharacterData?.data?.name;
-    if (!idToLoad) {
-      console.warn("Attempted to load chat without a valid ID.");
-      setState(prev => ({ ...prev, isLoading: false, error: "Cannot load chat: Missing character ID." }));
-      return;
-    }
 
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      // Pass both chatId and character data to loadChat
-      const loadedChat = await ChatStorage.loadChat(idToLoad, effectiveCharacterData);
+      // Pass character data first to allow the backend to find the active chat
+      // Only use chatId as an explicit override if it doesn't match the character name
+      const characterName = effectiveCharacterData?.data?.name || '';
+      const shouldUseActiveChat = chatId === characterName;
+      
+      console.log(`Loading chat${shouldUseActiveChat ? " (using active chat)" : ` with ID ${chatId}`} for character: ${characterName}`);
+      
+      // If chatId equals character name, rely on backend active chat lookup
+      // Otherwise use the explicit chatId that was provided
+      const loadedChat = await ChatStorage.loadChat(
+        shouldUseActiveChat ? null : chatId, // Pass null if using active chat
+        effectiveCharacterData  // Always pass character data
+      );
+      
       // Check if loading was successful and messages exist
       if (loadedChat && loadedChat.success && Array.isArray(loadedChat.messages)) {
         const messagesWithStatus = loadedChat.messages.map((msg: any) => ({ ...msg, status: 'complete' as Message['status'] })); // Add type assertion for msg
-        setState(prev => ({ ...prev, messages: messagesWithStatus, currentUser: loadedChat.metadata?.lastUser || prev.currentUser, lastContextWindow: { type: 'loaded_chat', timestamp: new Date().toISOString(), chatId: idToLoad, messageCount: messagesWithStatus.length } }));
+        setState(prev => ({ 
+          ...prev, 
+          messages: messagesWithStatus, 
+          currentUser: loadedChat.metadata?.lastUser || prev.currentUser, 
+          lastContextWindow: { 
+            type: 'loaded_chat', 
+            timestamp: new Date().toISOString(), 
+            chatId: loadedChat.metadata?.chat_metadata?.chat_id || chatId, 
+            messageCount: messagesWithStatus.length 
+          } 
+        }));
         hasInitializedChat.current = true;
       } else if (effectiveCharacterData?.data?.first_mes) {
         // Load first message if chat doesn't exist and character has one
@@ -765,7 +780,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
         saveChat([firstMessage], state.currentUser); // Save the initial message
       } else {
         // No chat found and no first message
-        setState(prev => ({ ...prev, messages: [], lastContextWindow: { type: 'no_chat_found', timestamp: new Date().toISOString(), chatId: idToLoad } }));
+        setState(prev => ({ ...prev, messages: [], lastContextWindow: { type: 'no_chat_found', timestamp: new Date().toISOString(), chatId: chatId } }));
         hasInitializedChat.current = true;
       }
     } catch (err) {
