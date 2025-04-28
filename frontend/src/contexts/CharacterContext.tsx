@@ -11,6 +11,8 @@ interface CharacterContextType {
   error: string | null;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   createNewCharacter: (name: string) => void;
+  isNewlyCreated: boolean;
+  setIsNewlyCreated: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const CharacterContext = createContext<CharacterContextType | null>(null);
@@ -20,6 +22,7 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);  // Changed from string | null
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isNewlyCreated, setIsNewlyCreated] = useState(false);
 
   const createNewCharacter = (name: string) => {
     const newCharacter: CharacterCard = {
@@ -71,6 +74,7 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       create_date: ""
     };
     setCharacterData(newCharacter);
+    setIsNewlyCreated(true); // Mark as newly created
   };
 
   const value = {
@@ -82,7 +86,9 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsLoading,
     error,
     setError,
-    createNewCharacter  // Add this line
+    createNewCharacter,
+    isNewlyCreated,
+    setIsNewlyCreated
   };
 
   return (

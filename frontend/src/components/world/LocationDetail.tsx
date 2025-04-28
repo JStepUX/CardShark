@@ -1,7 +1,7 @@
 import React from 'react';
-import { useWorldState } from '../contexts/WorldStateContext';
+import { useWorldState } from '../../contexts/WorldStateContext';
 
-const LocationDetail: React.FC = () => {
+export const LocationDetail: React.FC = () => {
   const { worldState, move, createAdjacentLocation } = useWorldState();
   
   if (!worldState) return <div className="p-4 bg-stone-800 rounded-lg"><p>No world state available</p></div>;

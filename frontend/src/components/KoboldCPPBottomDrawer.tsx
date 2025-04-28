@@ -139,6 +139,20 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
     }
   };
 
+  // New state for tracking recently selected model to trigger animation
+  const [recentlySelected, setRecentlySelected] = useState<string | null>(null);
+
+  // Enhanced model selection handler with animation trigger
+  const handleModelSelect = (model: Model) => {
+    setSelectedModel(model);
+    setRecentlySelected(model.path);
+    
+    // Reset the animation trigger after animation completes
+    setTimeout(() => {
+      setRecentlySelected(null);
+    }, 600); // Animation duration + a little extra
+  };
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 transform transition-transform duration-300 ease-in-out">
       <div className="bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-t-xl shadow-xl border border-b-0 border-zinc-700 max-h-[40vh] flex flex-col">
@@ -183,29 +197,93 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                   {isLoading && (
-                    <div className="absolute right-3 top-2.5 animate-spin h-5 w-5 border-t-2 border-blue-500 rounded-full"></div>
+                    <div className="absolute right-3 top-2.5 flex items-center justify-center">
+                      <div className="relative w-5 h-5">
+                        <div className="absolute top-0 left-0 w-full h-full rounded-full border-2 border-t-blue-500 border-l-blue-400 border-r-transparent border-b-transparent animate-spin"></div>
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                <div className="max-h-40 overflow-y-auto border border-zinc-700 rounded-lg">
-                  {filteredModels.length > 0 ? (
+                {/* Prevent horizontal overflow by adding overflow-x-hidden */}
+                <div className="max-h-40 overflow-y-auto overflow-x-hidden border border-zinc-700 rounded-lg overscroll-contain">
+                  {isLoading && filteredModels.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <div className="relative w-12 h-12 mb-3">
+                        {/* Animated spinner with gradient */}
+                        <div className="absolute top-0 left-0 w-full h-full rounded-full border-t-3 border-l-3 border-r-3 border-transparent border-t-blue-500 border-l-blue-400 animate-spin"></div>
+                        <div className="absolute top-0 left-0 w-full h-full rounded-full border-b-3 border-transparent border-b-indigo-600 animate-pulse"></div>
+                      </div>
+                      <p className="text-base font-semibold text-blue-400 animate-pulse">Scanning models...</p>
+                      <p className="text-xs text-zinc-500 mt-1">This might take a moment</p>
+                    </div>
+                  ) : filteredModels.length > 0 ? (
                     <div className="divide-y divide-zinc-800">
-                      {filteredModels.map((model) => (
-                        <div
-                          key={model.path}
-                          className={`p-2 cursor-pointer hover:bg-zinc-800 transition-colors ${
-                            selectedModel?.path === model.path ? 'bg-zinc-800 border-l-2 border-blue-500 pl-1.5' : ''
-                          }`}
-                          onClick={() => setSelectedModel(model)}
-                        >
-                          <div className="font-medium text-white">{model.name}</div>
-                          <div className="text-xs text-zinc-400">Size: {model.size_gb.toFixed(1)} GB</div>
-                        </div>
-                      ))}
+                      {filteredModels.map((model) => {
+                        // Determine if this model is selected
+                        const isSelected = selectedModel?.path === model.path;
+                        // Determine if this model was just selected (for animation)
+                        const isRecentlySelected = recentlySelected === model.path;
+                        
+                        return (
+                          <div
+                            key={model.path}
+                            className={`
+                              relative py-2 px-2 cursor-pointer transition-all duration-300 ease-in-out
+                              ${isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-800/70'}
+                              ${isRecentlySelected ? 'scale-[1.005]' : ''}
+                            `}
+                            onClick={() => handleModelSelect(model)}
+                          >
+                            {/* Visual selection indicator */}
+                            <div 
+                              className={`
+                                absolute left-0 top-0 bottom-0 w-1
+                                transition-all duration-300 ease-out
+                                ${isSelected ? 'bg-gradient-to-b from-blue-400 to-blue-600' : 'bg-transparent'}
+                                ${isRecentlySelected ? 'w-1.5' : ''}
+                              `}
+                            />
+                            
+                            {/* Content area with enhanced padding for the indicator */}
+                            <div className={`flex items-center min-w-0 transition-all ${isSelected ? 'translate-x-1' : 'translate-x-0'}`}>
+                              {/* Main content */}
+                              <div className="pl-3 flex-grow min-w-0">
+                                <div className={`font-medium text-white transition-colors duration-300 truncate ${isSelected ? 'text-blue-100' : ''}`}>
+                                  {model.name}
+                                </div>
+                                <div className="text-xs text-zinc-400">Size: {model.size_gb.toFixed(1)} GB</div>
+                              </div>
+                              
+                              {/* Selected checkmark indicator that fades in - moved to be part of flex layout with added right padding */}
+                              {isSelected && (
+                                <div className={`
+                                  flex-shrink-0 ml-2 mr-2 flex items-center justify-center
+                                  h-5 w-5 rounded-full bg-blue-500
+                                  ${isRecentlySelected ? 'animate-scale-in' : ''}
+                                `}>
+                                  <svg 
+                                    xmlns="http://www.w3.org/2000/svg" 
+                                    className="h-3 w-3 text-white"
+                                    viewBox="0 0 20 20" 
+                                    fill="currentColor"
+                                  >
+                                    <path 
+                                      fillRule="evenodd" 
+                                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" 
+                                      clipRule="evenodd" 
+                                    />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="p-4 text-center text-zinc-500">
-                      {isLoading ? 'Loading models...' : 'No models found'}
+                      No models found
                     </div>
                   )}
                 </div>
@@ -248,7 +326,9 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
           >
             {isLaunching ? (
               <>
-                <div className="animate-spin h-4 w-4 border-t-2 border-current rounded-full"></div>
+                <div className="relative w-5 h-5">
+                  <div className="absolute top-0 left-0 w-full h-full rounded-full border-2 border-t-blue-300 border-l-blue-300 border-r-transparent border-b-transparent animate-spin"></div>
+                </div>
                 <span>Starting...</span>
               </>
             ) : (

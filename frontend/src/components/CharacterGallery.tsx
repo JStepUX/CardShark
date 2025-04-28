@@ -369,81 +369,107 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         style={{ maxHeight: '100%', minHeight: 0 }}
         onScroll={scrollContainerRef ? undefined : handleScroll}
       >
-        {/* Error/Loading States */}
+        {/* Loading/Empty/Error States - More clearly separated conditions */}
         {isLoading && characters.length === 0 && (
-          <div className="p-8 text-center text-gray-400">Loading characters...</div>
+          <div className="flex flex-col items-center justify-center p-12 text-center">
+            <div className="relative w-16 h-16 mb-4">
+              {/* Animated spinner with gradient */}
+              <div className="absolute top-0 left-0 w-full h-full rounded-full border-t-4 border-l-4 border-r-4 border-transparent border-t-blue-500 border-l-blue-400 animate-spin"></div>
+              <div className="absolute top-0 left-0 w-full h-full rounded-full border-b-4 border-transparent border-b-indigo-600 animate-pulse"></div>
+            </div>
+            <p className="text-lg font-semibold text-blue-400 animate-pulse">Loading characters...</p>
+            <p className="text-sm text-slate-400 mt-2">Fetching your character gallery</p>
+          </div>
+        )}
+        {!isLoading && error && (
+          <div className="p-8 text-center text-amber-400">
+            <p className="font-medium">{error}</p>
+          </div>
         )}
         {!isLoading && !error && characters.length === 0 && currentDirectory && (
-          <div className="p-8 text-center text-gray-400">No PNG character files found in the selected directory.</div>
+          <div className="p-8 text-center">
+            <p className="text-gray-400">No PNG character files found in the selected directory.</p>
+            <p className="mt-2 text-sm text-gray-500">Try adding some character files or selecting a different directory in Settings.</p>
+          </div>
         )}
         {!isLoading && !error && characters.length === 0 && !currentDirectory && (
-          <div className="p-8 text-center text-gray-400">Set your character directory in Settings.</div>
+          <div className="p-8 text-center">
+            <p className="text-gray-400">No character directory configured.</p>
+            <p className="mt-2 text-sm text-gray-500">Set your character directory in Settings.</p>
+          </div>
         )}
         
-        {/* Character Grid using GalleryGrid */}
-        <GalleryGrid
-          items={filteredCharacters.slice(0, displayedCount)}
-          emptyMessage={error || "No characters found."}
-          renderItem={(character) => {
-            const isDeleting = deletingPath === character.path;
-            return (
-              <div
-                key={character.path}
-                className={`
-                  relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-[3/5]
-                  transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
-                  ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
-                  hover:shadow-xl 
-                `}
-                onClick={() => handleCharacterClick(character)}
-                role="button"
-                tabIndex={0}
-                aria-label={`Select character ${character.name}`}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleCharacterClick(character); }}
-              >
-                {/* Delete Button (Hide if animating out) */}
-                {!isDeleting && (
-                  <button
-                    title="Delete character"
-                    onClick={(e) => handleTrashIconClick(e, character)}
-                    className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full backdrop-blur-sm
-                              bg-black/40 text-white opacity-0 group-hover:opacity-100
-                              transition-all duration-200 ease-in-out
-                              hover:bg-red-700/70 hover:scale-110 focus:outline-none
-                              focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
-                    aria-label={`Delete ${character.name}`}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-                
-                {/* Character Image Container */}
-                <div className="w-full h-full bg-stone-950">
-                  <img
-                    src={`/api/character-image/${encodeFilePath(character.path)}`}
-                    alt={character.name}
-                    className={`w-full h-full object-cover object-center transition-transform duration-300 ${isDeleting ? '' : 'group-hover:scale-105'}`}
-                    loading="lazy" // Ensures lazy loading for performance
-                    onError={(e) => {
-                      console.error(`Failed to load image for: ${character.name}`);
-                      // Add visual feedback for failed images
-                      (e.target as HTMLImageElement).style.opacity = '0.5';
-                    }}
-                  />
+        {/* Character Grid using GalleryGrid - Only render when we have items or user is searching */}
+        {(filteredCharacters.length > 0 || (searchTerm && !isLoading)) && (
+          <GalleryGrid
+            items={filteredCharacters.slice(0, displayedCount)}
+            emptyMessage="No matching characters found."
+            renderItem={(character) => {
+              const isDeleting = deletingPath === character.path;
+              return (
+                <div
+                  key={character.path}
+                  className={`
+                    relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-[3/5]
+                    transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
+                    ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
+                    hover:shadow-xl 
+                  `}
+                  onClick={() => handleCharacterClick(character)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select character ${character.name}`}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleCharacterClick(character); }}
+                >
+                  {/* Delete Button (Hide if animating out) */}
+                  {!isDeleting && (
+                    <button
+                      title="Delete character"
+                      onClick={(e) => handleTrashIconClick(e, character)}
+                      className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full backdrop-blur-sm
+                                bg-black/40 text-white opacity-0 group-hover:opacity-100
+                                transition-all duration-200 ease-in-out
+                                hover:bg-red-700/70 hover:scale-110 focus:outline-none
+                                focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
+                      aria-label={`Delete ${character.name}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                  
+                  {/* Character Image Container */}
+                  <div className="w-full h-full bg-stone-950">
+                    <img
+                      src={`/api/character-image/${encodeFilePath(character.path)}`}
+                      alt={character.name}
+                      className={`w-full h-full object-cover object-center transition-transform duration-300 ${isDeleting ? '' : 'group-hover:scale-105'}`}
+                      loading="lazy" // Ensures lazy loading for performance
+                      onError={(e) => {
+                        console.error(`Failed to load image for: ${character.name}`);
+                        // Add visual feedback for failed images
+                        (e.target as HTMLImageElement).style.opacity = '0.5';
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Character Name Overlay */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium truncate rounded-b-lg">
+                    {character.name}
+                  </div>
                 </div>
-                
-                {/* Character Name Overlay */}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium truncate rounded-b-lg">
-                  {character.name}
-                </div>
-              </div>
-            );
-          }}
-        />
+              );
+            }}
+          />
+        )}
         
         {/* Loading Indicator / Scroll Trigger */}
         {isLoading && displayedCount > 0 && characters.length > 0 && (
-          <div className="h-20 flex items-center justify-center text-gray-400">Loading...</div>
+          <div className="h-20 flex items-center justify-center">
+            <div className="relative w-8 h-8">
+              <div className="absolute top-0 left-0 w-full h-full rounded-full border-t-2 border-l-2 border-r-2 border-transparent border-t-blue-500 border-l-blue-400 animate-spin"></div>
+            </div>
+            <span className="ml-3 text-blue-400">Loading more characters...</span>
+          </div>
         )}
         {!isLoading && displayedCount < filteredCharacters.length && (
           <div className="h-10" />

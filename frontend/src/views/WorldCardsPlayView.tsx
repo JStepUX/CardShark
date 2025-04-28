@@ -27,6 +27,7 @@ import NpcCard from '../components/NpcCard';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import MapDialog from '../components/MapDialog';
 import { formatWorldName } from '../utils/formatters'; // Removed unused formatUserName import
+import { worldDataService } from '../services/WorldDataService';
 
 // Custom hooks for generation timing management (Included as they were in the provided file)
 // Removed unused useGenerationTimeout hook
@@ -268,46 +269,66 @@ const WorldCardsPlayView: React.FC = () => {
       setIsLoadingWorld(true);
       setWorldLoadError(null);
       try {
-        // Use the imported worldStateApi utility
-        const worldData = await worldStateApi.getWorldState(worldId); // Type assertion removed, handled by Promise return type
-        setWorldState(worldData); // Store fetched world data in state
+        // Use the new data service to load and validate world data
+        const worldData = await worldDataService.loadWorld(worldId);
+        setWorldState(worldData);
 
-        // Determine current location description for context
-        const currentPositionKey = worldData.current_position;
-        const currentLoc = worldData.locations && currentPositionKey ? worldData.locations[currentPositionKey] : null;
-        const worldContextDescription = currentLoc?.description || `You are in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`;
+        // Get the current room with position-based fallbacks
+        const { room: currentLoc } = worldDataService.getCurrentRoom(worldData);
+
+        if (!currentLoc) {
+          setWorldLoadError('No locations found in this world state or current position is invalid. Please add a location or check world state.');
+          setCurrentRoom(null);
+          setCurrentRoomName('No Room');
+          setIsLoadingWorld(false);
+          return;
+        }
+
+        // Set the current room and name
+        setCurrentRoom(currentLoc);
+        setCurrentRoomName(currentLoc.name || 'Unnamed Room');
+
+        // Get world context description
+        const worldContextDescription = currentLoc.description || 
+          `You are in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`;
+        
         // Use introduction field if available, fall back to description
-        const worldContextFirstMes = currentLoc?.introduction || currentLoc?.description || `Welcome to ${formatWorldName(worldData.name) || 'this world'}!`;
+        const worldContextFirstMes = currentLoc.introduction || 
+          currentLoc.description || 
+          `Welcome to ${formatWorldName(worldData.name) || 'this world'}!`;
+
+        // Process world items using the service
+        const characterBookEntries = worldDataService.processWorldItems(worldData);
 
         // Create CharacterCard for Context (using world info and current location)
         const characterCardForContext: CharacterCard = {
-          name: worldData.name || "World Narrator", // Give it a name
-          description: worldContextDescription, // Use current location description
-          personality: "", // World doesn't have personality
+          name: worldData.name || "World Narrator",
+          description: worldContextDescription,
+          personality: "",
           scenario: `Exploring the world of ${formatWorldName(worldData.name) || 'Unknown'}`,
-          first_mes: worldContextFirstMes, // Use introduction field if available
+          first_mes: worldContextFirstMes,
           mes_example: "",
           creatorcomment: "",
-          avatar: "none", // World doesn't have avatar
-          chat: "", // No specific chat ID for the world itself
+          avatar: "none",
+          chat: "",
           talkativeness: "0.5",
           fav: false,
           tags: ["world", worldData.name || "unknown"],
           spec: "chara_card_v2",
           spec_version: "2.0",
-          create_date: "", // Add creation date if available from backend
+          create_date: "",
           data: {
             name: worldData.name || "World Narrator",
-            description: worldContextDescription, // Use derived description
+            description: worldContextDescription,
             personality: "",
             scenario: `Exploring the world of ${formatWorldName(worldData.name) || 'Unknown'}`,
-            first_mes: worldContextFirstMes, // Also empty it in the data property
+            first_mes: worldContextFirstMes,
             mes_example: "",
             creator_notes: "",
             system_prompt: `You are the narrator describing the world of ${formatWorldName(worldData.name) || 'Unknown'}.`,
             post_history_instructions: "Describe the surroundings and events.",
             tags: ["world", worldData.name || "unknown"],
-            creator: "", // Add creator if available
+            creator: "",
             character_version: "1.0",
             alternate_greetings: [],
             extensions: {
@@ -317,56 +338,17 @@ const WorldCardsPlayView: React.FC = () => {
               depth_prompt: { prompt: "", depth: 4, role: "system" }
             },
             group_only_greetings: [],
-            character_book: { // Populate world items if available
-              entries: (worldData as any).worldItems?.map((item: any) => ({
-                keys: [item.name || "Unknown Item"],
-                content: item.description || ""
-              })) || [],
+            character_book: {
+              entries: characterBookEntries,
               name: "World Items"
             },
             spec: ''
           }
         };
+        
         // Set this world-based character data in context if no character is selected
-        // This allows useChatMessages to use world context when no specific character is active
         if (!characterData) {
-             setCharacterData(characterCardForContext);
-        }
-
-
-        // Find the starting/current room using current_position
-        // const currentPositionKey = worldData.current_position; // Already defined above
-        let foundRoom: WorldLocation | null = worldData.locations[currentPositionKey] || null; // Use WorldLocation type directly
-        let foundRoomId: string | null = foundRoom ? currentPositionKey : null; // Keep track of the key used
-
-        // If no room found at current_position, try defaulting to "0,0,0" or the first available location
-        if (!foundRoom && worldData.locations && Object.keys(worldData.locations).length > 0) {
-          const defaultKey = "0,0,0";
-          if (worldData.locations[defaultKey]) {
-              foundRoomId = defaultKey;
-              foundRoom = worldData.locations[defaultKey];
-              console.warn("Current position invalid, defaulting to '0,0,0'.");
-          } else {
-              // Fallback to the very first location if "0,0,0" doesn't exist either
-              foundRoomId = Object.keys(worldData.locations)[0];
-              foundRoom = worldData.locations[foundRoomId];
-              console.warn("Current position and '0,0,0' invalid, defaulting to the first available location:", foundRoom?.name);
-          }
-        }
-
-        if (!foundRoom) {
-          setWorldLoadError('No locations found in this world state or current position is invalid. Please add a location or check world state.');
-          // setCurrentRoomId call removed
-          setCurrentRoom(null);
-          setCurrentRoomName('No Room');
-        } else {
-          // Handle potential undefined from find before setting state
-          // setCurrentRoomId call removed
-          setCurrentRoom(foundRoom);
-          setCurrentRoomName(foundRoom.name || 'Unnamed Room');
-          // Removed roomHistory initialization
-          // Removed intro generation logic - initial message should be handled by chat hook or context
-          // TODO: Review useChatMessages hook initialization to see if it can add the first message based on world/room description
+          setCharacterData(characterCardForContext);
         }
       } catch (err) {
         console.error("Error loading world:", err);
@@ -377,7 +359,7 @@ const WorldCardsPlayView: React.FC = () => {
     };
     loadWorldForPlay();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worldId, setCharacterData, apiConfig]); // Removed messages.length dependency, intro logic needs review
+  }, [worldId, setCharacterData, apiConfig]);
 
   // --- Generation Management ---
   useEnhancedGenerationTimeout(isGenerating, stopGeneration);
@@ -404,11 +386,71 @@ const WorldCardsPlayView: React.FC = () => {
   }, [messages, isGenerating, scrollToBottom]);
 
 
+  // --- Room Navigation ---
+  const handleRoomSelect = useCallback(async (position: string) => {
+    if (!worldId) return;
+    
+    try {
+      // Use existing worldState if available for better performance, otherwise fetch fresh data
+      const currentState = worldState || await worldDataService.loadWorld(worldId);
+      
+      // Check if the selected position exists in locations
+      if (!currentState.locations[position]) {
+        throw new Error("Selected room not found in world state");
+      }
+      
+      // Store the previous room for context
+      const previousPosition = currentState.current_position;
+      const previousRoom = previousPosition ? currentState.locations[previousPosition] : null;
+      
+      // Update the world state with the new position
+      const updatedState = {
+        ...currentState,
+        current_position: position,
+        visited_positions: currentState.visited_positions.includes(position) 
+          ? currentState.visited_positions 
+          : [...currentState.visited_positions, position]
+      };
+      
+      // Save the updated state using the data service
+      await worldDataService.saveWorldState(worldId, updatedState);
+      
+      // Get the selected room
+      const selectedRoom = updatedState.locations[position];
+      
+      // Update local state
+      setWorldState(updatedState);
+      setCurrentRoom(selectedRoom);
+      setCurrentRoomName(selectedRoom.name || "Unnamed Room");
+      
+      // Generate a narrative for entering the new room
+      const roomIntroduction = selectedRoom.introduction || 
+        selectedRoom.description || 
+        `You've entered ${selectedRoom.name || "a new room"}.`;
+      
+      // Add a message about entering the new room
+      const previousRoomName = previousRoom?.name || "the previous area";
+      const message = `You leave ${previousRoomName} and enter ${selectedRoom.name || "a new area"}. ${roomIntroduction}`;
+      
+      generateResponse(message);
+    } catch (error) {
+      console.error("Error navigating to room:", error);
+      setWorldLoadError(`Failed to navigate to the selected room: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, [worldId, generateResponse, worldState]);
+
   // --- NPC Dialog ---
   const handleNpcIconClick = useCallback(() => {
-    // Assuming Location.npcs is an array of strings (character paths)
-    if (currentRoom?.npcs && currentRoom.npcs.length > 0) setIsNpcDialogOpen(true);
-  }, [currentRoom?.npcs]);
+    // Get processed NPCs from the current room
+    const npcs = currentRoom ? worldDataService.processNpcs(currentRoom) : [];
+    
+    // Only open dialog if we have NPCs to display
+    if (npcs.length > 0) {
+      setIsNpcDialogOpen(true);
+    } else {
+      console.log("No NPCs available in this room");
+    }
+  }, [currentRoom]);
 
   // --- Other GameWorldIconBar Handlers ---
   const handleMapIconClick = useCallback(() => {
@@ -493,55 +535,6 @@ const WorldCardsPlayView: React.FC = () => {
       window.alert(`Failed to load NPC: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, [generateResponse, setCharacterData, setImageUrl, currentRoom, currentRoomName, currentUser?.name]);
-
-  // --- Room Navigation ---
-  const handleRoomSelect = useCallback(async (position: string) => {
-    if (!worldId) return;
-    
-    try {
-      // Use existing worldState if available for better performance, otherwise fetch fresh data
-      const currentState = worldState || await worldStateApi.getWorldState(worldId);
-      
-      // Store the previous room for context
-      const previousPosition = currentState.current_position;
-      const previousRoom = currentState.locations[previousPosition];
-      
-      // Update the world state with the new position
-      const updatedState = {
-        ...currentState,
-        current_position: position,
-        visited_positions: currentState.visited_positions.includes(position) 
-          ? currentState.visited_positions 
-          : [...currentState.visited_positions, position]
-      };
-      
-      // Save the updated state
-      await worldStateApi.saveWorldState(worldId, updatedState);
-      
-      // Get the selected room
-      const selectedRoom = updatedState.locations[position];
-      if (!selectedRoom) {
-        throw new Error("Selected room not found in world state");
-      }
-      
-      // Update local state
-      setWorldState(updatedState);
-      setCurrentRoom(selectedRoom);
-      setCurrentRoomName(selectedRoom.name || "Unnamed Room");
-      
-      // Generate a narrative for entering the new room
-      const roomIntroduction = selectedRoom.introduction || selectedRoom.description || `You've entered ${selectedRoom.name || "a new room"}.`;
-      
-      // Add a message about entering the new room
-      const previousRoomName = previousRoom?.name || "the previous area";
-      const message = `You leave ${previousRoomName} and enter ${selectedRoom.name || "a new area"}. ${roomIntroduction}`;
-      
-      generateResponse(message);
-    } catch (error) {
-      console.error("Error navigating to room:", error);
-      setWorldLoadError(`Failed to navigate to the selected room: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }, [worldId, generateResponse, worldState]); // Added worldState to dependency array
 
   // --- Helper Functions ---
   const getStopHandler = (message: Message): (() => void) | undefined => {
@@ -663,25 +656,20 @@ const WorldCardsPlayView: React.FC = () => {
         isOpen={isNpcDialogOpen}
         onClose={() => setIsNpcDialogOpen(false)}
         title={`NPCs in ${currentRoomName}`}
-        className="max-w-3xl" // Example: Add Tailwind class for max-width
+        className="max-w-3xl"
       >
         <p className="text-sm text-stone-400 mb-4">
           Select an NPC to interact with.
         </p>
-        <div className="max-h-[60vh] overflow-y-auto pr-2 -mr-2 mb-4"> {/* Adjusted padding/margin */}
-           {/* Pass items and renderItem to GalleryGrid */}
+        <div className="max-h-[60vh] overflow-y-auto pr-2 -mr-2 mb-4">
            <GalleryGrid
-              // Map the string array from currentRoom.npcs to NpcGridItem[]
-              items={currentRoom?.npcs?.map((npcPath: string) => ({
-                  name: npcPath.split(/[/\\]/).pop()?.replace('.png', '') || 'Unknown NPC',
-                  path: npcPath
-              })) || []}
+              items={currentRoom ? worldDataService.processNpcs(currentRoom) : []}
               renderItem={(npc: NpcGridItem, idx: number) => (
                 <NpcCard key={npc.path || idx} npc={npc} onClick={() => handleNpcSelect(npc)} />
               )}
+              emptyMessage="No NPCs found in this room."
            />
         </div>
-        {/* Footer with Cancel button (assuming Dialog component handles this or similar pattern) */}
         <div className="flex justify-end mt-4">
           <button
             onClick={() => setIsNpcDialogOpen(false)}

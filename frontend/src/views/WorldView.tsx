@@ -1,7 +1,7 @@
 import React from 'react';
 import { WorldStateProvider } from '../contexts/WorldStateContext';
-import LocationDetail from '@components/LocationDetail';
-import WorldMap from '@components/WorldMap';
+import { LocationDetail } from '@components/world/LocationDetail';
+import { WorldMap } from '@components/world/WorldMap';
 import PlayerStatus from '@components/PlayerStatus';
 import UnconnectedLocations from '@components/UnconnectedLocations';
 import EventDisplay from '@components/EventDisplay';

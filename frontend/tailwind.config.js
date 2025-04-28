@@ -18,6 +18,7 @@ module.exports = {
       animation: {
         'blink-caret': 'blink-caret 0.75s step-end infinite',
         'blink': 'blink 1s infinite',
+        'scale-in': 'scale-in 0.3s ease-out forwards',
       },
       keyframes: {
         'blink-caret': {
@@ -28,6 +29,14 @@ module.exports = {
           '0%, 100%': { opacity: 0 },
           '50%': { opacity: 1 },
         },
+        'scale-in': {
+          '0%': { transform: 'scale(0)', opacity: 0 },
+          '80%': { transform: 'scale(1.2)', opacity: 1 },
+          '100%': { transform: 'scale(1)', opacity: 1 },
+        },
+      },
+      boxShadow: {
+        'glow-blue': '0 0 8px rgba(59, 130, 246, 0.6)',
       },
     },
   },

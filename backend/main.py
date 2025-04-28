@@ -38,6 +38,7 @@ from backend.character_endpoints import CharacterEndpoints, router as character_
 from backend.user_endpoints import UserEndpoints, router as user_router
 from backend.settings_endpoints import SettingsEndpoints, router as settings_router
 from backend.world_endpoints import WorldEndpoints, router as world_router
+from backend.world_chat_endpoints import router as world_chat_router
 
 # Create FastAPI app
 app = FastAPI(title="CardShark API")
@@ -67,8 +68,13 @@ background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds() # Initialize default backgrounds
 lore_handler = LoreHandler(logger, default_position=0)
 world_state_handler = WorldStateHandler(logger, settings_manager)
-# Fix the initialization by passing a path instead of api_handler
-world_card_chat_handler = WorldCardChatHandler(logger, Path("./worlds"))
+
+# Initialize the world card chat handler with explicit worlds directory
+worlds_dir = Path("worlds")
+if not worlds_dir.exists():
+    worlds_dir.mkdir(parents=True, exist_ok=True)
+logger.log_step(f"Initializing world chat handler with worlds directory: {worlds_dir.absolute()}")
+world_card_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
 
 # ---------- Initialize and register endpoints ----------
 
@@ -95,6 +101,7 @@ app.include_router(character_router)
 app.include_router(user_router)
 app.include_router(settings_router)
 app.include_router(world_router)
+app.include_router(world_chat_router)
 
 # ---------- Direct routes that haven't been modularized yet ----------
 

@@ -12,11 +12,15 @@ export const worldApi = {
       const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/state`);
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to get world state: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to get world state: ${response.status} ${response.statusText}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to get world state');
+      }
+      
+      return data.state;
     } catch (error) {
       console.error(`Error getting world state for '${worldName}':`, error);
       throw error;
@@ -34,12 +38,15 @@ export const worldApi = {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to save world state: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to save world state: ${response.status} ${response.statusText}`);
       }
       
       const result = await response.json();
-      return result.success;
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to save world state');
+      }
+      
+      return true;
     } catch (error) {
       console.error(`Error saving world state for '${worldName}':`, error);
       throw error;
@@ -61,11 +68,15 @@ export const worldApi = {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to create world: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to create world: ${response.status} ${response.statusText}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to create world');
+      }
+      
+      return data;
     } catch (error) {
       console.error(`Error creating world '${worldName}':`, error);
       throw error;
@@ -77,11 +88,14 @@ export const worldApi = {
       const response = await fetch('/api/world-cards');
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to list worlds: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to list worlds: ${response.status} ${response.statusText}`);
       }
       
       const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to list worlds');
+      }
+      
       return result.worlds || [];
     } catch (error) {
       console.error('Error listing worlds:', error);
@@ -101,11 +115,15 @@ export const worldApi = {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to move player: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to move player: ${response.status} ${response.statusText}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to move player');
+      }
+      
+      return data.state;
     } catch (error) {
       console.error(`Error moving player in world '${worldName}':`, error);
       throw error;
@@ -126,11 +144,15 @@ export const worldApi = {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to create location: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to create location: ${response.status} ${response.statusText}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to create location');
+      }
+      
+      return data.state;
     } catch (error) {
       console.error(`Error creating location in world '${worldName}':`, error);
       throw error;
@@ -151,11 +173,15 @@ export const worldApi = {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to connect location: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to connect location: ${response.status} ${response.statusText}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to connect location');
+      }
+      
+      return data.state;
     } catch (error) {
       console.error(`Error connecting location in world '${worldName}':`, error);
       throw error;
@@ -177,11 +203,15 @@ export const worldApi = {
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to resolve event: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to resolve event: ${response.status} ${response.statusText}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to resolve event');
+      }
+      
+      return data.state;
     } catch (error) {
       console.error(`Error resolving event in world '${worldName}':`, error);
       throw error;

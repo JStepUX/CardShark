@@ -1,125 +1,130 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWorldState } from '../contexts/WorldStateContext';
 
-const WorldMap: React.FC = () => {
+export const WorldMap: React.FC = () => {
   const { worldState, move } = useWorldState();
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoom, setZoom] = useState(100);
+  const [currentZLevel, setCurrentZLevel] = useState(0);
   
-  if (!worldState) return <div>No world state available</div>;
+  if (!worldState) return <div aria-live="polite" className="p-4 bg-stone-800 rounded-lg"><p>No world state available</p></div>;
+  if (!worldState.locations) return <div aria-live="polite" className="p-4 bg-stone-800 rounded-lg"><p>Loading map data...</p></div>;
   
-  // Process locations into a 2D grid for simplified visualization
-  const processLocations = () => {
-    const grid: Record<string, any> = {};
-    const currentCoords = worldState.current_position.split(',').map(Number);
-    
-    // Process all locations
-    Object.entries(worldState.locations).forEach(([_, location]) => {
-      if (!location.coordinates || location.coordinates.length < 2) return;
-      
-      const [x, y, z] = location.coordinates;
-      // For now, we'll visualize only the current Z level
-      if (z !== currentCoords[2]) return;
-      
-      const key = `${x},${y}`;
-      grid[key] = {
-        ...location,
-        isCurrentLocation: x === currentCoords[0] && y === currentCoords[1] && z === currentCoords[2]
-      };
-    });
-    
-    return grid;
-  };
+  const cellSize = 40 * (zoom / 100);
   
-  const grid = processLocations();
-  
-  // Find min/max coordinates to determine viewport
-  const locations = Object.entries(grid).map(([coordStr, location]) => {
-    const [x, y] = coordStr.split(',').map(Number);
-    return { x, y, location };
+  // Get the bounds of the map
+  const allCoordinates = Object.keys(worldState.locations).map(key => {
+    const [x, y, z] = key.split(',').map(Number);
+    return { x, y, z };
   });
   
-  const minX = Math.min(...locations.map(l => l.x), 0) - 1;
-  const maxX = Math.max(...locations.map(l => l.x), 0) + 1;
-  const minY = Math.min(...locations.map(l => l.y), 0) - 1;
-  const maxY = Math.max(...locations.map(l => l.y), 0) + 1;
+  const minX = Math.min(...allCoordinates.map(c => c.x));
+  const maxX = Math.max(...allCoordinates.map(c => c.x));
+  const minY = Math.min(...allCoordinates.map(c => c.y));
+  const maxY = Math.max(...allCoordinates.map(c => c.y));
   
-  const renderLocation = (x: number, y: number) => {
-    const key = `${x},${y}`;
-    const location = grid[key];
-    
-    if (!location) {
-      return (
-        <div 
-          key={key}
-          className="w-12 h-12 bg-stone-900 opacity-25 rounded"
-        />
-      );
-    }
-    
-    return (
-      <div
-        key={key}
-        className={`w-12 h-12 rounded cursor-pointer flex items-center justify-center
-          ${location.isCurrentLocation ? 'bg-blue-800 ring-2 ring-white' : 'bg-stone-700 hover:bg-stone-600'}`}
-        onClick={() => {
-          if (!location.isCurrentLocation) {
-            // Calculate direction to move
-            const currentCoords = worldState.current_position.split(',').map(Number);
-            const dx = x - currentCoords[0];
-            const dy = y - currentCoords[1];
-            
-            if (dx === 1 && dy === 0) move('east');
-            else if (dx === -1 && dy === 0) move('west');
-            else if (dx === 0 && dy === 1) move('north');
-            else if (dx === 0 && dy === -1) move('south');
-          }
-        }}
-        title={location.name}
-      >
-        <div className="text-xs overflow-hidden max-w-full truncate px-1">
-          {location.name.charAt(0)}
-        </div>
-      </div>
-    );
-  };
+  // Get current position
+  const currentPos = worldState.current_position.split(',').map(Number);
+  const [currentX, currentY, currentZ] = currentPos;
+  
+  // If no Z level is explicitly set, use the current location's Z
+  useEffect(() => {
+    setCurrentZLevel(currentZ);
+  }, [currentZ]);
+  
+  // Filtered locations for current Z level
+  const locationsOnCurrentZ = Object.entries(worldState.locations).filter(([coords]) => {
+    const [, , z] = coords.split(',').map(Number);
+    return z === currentZLevel;
+  });
+  
+  // Map dimensions
+  const mapWidth = (maxX - minX + 1) * cellSize;
+  const mapHeight = (maxY - minY + 1) * cellSize;
+  
+  // Zoom controls
+  const zoomIn = () => setZoom(prev => Math.min(prev + 10, 200));
+  const zoomOut = () => setZoom(prev => Math.max(prev - 10, 50));
   
   return (
-    <div className="mt-4 bg-stone-800 rounded-lg p-4">
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="text-xl">Map View (Z-Level: {worldState.current_position.split(',')[2]})</h3>
-        <div className="flex items-center space-x-2">
+    <div role="region" aria-label="World Map" className="bg-stone-800 rounded-lg p-4 mt-4">
+      <div className="flex justify-between items-center mb-4">
+        <h2 id="world-map-heading" className="text-xl">Map View (Z-Level: {currentZLevel})</h2>
+        <div role="toolbar" aria-label="Map controls" className="flex gap-2">
+          <span>{zoom}%</span>
           <button 
-            className="bg-stone-700 w-8 h-8 rounded flex items-center justify-center"
-            onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
-          >
-            -
-          </button>
-          <span className="text-sm">{Math.round(zoomLevel * 100)}%</span>
+            onClick={zoomOut} 
+            className="px-3 py-1 bg-stone-700 hover:bg-stone-600 rounded-md"
+            title="Zoom out"
+            aria-label="Zoom out"
+          >-</button>
           <button 
-            className="bg-stone-700 w-8 h-8 rounded flex items-center justify-center"
-            onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}
-          >
-            +
-          </button>
+            onClick={zoomIn} 
+            className="px-3 py-1 bg-stone-700 hover:bg-stone-600 rounded-md"
+            title="Zoom in"
+            aria-label="Zoom in"
+          >+</button>
         </div>
       </div>
       
-      <div className="overflow-auto p-2 bg-stone-900 rounded" style={{ maxHeight: '300px' }}>
+      <div 
+        className="overflow-auto p-2 bg-stone-900 rounded-lg" 
+        style={{ maxHeight: '400px' }}
+        aria-labelledby="world-map-heading"
+      >
         <div 
-          className="grid gap-1 transition-transform duration-200"
-          style={{ 
-            transform: `scale(${zoomLevel})`,
-            transformOrigin: 'top left',
-            gridTemplateColumns: `repeat(${maxX - minX + 1}, 1fr)`,
-            gridTemplateRows: `repeat(${maxY - minY + 1}, 1fr)`
-          }}
+          className="relative" 
+          style={{ width: mapWidth, height: mapHeight }}
+          role="grid"
+          aria-label="Map grid showing locations"
         >
-          {Array.from({ length: (maxY - minY + 1) * (maxX - minX + 1) }).map((_, index) => {
-            const y = maxY - Math.floor(index / (maxX - minX + 1));
-            const x = minX + (index % (maxX - minX + 1));
-            return renderLocation(x, y);
+          {locationsOnCurrentZ.map(([coords, location]) => {
+            const [x, y, z] = coords.split(',').map(Number);
+            const isCurrentLocation = coords === worldState.current_position;
+            
+            // Position based on grid coordinates
+            const cellLeft = (x - minX) * cellSize;
+            const cellTop = (maxY - y) * cellSize; // Invert Y for proper visualization
+            
+            return (
+              <div
+                key={coords}
+                style={{
+                  left: cellLeft,
+                  top: cellTop,
+                  width: cellSize,
+                  height: cellSize
+                }}
+                className={`absolute border-2 flex items-center justify-center 
+                      ${isCurrentLocation ? 'border-yellow-400 bg-stone-700' : 'border-stone-600 bg-stone-800'}
+                      cursor-pointer hover:bg-stone-700
+                    `}
+                onClick={() => {
+                  // If adjacent to current location, move there
+                  if (Math.abs(x - currentX) + Math.abs(y - currentY) === 1 && z === currentZ) {
+                    if (x > currentX) move('east');
+                    else if (x < currentX) move('west');
+                    else if (y > currentY) move('north');
+                    else if (y < currentY) move('south');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                data-testid={`map-cell-${x}-${y}-${currentZLevel}`}
+                aria-current={isCurrentLocation}
+                aria-label={`${location.name}${isCurrentLocation ? ' (current location)' : ''}`}
+              >
+                {isCurrentLocation && (
+                  <div className="absolute inset-0 bg-yellow-400 opacity-25"></div>
+                )}
+                <span className="text-xs truncate">{location.name}</span>
+              </div>
+            );
           })}
         </div>
+      </div>
+      
+      <div className="mt-2 text-stone-400 text-xs" aria-live="polite">
+        <p>Current position: {worldState.current_position}</p>
       </div>
     </div>
   );

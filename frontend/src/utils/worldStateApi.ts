@@ -159,12 +159,24 @@ export const worldStateApi = {
    */
   loadLatestChat: async (worldName: string) => {
     try {
+      // Sanitize the world name for URL safety - consistently across all API calls
+      const safeWorldName = worldName.replace(/[^\w\-]+/g, '_');
+      
       // Use chat endpoint instead of world-cards endpoint
-      const response = await fetch(`/api/world-chat/${encodeURIComponent(worldName)}/latest`);
+      const response = await fetch(`/api/world-chat/${encodeURIComponent(safeWorldName)}/latest`);
       
       if (response.status === 404) {
-        console.log('No chat found for this world, will create a new one');
-        return null;
+        console.log('No chat found for this world, creating a new one');
+        
+        // Create a new chat automatically when none exists
+        const newChat = await worldStateApi.createNewChat(worldName);
+        if (newChat) {
+          console.log('Successfully created new chat for world:', worldName);
+          return newChat;
+        } else {
+          console.error('Failed to auto-create chat for world:', worldName);
+          return null;
+        }
       }
       
       if (!response.ok) {
@@ -186,6 +198,9 @@ export const worldStateApi = {
    */
   saveChat: async (worldName: string, chatId: string, chatData: any) => {
     try {
+      // Sanitize the world name for URL safety - consistent with backend
+      const safeWorldName = worldName.replace(/[^\w\-]+/g, '_');
+      
       // Include the chatId in the request body to ensure it's used by the backend
       const dataWithChatId = {
         ...chatData,
@@ -197,7 +212,7 @@ export const worldStateApi = {
       };
       
       // Use chat endpoint instead of world-cards endpoint
-      const response = await fetch(`/api/world-chat/${encodeURIComponent(worldName)}/save`, {
+      const response = await fetch(`/api/world-chat/${encodeURIComponent(safeWorldName)}/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

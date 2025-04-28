@@ -1,4 +1,3 @@
-// frontend/src/components/CharacterInfoView.tsx (Modified)
 import React, { useState } from 'react';
 import { Search, FileJson, SplitSquareVertical } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
@@ -90,10 +89,28 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
 
+  // State for managing name input when creating a new character
+  const [nameInput, setNameInput] = useState('');
+  
+  // Create a stateful flag to track if we're creating a new character
+  const [isCreatingNewCharacter, setIsCreatingNewCharacter] = useState(false);
+
   const handleFieldChange = (field: keyof CharacterCard['data'], value: string | string[]): void => {
     try {
+      // Special handling for the name field when there's no character data yet
+      if (field === 'name' && !characterData?.data) {
+        // Just update local state without creating character
+        setNameInput(value as string);
+        setIsCreatingNewCharacter(true);
+        return;
+      } else if (field === 'name' && isCreatingNewCharacter) {
+        // We already have a character in progress, just update name
+        setNameInput(value as string);
+      }
+      
+      // For other fields or when character data exists
       if (!characterData?.data) {
-        console.error("Character data is missing.");
+        console.error("Cannot update field when no character is selected");
         return;
       }
 
@@ -176,6 +193,30 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
       <div className="flex-1 overflow-y-auto">
         <div className="px-8 pb-8">
+          {/* Show Create Character button when there's a name but no character data */}
+          {isCreatingNewCharacter && nameInput && !characterData && (
+            <div className="mb-6 p-4 bg-stone-800 border border-stone-600 rounded-lg">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-md font-medium">New Character: {nameInput}</h3>
+                  <p className="text-sm text-gray-400">Click Create to initialize this character</p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (primaryContext.createNewCharacter) {
+                      primaryContext.createNewCharacter(nameInput);
+                      setIsCreatingNewCharacter(false);
+                      setNameInput('');
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+                >
+                  Create Character
+                </button>
+              </div>
+            </div>
+          )}
+          
           <div className="space-y-6">
             {/* Name Field */}
             <div>
@@ -184,7 +225,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 type="text"
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} rounded-lg px-3 py-2`}
                 placeholder="Character name"
-                value={getFieldValue('name')}
+                value={characterData?.data?.name || nameInput}
                 onChange={(e) => handleFieldChange('name', e.target.value)}
               />
             </div>

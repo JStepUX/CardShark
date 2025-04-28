@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog } from './Dialog';
-import RoomMap from './RoomMap';
+import GridRoomMap from './GridRoomMap'; // Keep only the GridRoomMap import
 import { Room } from '../types/room';
 import { FullWorldState } from '../types/worldState';
 import worldStateApi from '../utils/worldStateApi';
@@ -241,14 +241,15 @@ const MapDialog: React.FC<MapDialogProps> = ({
             )}
           </div>
           <div className="max-h-[70vh] overflow-auto relative z-10">
-            <RoomMap
+            <GridRoomMap
               roomsById={roomsById}
               posToId={posToId}
               selectedRoomId={selectedRoomId}
               onSelectRoom={handleSelectRoom}
               onCreateRoom={handleCreateRoom}
-              playMode={playMode} // Pass the playMode prop to RoomMap
+              playMode={playMode}
               debugMode={true}
+              gridSize={5} // Changed from 6 to 5 for a proper central room
             />
           </div>
           <div className="flex justify-end mt-4">

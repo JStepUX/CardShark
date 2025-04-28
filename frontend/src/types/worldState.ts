@@ -58,6 +58,8 @@ export interface FullWorldState {
   id?: string;
   cardImageUrl?: string;
   rooms?: Record<string, Room>;
+  // World items for character book entries
+  worldItems?: Array<{ name: string; description: string; }>; 
   // Runtime-only fields added by frontend context if needed (like pending_event)
   pending_event?: EventInfo; // Use EventInfo from ./world
 }

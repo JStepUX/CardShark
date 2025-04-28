@@ -6,9 +6,8 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { FullWorldState, WorldLocation, NpcGridItem } from '../types/worldState';
 import { CharacterCard } from '../types/schema';
 import { Room } from '../types/room';
-import RoomMap from '../components/RoomMap';
+import GridRoomMap from '../components/GridRoomMap'; // Only keep the GridRoomMap component we're using
 import RoomEditor from '../components/RoomEditor';
-import WorldSaveButton from '../components/WorldSaveButton';
 import { Dialog } from '../components/Dialog';
 import GalleryGrid from '../components/GalleryGrid';
 import NpcCard from '../components/NpcCard';
@@ -284,6 +283,41 @@ const WorldBuilderView: React.FC = () => {
     navigate(`/worldcards/${encodeURIComponent(worldId)}/play?startPos=${targetPosition}`);
   };
 
+  // Add an effect to auto-save when rooms change or on component unmount
+  useEffect(() => {
+    // Skip the initial render
+    if (Object.keys(roomsById).length === 0) return;
+    
+    // Create a debounced save function to prevent saving too frequently
+    const saveTimeout = setTimeout(() => {
+      console.log("Auto-saving world state...");
+      handleSaveWorld();
+    }, 1000); // 1-second debounce
+    
+    // Clean up timeout on unmount or when dependencies change
+    return () => clearTimeout(saveTimeout);
+  }, [roomsById]); // Depend on roomsById to trigger save when rooms change
+
+  // Add an effect to handle saving on navigation away
+  useEffect(() => {
+    // Define the beforeunload handler
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Save world state when user tries to leave
+      handleSaveWorld();
+      // Modern browsers require returnValue to be set
+      e.returnValue = '';
+    };
+    
+    // Add the event listener
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Clean up the event listener on unmount
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);  // Empty dependency array means this runs once on mount
+
+  // Modify handleCreateRoom to save automatically
   const handleCreateRoom = (x: number, y: number) => {
     if (!worldId) return;
 
@@ -303,9 +337,12 @@ const WorldBuilderView: React.FC = () => {
     setRoomsById(prev => ({ ...prev, [newRoomId]: newRoom }));
     setPosToId(prev => ({ ...prev, [newPosKey]: newRoomId }));
     setSelectedRoomId(newRoomId);
+    
+    // Schedule an immediate save after creating a room
+    setTimeout(() => handleSaveWorld(), 100);
   };
 
-  // Re-enable handleUpdateRoom function
+  // Modify handleUpdateRoom to save after updates
   const handleUpdateRoom = (roomId: string, updates: Partial<Room>) => {
     setRoomsById(prev => {
       const roomToUpdate = prev[roomId];
@@ -320,6 +357,9 @@ const WorldBuilderView: React.FC = () => {
         [roomId]: updatedRoom
       };
     });
+    
+    // Schedule a save after room update
+    setTimeout(() => handleSaveWorld(), 100);
   };
 
   const handleDeleteRoom = (roomId: string) => {
@@ -415,34 +455,64 @@ const WorldBuilderView: React.FC = () => {
     const locations: Record<string, WorldLocation> = {};
     Object.values(roomsById).forEach(room => {
       const coordKey = `${room.x},${room.y},0`;
+      
+      // Preserve any existing location data
+      const existingLocation = worldData.locations?.[coordKey];
+      
       locations[coordKey] = {
         location_id: room.id,
         name: room.name,
-        description: room.description,
+        description: room.description || '',
         coordinates: [room.x, room.y, 0],
         npcs: room.npcs.map(npc => npc.path),
-        zone_id: (worldData.locations?.[coordKey] as any)?.zone_id,
-        room_type: (worldData.locations?.[coordKey] as any)?.room_type,
-        notes: (worldData.locations?.[coordKey] as any)?.notes,
-        background: (worldData.locations?.[coordKey] as any)?.background,
-        events: (worldData.locations?.[coordKey] as any)?.events || [],
-        explicit_exits: (worldData.locations?.[coordKey] as any)?.explicit_exits,
-        lore_source: (worldData.locations?.[coordKey] as any)?.lore_source,
+        zone_id: existingLocation?.zone_id,
+        room_type: existingLocation?.room_type,
+        notes: existingLocation?.notes,
+        background: existingLocation?.background,
+        events: existingLocation?.events || [],
+        explicit_exits: existingLocation?.explicit_exits || {},
+        lore_source: existingLocation?.lore_source || '',
         connected: true,
+        introduction: existingLocation?.introduction || room.description || '',
       };
     });
 
+    // Create a deep copy to avoid modifying the original state
     const worldStateForSave: FullWorldState = {
-      ...worldData,
+      ...JSON.parse(JSON.stringify(worldData)),
       current_position: currentPositionString,
       locations: locations,
       unconnected_locations: worldData.unconnected_locations || {},
       player: worldData.player || { health: 100, stamina: 100, level: 1, experience: 0 },
       visited_positions: worldData.visited_positions || [],
+      // Remove any properties that shouldn't be in the final state
       rooms: undefined,
     };
 
+    console.log('Prepared world state for save:', worldStateForSave);
     return worldStateForSave;
+  };
+
+  // Add a new function to handle explicit saves
+  const handleSaveWorld = async () => {
+    const worldStateToSave = prepareWorldStateForSave();
+    if (!worldStateToSave || !worldId) {
+      console.error("Cannot save world: Invalid world state or missing world ID");
+      return;
+    }
+    
+    try {
+      const success = await worldStateApi.saveWorldState(worldId, worldStateToSave);
+      if (success) {
+        console.log("World saved successfully");
+        // Update local state to match saved state
+        setWorldData(worldStateToSave);
+      } else {
+        console.error("Failed to save world");
+      }
+    } catch (error) {
+      console.error("Error saving world:", error);
+    }
   };
 
   if (isLoading) {
@@ -467,21 +537,24 @@ const WorldBuilderView: React.FC = () => {
         <span className="text-gray-400">/</span>
         <span className="font-semibold text-stone-900 dark:text-stone-100">{worldData.name}</span>
         <div className="ml-auto">
-          <WorldSaveButton
-            worldName={worldData.name}
-            worldState={prepareWorldStateForSave()}
-            pngFile={null}
-          />
+          <button
+            className="px-6 py-2 rounded-lg shadow bg-green-700 text-white hover:bg-green-800 transition-colors font-medium"
+            onClick={handleSaveWorld}
+          >
+            Save World
+          </button>
         </div>
       </div>
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-col items-center justify-center flex-1 p-6 overflow-auto bg-stone-100 dark:bg-stone-900">
-          <RoomMap
+          <GridRoomMap
             roomsById={roomsById}
             posToId={posToId}
             selectedRoomId={selectedRoomId}
             onSelectRoom={setSelectedRoomId}
             onCreateRoom={handleCreateRoom}
+            debugMode={true}
+            gridSize={5} // Changed from 6 to 5 for a proper central room
           />
         </div>
 
