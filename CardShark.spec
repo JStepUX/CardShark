@@ -2,14 +2,15 @@
 
 import sys
 import os
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
 
 # Collect all required data files
 frontend_datas = [
-    ('frontend/dist/*', 'frontend/dist/'),
-    ('frontend/dist/assets/*', 'frontend/dist/assets/'),
+    ('frontend/dist/*', 'frontend'),
+    ('frontend/dist/assets/*', 'frontend/assets'),
 ]
 
 backend_datas = [
@@ -20,8 +21,15 @@ backend_datas = [
     ('backend/utils/*', 'backend/utils'),
 ]
 
+# Add KoboldCPP directory (even if empty) to ensure it's created
+koboldcpp_dir = Path('KoboldCPP')
+koboldcpp_dir.mkdir(exist_ok=True)
+koboldcpp_datas = [
+    ('KoboldCPP', 'KoboldCPP'),
+]
+
 # Combine all data files
-all_datas = frontend_datas + backend_datas
+all_datas = frontend_datas + backend_datas + koboldcpp_datas
 
 # Verified backend modules that exist in your project
 hidden_imports = [
@@ -55,6 +63,8 @@ hidden_imports = [
     'backend.character_validator',
     'backend.chat_handler',
     'backend.errors',
+    'backend.koboldcpp_manager',
+    'backend.koboldcpp_handler',
     'backend.log_manager',
     'backend.lore_handler',
     'backend.network_server',

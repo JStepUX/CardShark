@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Download, Play, AlertCircle, X, CheckCircle, Loader2, RefreshCw, ArrowUpCircle } from 'lucide-react';
+import { Download, AlertCircle, X, CheckCircle, Loader2, RefreshCw, ArrowUpCircle } from 'lucide-react';
 
 interface KoboldStatus {
   status: 'running' | 'present' | 'missing';
@@ -71,8 +71,8 @@ const KoboldCPPManager: React.FC = () => {
     }
   }, []);
   
-  // Launch KoboldCPP
-  const launchKoboldCPP = async () => {
+  // Launch KoboldCPP - Function will be used in the UI
+  const launchKoboldCPP = useCallback(async () => {
     try {
       const response = await fetch('/api/koboldcpp/launch', {
         method: 'POST',
@@ -88,7 +88,7 @@ const KoboldCPPManager: React.FC = () => {
     } catch (err) {
       setError(`Error launching KoboldCPP: ${err instanceof Error ? err.message : String(err)}`);
     }
-  };
+  }, [fetchStatus]);
   
   // Download KoboldCPP
   const downloadKoboldCPP = async () => {
@@ -318,6 +318,17 @@ const KoboldCPPManager: React.FC = () => {
                     Download KoboldCPP
                   </>
                 )}
+              </button>
+            )}
+            
+            {/* Launch button - Added to use the launchKoboldCPP function */}
+            {status.status === 'present' && !status.is_running && (
+              <button
+                onClick={launchKoboldCPP}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Launch KoboldCPP
               </button>
             )}
             

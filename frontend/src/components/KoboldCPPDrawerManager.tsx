@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import KoboldCPPBottomDrawer from './KoboldCPPBottomDrawer';
-import { useSettings } from '../contexts/SettingsContext';
 
 interface KoboldStatus {
   status: 'running' | 'present' | 'missing';
@@ -10,7 +9,6 @@ interface KoboldStatus {
 const KoboldCPPDrawerManager: React.FC = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [koboldStatus, setKoboldStatus] = useState<KoboldStatus | null>(null);
-  const { settings } = useSettings();
   const [isDismissed, setIsDismissed] = useState(false);
 
   // Check KoboldCPP status when the component mounts

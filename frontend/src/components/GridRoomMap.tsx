@@ -3,6 +3,7 @@ import { Room } from '../types/room';
 
 interface GridRoomMapProps {
   roomsById: Record<string, Room>;
+  posToId: Record<string, string>; // Added posToId property
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string) => void;
   onCreateRoom: (x: number, y: number) => void;
@@ -13,6 +14,7 @@ interface GridRoomMapProps {
 
 const GridRoomMap: React.FC<GridRoomMapProps> = ({
   roomsById,
+  posToId, // Added the posToId parameter
   selectedRoomId,
   onSelectRoom,
   onCreateRoom,
@@ -29,6 +31,13 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
     const key = `${room.x},${room.y}`;
     roomByCoords[key] = room;
   });
+  
+  // Debug: log position to ID mapping for troubleshooting
+  React.useEffect(() => {
+    if (debugMode && Object.keys(posToId).length > 0) {
+      console.log("Position to ID mappings available:", Object.keys(posToId).length);
+    }
+  }, [posToId, debugMode]);
   
   // Check if we have any rooms at all
   const roomCount = Object.keys(roomsById).length;

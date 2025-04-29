@@ -230,14 +230,15 @@ def create_spec_file():
 
 import sys
 import os
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
 
 # Collect all required data files
 frontend_datas = [
-    ('frontend/dist/*', 'frontend/dist/'),
-    ('frontend/dist/assets/*', 'frontend/dist/assets/'),
+    ('frontend/dist/*', 'frontend'),
+    ('frontend/dist/assets/*', 'frontend/assets'),
 ]
 
 backend_datas = [

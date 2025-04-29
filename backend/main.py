@@ -7,6 +7,8 @@ import uvicorn
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import traceback
+import webbrowser
+from threading import Timer
 
 # FastAPI imports
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File
@@ -255,7 +257,7 @@ def main():
     """Main entry point for the application."""
     parser = argparse.ArgumentParser(description="CardShark Character Card Editor")
     parser.add_argument("-host", "--host", default="127.0.0.1", help="Host to run the server on")
-    parser.add_argument("-port", "--port", type=int, default=8000, help="Port to run the server on")
+    parser.add_argument("-port", "--port", type=int, default=9696, help="Port to run the server on")
     parser.add_argument("--batch", action="store_true", help="Run in batch processing mode (no GUI)")
     args = parser.parse_args()
     
@@ -269,6 +271,12 @@ def main():
     port = int(os.environ.get("CARDSHARK_PORT", args.port))
     logger.log_step(f"Starting CardShark server at http://{host}:{port}")
     logger.log_step(f"To access the UI, open your browser and go to: http://{host}:{port}")
+    
+    # Open the browser after a short delay
+    def open_browser():
+        webbrowser.open_new(f"http://{host}:{port}")
+
+    Timer(1, open_browser).start()
     
     # Start the server
     uvicorn.run("backend.main:app", host=host, port=port, reload=False)

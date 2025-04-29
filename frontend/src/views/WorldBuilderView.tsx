@@ -552,7 +552,7 @@ const WorldBuilderView: React.FC = () => {
             posToId={posToId}
             selectedRoomId={selectedRoomId}
             onSelectRoom={setSelectedRoomId}
-            onCreateRoom={handleCreateRoom}
+            onCreateRoom={(x, y) => handleCreateRoom(x, y)}
             debugMode={true}
             gridSize={5} // Changed from 6 to 5 for a proper central room
           />
