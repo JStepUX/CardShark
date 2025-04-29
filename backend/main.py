@@ -29,35 +29,53 @@ from backend.chat_handler import ChatHandler
 from backend.template_handler import TemplateHandler
 from backend.background_handler import BackgroundHandler
 from backend.lore_handler import LoreHandler
-from backend.handlers.world_state_handler import WorldStateHandler
-from backend.handlers.world_card_chat_handler import WorldCardChatHandler
-from backend.koboldcpp_handler import router as koboldcpp_router
-from backend.room_card_endpoint import router as room_card_router
 
-# Import our new endpoint modules
+# API endpoint modules
 from backend.chat_endpoints import ChatEndpoints
-from backend.character_endpoints import CharacterEndpoints, router as character_router
-from backend.user_endpoints import UserEndpoints, router as user_router
-from backend.settings_endpoints import SettingsEndpoints, router as settings_router
-from backend.world_endpoints import WorldEndpoints, router as world_router
+from backend.character_endpoints import CharacterEndpoints
+from backend.user_endpoints import UserEndpoints
+from backend.settings_endpoints import SettingsEndpoints
+from backend.world_endpoints import WorldEndpoints
+from backend.background_endpoints import BackgroundEndpoints, setup_router as setup_background_router
+from backend.background_endpoints import router as background_router
+from backend.room_card_endpoint import router as room_card_router
+from backend.character_endpoints import router as character_router
+from backend.user_endpoints import router as user_router
+from backend.settings_endpoints import router as settings_router
+from backend.world_endpoints import router as world_router
 from backend.world_chat_endpoints import router as world_chat_router
 
-# Create FastAPI app
-app = FastAPI(title="CardShark API")
+# Import koboldcpp handler & manager
+from backend.koboldcpp_handler import router as koboldcpp_router
 
-# Enable CORS
+# Import user directory utilities functions
+from backend.utils.user_dirs import get_users_dir # type: ignore
+
+# Import various handlers
+from backend.handlers.world_state_handler import WorldStateHandler
+from backend.handlers.world_card_chat_handler import WorldCardChatHandler
+
+# Global configuration
+VERSION = "0.1.0"
+DEBUG = os.environ.get("DEBUG", "").lower() in ("true", "1", "t")
+
+# Initialize FastAPI app
+logger = LogManager()
+app = FastAPI(debug=DEBUG)
+
+# Add CORS middleware to allow all origins (for development)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # In production, this should be restricted
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize handlers
-logger = LogManager()
+# ---------- Initialize Handlers ----------
+
+# Initialize core handlers
 settings_manager = SettingsManager(logger)
-# Load settings at startup
 settings_manager._load_settings()
 validator = CharacterValidator(logger)
 png_handler = PngMetadataHandler(logger)
@@ -88,6 +106,7 @@ settings_endpoints = SettingsEndpoints(logger, settings_manager)
 # Add template handler to settings endpoints for templates management
 settings_endpoints.template_handler = template_handler
 world_endpoints = WorldEndpoints(logger, world_state_handler, world_card_chat_handler)
+background_endpoints = BackgroundEndpoints(logger, background_handler, chat_handler)  # Pass chat_handler here
 
 # Register endpoints from classes
 chat_endpoints.register_routes(app)
@@ -95,8 +114,10 @@ character_endpoints.register_routes(app)
 user_endpoints.register_routes(app)
 settings_endpoints.register_routes(app)
 world_endpoints.register_routes(app)
+background_endpoints.register_routes(app)
 
-# Include routers directly
+# Set up and include routers directly
+setup_background_router(background_handler, logger, chat_handler)  # Pass chat_handler here as well
 app.include_router(koboldcpp_router)
 app.include_router(room_card_router)
 app.include_router(character_router)
@@ -104,6 +125,7 @@ app.include_router(user_router)
 app.include_router(settings_router)
 app.include_router(world_router)
 app.include_router(world_chat_router)
+app.include_router(background_router)
 
 # ---------- Direct routes that haven't been modularized yet ----------
 
@@ -111,147 +133,50 @@ app.include_router(world_chat_router)
 async def debug_png(file: UploadFile = File(...)):
     """Debug a PNG file to extract all chunks and metadata."""
     try:
-        content = await file.read()
-        debug_info = debug_handler.debug_png(content)
-        return JSONResponse(status_code=200, content=debug_info)
+        result = await debug_handler.debug_png(file)
+        return JSONResponse(content=result)
     except Exception as e:
         logger.log_error(f"Error debugging PNG: {str(e)}")
+        logger.log_error(traceback.format_exc())
         return JSONResponse(
-            status_code=500,
+            status_code=500, 
             content={"error": f"Failed to debug PNG: {str(e)}"}
         )
 
-@app.post("/api/extract-lore")
-async def extract_lore(file: UploadFile = File(...)):
-    """Extract lore items from a PNG character card."""
-    try:
-        content = await file.read()
-        logger.log_step("Extracting lore from uploaded PNG file")
-        
-        # Extract metadata from PNG
-        metadata = png_handler.read_metadata(content)
-        if not metadata:
-            logger.log_warning("No metadata found in PNG")
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False, 
-                    "message": "No metadata found in PNG"
-                }
-            )
-        
-        # Extract lore from character book
-        lore_items = lore_handler.extract_lore_from_metadata(metadata)
-        
-        logger.log_step(f"Extracted {len(lore_items)} lore items")
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True, 
-                "lore": lore_items,
-                "character_name": metadata.get("data", {}).get("name", "Unknown")
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error extracting lore: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False, 
-                "message": str(e)
-            }
-        )
+# ---------- Serve frontend if running in production mode ----------
 
-@app.get("/api/backgrounds")
-async def get_backgrounds():
-    """Get a list of available background images."""
-    try:
-        backgrounds = background_handler.list_backgrounds()
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "backgrounds": backgrounds
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error listing backgrounds: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": str(e)
-            }
-        )
-
-@app.post("/api/generate-stream")
-async def generate_stream(request: Request):
-    """Streaming generation from an API endpoint."""
-    try:
-        data = await request.json()
-        api_name = data.get("api")
-        prompt = data.get("prompt")
-        model_params = data.get("params", {})
-        
-        if not api_name or not prompt:
-            raise HTTPException(status_code=400, detail="API name and prompt are required")
-            
-        logger.log_step(f"Streaming generation from {api_name}")
-        
-        # Create async generator for streaming the response
-        async def response_generator():
-            async for chunk in api_handler.generate_stream(api_name, prompt, model_params):
-                yield f"data: {chunk}\n\n"
-        
-        return StreamingResponse(
-            response_generator(),
-            media_type="text/event-stream"
-        )
-    except Exception as e:
-        logger.log_error(f"Error in streaming generation: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ---------- Frontend Static Files ----------
-
-def get_frontend_path():
-    """Determine the correct frontend path."""
-    # Check if in PyInstaller bundle
-    if getattr(sys, 'frozen', False):
-        base_path = Path(sys._MEIPASS)
+# Check if we're running as a standalone executable or script
+if getattr(sys, 'frozen', False):
+    # Running as PyInstaller bundle - serve built frontend files
+    logger.log_step("Running as PyInstaller bundle, serving built frontend")
+    static_dir = Path(sys._MEIPASS) / "frontend"
+    if static_dir.exists():
+        logger.log_step(f"Serving frontend from {static_dir}")
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
     else:
-        base_path = Path().absolute()
-    
-    # Look for the frontend directory
-    frontend_path = base_path / "frontend"
-    
-    # Check if frontend exists
-    if not frontend_path.exists():
-        # Try one level up (for development)
-        frontend_path = base_path.parent / "frontend"
-    
-    return frontend_path
+        logger.log_warning(f"Frontend directory not found at {static_dir}")
+else:
+    # Running as script - serve from frontend/dist if exists
+    static_dir = Path(__file__).parent.parent / "frontend" / "dist"
+    if static_dir.exists():
+        logger.log_step(f"Serving frontend from {static_dir}")
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+    else:
+        logger.log_warning(f"Frontend build directory not found at {static_dir}, API endpoints only")
 
-frontend_path = get_frontend_path()
-if frontend_path.exists():
-    logger.log_step(f"Mounting frontend static files from: {frontend_path}")
-    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+# Also mount the uploads directory to serve uploaded files
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
-@app.get("/")
-async def root():
-    """Root endpoint serving the frontend."""
-    try:
-        index_path = frontend_path / "index.html"
-        with open(index_path, "r") as f:
-            return HTMLResponse(content=f.read())
-    except Exception as e:
-        logger.log_error(f"Error serving frontend: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Frontend not available"}
-        )
+# ---------- Health check endpoint ----------
 
-# ---------- Main Entry Point ----------
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "ok", "version": VERSION}
+
+# ---------- Main entry point ----------
 
 def main():
     """Main entry point for the application."""
@@ -274,13 +199,12 @@ def main():
     
     # Open the browser after a short delay
     def open_browser():
-        webbrowser.open_new(f"http://{host}:{port}")
-
+        webbrowser.open(f"http://{host}:{port}")
+    
     Timer(1, open_browser).start()
     
     # Start the server
     uvicorn.run("backend.main:app", host=host, port=port, reload=False)
 
 if __name__ == "__main__":
-    # When run directly, not as an import
     main()

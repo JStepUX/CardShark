@@ -271,7 +271,8 @@ export class ChatStorage {
     character: CharacterCard, 
     messages: Message[], 
     currentUser: UserProfile | null,
-    apiInfo: any = null
+    apiInfo: any = null,
+    backgroundSettings: any = null  // Added parameter for background settings
   ): Promise<any> {
     if (!character) {
       console.error('Cannot save chat: No character provided');
@@ -280,6 +281,18 @@ export class ChatStorage {
 
     try {
       console.log(`Saving chat with ${messages.length} messages for character:`, character.data?.name);
+      
+      // Get any stored background settings from localStorage if not provided
+      if (!backgroundSettings) {
+        try {
+          const storedSettings = localStorage.getItem('cardshark_background_settings');
+          if (storedSettings) {
+            backgroundSettings = JSON.parse(storedSettings);
+          }
+        } catch (e) {
+          console.warn('Failed to load background settings from localStorage:', e);
+        }
+      }
       
       const response = await fetch('/api/save-chat', {
         method: 'POST',
@@ -290,8 +303,10 @@ export class ChatStorage {
           character_data: character, // Send full character object
           messages: messages,
           lastUser: currentUser, // Corrected key name
-          api_info: apiInfo
-          // Removed character_id and char_name as they are not expected by this specific endpoint
+          api_info: apiInfo,
+          metadata: {
+            backgroundSettings: backgroundSettings,  // Add background settings to metadata
+          }
         }),
       });
 

@@ -234,27 +234,8 @@ const ChatView: React.FC = () => {
   const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
   
-  // Load background settings from localStorage
-  useEffect(() => {
-    try {
-      const storedSettings = localStorage.getItem(BACKGROUND_SETTINGS_KEY);
-      if (storedSettings) {
-        setBackgroundSettings(JSON.parse(storedSettings));
-      }
-    } catch (err) {
-      console.error('Error loading background settings:', err);
-    }
-  }, []);
-
-  // Save background settings when they change
-  useEffect(() => {
-    localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));
-  }, [backgroundSettings]);
-  
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
-
-  // Remove unused performance tracking ref
 
   const {
     messages,
@@ -274,25 +255,52 @@ const ChatView: React.FC = () => {
     loadExistingChat,
     updateReasoningSettings,
     clearError
-  }: {
-    messages: Message[];
-    isGenerating: boolean;
-    error: string | null;
-    currentUser: UserProfile | null;
-    lastContextWindow: any;
-    generatingId: string | null;
-    reasoningSettings: ReasoningSettings;
-    generateResponse: (content: string) => void;
-    regenerateMessage: (message: Message) => void;
-    cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
-    stopGeneration: () => void;
-    deleteMessage: (messageId: string) => void;
-    updateMessage: (messageId: string, content: string, isStreamingUpdate?: boolean) => void;
-    setCurrentUser: (user: UserProfile | null) => void;
-    loadExistingChat: (chatId: string) => Promise<void>;
-    updateReasoningSettings: (settings: ReasoningSettings) => void;
-    clearError: () => void;
   } = useChatMessages(characterData);
+  
+  // Load background settings from localStorage
+  useEffect(() => {
+    try {
+      const storedSettings = localStorage.getItem(BACKGROUND_SETTINGS_KEY);
+      if (storedSettings) {
+        setBackgroundSettings(JSON.parse(storedSettings));
+      }
+    } catch (err) {
+      console.error('Error loading background settings:', err);
+    }
+  }, []);
+
+  // Save background settings when they change
+  useEffect(() => {
+    localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));
+    
+    // Also update background settings in current chat metadata
+    if (characterData && messages.length > 0) {
+      try {
+        // Pass current background settings when saving the chat
+        ChatStorage.saveChat(
+          characterData, 
+          messages, 
+          currentUser, 
+          null, // No need to pass apiInfo here
+          backgroundSettings // Pass current background settings
+        );
+      } catch (err) {
+        console.error('Error saving background settings to chat metadata:', err);
+      }
+    }
+  }, [backgroundSettings, characterData, messages, currentUser]);
+  
+  // Sync background settings from loaded chat metadata
+  useEffect(() => {
+    // When lastContextWindow changes and indicates a chat was loaded
+    if (lastContextWindow?.type === 'chat_loaded' || lastContextWindow?.type === 'loaded_chat') {
+      // Check if the loaded chat has background settings in metadata
+      if (lastContextWindow.backgroundSettings) {
+        console.log('Loading background settings from chat metadata:', lastContextWindow.backgroundSettings);
+        setBackgroundSettings(lastContextWindow.backgroundSettings);
+      }
+    }
+  }, [lastContextWindow]);
 
   // Use the chat continuation hook
   const {

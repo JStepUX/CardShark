@@ -433,8 +433,8 @@ class ChatHandler:
             self.logger.log_error(f"Failed to append/update message: {str(e)}")
             return False
 
-    def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None) -> bool:
-        """Save complete chat state to a file with API information."""
+    def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None, metadata: Optional[Dict] = None) -> bool:
+        """Save complete chat state to a file with API information and additional metadata."""
         self.logger.log_step(f"Saving chat state for character: {character_data.get('data', {}).get('name')}")
         
         try:
@@ -444,15 +444,18 @@ class ChatHandler:
             
             # Try to preserve the current chat_id if possible
             current_chat_id = None
+            current_metadata = {}
             if chat_file.exists():
                 try:
                     with open(chat_file, 'r', encoding='utf-8') as f:
                         first_line = f.readline().strip()
                         if first_line:
-                            metadata = json.loads(first_line)
-                            current_chat_id = metadata.get('chat_metadata', {}).get('chat_id')
-                except:
-                    pass
+                            current_metadata = json.loads(first_line)
+                            current_chat_id = current_metadata.get('chat_metadata', {}).get('chat_id')
+                            # Preserve existing metadata entries we don't want to overwrite
+                            current_background_settings = current_metadata.get('chat_metadata', {}).get('backgroundSettings')
+                except Exception as e:
+                    self.logger.log_warning(f"Error reading existing metadata: {str(e)}")
             
             with open(chat_file, 'w', encoding='utf-8') as f:
                 # Create metadata with lastUser and preserve chat_id if available
@@ -461,26 +464,34 @@ class ChatHandler:
                 # Use existing chat_id or generate a new one
                 chat_id = current_chat_id if current_chat_id else f"{char_id}_{int(time.time())}"
                 
-                # Prepare metadata including API information
-                metadata = {
+                # Merge existing and new metadata
+                chat_metadata = {
+                    "chat_id": chat_id,
+                    "tainted": False,
+                    "timedWorldInfo": {
+                        "sticky": {},
+                        "cooldown": {}
+                    },
+                    "lastUser": lastUser,
+                    "api_info": api_info or {}  # Add API information
+                }
+                
+                # Add background settings from the input metadata if provided
+                if metadata and 'backgroundSettings' in metadata:
+                    chat_metadata['backgroundSettings'] = metadata.get('backgroundSettings')
+                    self.logger.log_step(f"Saved background settings to chat metadata")
+                
+                # Prepare full metadata
+                metadata_obj = {
                     "user_name": "User",
                     "character_name": char_name,
                     "character_id": char_id,
                     "create_date": datetime.now().isoformat(),
-                    "chat_metadata": {
-                        "chat_id": chat_id,
-                        "tainted": False,
-                        "timedWorldInfo": {
-                            "sticky": {},
-                            "cooldown": {}
-                        },
-                        "lastUser": lastUser,
-                        "api_info": api_info or {}  # Add API information
-                    }
+                    "chat_metadata": chat_metadata
                 }
                 
                 # Write metadata
-                json.dump(metadata, f)
+                json.dump(metadata_obj, f)
                 f.write('\n')
                 
                 # Write all messages
@@ -1048,4 +1059,63 @@ class ChatHandler:
             return self._active_chats.get(char_id)
         except Exception as e:
             self.logger.log_error(f"Error getting active chat ID: {str(e)}")
+            return None
+        
+    def _get_character_folder(self, character_id: str) -> Optional[Path]:
+        """Get the chat directory for a character based on its ID.
+        
+        Args:
+            character_id: The unique identifier for the character.
+            
+        Returns:
+            Path object to the character's chat folder, or None if not found.
+        """
+        try:
+            self.logger.log_step(f"Getting folder for character ID: {character_id}")
+            
+            # Get base directory path
+            if getattr(sys, 'frozen', False):
+                base_dir = Path(sys.executable).parent
+            else:
+                base_dir = Path.cwd()
+            
+            chats_dir = base_dir / 'chats'
+            if not chats_dir.exists():
+                self.logger.log_warning(f"Chats directory doesn't exist: {chats_dir}")
+                return None
+            
+            # Load the folders mapping file to look up the character folder
+            folders_map_path = chats_dir / 'folders.json'
+            
+            if not folders_map_path.exists():
+                self.logger.log_warning(f"Folders mapping file not found at {folders_map_path}")
+                return None
+            
+            folders_map = {}
+            try:
+                with open(folders_map_path, 'r', encoding='utf-8') as f:
+                    folders_map = json.load(f)
+            except Exception as e:
+                self.logger.log_error(f"Error loading folders.json: {str(e)}")
+                return None
+            
+            # Look for the character ID in the mapping
+            if character_id in folders_map:
+                folder_name = folders_map[character_id]
+                chat_folder = chats_dir / folder_name
+                
+                # Verify the folder exists
+                if chat_folder.exists():
+                    self.logger.log_step(f"Found character folder: {chat_folder}")
+                    return chat_folder
+                else:
+                    self.logger.log_warning(f"Character folder not found at expected location: {chat_folder}")
+                    return None
+            else:
+                self.logger.log_warning(f"No folder mapping found for character ID: {character_id}")
+                return None
+            
+        except Exception as e:
+            self.logger.log_error(f"Error getting character folder: {str(e)}")
+            self.logger.log_error(traceback.format_exc())
             return None
