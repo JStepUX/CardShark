@@ -179,15 +179,15 @@ export async function importPng(file: File): Promise<LoreEntry[]> {
     const data = await response.json();
     
     if (!data.success) {
-      throw new Error(data.error || 'Unknown error extracting lore from PNG');
+      throw new Error(data.message || 'Unknown error extracting lore from PNG');
     }
     
-    // Validate the loreItems structure
-    if (!data.loreItems || !Array.isArray(data.loreItems)) {
+    // Look for 'lore' property which is what the backend sends (not 'loreItems')
+    if (!data.lore || !Array.isArray(data.lore)) {
       throw new Error('Invalid lore items format in PNG');
     }
     
-    return extractEntriesFromJson(data.loreItems);
+    return extractEntriesFromJson(data.lore);
   } catch (error) {
     console.error('PNG import failed:', error);
     

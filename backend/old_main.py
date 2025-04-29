@@ -1629,11 +1629,15 @@ async def list_character_chats(request: Request):
     try:
         data = await request.json()
         character_data = data.get('character_data')
+        scan_all_files = data.get('scan_all_files', False)  # New parameter to scan all JSONL files
         
         if not character_data:
             raise HTTPException(status_code=400, detail="Character data is required")
             
-        chat_list = chat_handler.list_character_chats(character_data)
+        # Pass the scan_all_files parameter to the handler
+        chat_list = chat_handler.list_character_chats(character_data, scan_all_files)
+        
+        logger.log_step(f"Found {len(chat_list)} chat files for character (scan_all_files={scan_all_files})")
         
         return JSONResponse(
             status_code=200,

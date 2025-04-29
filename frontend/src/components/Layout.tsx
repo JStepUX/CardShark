@@ -1,6 +1,6 @@
 // frontend/src/components/Layout.tsx (Modified)
 import React, { useRef, useState, useEffect } from "react";
-import { Outlet } from "react-router-dom"; // Import Outlet
+import { Outlet, useLocation } from "react-router-dom"; // Added useLocation for routing transitions
 import { useCharacter } from "../contexts/CharacterContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
@@ -31,6 +31,9 @@ const Layout: React.FC = () => {
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
   const [backendStatus, setBackendStatus] = useState<"running" | "disconnected">("disconnected");
+  const [lastHealthCheck, setLastHealthCheck] = useState<number>(0);
+  const location = useLocation(); // Track route changes
+  
   const { settings } = useSettings();
   const [newImage, setNewImage] = useState<File | string | null>(null);
   
@@ -51,20 +54,87 @@ const Layout: React.FC = () => {
 
   // We no longer need to load settings here as it's handled by the SettingsContext
 
-  // Backend status check
+  // Backend status check - optimized to reduce API calls
   useEffect(() => {
-    const checkBackend = async () => {
+    // Health check function with caching
+    const checkBackend = async (force = false) => {
+      const now = Date.now();
+      // Skip check if last check was less than 5 minutes ago (300000ms) and not forced
+      const CACHE_DURATION = 300000; // 5 minutes
+      
+      // Try to get cached status first
+      const cachedStatus = localStorage.getItem('backendStatus');
+      const cachedTimestamp = Number(localStorage.getItem('backendStatusTimestamp') || '0');
+      
+      if (!force && cachedStatus && now - cachedTimestamp < CACHE_DURATION) {
+        setBackendStatus(cachedStatus as "running" | "disconnected");
+        setLastHealthCheck(cachedTimestamp);
+        return;
+      }
+      
       try {
         const response = await fetch("/api/health");
-        setBackendStatus(response.ok ? "running" : "disconnected");
+        const status = response.ok ? "running" : "disconnected";
+        setBackendStatus(status);
+        setLastHealthCheck(now);
+        
+        // Cache the result
+        localStorage.setItem('backendStatus', status);
+        localStorage.setItem('backendStatusTimestamp', now.toString());
       } catch {
         setBackendStatus("disconnected");
+        setLastHealthCheck(now);
+        localStorage.setItem('backendStatus', "disconnected");
+        localStorage.setItem('backendStatusTimestamp', now.toString());
       }
     };
+    
+    // Check immediately on first mount
     checkBackend();
-    const interval = setInterval(checkBackend, 90000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    // Set up a longer interval for periodic checks (5 minutes)
+    const interval = setInterval(() => checkBackend(), 300000);
+    
+    // Add visibility change listener to check when user returns to the tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Only force a check if it's been more than 2 minutes since last check
+        if (Date.now() - lastHealthCheck > 120000) {
+          checkBackend(true);
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [lastHealthCheck]);
+  
+  // Check health on major route changes
+  useEffect(() => {
+    // Only check health on route change if it's been more than 2 minutes
+    if (Date.now() - lastHealthCheck > 120000) {
+      const checkBackendOnRouteChange = async () => {
+        try {
+          const response = await fetch("/api/health");
+          const status = response.ok ? "running" : "disconnected";
+          setBackendStatus(status);
+          setLastHealthCheck(Date.now());
+          localStorage.setItem('backendStatus', status);
+          localStorage.setItem('backendStatusTimestamp', Date.now().toString());
+        } catch {
+          setBackendStatus("disconnected");
+          setLastHealthCheck(Date.now());
+          localStorage.setItem('backendStatus', "disconnected");
+          localStorage.setItem('backendStatusTimestamp', Date.now().toString());
+        }
+      };
+      checkBackendOnRouteChange();
+    }
+  }, [location.pathname, lastHealthCheck]);
 
   // File upload handler
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {

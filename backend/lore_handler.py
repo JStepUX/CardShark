@@ -19,6 +19,99 @@ class LoreHandler:
         self.logger = logger
         self.default_position = default_position
 
+    def extract_lore_from_metadata(self, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Extract lore entries from character card metadata
+        
+        Args:
+            metadata: Character card metadata dictionary
+            
+        Returns:
+            List of lore entry dictionaries
+        """
+        lore_entries = []
+        
+        self.logger.log_step("Extracting lore entries from character card metadata")
+        
+        # Validate metadata structure
+        if not isinstance(metadata, dict):
+            self.logger.log_warning(f"Invalid metadata type: {type(metadata)}")
+            return []
+            
+        # Check if metadata has the expected structure
+        if 'data' not in metadata:
+            self.logger.log_warning("No 'data' field found in metadata")
+            return []
+            
+        data = metadata['data']
+        
+        # Look for character_book which contains lore entries
+        if 'character_book' not in data or not data['character_book']:
+            self.logger.log_step("No character_book found in metadata")
+            return []
+            
+        character_book = data['character_book']
+        
+        # Extract entries from character_book
+        # Character book structure may vary based on format
+        if isinstance(character_book, dict):
+            # Process modern character book format
+            entries = character_book.get('entries', [])
+            if entries and isinstance(entries, list):
+                for entry in entries:
+                    # Validate and standardize the entry
+                    if not isinstance(entry, dict):
+                        continue
+                        
+                    normalized_entry = {
+                        'content': entry.get('content', ''),
+                        'keys': entry.get('keys', []),
+                        'enabled': entry.get('enabled', True),
+                        'position': self._convert_position(entry.get('position', self.default_position)),
+                        'insertion_order': entry.get('insertion_order', 0),
+                        'case_sensitive': entry.get('case_sensitive', False),
+                        'name': entry.get('name', '')
+                    }
+                    
+                    # Only add entries with content and at least one key
+                    if normalized_entry['content'] and normalized_entry['keys']:
+                        lore_entries.append(normalized_entry)
+                        
+            self.logger.log_step(f"Extracted {len(lore_entries)} lore entries from character_book")
+        else:
+            self.logger.log_warning(f"Unexpected character_book type: {type(character_book)}")
+            
+        return lore_entries
+        
+    def _convert_position(self, position) -> int:
+        """
+        Convert position from string or other formats to standard integer
+        
+        Args:
+            position: Position value to convert
+            
+        Returns:
+            Standardized integer position
+        """
+        # Position mapping from strings (for compatibility with different formats)
+        position_mapping = {
+            # String positions
+            'before_char': self.POSITION_BEFORE_CHAR,
+            'after_char': self.POSITION_AFTER_CHAR, 
+            'an_top': self.POSITION_AN_TOP,
+            'an_bottom': self.POSITION_AN_BOTTOM,
+            'at_depth': self.POSITION_AT_DEPTH,
+            'before_example': self.POSITION_BEFORE_EXAMPLE,
+            'after_example': self.POSITION_AFTER_EXAMPLE
+        }
+        
+        if isinstance(position, str) and position in position_mapping:
+            return position_mapping[position]
+        elif isinstance(position, int) and 0 <= position <= 6:
+            return position
+        else:
+            return self.default_position
+    
     def match_lore_entries(self, 
                            lore_entries: List[Dict], 
                            text: str) -> List[Dict]:

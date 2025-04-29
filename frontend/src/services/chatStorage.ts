@@ -144,6 +144,8 @@ export class ChatStorage {
       const characterId = this.getCharacterId(character);
       console.log('Using character ID:', characterId);
       
+      // Added scanAllFiles parameter to ensure we scan for all JSONL files 
+      // regardless of naming convention
       const response = await fetch('/api/list-character-chats', {
         method: 'POST',
         headers: {
@@ -153,7 +155,8 @@ export class ChatStorage {
           character_data: character, // Send full character object
           character_id: characterId,
           char_name: character.data?.name || '',
-          format: 'jsonl'
+          format: 'jsonl',
+          scan_all_files: true // Add flag to scan for all JSONL files
         }),
       });
 
@@ -197,7 +200,8 @@ export class ChatStorage {
         body: JSON.stringify({
           chat_id: chatId, // Could be null to let backend use active chat
           character_data: character, // Send the full character object
-          use_active: chatId === null // Signal to the backend to use the active chat
+          use_active: chatId === null, // Signal to the backend to use the active chat
+          scan_all_files: true // Add parameter to scan all JSONL files
         }),
       });
 

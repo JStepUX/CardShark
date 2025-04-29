@@ -555,21 +555,101 @@ class ChatHandler:
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f):
-                    if line.strip():
-                        try:
-                            data = json.loads(line)
-                            if line_num == 0 or 'chat_metadata' in data:
-                                metadata = data
-                                self.logger.log_step("Found chat metadata")
-                            else:
-                                converted = self._convert_to_internal_format(data)
-                                if converted:
-                                    messages.append(converted)
-                        except json.JSONDecodeError as e:
-                            self.logger.log_error(f"Error parsing line {line_num}: {e}")
-                            continue
+                # Read all lines first for more robust parsing
+                lines = [line.strip() for line in f if line.strip()]
+                
+                # First line should always be metadata, but be flexible
+                if lines:
+                    try:
+                        first_line = json.loads(lines[0])
+                        if 'chat_metadata' in first_line or 'character_name' in first_line:
+                            metadata = first_line
+                            self.logger.log_step("Found chat metadata in first line")
+                            # Start processing from the second line
+                            start_line = 1
+                        else:
+                            # No metadata at first line, we'll need to create one
+                            self.logger.log_warning(f"No metadata found in first line, will synthesize metadata")
+                            # Extract character name from the file path
+                            file_name = file_path.name
+                            # Expected format: chat_CharacterName_Timestamp.jsonl
+                            parts = file_name.replace('.jsonl', '').split('_')
+                            char_name = parts[1] if len(parts) > 1 else "Unknown"
                             
+                            # Create a synthetic chat_id based on the filename
+                            chat_id = file_path.stem  # Use the whole filename without extension as chat_id
+                            
+                            # Create minimal metadata
+                            metadata = {
+                                "user_name": "User",
+                                "character_name": char_name,
+                                "create_date": datetime.now().isoformat(),
+                                "chat_metadata": {
+                                    "chat_id": chat_id,
+                                    "tainted": False,
+                                    "timedWorldInfo": {
+                                        "sticky": {},
+                                        "cooldown": {}
+                                    },
+                                    "lastUser": None
+                                }
+                            }
+                            
+                            # Process all lines as messages
+                            start_line = 0
+                    except json.JSONDecodeError as e:
+                        self.logger.log_error(f"Error parsing first line as metadata: {e}")
+                        # Create minimal metadata as above
+                        chat_id = file_path.stem
+                        char_name = file_path.name.split('_')[1] if len(file_path.name.split('_')) > 1 else "Unknown"
+                        
+                        metadata = {
+                            "user_name": "User",
+                            "character_name": char_name,
+                            "create_date": datetime.now().isoformat(),
+                            "chat_metadata": {
+                                "chat_id": chat_id,
+                                "tainted": False,
+                                "timedWorldInfo": {
+                                    "sticky": {},
+                                    "cooldown": {}
+                                },
+                                "lastUser": None
+                            }
+                        }
+                        start_line = 0
+                    
+                    # Process message lines
+                    for i in range(start_line, len(lines)):
+                        try:
+                            data = json.loads(lines[i])
+                            # Skip any additional metadata-like lines
+                            if 'chat_metadata' in data and i > 0:
+                                self.logger.log_warning(f"Found additional metadata at line {i+1}, skipping")
+                                continue
+                                
+                            converted = self._convert_to_internal_format(data)
+                            if converted:
+                                messages.append(converted)
+                        except json.JSONDecodeError as e:
+                            self.logger.log_error(f"Error parsing message at line {i+1}: {e}")
+                            continue
+                
+                # Make sure chat_id exists in metadata
+                if metadata and 'chat_metadata' in metadata and not metadata['chat_metadata'].get('chat_id'):
+                    metadata['chat_metadata']['chat_id'] = file_path.stem
+                
+                # After loading, update the active chat tracking for this character
+                if metadata and metadata.get('character_name') and metadata.get('chat_metadata', {}).get('chat_id'):
+                    char_name = metadata.get('character_name')
+                    chat_id = metadata.get('chat_metadata', {}).get('chat_id')
+                    # Try to update active chat for this character
+                    try:
+                        char_data = {'data': {'name': char_name}}
+                        self._update_active_chat(char_data, chat_id)
+                    except Exception as e:
+                        self.logger.log_error(f"Failed to update active chat: {e}")
+            
             self.logger.log_step(f"Loaded {len(messages)} messages")
             
             # Ensure messages are in chronological order
@@ -678,15 +758,28 @@ class ChatHandler:
             self.logger.log_error(traceback.format_exc())
             return None
 
-    def list_character_chats(self, character_data: Dict) -> List[Dict]:
-        """List all available chat files for a character."""
+    def list_character_chats(self, character_data: Dict, scan_all_files: bool = False) -> List[Dict]:
+        """
+        List all available chat files for a character.
+        
+        Args:
+            character_data: Character data dictionary
+            scan_all_files: If True, scan for all JSONL files regardless of naming convention
+        """
         try:
             chat_dir = self._get_chat_path(character_data)
             character_name = character_data.get('data', {}).get('name', 'unknown')
             char_name = self._sanitize_filename(character_name)
             
             # Find all chat files for this character
-            chat_files = list(chat_dir.glob(f"chat_{char_name}_*.jsonl"))
+            if scan_all_files:
+                # Scan for all JSONL files regardless of naming convention
+                self.logger.log_step(f"Scanning all JSONL files in directory: {chat_dir}")
+                chat_files = list(chat_dir.glob("*.jsonl"))
+            else:
+                # Only scan for files with the standard naming convention
+                self.logger.log_step(f"Scanning standard named chat files for character: {char_name}")
+                chat_files = list(chat_dir.glob(f"chat_{char_name}_*.jsonl"))
             
             # Sort by modification time (newest first)
             chat_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
@@ -696,20 +789,36 @@ class ChatHandler:
                 try:
                     # Extract the timestamp from the filename
                     filename = file_path.name
-                    timestamp_str = filename.replace(f"chat_{char_name}_", "").replace(".jsonl", "")
+                    if filename.startswith(f"chat_{char_name}_"):
+                        timestamp_str = filename.replace(f"chat_{char_name}_", "").replace(".jsonl", "")
+                    else:
+                        # For files with non-standard naming
+                        parts = filename.split('_')
+                        if len(parts) >= 3 and parts[0] == "chat":
+                            timestamp_str = parts[-1].replace(".jsonl", "")
+                        else:
+                            # Use the file modification time as a fallback
+                            timestamp_str = datetime.fromtimestamp(file_path.stat().st_mtime).strftime("%Y%m%d_%H%M%S")
                     
                     # Parse the file to get metadata
                     chat_id = None
                     chat_preview = ""
                     message_count = 0
+                    create_date = ""
                     
                     with open(file_path, 'r', encoding='utf-8') as f:
                         # Read the first line for metadata
                         first_line = f.readline().strip()
                         if first_line:
-                            metadata = json.loads(first_line)
-                            chat_id = metadata.get('chat_metadata', {}).get('chat_id')
-                            create_date = metadata.get('create_date', '')
+                            try:
+                                metadata = json.loads(first_line)
+                                chat_id = metadata.get('chat_metadata', {}).get('chat_id')
+                                create_date = metadata.get('create_date', '')
+                            except json.JSONDecodeError:
+                                self.logger.log_warning(f"Invalid JSON in first line of {filename}, falling back to filename")
+                                chat_id = file_path.stem  # Use filename without extension as ID
+                        else:
+                            chat_id = file_path.stem  # Use filename without extension as ID
                         
                         # Count messages and get preview
                         for i, line in enumerate(f):
@@ -719,19 +828,30 @@ class ChatHandler:
                                 if i < 5 and not chat_preview:
                                     try:
                                         msg = json.loads(line)
-                                        if not msg.get('is_system', False) and msg.get('mes'):
-                                            # Truncate message for preview
-                                            preview_text = msg.get('mes', '')[:50].replace('\n', ' ')
-                                            if preview_text:
-                                                chat_preview = preview_text + "..."
-                                    except:
+                                        if not msg.get('is_system', False):
+                                            # Try to get message content from different possible formats
+                                            message_content = msg.get('mes', msg.get('content', ''))
+                                            if message_content:
+                                                # Truncate message for preview
+                                                preview_text = message_content[:50].replace('\n', ' ')
+                                                if preview_text:
+                                                    chat_preview = preview_text + "..."
+                                    except json.JSONDecodeError:
                                         pass
                     
                     # Format the time for display
                     try:
-                        display_date = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S").strftime("%b %d, %Y %I:%M %p")
+                        if timestamp_str:
+                            display_date = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S").strftime("%b %d, %Y %I:%M %p")
+                        elif create_date:
+                            # Try to parse create_date instead
+                            date_obj = datetime.fromisoformat(create_date)
+                            display_date = date_obj.strftime("%b %d, %Y %I:%M %p")
+                        else:
+                            # Fall back to file modification time
+                            display_date = datetime.fromtimestamp(file_path.stat().st_mtime).strftime("%b %d, %Y %I:%M %p")
                     except:
-                        display_date = timestamp_str
+                        display_date = timestamp_str or "Unknown date"
                     
                     chat_list.append({
                         'id': chat_id or f"{char_name}_{timestamp_str}",
@@ -740,7 +860,8 @@ class ChatHandler:
                         'timestamp': timestamp_str,
                         'display_date': display_date,
                         'message_count': message_count,
-                        'preview': chat_preview
+                        'preview': chat_preview,
+                        'create_date': create_date or display_date
                     })
                 except Exception as e:
                     self.logger.log_error(f"Error processing chat file {file_path}: {str(e)}")

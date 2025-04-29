@@ -231,14 +231,17 @@ class ChatEndpoints:
             try:
                 data = await request.json()
                 character_data = data.get("character_data")
+                scan_all_files = data.get("scan_all_files", False)  # New parameter to scan all JSONL files
                 
                 if not character_data:
                     self.logger.log_warning("No character data provided for list-character-chats")
                     raise HTTPException(status_code=400, detail="Missing character data")
                 
-                self.logger.log_step("Listing character chats")
-                chats = self.chat_handler.get_all_chats(character_data)
+                self.logger.log_step(f"Listing character chats (scan_all_files={scan_all_files})")
+                # Pass the scan_all_files parameter to list_character_chats instead of using get_all_chats
+                chats = self.chat_handler.list_character_chats(character_data, scan_all_files)
                 
+                self.logger.log_step(f"Found {len(chats)} chat files")
                 return {"success": True, "chats": chats}
             except HTTPException as http_exc:
                 raise http_exc

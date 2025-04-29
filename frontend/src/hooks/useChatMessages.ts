@@ -29,6 +29,22 @@ const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
 };
 const REASONING_SETTINGS_KEY = 'cardshark_reasoning_settings';
 const CONTEXT_WINDOW_KEY = 'cardshark_context_window';
+const DEBOUNCE_DELAY = 1000; // 1 second debounce delay for message updates
+
+// --- Debounce Utility ---
+const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): ((...args: Parameters<T>) => void) => {
+  let timeout: NodeJS.Timeout | null = null;
+  
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      func(...args);
+    }, wait);
+  };
+};
 
 // --- Default Assistant Character ---
 const DEFAULT_ASSISTANT_CHARACTER: CharacterCard = {
@@ -145,6 +161,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
   const streamTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout for stream inactivity
   const autoSaveEnabled = useRef(!isGenericAssistant);
   const hasInitializedChat = useRef<boolean>(false);
+  const isInitialLoad = useRef<boolean>(true); // New flag to track initial load
   const STREAM_INACTIVITY_TIMEOUT_MS = 30000; // 30 seconds
 
   // --- Utility Functions ---
@@ -290,14 +307,23 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     }, 1000);
   }, [effectiveCharacterData, apiConfig, isGenericAssistant]); // Add dependencies
 
-  const appendMessage = useCallback(async (message: Message) => {
+  // Direct API call implementation (non-debounced)
+  const appendMessageDirect = useCallback(async (message: Message) => {
     // Only append if it's a real character
     if (isGenericAssistant || message.role === 'thinking' || !effectiveCharacterData.data?.name) return;
     try {
       // Use effectiveCharacterData, check ensures it's not generic
       if (effectiveCharacterData) await ChatStorage.appendMessage(effectiveCharacterData, message);
     } catch (err) { console.error('Error appending/updating message:', err); }
-  }, [effectiveCharacterData, apiConfig, isGenericAssistant]); // Add dependencies
+  }, [effectiveCharacterData, isGenericAssistant]); // Removed apiConfig from dependencies as it's not used
+
+  // Create a debounced version of appendMessage
+  const appendMessage = useCallback(
+    debounce(async (message: Message) => {
+      await appendMessageDirect(message);
+    }, DEBOUNCE_DELAY),
+    [appendMessageDirect]
+  );
 
   // --- Core Stream Processing Logic ---
   const processStream = useCallback(async (
@@ -741,6 +767,12 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       return;
     }
 
+    console.log("Starting chat load with autoSaveEnabled:", autoSaveEnabled.current);
+    
+    // Temporarily disable autosave to prevent race conditions during load
+    const previousAutoSaveState = autoSaveEnabled.current;
+    autoSaveEnabled.current = false;
+    
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
       // Pass character data first to allow the backend to find the active chat
@@ -759,7 +791,18 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       
       // Check if loading was successful and messages exist
       if (loadedChat && loadedChat.success && Array.isArray(loadedChat.messages)) {
-        const messagesWithStatus = loadedChat.messages.map((msg: any) => ({ ...msg, status: 'complete' as Message['status'] })); // Add type assertion for msg
+        console.log(`Successfully loaded chat with ${loadedChat.messages.length} messages`);
+        
+        // Mark chat as initialized BEFORE setting state to prevent race conditions
+        hasInitializedChat.current = true;
+        
+        // Prepare messages with proper status
+        const messagesWithStatus = loadedChat.messages.map((msg: any) => ({ 
+          ...msg, 
+          status: 'complete' as Message['status'] 
+        }));
+        
+        // Update state with loaded messages
         setState(prev => ({ 
           ...prev, 
           messages: messagesWithStatus, 
@@ -771,17 +814,40 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
             messageCount: messagesWithStatus.length 
           } 
         }));
-        hasInitializedChat.current = true;
       } else if (effectiveCharacterData?.data?.first_mes) {
         // Load first message if chat doesn't exist and character has one
-        const firstMessage = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
-        setState(prev => ({ ...prev, messages: [firstMessage], lastContextWindow: { type: 'initial_message', timestamp: new Date().toISOString(), firstMessage: firstMessage.content } }));
+        console.log("No existing chat found, creating initial message from first_mes");
         hasInitializedChat.current = true;
-        saveChat([firstMessage], state.currentUser); // Save the initial message
+        const firstMessage = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
+        
+        setState(prev => ({ 
+          ...prev, 
+          messages: [firstMessage], 
+          lastContextWindow: { 
+            type: 'initial_message', 
+            timestamp: new Date().toISOString(), 
+            firstMessage: firstMessage.content 
+          } 
+        }));
+        
+        // Now we can safely save the first message since we've marked chat as initialized
+        setTimeout(() => {
+          console.log("Saving initial message after slight delay");
+          saveChat([firstMessage], state.currentUser);
+        }, 100);
       } else {
         // No chat found and no first message
-        setState(prev => ({ ...prev, messages: [], lastContextWindow: { type: 'no_chat_found', timestamp: new Date().toISOString(), chatId: chatId } }));
+        console.log("No existing chat or first_mes content found");
         hasInitializedChat.current = true;
+        setState(prev => ({ 
+          ...prev, 
+          messages: [], 
+          lastContextWindow: { 
+            type: 'no_chat_found', 
+            timestamp: new Date().toISOString(), 
+            chatId: chatId 
+          } 
+        }));
       }
     } catch (err) {
       console.error("Error loading chat:", err);
@@ -789,8 +855,14 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       hasInitializedChat.current = false; // Failed to initialize
     } finally {
       setState(prev => ({ ...prev, isLoading: false }));
+      
+      // Wait a moment before re-enabling autosave to ensure state updates are complete
+      setTimeout(() => {
+        console.log("Re-enabling autosave:", previousAutoSaveState && !isGenericAssistant);
+        autoSaveEnabled.current = previousAutoSaveState && !isGenericAssistant;
+      }, 500);
     }
-  }, [effectiveCharacterData, isGenericAssistant, state.currentUser, saveChat]); // Add dependencies
+  }, [effectiveCharacterData, isGenericAssistant, state.currentUser, saveChat]);
 
   const updateReasoningSettings = (settings: Partial<ReasoningSettings>) => {
     try {
@@ -910,7 +982,15 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     }
 
     // --- Handle Regular Characters (Not Generic Assistant or World Play) ---
-    autoSaveEnabled.current = true; // Enable autosave
+    // Initial state for autosave depends on whether this is the first load after startup
+    if (isInitialLoad.current) {
+        console.log("Initial app load detected, temporarily disabling autosave");
+        autoSaveEnabled.current = false; // Initially disable autosave until load completes
+        isInitialLoad.current = false;  // Reset the initial load flag
+    } else {
+        // For subsequent character changes, enable autosave
+        autoSaveEnabled.current = true;
+    }
 
     // --- Logic for actual characters ---
     const loadChat = async () => {
@@ -922,22 +1002,23 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
         return;
       }
 
-      // Prevent re-loading the same chat unless forced? (Current logic reloads)
-      // if (currentCharacterId === lastCharacterId.current && hasInitializedChat.current) return;
-
-      console.log(`Loading chat for character: ${characterName}`);
+      console.log(`Loading chat for character: ${characterName} (isNewContext: ${isNewContext}, hasInitialized: ${hasInitializedChat.current})`);
       setState(prev => ({ ...prev, isLoading: true, error: null }));
-      autoSaveEnabled.current = false; // Disable save during load
 
       try {
         await loadExistingChat(characterName);
         // loadExistingChat now sets hasInitializedChat.current internally
+        
+        // After successful load, re-enable autosave with a delay to ensure chat is loaded first
+        setTimeout(() => {
+          console.log("Re-enabling autosave after successful chat load");
+          autoSaveEnabled.current = true;
+        }, 1000);
       } catch (err) {
         // Error handling is now inside loadExistingChat
         console.error("Error occurred during loadExistingChat call:", err);
       } finally {
         setState(prev => ({ ...prev, isLoading: false }));
-        autoSaveEnabled.current = !isGenericAssistant; // Re-enable save after load attempt (if not generic)
       }
     };
 
@@ -948,9 +1029,13 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       // hasInitializedChat.current is set within loadExistingChat now
     }
 
-    // Cleanup function (optional, might be useful for aborting loads)
+    // Cleanup function
     return () => {
-      // console.log("ChatMessages effect cleanup");
+      // If switching characters, disable autosave to prevent race conditions
+      if (lastCharacterId.current !== currentCharacterId && lastCharacterId.current !== null) {
+        console.log(`Switching from ${lastCharacterId.current} to ${currentCharacterId}, temporarily disabling autosave`);
+        autoSaveEnabled.current = false;
+      }
     };
   }, [characterData, options?.isWorldPlay, loadExistingChat, isGenericAssistant, effectiveCharacterData]); // Keep dependencies
 

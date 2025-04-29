@@ -170,8 +170,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose }) => {
       // Try to parse as timestamp
       const timestamp = parseInt(dateString);
       if (!isNaN(timestamp)) {
-        const date = new Date(timestamp);
-        if (!isNaN(date.getTime())) {
+        // Handle potential Unix timestamp in seconds or milliseconds
+        const date = new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp);
+        if (!isNaN(date.getTime()) && date.getFullYear() > 1990) { // Sanity check for reasonable dates
           return date.toLocaleString();
         }
       }
@@ -192,6 +193,29 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose }) => {
         }
       }
       
+      // Try to parse from YYYYMMDD_HHMMSS format (used in filenames)
+      const filenamePattern = /(\d{8})_(\d{6})/;  
+      const filenameMatch = dateString.match(filenamePattern);
+      if (filenameMatch) {
+        const datePart = filenameMatch[1];
+        const timePart = filenameMatch[2];
+        
+        if (datePart && timePart) {
+          const year = parseInt(datePart.substring(0, 4));
+          const month = parseInt(datePart.substring(4, 6)) - 1;
+          const day = parseInt(datePart.substring(6, 8));
+          
+          const hour = parseInt(timePart.substring(0, 2));
+          const minute = parseInt(timePart.substring(2, 4));
+          const second = parseInt(timePart.substring(4, 6));
+          
+          const date = new Date(year, month, day, hour, minute, second);
+          if (!isNaN(date.getTime())) {
+            return date.toLocaleString();
+          }
+        }
+      }
+      
       // Fallback for simpler formatting
       return dateString.substring(0, 19).replace('T', ' ');
     } catch (e) {
@@ -206,9 +230,13 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose }) => {
       const formattedDate = formatDate(dateString);
       
       if (lastMessage && lastMessage.length > 0) {
+        // Strip any HTML tags for cleaner display
+        const cleanMessage = lastMessage.replace(/<[^>]*>/g, '');
+        
         // Use a snippet from the last message as part of the title
-        const messagePreview = lastMessage.substring(0, 30).trim();
-        return `Chat from ${formattedDate}${messagePreview ? ` - "${messagePreview}${messagePreview.length < lastMessage.length ? '...' : ''}"` : ''}`;
+        const messagePreview = cleanMessage.substring(0, 30).trim();
+        
+        return `Chat from ${formattedDate}${messagePreview ? ` - "${messagePreview}${messagePreview.length < cleanMessage.length ? '...' : ''}"` : ''}`;
       }
       
       return `Chat from ${formattedDate}`;
