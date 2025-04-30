@@ -1,0 +1,28 @@
+{
+  "id": "openai",
+  "name": "OpenAI",
+  "description": "Template for OpenAI-compatible APIs (GPT models and OpenRouter)",
+  "isBuiltIn": false,
+  "isEditable": true,
+  "systemFormat": "{\"role\": \"system\", \"content\": \"{{content}}\"}",
+  "userFormat": "{\"role\": \"user\", \"content\": \"{{content}}\"}",
+  "assistantFormat": "{\"role\": \"assistant\", \"content\": \"{{content}}\"}",
+  "memoryFormat": "{{#if system}}{{system}}\n\n{{/if}}{{#if description}}# Character: {{char}}\n{{description}}\n\n{{/if}}{{#if personality}}# Personality\n{{personality}}\n\n{{/if}}{{#if scenario}}# Scenario\n{{scenario}}\n\n{{/if}}{{#if examples}}# Examples\n{{examples}}\n\n{{/if}}{{#if mesExamples}}# Dialogue Examples\n{{mesExamples}}\n\n{{/if}}Always speak as {{char}}. Never speak as {{user}}.",
+  "detectionPatterns": [
+    "\"role\"",
+    "\"content\"",
+    "\"assistant\"",
+    "\"user\"",
+    "\"system\""
+  ],
+  "stopSequences": [
+    "{{user}}:",
+    "User:",
+    "USER:",
+    "Human:",
+    "HUMAN:",
+    "{{char}}:",
+    "Assistant:",
+    "ASSISTANT:"
+  ]
+}

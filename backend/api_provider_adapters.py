@@ -498,12 +498,38 @@ class OpenRouterAdapter(ApiProviderAdapter):
         max_tokens = generation_settings.get('max_length', 220)
         temperature = generation_settings.get('temperature', 0.7)
         top_p = generation_settings.get('top_p', 0.9)
-        model = generation_settings.get('model', 'openai/gpt-3.5-turbo')  # Default model
         
+        # Enhanced model selection logic with better logging and prioritization
+        model = None
+        
+        # First, explicitly check if there's a direct model provided
+        if 'model' in generation_settings and generation_settings['model']:
+            model = generation_settings['model']
+            self.logger.log_step(f"Using explicitly selected model: {model}")
+        
+        # Check for OpenRouter specific format only if model is still None
+        elif 'openrouter_model' in generation_settings and generation_settings['openrouter_model']:
+            model = generation_settings['openrouter_model']
+            self.logger.log_step(f"Using model from openrouter_model setting: {model}")
+            
+        # Default fallback
+        if not model:
+            model = 'openai/gpt-3.5-turbo'  # Default model
+            self.logger.log_step(f"No model specified in settings, using default: {model}")
+            
         # Create the OpenRouter request format (similar to OpenAI)
+        messages = []
+        
+        # Add system message if memory is provided
+        if memory and memory.strip():
+            messages.append({"role": "system", "content": memory})
+        
+        # Add the prompt as a user message
+        messages.append({"role": "user", "content": prompt})
+        
         data = {
             "model": model,
-            "messages": [{"role": "system", "content": memory if memory else ""}],
+            "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "top_p": top_p,
@@ -511,35 +537,83 @@ class OpenRouterAdapter(ApiProviderAdapter):
             "stream": True
         }
         
-        # Add the prompt as a user message
-        data["messages"].append({"role": "user", "content": prompt})
+        # Log the constructed request for debugging
+        self.logger.log_step(f"OpenRouter request to model: {model}")
+        self.logger.log_step(f"Request contains {len(messages)} messages")
         
         return data
-        
+    
     def parse_streaming_response(self, line: bytes) -> Optional[Dict[str, Any]]:
         """Parse a streaming response line from OpenRouter"""
-        # OpenRouter uses OpenAI's streaming format
         try:
             line_text = line.decode('utf-8')
+            
+            # Add debug logging for the first few chunks and special cases
+            if line_text.startswith(':'):
+                # OpenRouter sends ":" lines as keep-alive
+                self.logger.log_step(f"OpenRouter keep-alive line received: {line_text}")
+                return None
+            
             if line_text.startswith('data: '):
                 data_portion = line_text[6:]
                 
                 # Check for completion message
                 if data_portion.strip() == "[DONE]":
+                    self.logger.log_step("OpenRouter [DONE] marker received")
                     return None
                 
                 try:
-                    content = json.loads(data_portion)
+                    # Handle potentially incomplete JSON by trying to fix common issues
+                    try:
+                        content = json.loads(data_portion)
+                    except json.JSONDecodeError:
+                        # Try to fix incomplete JSON by adding closing brackets
+                        # This happens when large responses are chunked mid-JSON
+                        if '"delta": {' in data_portion and not '"content":' in data_portion:
+                            self.logger.log_step("Detected incomplete delta object, assuming role-only message")
+                            return {'token': '', 'delta_type': 'role'}
+                            
+                        self.logger.log_error(f"Incomplete JSON received: {data_portion}")
+                        return None
                     
-                    # Extract the delta content from OpenRouter's format (same as OpenAI)
+                    # Extract the delta content from OpenRouter's format (similar to OpenAI)
                     if 'choices' in content and len(content['choices']) > 0:
                         choice = content['choices'][0]
+                        
+                        # Check if there's a delta with content
                         if 'delta' in choice and 'content' in choice['delta']:
-                            return {'content': choice['delta']['content']}
+                            chunk_content = choice['delta']['content'] or ""
+                            # Return token instead of content for better streaming in frontend
+                            return {'token': chunk_content, 'model': content.get('model', '')}
+                        
+                        # Handle the case where delta contains only role info (first message)
+                        elif 'delta' in choice and 'role' in choice['delta']:
+                            self.logger.log_step(f"Received role-only delta with role: {choice['delta']['role']}")
+                            # Return empty token with delta_type to indicate role info
+                            return {'token': '', 'delta_type': 'role', 'role': choice['delta']['role']}
+                        
+                        # Handle the case where 'text' might be used instead
+                        elif 'text' in choice and choice['text']:
+                            return {'token': choice['text'], 'model': content.get('model', '')}
+                            
+                        # If delta exists but has no content (could be an empty delta)
+                        elif 'delta' in choice:
+                            self.logger.log_step("Delta exists but has no content field")
+                            # Return empty token to keep the stream alive
+                            return {'token': '', 'delta_type': 'empty_delta'}
                     
+                    # Sometimes OpenRouter sends metadata or processing info
+                    if content.get('processing', False) or content.get('created', False):
+                        self.logger.log_step("Received OpenRouter processing info")
+                        return {'token': '', 'delta_type': 'processing'}
+                    
+                    # If we couldn't extract content in any recognized format, log it
+                    self.logger.log_step(f"OpenRouter response format not recognized: {json.dumps(content)[:100]}...")
                     return None
-                except json.JSONDecodeError:
-                    self.logger.log_error(f"Invalid JSON in OpenRouter response: {data_portion}")
+                    
+                except Exception as e:
+                    self.logger.log_error(f"Error processing OpenRouter response: {str(e)}")
+                    self.logger.log_error(f"Problematic data: {data_portion}")
                     return None
             return None
         except Exception as e:

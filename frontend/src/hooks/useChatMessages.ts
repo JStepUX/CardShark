@@ -339,25 +339,27 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     let done = false;
     let buffer = ''; // Buffer for UI updates
     let bufferTimer: NodeJS.Timeout | null = null;
+    
+    // Track empty chunks to help diagnose OpenRouter issues
+    let emptyChunkCount = 0;
+    let lastChunkTime = Date.now();
+    let contentStarted = false; // Keep track if we received the first content chunk
 
     const updateUIBuffer = () => {
-        if (buffer.length > 0) {
-            const contentToAdd = buffer;
-            buffer = '';
-            // Use functional update for setState based on potentially stale accumulatedContent
-            // No need to read state here anymore
-            if (isThinking) {
-                // Assuming updateThinkingMessageContent is similarly refactored or doesn't need currentFullContent
-                updateThinkingMessageContent(messageId, contentToAdd); // Pass only chunk
-            } else {
-                updateGeneratingMessageContent(messageId, contentToAdd); // Pass only chunk
-            }
+      if (buffer.length > 0) {
+        const contentToAdd = buffer;
+        buffer = '';
+        // Use functional update for setState based on potentially stale accumulatedContent
+        if (isThinking) {
+          updateThinkingMessageContent(messageId, contentToAdd);
+        } else {
+          updateGeneratingMessageContent(messageId, contentToAdd);
         }
+      }
     };
 
-
     if (!isThinking) { // Only buffer UI updates for assistant messages
-        bufferTimer = setInterval(updateUIBuffer, 100);
+      bufferTimer = setInterval(updateUIBuffer, 100);
     }
 
     try {
@@ -365,51 +367,144 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
         if (!currentGenerationRef.current || currentGenerationRef.current.signal.aborted) {
           throw new DOMException('Aborted by user', 'AbortError');
         }
+        
         const { value, done: streamDone } = await reader.read();
         done = streamDone;
+        
+        // Track time between chunks for debugging
+        const now = Date.now();
+        const timeSinceLastChunk = now - lastChunkTime;
+        lastChunkTime = now;
+        
         if (value) {
           const decodedChunk = decoder.decode(value, { stream: true });
           resetStreamTimeout(); // Reset inactivity timer on receiving data
-          // console.log('[DEBUG] processStream received chunk:', decodedChunk); // Reduced logging
+          
+          // Log chunk details for debugging if needed
+          if (receivedChunks === 0 || receivedChunks % 50 === 0) {
+            console.log(`[Stream] Received chunk #${receivedChunks}, length: ${decodedChunk.length}, time since last: ${timeSinceLastChunk}ms`);
+          }
+          
           receivedChunks++;
+          
+          // Split the chunk into lines and process each line separately
           const lines = decodedChunk.split('\n');
+          
           for (const line of lines) {
+            if (!line.trim()) continue; // Skip empty lines
+            
+            let contentDelta: string | null = null;
+            let isDoneSignal = false;
+
+            // Process each data line independently
             if (line.startsWith('data: ')) {
               const jsonData = line.substring(6).trim();
-              if (jsonData === '[DONE]') { done = true; break; }
-              try {
-                const parsed = JSON.parse(line.replace(/^data: /, ""));
-                // console.log('[DEBUG] processStream parsed:', parsed); // Reduced logging
-                // For assistant messages (not thinking), accumulate tokens
-                if (!isThinking && parsed.token !== undefined) {
-                  accumulatedContent += parsed.token;
-                  if (!streamDone && parsed.token) {
-                    // console.log('[DEBUG] processStream calling updateGeneratingMessageContent:', { messageId, token: parsed.token }); // Reduced logging
-                    updateGeneratingMessageContent(messageId, parsed.token);
+              
+              if (jsonData === '[DONE]') { 
+                console.log('[Stream] Received [DONE] marker');
+                isDoneSignal = true; 
+              } else {
+                try {
+                  // Parse the JSON string
+                  const parsed = JSON.parse(jsonData);
+                  
+                  // Handle OpenAI/OpenRouter token format
+                  if (typeof parsed.token === 'string') {
+                    contentDelta = parsed.token;
+                  } 
+                  // Also check for direct content_delta format
+                  else if (typeof parsed.content_delta === 'string') {
+                    contentDelta = parsed.content_delta;
+                  } 
+                  // Fallback to OpenAI/OpenRouter chat format
+                  else if (parsed.choices?.[0]?.delta?.content) {
+                    contentDelta = parsed.choices[0].delta.content;
+                  } 
+                  // Another format used by some APIs
+                  else if (isThinking && typeof parsed.content === 'string') {
+                    contentDelta = parsed.content;
                   }
-                } else if (isThinking && parsed.content) {
-                  accumulatedContent += parsed.content;
-                  updateThinkingMessageContent(messageId, parsed.content);
-                } else if (parsed.error) { throw new Error(parsed.error.message || "Error from stream"); }
-              } catch (e) { /* Ignore non-JSON */ }
+                  // Handle explicit empty content delta
+                  else if (parsed.choices?.[0]?.delta && 'content' in parsed.choices[0].delta && parsed.choices[0].delta.content === null) {
+                    emptyChunkCount++;
+                  }
+                  else if (parsed.error) { 
+                    throw new Error(parsed.error.message || "Error from stream"); 
+                  }
+                } catch (e) {
+                  // Don't crash on parse error - log it and continue
+                  console.warn('[Stream] Failed to parse JSON data line:', line, e);
+                  
+                  // Only log a warning, don't treat as fatal error since some APIs
+                  // send multiple partial data lines that won't parse individually
+                }
+              }
+            } else {
+               // Handle lines that are NOT SSE (don't start with 'data: ')
+               try {
+                 const parsed = JSON.parse(line);
+                 if (typeof parsed.token === 'string') {
+                   contentDelta = parsed.token;
+                 } else if (typeof parsed.content_delta === 'string') {
+                   contentDelta = parsed.content_delta;
+                 } else if (isThinking && typeof parsed.content === 'string') {
+                   contentDelta = parsed.content;
+                 } else if (parsed.error) {
+                   throw new Error(parsed.error.message || "Error from plain JSON stream");
+                 }
+               } catch (e) {
+                 // Plain text might be sent directly
+                 // This is rare but can happen with some APIs
+               }
             }
-          }
-        }
-        if (done) break;
-      }
-      // No need for final buffer processing or re-reading state
 
-      // Use the locally accumulated content
-      // Use the locally accumulated content directly
-      // console.log(`Stream processing complete. Chunks: ${receivedChunks}. Length: ${accumulatedContent.length}`); // Reduced logging
-      onComplete(accumulatedContent, receivedChunks); // Pass the final accumulated string
+            // Process any extracted content
+            if (contentDelta !== null) {
+               if (!contentStarted) {
+                 console.log('[Stream] First content chunk received:', contentDelta.substring(0, 50) + (contentDelta.length > 50 ? '...' : ''));
+                 contentStarted = true;
+               }
+               
+               accumulatedContent += contentDelta;
+               buffer += contentDelta;
+               
+               if (isThinking) {
+                 // Update thinking message immediately (no buffering needed)
+                 updateThinkingMessageContent(messageId, contentDelta);
+               }
+            }
+
+            if (isDoneSignal) {
+              done = true;
+              break; // Exit inner loop once DONE is received
+            }
+          } // End for loop over lines
+        } // End if(value)
+        
+        // Force update UI buffer for non-thinking messages
+        if (buffer.length > 0 && !isThinking) {
+          updateUIBuffer();
+        }
+        
+        if (done) break; // Exit outer loop if done
+      } // End while loop
+      
+      // Log streaming statistics for debugging
+      console.log(`[Stream] Streaming complete. Chunks: ${receivedChunks}, Empty chunks: ${emptyChunkCount}, Total content length: ${accumulatedContent.length}`);
+      
+      // Process any remaining buffer content
+      if (buffer.length > 0) {
+        updateUIBuffer();
+      }
+      
+      onComplete(accumulatedContent, receivedChunks);
     } catch (err) {
+      console.error('[Stream] Stream error:', err);
       onError(err as Error);
     } finally {
-       if (bufferTimer) clearInterval(bufferTimer);
-       // Do NOT clear timeouts here, let the calling function handle it via onComplete/onError
+      if (bufferTimer) clearInterval(bufferTimer);
     }
-  }, [updateGeneratingMessageContent, updateThinkingMessageContent, resetStreamTimeout]); // Added resetStreamTimeout dependency
+  }, [updateGeneratingMessageContent, updateThinkingMessageContent, resetStreamTimeout]);
 
   // --- Generation Functions ---
   // Helper to get context messages, ensuring full Message type for formatChatHistory
@@ -535,10 +630,12 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     // Only show assistant message in UI, not the system message
     setGeneratingStart(userMessage, assistantMessage);
     resetStreamTimeout(); // Start/reset timeout for main response
+    
     // Only append user message to storage if it's a real character and not a system message
     if (!isGenericAssistant && userMessage) await appendMessage(userMessage);
-    // Only save state if it's a real character
-    if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); return prev; });
+    
+    // REMOVED: Save immediately BEFORE streaming - this was causing the issue
+    // if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); return prev; });
 
     try {
       let reasoningResult: string | null = null;
@@ -578,26 +675,47 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       const response = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody), signal: abortController.signal });
       if (!response.ok) { const errorText = await response.text(); throw new Error(`Generation failed: ${response.status} ${errorText || "(No details)"}`); }
 
-      // let accumulatedContent = ''; // Removed as processStream handles accumulation
       await processStream(
         response, assistantMessage.id, false, // isThinking = false
         (finalContent, receivedChunks) => {
-          // Use accumulatedContent (tokens) for assistant
+          // Use accumulatedContent for assistant
           setGenerationComplete(assistantMessage.id, finalContent, 'generation_complete', receivedChunks);
-          // Only save/append if it's a real character
-          if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; });
+          
+          // MOVED: Save/append AFTER streaming is complete - fixing the issue
+          if (!isGenericAssistant) {
+            setState(prev => { 
+              // Get the updated message with finalContent from current state
+              const msg = prev.messages.find(m => m.id === assistantMessage.id); 
+              if (msg) {
+                // First save the complete chat with the fully streamed message
+                saveChat(prev.messages, prev.currentUser);
+                // Then append/update that specific message in storage
+                appendMessageDirect(msg); // Use direct (non-debounced) version
+              }
+              return prev;
+            });
+          }
         },
-        (error) => { handleGenerationError(error, assistantMessage.id); if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; }); }
+        (error) => { 
+          handleGenerationError(error, assistantMessage.id); 
+          // Only save if there's an error, but still AFTER streaming attempt
+          if (!isGenericAssistant) setState(prev => { 
+            saveChat(prev.messages, prev.currentUser); 
+            const msg = prev.messages.find(m => m.id === assistantMessage.id); 
+            if (msg) appendMessageDirect(msg);
+            return prev; 
+          }); 
+        }
       );
     } catch (err) {
       if (!state.error) handleGenerationError(err, assistantMessage.id);
       // Only save/append if it's a real character
-      if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessage(msg); return prev; });
+      if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessageDirect(msg); return prev; });
     } finally {
       currentGenerationRef.current = null;
       setState(prev => prev.generatingId === assistantMessage.id ? {...prev, isGenerating: false, generatingId: null} : prev);
     }
-  }, [effectiveCharacterData, isGenericAssistant, state.isGenerating, state.messages, state.reasoningSettings, state.currentUser, apiConfig, handleGenerationError, saveChat, appendMessage, prepareAPIConfig, processStream, generateReasoning, resetStreamTimeout]);
+  }, [effectiveCharacterData, isGenericAssistant, state.isGenerating, state.messages, state.reasoningSettings, state.currentUser, apiConfig, handleGenerationError, saveChat, appendMessage, appendMessageDirect, prepareAPIConfig, processStream, generateReasoning, resetStreamTimeout]);
 
   const regenerateMessage = useCallback(async (messageToRegenerate: Message) => {
     // Use effectiveCharacterData for checks

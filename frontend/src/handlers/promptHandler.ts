@@ -400,6 +400,18 @@ ${character.data.mes_example || ''}
               // Parse the JSON data
               const parsed = JSON.parse(data);
               
+              // Log first chunk for debugging (optional)
+              if (parsed.delta_type === 'role' && parsed.role === 'assistant') {
+                console.log('[OpenRouter] Received role marker for assistant');
+                continue; // Skip yielding for role-only chunks
+              }
+              
+              // Handle OpenRouter-specific token format from our improved adapter
+              if (parsed.token !== undefined) {
+                yield parsed.token;
+                continue;
+              }
+              
               // Handle different response formats
               // OpenAI and OpenRouter format: choices[0].delta.content
               if (parsed.choices && parsed.choices[0]?.delta?.content) {
@@ -413,7 +425,12 @@ ${character.data.mes_example || ''}
                 continue;
               }
               
-              // If we can't extract content in a standard way, return the raw data
+              // Handle special formats with empty content that should be skipped
+              if (parsed.delta_type === 'empty_delta' || parsed.delta_type === 'processing') {
+                continue;
+              }
+              
+              // If we can't extract content in a standard way, log the format
               console.log('Unrecognized response format:', parsed);
             } catch (error) {
               console.warn('Failed to parse SSE data:', error);

@@ -400,6 +400,12 @@ class ApiHandler:
             self.logger.log_step(f"Memory length: {len(memory) if memory else 0} chars")
             self.logger.log_step(f"Using provider: {provider}")
             
+            # OpenRouter-specific streaming handling
+            if provider == "OpenRouter":
+                self.logger.log_step("Using OpenRouter-specific streaming handling")
+                # Send special start message for OpenRouter to initiate streaming properly
+                yield f"data: {json.dumps({'content': '', 'streaming_start': True})}\n\n".encode('utf-8')
+            
             # Use our adapter system to handle the stream generation
             self.logger.log_step(f"Attempting to call adapter.stream_generate for {provider}...")
             adapter_generator = adapter.stream_generate(
@@ -415,13 +421,29 @@ class ApiHandler:
             # Explicitly iterate over the adapter's generator and yield chunks
             self.logger.log_step("Iterating over adapter generator in api_handler...")
             chunk_count = 0
+            has_yielded_content = False
+            
             for chunk in adapter_generator:
                 chunk_count += 1
-                if chunk_count % 50 == 0: # Log every 50 chunks
-                     self.logger.log_step(f"Yielding chunk {chunk_count} from adapter generator...")
-                yield chunk
+                
+                # For OpenRouter, handle empty chunks and role-only chunks specially
+                if provider == "OpenRouter" and b'{"content":""}' in chunk:
+                    # OpenRouter is sending a role-only chunk, ensure streaming continues
+                    self.logger.log_step("Processing OpenRouter empty content chunk")
+                    if not has_yielded_content:
+                        # This is to ensure the frontend knows we're actively streaming
+                        yield f"data: {json.dumps({'content': '', 'streaming_active': True})}\n\n".encode('utf-8')
+                        has_yielded_content = True
+                else:
+                    # Regular content chunk
+                    if chunk_count % 50 == 0:  # Log every 50 chunks
+                        self.logger.log_step(f"Yielding chunk {chunk_count} from adapter generator...")
+                    yield chunk
+                    has_yielded_content = True
+                    
             self.logger.log_step(f"Finished iterating adapter generator. Total chunks yielded: {chunk_count}")
             # No explicit return needed here as yielding handles the generator response
+            
         except ValueError as ve:
             error_msg = str(ve)
             self.logger.log_error(error_msg)

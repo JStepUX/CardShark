@@ -233,7 +233,7 @@ class SettingsEndpoints:
                 headers = adapter.prepare_headers(api_key)
                 self.logger.log_step(f"Headers prepared (keys only): {list(headers.keys())}")
                 
-                # Prepare test message with provider-specific format
+                # For test purposes, create a non-streaming request
                 test_data = adapter.prepare_request_data(
                     prompt="Hi",
                     memory="You are a helpful assistant.",
@@ -245,6 +245,8 @@ class SettingsEndpoints:
                     }
                 )
                 
+                # Ensure stream flag is set to False for testing purposes
+                test_data["stream"] = False
                 self.logger.log_step(f"Test data prepared: {test_data}")
                 
                 # Make the test request
@@ -258,39 +260,69 @@ class SettingsEndpoints:
                 
                 self.logger.log_step(f"Response status: {response.status_code}")
                 
+                # Try to parse as JSON
+                response_data = None
                 try:
                     response_data = response.json()
-                    self.logger.log_step(f"Response data: {response_data}")
-                except:
-                    self.logger.log_warning("Could not parse response as JSON")
-                    response_data = None
+                    self.logger.log_step(f"Response data: {json.dumps(response_data)[:500]}...")
+                except Exception as json_err:
+                    self.logger.log_warning(f"Could not parse response as JSON: {str(json_err)}")
+                    # Try to get plain text for debug
+                    self.logger.log_step(f"Raw response: {response.text[:100]}...")
                 
+                # Check for a successful connection
                 if response.status_code == 200:
                     self.logger.log_step("Connection test successful")
                     
                     # Get model info - safely handle None response_data
                     model_info = {
-                        "id": "unknown",
-                        "name": provider or "unknown"
+                        "id": model or "unknown",
+                        "name": model or provider or "unknown"
                     }
                     
+                    # If we successfully parsed JSON, extract model info
                     if response_data:
-                        model_info["id"] = response_data.get("model") or response_data.get("id") or model or "unknown"
-                        model_info["name"] = response_data.get("model_name") or response_data.get("name") or response_data.get("model") or provider or "unknown"
+                        if isinstance(response_data, dict):
+                            # Look in various locations for model info
+                            model_info["id"] = (
+                                response_data.get("model") or 
+                                response_data.get("id") or 
+                                model or 
+                                "unknown"
+                            )
+                            model_info["name"] = (
+                                response_data.get("model_name") or 
+                                response_data.get("name") or 
+                                response_data.get("model") or 
+                                model or 
+                                provider or 
+                                "unknown"
+                            )
                     
                     # Try to detect template from response content
                     detected_template = None
-                    if response_data and response_data.get("choices") and len(response_data.get("choices", [])) > 0:
-                        choice = response_data["choices"][0]
-                        content = choice.get("message", {}).get("content") or choice.get("text", "")
-                        
-                        # Simple detection - look for common template markers
-                        if content and "<|im_start|>" in content or "<|im_end|>" in content:
-                            detected_template = "chatml"
-                        elif content and "[/INST]" in content:
-                            detected_template = "mistral"
-                        elif content and "<|start_header_id|>" in content:
-                            detected_template = "llama3"
+                    if response_data and isinstance(response_data, dict):
+                        # Check for OpenAI/OpenRouter format
+                        if response_data.get("choices") and len(response_data.get("choices", [])) > 0:
+                            choice = response_data["choices"][0]
+                            content = ""
+                            
+                            # Try to extract content from various formats
+                            if "message" in choice and "content" in choice["message"]:
+                                content = choice["message"]["content"]
+                            elif "text" in choice:
+                                content = choice["text"]
+                            elif "delta" in choice and "content" in choice["delta"]:
+                                content = choice["delta"]["content"]
+                            
+                            # Simple detection - look for common template markers
+                            if content:
+                                if "<|im_start|>" in content or "<|im_end|>" in content:
+                                    detected_template = "chatml"
+                                elif "[/INST]" in content:
+                                    detected_template = "mistral"
+                                elif "<|start_header_id|>" in content:
+                                    detected_template = "llama3"
                     
                     self.logger.log_step(f"Detected template: {detected_template}")
                 
@@ -305,9 +337,16 @@ class SettingsEndpoints:
                         }
                     )
                 else:
-                    error_msg = "Connection failed"
-                    if response_data and 'error' in response_data:
-                        error_msg = f"{error_msg}: {response_data['error']}"
+                    error_msg = f"Connection failed with status {response.status_code}"
+                    
+                    # Try to extract an error message from the response
+                    if response_data and isinstance(response_data, dict) and 'error' in response_data:
+                        if isinstance(response_data['error'], dict) and 'message' in response_data['error']:
+                            error_msg = f"{error_msg}: {response_data['error']['message']}"
+                        else:
+                            error_msg = f"{error_msg}: {response_data['error']}"
+                    elif response.text:
+                        error_msg = f"{error_msg}: {response.text[:200]}"
                     
                     self.logger.log_warning(f"Connection test failed: {error_msg}")
                     return JSONResponse(

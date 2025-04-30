@@ -7,10 +7,11 @@ import {
   Trash2,
   StepForward,
   Sparkles,
+  Copy,
 } from 'lucide-react';
 import { Message } from '../types/messages';
 import RichTextEditor from './RichTextEditor';
-import { formatUserName } from '../utils/formatters'; // Import formatter
+import { formatUserName } from '../utils/formatters';
 
 interface ChatBubbleProps {
   message: Message;
@@ -32,8 +33,8 @@ interface ChatBubbleProps {
 const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   message,
   isGenerating,
-  isFirstMessage = false, // Default to false
-  isRegeneratingGreeting = false, // Default to false
+  isFirstMessage = false,
+  isRegeneratingGreeting = false,
   onContentChange,
   onDelete,
   onStop,
@@ -50,6 +51,8 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const [htmlContent, setHtmlContent] = useState<string>('');
   const highlightCache = useRef(new Map<string, string>());
   const [copied, setCopied] = useState(false);
+  const [streamingStarted, setStreamingStarted] = useState(false);
+  const hasReceivedContent = useRef(false);
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
@@ -74,14 +77,35 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
 
   // Function to process content with variable replacements and highlighting
   const processContent = useCallback((text: string): string => {
-    // Debug empty content issue
-    if (!text || text.trim() === '') {
-      console.warn(`[ChatBubble] Empty content detected for message ${message.id}, role: ${message.role}`);
-      return message.role === 'assistant' ? '...' : text; 
+    // Special handling for empty content during streaming
+    if (isGenerating && message.role === 'assistant') {
+      // Mark that streaming has started, even with empty content
+      if (!streamingStarted) {
+        setStreamingStarted(true);
+      }
+      
+      // Track if we've received non-empty content
+      if (text && text.trim() !== '') {
+        hasReceivedContent.current = true;
+      }
+      
+      // Return empty string for streaming instead of placeholder
+      if (!text || text.trim() === '') {
+        return '';
+      }
+    }
+    
+    // Handle completely empty content for non-streaming cases
+    if ((!text || text.trim() === '') && !isGenerating) {
+      console.warn(`[ChatBubble] Empty content detected for message ${message.id}, role: ${message.role}, status: ${message.status}`);
+      
+      // IMPORTANT: Never return "..." placeholder for empty content
+      // OpenRouter sometimes sends valid empty responses
+      return '';
     }
     
     // First trim leading newlines
-    const trimmedContent = trimLeadingNewlines(text);
+    const trimmedContent = trimLeadingNewlines(text || '');
 
     // Create a cache key based on content and variables
     const cacheKey = `${trimmedContent}_${currentUser || ''}_${characterName || ''}`;
@@ -104,231 +128,181 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     highlightCache.current.set(cacheKey, processedText);
 
     return processedText;
-  }, [currentUser, characterName, trimLeadingNewlines, message.id, message.role]);
+  }, [currentUser, characterName, trimLeadingNewlines, message.id, message.role, message.status, isGenerating, streamingStarted]);
 
-  // Enhanced streaming content processing with simple HTML tag removal
-  const getStreamingDisplay = useCallback((text: string): string => {
-    // Also trim leading newlines for streaming content
-    const trimmedContent = trimLeadingNewlines(text);
-
-    // Replace variables first
-    let processedText = trimmedContent;
-    if (currentUser) {
-      processedText = processedText.replace(/\{\{user\}\}/gi, currentUser);
-    }
-    if (characterName) {
-      processedText = processedText.replace(/\{\{char\}\}/gi, characterName);
-    }
-    
-    // Strip any HTML tags for cleaner streaming display
-    // Using a basic regex instead of DOMPurify for simplicity
-    return processedText.replace(/<[^>]*>/g, '');
-  }, [currentUser, characterName, trimLeadingNewlines]);
-
-  // Track whether this is the first time we're displaying the content
-  const [isFirstRender, setIsFirstRender] = useState(true);
-
-  // Update htmlContent when message content changes
+  // Process the message content with variables replaced
   useEffect(() => {
+    const processedContent = processContent(message.content);
+    setHtmlContent(processedContent);
     previousContent.current = message.content;
+  }, [message.content, processContent]);
 
-    // Apply variable substitution and trim leading newlines
-    if (!isGenerating || message.role !== 'assistant') {
-      setHtmlContent(processContent(message.content));
-      setIsFirstRender(true); // Reset for future streaming
-    } else if (isGenerating && message.role === 'assistant') {
-      // For streaming content, do basic variable replacement and remove HTML
-      setHtmlContent(getStreamingDisplay(message.content));
-      
-      // After small delay, mark as not first render to enable animations
-      if (isFirstRender) {
-        setTimeout(() => setIsFirstRender(false), 50);
+  // Handle copy message action
+  const handleCopy = () => {
+    navigator.clipboard.writeText(htmlContent);
+    setCopied(true);
+    setTimeout(() => {
+      if (isMounted.current) {
+        setCopied(false);
       }
-    }
-  }, [message.content, isGenerating, processContent, getStreamingDisplay, message.role, isFirstRender]);
+    }, 2000);
+  };
 
-  // Improved handle input with better debouncing
-  const handleContentChange = useCallback((newContent: string) => {
-    if (!isMounted.current) return;
+  // Determine if variations are available
+  const hasVariations = message.variations && message.variations.length > 1;
+  const variationIndex = message.currentVariation || 0;
+  const variationCount = message.variations ? message.variations.length : 0;
 
-    // Only update if content has actually changed
-    if (newContent !== message.content) {
-      console.debug(`Calling onContentChange with new content`);
-      onContentChange(newContent);
-    } else {
-      console.debug('Content unchanged, not saving');
-    }
-  }, [message.content, onContentChange]);
-
-  // Replace the deprecated document.queryCommandSupported and document.execCommand
-  const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(message.content);
-      // Show visual feedback that text was copied
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
-    }
-  }, [message.content]);
-
-  // Skip rendering system messages in chat bubbles
-  if (message.role === 'system') {
-    return null;
+  // Helper to get user name display
+  const formattedUserName = currentUser ? formatUserName(currentUser) : 'User';
+  
+  // Debug log for empty messages
+  if (!message.content && !isGenerating) {
+    console.warn(`[ChatBubble] Rendering bubble with empty content: ID=${message.id}, Role=${message.role}`);
   }
 
-  const bubbleClass = message.role === 'user'
-    ? 'bg-stone-900 text-white self-end'
-    : 'bg-stone-900 text-gray-300 self-start';
-
+  // Use original styling, different than what I introduced before
   return (
-    <div className={`w-full rounded-lg transition-colors ${bubbleClass}`}>
+    <div className="w-full rounded-lg transition-colors bg-stone-800 text-white">
+      {/* Message header - shows name and buttons */}
       <div className="px-4 pt-2 flex justify-between items-center">
-        <div className="text-sm text-gray-500">
-          {message.role === 'user' ? formatUserName(currentUser || '') : characterName || 'Character'}
-          {copied && <span className="ml-2 text-green-500 text-xs">Copied!</span>}
+        <div className="font-medium text-sm">
+          {message.role === 'assistant' ? characterName : formattedUserName}
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Copy button */}
-          <button
-            onClick={handleCopy}
-            className="p-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
-            title="Copy message"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-          </button>
-
-          {message.variations && message.variations.length > 0 && (
+        <div className="flex items-center gap-1">
+          {/* Show different buttons based on message role and state */}
+          {message.role === 'assistant' && (
             <>
+              {/* Copy button - use the copy functionality */}
               <button
-                onClick={onPrevVariation}
-                className="p-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
-                disabled={isGenerating}
-                title="Previous version"
+                onClick={handleCopy}
+                className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                title={copied ? "Copied!" : "Copy message"}
               >
-                <ArrowLeft size={16} />
+                <Copy size={16} />
+                {copied && <span className="sr-only">Copied!</span>}
               </button>
-              <span className="text-xs text-gray-500">
-                {(message.currentVariation ?? 0) + 1}/{message.variations.length}
-              </span>
-              <button
-                onClick={onNextVariation}
-                className="p-1 text-gray-400 hover:text-gray-200 disabled:opacity-50"
-                disabled={isGenerating}
-                title="Next version"
-              >
-                <ArrowRight size={16} />
-              </button>
+              
+              {/* Regeneration buttons */}
+              {isFirstMessage && onRegenerateGreeting && !isGenerating && (
+                <button
+                  onClick={onRegenerateGreeting}
+                  disabled={isRegeneratingGreeting}
+                  className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                  title="Regenerate greeting"
+                >
+                  <Sparkles size={16} />
+                </button>
+              )}
+              
+              {/* Try again button for non-greeting messages */}
+              {!isFirstMessage && onTryAgain && !isGenerating && (
+                <button
+                  onClick={onTryAgain}
+                  className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                  title="Regenerate response"
+                >
+                  <RotateCw size={16} />
+                </button>
+              )}
+              
+              {/* Continue button */}
+              {onContinue && !isGenerating && (
+                <button
+                  onClick={onContinue}
+                  className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                  title="Continue response"
+                >
+                  <StepForward size={16} />
+                </button>
+              )}
+              
+              {/* Variation controls */}
+              {hasVariations && !isGenerating && (
+                <div className="flex items-center">
+                  <button
+                    onClick={onPrevVariation}
+                    disabled={variationIndex <= 0}
+                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Previous variation"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  
+                  <span className="text-xs text-stone-500 mx-1">
+                    {variationIndex + 1}/{variationCount}
+                  </span>
+                  
+                  <button
+                    onClick={onNextVariation}
+                    disabled={variationIndex >= variationCount - 1}
+                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Next variation"
+                  >
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+              )}
+              
+              {/* Stop generation button */}
+              {isGenerating && onStop && (
+                <button
+                  onClick={onStop}
+                  className="p-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors"
+                  title="Stop generation"
+                >
+                  <Pause size={16} />
+                </button>
+              )}
             </>
           )}
 
-          {/* Continue button */}
-          {message.role === 'assistant' && onContinue && (
+          {/* Show delete button for all message types when not generating */}
+          {!isGenerating && (
             <button
-              onClick={onContinue}
-              className="p-1 text-gray-400 hover:text-blue-400 disabled:opacity-50"
-              disabled={isGenerating}
-              title="Continue response"
+              onClick={onDelete}
+              className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+              title="Delete message"
             >
-              <StepForward size={16} />
+              <Trash2 size={16} />
             </button>
           )}
-
-          {isGenerating && onStop ? (
-            <button
-              onClick={onStop}
-              className="p-1 text-gray-400 hover:text-red-400"
-              title="Stop generating"
-            >
-              <Pause size={16} />
-            </button>
-          ) : (
-            // Show special "Regenerate Greeting" button for the first assistant message
-            // Show standard regeneration button for other assistant messages
-            message.role === 'assistant' && (
-              <>
-                {isFirstMessage && onRegenerateGreeting ? (
-                  <button
-                    onClick={onRegenerateGreeting}
-                    className="p-1 text-gray-400 hover:text-purple-400 disabled:opacity-50"
-                    disabled={isGenerating || isRegeneratingGreeting}
-                    title="Regenerate greeting and update character"
-                  >
-                    {isRegeneratingGreeting ? (
-                      <svg className="animate-spin h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    ) : (
-                      <Sparkles size={16} />
-                    )}
-                  </button>
-                ) : (
-                  onTryAgain && (
-                    <button
-                      onClick={onTryAgain}
-                      className="p-1 text-gray-400 hover:text-blue-400 disabled:opacity-50"
-                      disabled={isGenerating}
-                      title="Regenerate response"
-                    >
-                      <RotateCw size={16} />
-                    </button>
-                  )
-                )}
-              </>
-            )
-          )}
-
-          <button
-            onClick={onDelete}
-            className="p-1 text-gray-400 hover:text-red-400 disabled:opacity-50"
-            disabled={isGenerating}
-            title="Delete message"
-          >
-            <Trash2 size={16} />
-          </button>
         </div>
       </div>
 
-      <div className="p-4">
-        {message.aborted ? (
-          <div className="text-red-400">Generation failed.</div>
-        ) : isGenerating && message.role === 'assistant' ? (
-          // Enhanced streaming content display
+      {/* Message content */}
+      <div className="p-4 pt-2">
+        {isGenerating || isRegeneratingGreeting ? (
+          /* Show non-editable content with cursor while generating */
           <div className="streaming-content whitespace-pre-wrap break-words">
-            {htmlContent}
-            <span className={`cursor ${isFirstRender ? '' : 'animate-blink'}`}></span>
-          </div>
-        ) : isRegeneratingGreeting && isFirstMessage ? (
-          // New special loading state for greeting regeneration
-          <div className="relative">
-            {/* Ghosted content with purple loading overlay */}
-            <div className="whitespace-pre-wrap break-words opacity-30">
-              {htmlContent}
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="p-4 flex flex-col items-center">
-                <svg className="animate-spin h-8 w-8 text-purple-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span className="text-sm text-purple-400 font-medium">Regenerating greeting...</span>
-              </div>
-            </div>
+            <div 
+              className="prose prose-invert max-w-none"
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            />
+            {/* Animating cursor for generating state */}
+            <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
           </div>
         ) : (
-          // For viewing/editing - use TipTap with proper newline handling
+          /* Rich text editor for editable content */
           <RichTextEditor
-            content={htmlContent} // Use processed content with substitutions
-            onChange={handleContentChange}
-            readOnly={isGenerating || isRegeneratingGreeting}
+            content={htmlContent}
+            onChange={(html) => {
+              if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+              }
+              
+              // Debounce saving changes
+              saveTimeoutRef.current = setTimeout(() => {
+                if (html !== htmlContent) {
+                  onContentChange(html);
+                }
+              }, 1000);
+              
+              setHtmlContent(html);
+            }}
             className="chat-bubble-editor"
-            autofocus={false}
-            preserveWhitespace={true} // Enable whitespace preservation
+            preserveWhitespace={true}
           />
         )}
       </div>
