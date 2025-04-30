@@ -100,7 +100,7 @@ world_card_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
 
 # Initialize endpoint classes
 chat_endpoints = ChatEndpoints(logger, chat_handler, api_handler)
-character_endpoints = CharacterEndpoints(logger, png_handler, validator, settings_manager, backyard_handler)
+character_endpoints = CharacterEndpoints(logger, png_handler, validator, settings_manager, backyard_handler, api_handler, template_handler)
 user_endpoints = UserEndpoints(logger, settings_manager)
 settings_endpoints = SettingsEndpoints(logger, settings_manager)
 # Add template handler to settings endpoints for templates management

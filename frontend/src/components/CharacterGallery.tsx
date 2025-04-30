@@ -378,7 +378,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               <div className="absolute top-0 left-0 w-full h-full rounded-full border-b-4 border-transparent border-b-indigo-600 animate-pulse"></div>
             </div>
             <p className="text-lg font-semibold text-blue-400 animate-pulse">Loading characters...</p>
-            <p className="text-sm text-slate-400 mt-2">Fetching your character gallery</p>
+            <p className="text-sm text-slate-400 mt-2">If character directory is set, but characters aren't loading: Try restarting CardShark</p>
           </div>
         )}
         {!isLoading && error && (

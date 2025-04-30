@@ -21,15 +21,16 @@ backend_datas = [
     ('backend/utils/*', 'backend/utils'),
 ]
 
-# Add KoboldCPP directory (even if empty) to ensure it's created
+# Create empty KoboldCPP directory structure but don't include existing files
 koboldcpp_dir = Path('KoboldCPP')
 koboldcpp_dir.mkdir(exist_ok=True)
-koboldcpp_datas = [
-    ('KoboldCPP', 'KoboldCPP'),
-]
+# No longer include the entire KoboldCPP directory which may contain large files
+# koboldcpp_datas = [
+#     ('KoboldCPP', 'KoboldCPP'),
+# ]
 
-# Combine all data files
-all_datas = frontend_datas + backend_datas + koboldcpp_datas
+# Combine all data files - no longer including KoboldCPP files
+all_datas = frontend_datas + backend_datas  # removed koboldcpp_datas
 
 # Verified backend modules that exist in your project
 hidden_imports = [

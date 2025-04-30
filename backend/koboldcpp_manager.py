@@ -573,7 +573,6 @@ class KoboldCPPManager:
             # Get generation settings if available
             if kobold_config and kobold_config.get("generation_settings"):
                 gen_settings = kobold_config["generation_settings"]
-                
                 # Default configuration with values from API settings
                 default_config = {
                     'contextsize': gen_settings.get("max_context_length", 4096),
@@ -598,11 +597,15 @@ class KoboldCPPManager:
                 'defaultgenamt': 128
             }
         
-        # Merge with provided config
+        # Merge with provided config - if config is provided, it overrides the API settings
         params = default_config.copy()
         if config:
-            params.update(config)
-            
+            # Only update with non-None values from config
+            for key, value in config.items():
+                if value is not None:
+                    params[key] = value
+            logger.info(f"Using merged configuration settings: {params}")
+        
         # Build command-line arguments
         additional_params = []
         
@@ -610,7 +613,7 @@ class KoboldCPPManager:
         for key, value in params.items():
             if isinstance(value, bool) and value:
                 additional_params.append(f"--{key}")
-            elif not isinstance(value, bool):
+            elif not isinstance(value, bool) and value is not None:
                 additional_params.append(f"--{key}")
                 additional_params.append(str(value))
         

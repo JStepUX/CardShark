@@ -249,15 +249,16 @@ backend_datas = [
     ('backend/utils/*', 'backend/utils'),
 ]
 
-# Add KoboldCPP directory (even if empty) to ensure it's created
+# Create empty KoboldCPP directory structure but don't include existing files
 koboldcpp_dir = Path('KoboldCPP')
 koboldcpp_dir.mkdir(exist_ok=True)
-koboldcpp_datas = [
-    ('KoboldCPP', 'KoboldCPP'),
-]
+# No longer include the entire KoboldCPP directory which may contain large files
+# koboldcpp_datas = [
+#     ('KoboldCPP', 'KoboldCPP'),
+# ]
 
-# Combine all data files
-all_datas = frontend_datas + backend_datas + koboldcpp_datas
+# Combine all data files - no longer including KoboldCPP files
+all_datas = frontend_datas + backend_datas  # removed koboldcpp_datas
 
 # Verified backend modules that exist in your project
 hidden_imports = [
@@ -400,7 +401,8 @@ def build_executable():
             log(f"Error: frontend dist not found at {frontend_dist}", "ERROR")
             return False
             
-        # Create KoboldCPP directory if it doesn't exist
+        # Create empty KoboldCPP directory if it doesn't exist
+        # but don't include its contents in the build
         koboldcpp_dir = BASE_DIR / 'KoboldCPP'
         koboldcpp_dir.mkdir(exist_ok=True)
         log(f"Ensured KoboldCPP directory exists at {koboldcpp_dir}", "DEBUG")
@@ -429,10 +431,10 @@ def build_executable():
         if internal_dir.exists():
             log("Warning: _internal directory was created unexpectedly", "WARNING")
         
-        # Create KoboldCPP directory in the dist folder
+        # Create empty KoboldCPP directory in the dist folder
         dist_koboldcpp_dir = BASE_DIR / 'dist' / 'KoboldCPP'
         dist_koboldcpp_dir.mkdir(exist_ok=True)
-        log(f"Created KoboldCPP directory in dist folder: {dist_koboldcpp_dir}", "DEBUG")
+        log(f"Created empty KoboldCPP directory in dist folder: {dist_koboldcpp_dir}", "DEBUG")
             
         log(f"Executable successfully created at {exe_path}")
         return True

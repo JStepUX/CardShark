@@ -28,13 +28,15 @@ png_handler = PngMetadataHandler(logger)
 class CharacterEndpoints:
     """Encapsulates character-related endpoints."""
     
-    def __init__(self, logger, png_handler, validator, settings_manager, backyard_handler=None):
+    def __init__(self, logger=None, png_handler=None, validator=None, settings_manager=None, backyard_handler=None, api_handler=None, template_handler=None):
         """Initialize with dependencies."""
         self.logger = logger
         self.png_handler = png_handler
         self.validator = validator
         self.settings_manager = settings_manager
         self.backyard_handler = backyard_handler
+        self.api_handler = api_handler
+        self.template_handler = template_handler
         
     def register_routes(self, router):
         """Register all character endpoints with the provided router."""
@@ -364,6 +366,126 @@ class CharacterEndpoints:
                 self.logger.log_error(f"Unexpected error: {str(e)}")
                 self.logger.log_error(traceback.format_exc())
                 raise HTTPException(status_code=500, detail=str(e))
+
+        @router.post("/api/generate-greeting")
+        async def generate_greeting(request: Request):
+            """Generate a greeting for a character using the existing generation system."""
+            try:
+                # Get request data
+                data = await request.json()
+                
+                character_data = data.get('character_data')
+                api_config = data.get('api_config')
+                
+                if not character_data or not api_config:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "success": False,
+                            "message": "Missing character data or API configuration"
+                        }
+                    )
+                
+                # Extract character info
+                char_data = character_data.get('data', {})
+                char_name = char_data.get('name', 'Character')
+                
+                self.logger.log_step(f"Generating greeting for character: {char_name}")
+                
+                # Get template
+                template_id = api_config.get('templateId', 'mistral')
+                
+                # Make sure template_handler is available
+                if not self.template_handler:
+                    from backend.template_handler import TemplateHandler
+                    self.template_handler = TemplateHandler(self.logger)
+                
+                all_templates = self.template_handler.get_all_templates()
+                template = next((t for t in all_templates if t.get('id') == template_id), None)
+                
+                if not template:
+                    self.logger.log_warning(f"Template '{template_id}' not found, using default")
+                    template = {
+                        'memoryFormat': "{{system}}\nPersona: {{description}}\nPersonality: {{personality}}\n[Scenario: {{scenario}}]\n{{examples}}\n***",
+                        'userFormat': "[INST] {{content}} [/INST]",
+                        'assistantFormat': "{{char}}: {{content}}",
+                        'stopSequences': ["User:", "Human:", f"{char_name}:", "[INST]", "[/INST]"]
+                    }
+                
+                # Helper to replace variables in template strings
+                def replace_vars(text, variables):
+                    if not text:
+                        return ""
+                    result = text
+                    for key, value in variables.items():
+                        result = result.replace(f"{{{{{key}}}}}", str(value) or '')
+                    return result
+
+                # Build Memory using Template Format
+                memory_vars = {
+                    'system': char_data.get('system_prompt', ''),
+                    'description': char_data.get('description', ''),
+                    'personality': char_data.get('personality', ''),
+                    'scenario': char_data.get('scenario', ''),
+                    'examples': char_data.get('mes_example', '')
+                }
+                memory = replace_vars(template.get('memoryFormat', ''), memory_vars).strip()
+                self.logger.log_step(f"Built memory context (length: {len(memory)})")
+
+                # Build Prompt for greeting generation
+                greeting_instruction = f"""You are tasked with crafting a new, engaging first message for {char_name}. Your new message should be natural, distinctly in-character, and should not replicate the scenario of the current first message, while still matching its style, formatting, and relative length as a quality benchmark. Use the character's description, personality, and examples provided in the memory context. Craft a new introductory message that starts the conversation in a fresh and engaging way."""
+
+                # Format the instruction like a user message in the template
+                prompt_instruction_formatted = replace_vars(template.get('userFormat', '[INST] {{content}} [/INST]'), {'content': greeting_instruction})
+                
+                # Format the start of the assistant response
+                assistant_start_formatted = replace_vars(template.get('assistantFormat', '{{char}}: {{content}}'), {'char': char_name, 'content': ''})
+
+                # Combine memory, formatted instruction, and assistant start
+                prompt = f"{memory}\n{prompt_instruction_formatted}\n{assistant_start_formatted}".strip()
+                self.logger.log_step(f"Built prompt (length: {len(prompt)})")
+
+                # Get Stop Sequences from Template
+                stop_sequence = [seq.replace('{{char}}', char_name) for seq in template.get('stopSequences', [])]
+                if not stop_sequence: # Add defaults if template is missing them
+                    stop_sequence = ["User:", "Human:", f"{char_name}:", "[INST]", "[/INST]", "</s>"]
+                # Ensure common EOS tokens are present
+                if "</s>" not in stop_sequence: 
+                    stop_sequence.append("</s>")
+                
+                # Make sure we have an API handler
+                if not self.api_handler:
+                    from backend.api_handler import ApiHandler
+                    self.api_handler = ApiHandler(self.logger)
+                
+                # Make the API request using api_handler
+                result = await self.api_handler.generate_with_config(api_config, {
+                    'prompt': prompt,
+                    'memory': memory,
+                    'stop_sequence': stop_sequence,
+                    'character_data': character_data
+                })
+                
+                if 'error' in result:
+                    raise Exception(result['error'])
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": True,
+                        "greeting": result['content']
+                    }
+                )
+                
+            except Exception as e:
+                self.logger.log_error(f"Error generating greeting: {str(e)}")
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "success": False,
+                        "message": str(e)
+                    }
+                )
 
 # Add direct routes here for router pattern usage
 # Example:
