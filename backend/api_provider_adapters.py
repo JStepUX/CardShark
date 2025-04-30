@@ -520,12 +520,28 @@ class OpenRouterAdapter(ApiProviderAdapter):
         # Create the OpenRouter request format (similar to OpenAI)
         messages = []
         
-        # Add system message if memory is provided
-        if memory and memory.strip():
-            messages.append({"role": "system", "content": memory})
-        
-        # Add the prompt as a user message
-        messages.append({"role": "user", "content": prompt})
+        # Special handling for greeting generation
+        is_greeting = False
+        if prompt and (prompt.startswith("You are tasked with crafting a new, engaging first message") or 
+                     "craft a new introductory message" in prompt.lower()):
+            is_greeting = True
+            self.logger.log_step("Detected greeting generation request")
+            
+            # For greeting generation, we need to format the prompt differently for OpenRouter
+            if memory and memory.strip():
+                # First add memory as system message
+                messages.append({"role": "system", "content": memory})
+            
+            # Add prompt as user message
+            messages.append({"role": "user", "content": prompt})
+        else:
+            # Standard message handling
+            # Add system message if memory is provided
+            if memory and memory.strip():
+                messages.append({"role": "system", "content": memory})
+            
+            # Add the prompt as a user message
+            messages.append({"role": "user", "content": prompt})
         
         data = {
             "model": model,
