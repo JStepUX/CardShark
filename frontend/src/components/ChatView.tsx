@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Send, User, Plus, Eye, Wallpaper, MessageSquare } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
+import { useAPIConfig } from '../contexts/APIConfigContext'; // Add this import for API config
 import ChatBubble from './ChatBubble';
 import ThoughtBubble from './ThoughtBubble';
 import UserSelect from './UserSelect';
@@ -227,12 +228,14 @@ const InputArea: React.FC<{
 
 // Main ChatView component
 const ChatView: React.FC = () => {
-  const { characterData } = useCharacter();
+  const { characterData, setCharacterData } = useCharacter(); // Get setCharacterData from context
+  const { apiConfig } = useAPIConfig(); // Get API config for generation
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
   const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
+  const [isRegeneratingGreeting, setIsRegeneratingGreeting] = useState(false); // Add state for greeting regeneration
   
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
@@ -484,6 +487,85 @@ const ChatView: React.FC = () => {
       : stopContinuation;
   };
 
+  // Function to find the first assistant message index in the chat
+  const getFirstAssistantMessageIndex = useCallback(() => {
+    return messages.findIndex(msg => msg.role === 'assistant');
+  }, [messages]);
+
+  // Function to check if a message is the first assistant message
+  const isFirstAssistantMessage = useCallback((messageId: string): boolean => {
+    const firstIndex = getFirstAssistantMessageIndex();
+    if (firstIndex === -1) return false;
+    return messages[firstIndex].id === messageId;
+  }, [messages, getFirstAssistantMessageIndex]);
+
+  // Function to regenerate greeting and update character data
+  const handleRegenerateGreeting = useCallback(async () => {
+    // Don't allow regeneration if already generating or no character data
+    if (isGenerating || isRegeneratingGreeting || !characterData || !apiConfig) {
+      return;
+    }
+
+    // Set generating state
+    setIsRegeneratingGreeting(true);
+    
+    try {
+      // Clear previous errors
+      if (clearError) clearError();
+      
+      // Generate new greeting using the streaming API
+      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig);
+      
+      if (result.success && result.greeting) {
+        // Find the first assistant message
+        const firstIndex = getFirstAssistantMessageIndex();
+        
+        if (firstIndex !== -1) {
+          // Create a new message with the generated greeting
+          const updatedMessage = {
+            ...messages[firstIndex],
+            content: result.greeting,
+            // Reset any variations
+            variations: [],
+            currentVariation: 0,
+          };
+          
+          // Update the message in the chat
+          updateMessage(updatedMessage.id, updatedMessage.content);
+          
+          // Also update the character's first_mes field
+          setCharacterData(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              data: {
+                ...prev.data,
+                first_mes: result.greeting || prev.data.first_mes || '',
+              }
+            };
+          });
+          
+          // Show a success toast or notification (optional)
+          console.log("Greeting regenerated and updated in character data");
+        }
+      } else {
+        throw new Error(result.message || 'Failed to generate greeting');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error regenerating greeting:', errorMessage);
+      // Set error state if available
+      if (typeof clearError === 'function') {
+        // This assumes there's a setError function in the context
+        window.dispatchEvent(new CustomEvent('cardshark:set-error', { 
+          detail: { message: `Failed to regenerate greeting: ${errorMessage}` }
+        }));
+      }
+    } finally {
+      setIsRegeneratingGreeting(false);
+    }
+  }, [characterData, apiConfig, isGenerating, isRegeneratingGreeting, messages, updateMessage, setCharacterData, getFirstAssistantMessageIndex, clearError]);
+  
   const handleSendMessage = (content: string) => {
     // First strip any HTML that might already be in the content
     const plainContent = content.replace(/<[^>]*>/g, '');
@@ -701,7 +783,9 @@ const ChatView: React.FC = () => {
               {message.role !== 'thinking' && (
                 <ChatBubble
                   message={message}
-                  isGenerating={isGenerating && message.id === generatingId}
+                  isGenerating={(isGenerating && message.id === generatingId)}
+                  isFirstMessage={isFirstAssistantMessage(message.id)}
+                  isRegeneratingGreeting={isRegeneratingGreeting && isFirstAssistantMessage(message.id)}
                   onContentChange={(content) => updateMessage(message.id, content)}
                   onDelete={() => deleteMessage(message.id)}
                   onStop={getStopHandler(message)}
@@ -717,6 +801,11 @@ const ChatView: React.FC = () => {
                   }
                   onNextVariation={() => cycleVariation(message.id, 'next')}
                   onPrevVariation={() => cycleVariation(message.id, 'prev')}
+                  onRegenerateGreeting={
+                    message.role === 'assistant' && isFirstAssistantMessage(message.id)
+                      ? handleRegenerateGreeting
+                      : undefined
+                  }
                   currentUser={currentUser?.name}
                   characterName={characterData?.data?.name}
                 />
@@ -726,7 +815,7 @@ const ChatView: React.FC = () => {
           <div ref={messagesEndRef} className="h-px" />
         </div>
       </div>
-
+      
       {/* Input Area */}
       <div
         className="relative z-10"
