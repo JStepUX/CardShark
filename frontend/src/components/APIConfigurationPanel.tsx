@@ -1,7 +1,7 @@
 // components/APIConfigurationPanel.tsx
 // Component for displaying and updating API configuration settings
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronUp, ChevronDown, Sliders, Save, AlertCircle } from 'lucide-react';
+import { ChevronUp, ChevronDown, Sliders, Save, AlertCircle, Loader2 } from 'lucide-react';
 import { APIConfig } from '../types/api';
 
 // Model selection related types
@@ -11,6 +11,18 @@ interface Model {
   size_gb: number;
   extension: string;
   last_modified: string;
+}
+
+// OpenRouter model interface
+interface OpenRouterModel {
+  id: string;
+  name: string;
+  description?: string;
+  context_length?: number;
+  pricing?: {
+    prompt?: number;
+    completion?: number;
+  };
 }
 
 interface APIConfigurationPanelProps {
@@ -246,6 +258,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
           modelsDirectory={modelsDirectory}
           selectedModel={selectedModel}
           onChange={handleModelChange}
+          apiKey={config.apiKey || ''}
         />
       </div>
 
@@ -477,13 +490,165 @@ interface ModelSelectorProps {
   modelsDirectory?: string;
   selectedModel?: string;
   onChange: (model: string) => void;
+  apiKey?: string;
 }
+
+// OpenRouter model selector props
+interface OpenRouterModelSelectorProps {
+  apiUrl: string;
+  apiKey: string | null;
+  selectedModel: string;
+  onChange: (model: string) => void;
+}
+
+// OpenRouter model selector component
+const OpenRouterModelSelector: React.FC<OpenRouterModelSelectorProps> = ({
+  apiUrl,
+  apiKey,
+  selectedModel,
+  onChange
+}) => {
+  const [models, setModels] = useState<OpenRouterModel[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Fetch available models from OpenRouter when API URL or key changes
+  useEffect(() => {
+    if (apiUrl && apiKey) {
+      fetchOpenRouterModels();
+    }
+  }, [apiUrl, apiKey]);
+
+  const fetchOpenRouterModels = async () => {
+    if (!apiUrl || !apiKey) {
+      setError("API URL and key are required to fetch models");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await fetch('/api/openrouter/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: apiUrl, apiKey })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || response.statusText);
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || "Failed to fetch models");
+      }
+
+      setModels(data.models || []);
+    } catch (err) {
+      setError(`Error fetching OpenRouter models: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Filter models based on search term
+  const filteredModels = models.filter(model =>
+    (model.name || model.id).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Search input */}
+      {models.length > 0 && (
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search models..."
+          className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 mb-2"
+        />
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center p-4">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+          <span className="ml-2 text-sm text-gray-400">Loading models...</span>
+        </div>
+      ) : error ? (
+        <div className="text-sm text-red-500 bg-red-900/20 p-2 rounded flex items-center gap-2">
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      ) : models.length === 0 && !isLoading ? (
+        <div className="text-yellow-500 text-sm bg-yellow-900/20 p-2 rounded flex items-center gap-2">
+          <AlertCircle size={16} />
+          <span>No models found. Please check your API key and URL.</span>
+        </div>
+      ) : (
+        <div className="max-h-60 overflow-y-auto border border-stone-700 rounded-lg bg-stone-900">
+          <div className="divide-y divide-stone-700">
+            {filteredModels.map((model) => (
+              <div 
+                key={model.id}
+                className={`p-2 flex flex-col cursor-pointer hover:bg-stone-800 transition-colors ${
+                  selectedModel === model.id ? 'bg-blue-900/30 border-l-2 border-blue-500' : ''
+                }`}
+                onClick={() => onChange(model.id)}
+              >
+                <div className="flex justify-between items-center">
+                  <span className="font-medium text-sm">{model.name || model.id}</span>
+                  {model.context_length && (
+                    <span className="text-xs text-gray-400">{model.context_length.toLocaleString()} tokens</span>
+                  )}
+                </div>
+                {model.description && (
+                  <p className="text-xs text-gray-400 mt-1 line-clamp-2">{model.description}</p>
+                )}
+                {model.pricing && (
+                  <div className="text-xs text-gray-400 mt-1">
+                    {model.pricing.prompt && model.pricing.completion ? (
+                      <span>
+                        ${model.pricing.prompt}/1M prompt, ${model.pricing.completion}/1M completion
+                      </span>
+                    ) : (
+                      <span>Pricing info available</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Manual input fallback */}
+      {!isLoading && (
+        <div className="pt-2">
+          <label className="block text-xs text-gray-400 mb-1">
+            Or enter model ID manually:
+          </label>
+          <input
+            type="text"
+            value={selectedModel}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="e.g., anthropic/claude-3-opus-20240229"
+            className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({ 
   apiUrl, 
   modelsDirectory,
   selectedModel,
-  onChange 
+  onChange,
+  apiKey
 }) => {
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -494,12 +659,16 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   
-  // Determine if this is likely a local KoboldCPP URL
+  // Determine provider from URL
   const isLocalKobold = apiUrl && (
     apiUrl.includes('localhost') || 
     apiUrl.includes('127.0.0.1') ||
     apiUrl.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/) // IP address pattern
   );
+  
+  // Check if it's OpenRouter
+  const isOpenRouter = apiUrl && 
+    (apiUrl.includes('openrouter.ai') || apiUrl.toLowerCase().includes('openrouter'));
 
   // Check if KoboldCPP is running
   const checkKoboldStatus = useCallback(async () => {
@@ -730,6 +899,13 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
             </div>
           )}
         </>
+      ) : isOpenRouter ? (
+        <OpenRouterModelSelector 
+          apiUrl={apiUrl} 
+          apiKey={apiKey || null} 
+          selectedModel={selectedModel || ''}
+          onChange={onChange}
+        />
       ) : (
         <input
           type="text"

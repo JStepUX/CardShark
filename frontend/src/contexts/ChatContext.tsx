@@ -737,6 +737,9 @@ export const ChatProvider: React.FC<{
 
       bufferTimer = setInterval(() => {
         if (buffer.length > 0) {
+          // Debug buffer contents to track streaming
+          console.log(`Processing buffer of length ${buffer.length}, first ${Math.min(20, buffer.length)} chars: "${buffer.substring(0, 20)}..."`);
+          
           let processedBuffer = buffer;
           if (isFirstChunk && content === '') {
             processedBuffer = processedBuffer.replace(/^\s+/, '');
@@ -744,9 +747,15 @@ export const ChatProvider: React.FC<{
           }
           const newContent = content + processedBuffer;
           buffer = '';
+          
+          // Update message with new content - Fix TypeScript error by ensuring all returned messages are of type Message
           setMessages((prev: Message[]) => {
             const updatedMessages = prev.map(msg =>
-              msg.id === assistantMessage.id ? { ...msg, content: newContent } : msg
+              msg.id === assistantMessage.id ? { 
+                ...msg, 
+                content: newContent,
+                status: 'streaming' as const // Use const assertion for literal type
+              } : msg
             );
             return updatedMessages;
           });
@@ -756,7 +765,13 @@ export const ChatProvider: React.FC<{
       
       // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        buffer += chunk;
+        // Debug chunks received
+        if (chunk) {
+          console.log(`Response chunk received: "${chunk.substring(0, 20)}...", length: ${chunk.length}`);
+        } else {
+          console.warn("Empty chunk received from stream");
+        }
+        buffer += chunk || '';
       }
       
       // Final update
@@ -926,7 +941,8 @@ export const ChatProvider: React.FC<{
                 if (targetIndex >= 0 && targetIndex < updatedMessages.length) {
                    updatedMessages[targetIndex] = {
                      ...updatedMessages[targetIndex],
-                     content
+                     content,
+                     status: 'streaming' as const // Add status with type assertion
                    };
                 }
                 return updatedMessages;
@@ -935,7 +951,9 @@ export const ChatProvider: React.FC<{
             }
           }, 50);
         }
-        buffer += chunk;
+        // Debug chunks in regeneration too
+        console.log(`Regeneration chunk received: "${chunk?.substring(0, 20)}...", length: ${chunk.length}`);
+        buffer += chunk || '';
       }
 
       // Clean up buffer timer
@@ -944,40 +962,71 @@ export const ChatProvider: React.FC<{
         bufferTimer = null;
       }
 
-      // Final update.  Define finalMessages here before using it
+      // Add any remaining buffered content
       if (buffer.length > 0) {
         newContent += buffer;
       }
-
-      const finalMessages = messages.map(msg => {
-        if (msg.id === message.id) {
-          const variations = [...(msg.variations || [])];
-          if (!variations.includes(newContent)) {
-            variations.push(newContent);
-          }
-          return {
-            ...msg,
-            content: newContent,
-            variations,
-            currentVariation: variations.length - 1
-          };
+      
+      // Now that streaming is complete, handle variations correctly - only once at the end
+      
+      // Keep a local copy of the current message state to compare
+      const originalMessage = messages.find(msg => msg.id === message.id);
+      
+      // Check if we actually have new content to add as a variation
+      if (originalMessage && newContent !== originalMessage.content) {
+        console.log("Creating final message with continuation content");
+        
+        // Get existing variations, or initialize if none
+        const variations = [...(originalMessage.variations || [originalMessage.content])];
+        
+        // Only add as a new variation if it's different
+        if (!variations.includes(newContent)) {
+          variations.push(newContent);
         }
-        return msg;
-      });
-
-
-      setLastContextWindow((prev: any) => ({
-        ...prev,
-        type: 'regeneration_complete',
-        finalResponse: newContent,
-        completionTime: new Date().toISOString(),
-        variationsCount: message.variations?.length || 0  // Use message.variations
-      }));
-
-
-      // Save messages using the helper function
-      updateAndSaveMessages(finalMessages);
-
+        
+        // Create the final message with the new content and updated variations
+        const finalMessage = {
+          ...originalMessage,
+          content: newContent,
+          variations,
+          currentVariation: variations.length - 1,
+          timestamp: Date.now() // Update timestamp
+        };
+        
+        // Update messages state once with the final result
+        setMessages(prevMessages => 
+          prevMessages.map(msg => msg.id === message.id ? finalMessage : msg)
+        );
+        
+        // Update context window info
+        setLastContextWindow({
+          type: 'continuation_complete',
+          timestamp: new Date().toISOString(),
+          characterName: characterData.data?.name || 'Unknown',
+          messageId: message.id,
+          finalResponse: newContent,
+          completionTime: new Date().toISOString(),
+          variationsCount: variations.length
+        });
+        
+        // Save ONCE at the end instead of for each chunk
+        try {
+          // Make a single append call
+          await appendMessage(finalMessage);
+          
+          // Get the current state of messages after our state update
+          const currentMessages = messages.map(msg => 
+            msg.id === message.id ? finalMessage : msg
+          );
+          
+          // Make a single save call
+          await saveChat(currentMessages);
+          
+          console.log('Successfully saved continued message');
+        } catch (saveError) {
+          console.error('Error saving continued message:', saveError);
+        }
+      }
     } catch (err) {
       console.error("Regeneration error:", err);
       setError(err instanceof Error ? err.message : "Generation failed");
@@ -1075,7 +1124,7 @@ export const ChatProvider: React.FC<{
       }
   
       // Stream response using the async generator
-      let newContent = message.content; // Start with existing content
+      let currentContent = message.content; // Start with existing content
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
       
@@ -1084,23 +1133,28 @@ export const ChatProvider: React.FC<{
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
-              const content = newContent + buffer;
+              const updatedContent = currentContent + buffer;
               buffer = '';
               setMessages((prev: Message[]) => {
                 const updatedMessages = [...prev];
-                if (targetIndex >= 0 && targetIndex < updatedMessages.length) {
-                  updatedMessages[targetIndex] = {
-                    ...updatedMessages[targetIndex],
-                    content
+                const msgIndex = prev.findIndex(msg => msg.id === message.id);
+                if (msgIndex >= 0 && msgIndex < updatedMessages.length) {
+                  updatedMessages[msgIndex] = {
+                    ...updatedMessages[msgIndex],
+                    content: updatedContent,
+                    status: 'streaming' as const
                   };
                 }
                 return updatedMessages;
               });
-              newContent = content;
+              currentContent = updatedContent;
             }
           }, 50);
         }
-        buffer += chunk;
+        
+        // Debug chunks in continuation too
+        console.log(`Continuation chunk received: "${chunk?.substring(0, 20)}...", length: ${chunk.length}`);
+        buffer += chunk || '';
       }
   
       // Clean up buffer timer
@@ -1111,7 +1165,7 @@ export const ChatProvider: React.FC<{
   
       // Add any remaining buffered content
       if (buffer.length > 0) {
-        newContent += buffer;
+        currentContent += buffer;
       }
       
       // Now that streaming is complete, handle variations correctly - only once at the end
@@ -1120,21 +1174,21 @@ export const ChatProvider: React.FC<{
       const originalMessage = messages.find(msg => msg.id === message.id);
       
       // Check if we actually have new content to add as a variation
-      if (originalMessage && newContent !== originalMessage.content) {
+      if (originalMessage && currentContent !== originalMessage.content) {
         console.log("Creating final message with continuation content");
         
         // Get existing variations, or initialize if none
         const variations = [...(originalMessage.variations || [originalMessage.content])];
         
         // Only add as a new variation if it's different
-        if (!variations.includes(newContent)) {
-          variations.push(newContent);
+        if (!variations.includes(currentContent)) {
+          variations.push(currentContent);
         }
         
         // Create the final message with the new content and updated variations
         const finalMessage = {
           ...originalMessage,
-          content: newContent,
+          content: currentContent,
           variations,
           currentVariation: variations.length - 1,
           timestamp: Date.now() // Update timestamp
@@ -1151,7 +1205,7 @@ export const ChatProvider: React.FC<{
           timestamp: new Date().toISOString(),
           characterName: characterData.data?.name || 'Unknown',
           messageId: message.id,
-          finalResponse: newContent,
+          finalResponse: currentContent,
           completionTime: new Date().toISOString(),
           variationsCount: variations.length
         });

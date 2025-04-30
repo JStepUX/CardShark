@@ -364,6 +364,7 @@ ${character.data.mes_example || ''}
     
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let buffer = '';
     
     try {
       while (true) {
@@ -373,9 +374,62 @@ ${character.data.mes_example || ''}
           break;
         }
         
-        // Decode the chunk and yield it
+        // Decode the chunk
         const chunk = decoder.decode(value, { stream: true });
-        yield chunk;
+        buffer += chunk;
+        
+        // Process lines in buffer
+        let lineEnd;
+        while ((lineEnd = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.substring(0, lineEnd).trim();
+          buffer = buffer.substring(lineEnd + 1);
+          
+          if (!line) continue;
+          
+          // Check if it's SSE format (data: prefix)
+          if (line.startsWith('data: ')) {
+            const data = line.substring(6);
+            
+            // Handle completion marker
+            if (data === '[DONE]') {
+              console.log('Stream complete marker received');
+              continue;
+            }
+            
+            try {
+              // Parse the JSON data
+              const parsed = JSON.parse(data);
+              
+              // Handle different response formats
+              // OpenAI and OpenRouter format: choices[0].delta.content
+              if (parsed.choices && parsed.choices[0]?.delta?.content) {
+                yield parsed.choices[0].delta.content;
+                continue;
+              }
+              
+              // KoboldCPP and other formats
+              if (parsed.content) {
+                yield parsed.content;
+                continue;
+              }
+              
+              // If we can't extract content in a standard way, return the raw data
+              console.log('Unrecognized response format:', parsed);
+            } catch (error) {
+              console.warn('Failed to parse SSE data:', error);
+              // Just yield the raw data if parsing fails
+              yield data;
+            }
+          } else {
+            // Non-SSE format, yield as is
+            yield line;
+          }
+        }
+      }
+      
+      // Don't forget any remaining content in the buffer
+      if (buffer.trim()) {
+        yield buffer.trim();
       }
     } finally {
       reader.releaseLock();

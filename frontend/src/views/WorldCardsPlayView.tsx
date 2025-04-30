@@ -238,6 +238,10 @@ const WorldCardsPlayView: React.FC = () => {
       if (!worldId || !chatId || messages.length === 0) return;
       
       try {
+        // Debug which messages are being saved
+        console.log("Saving chat messages:", messages.length, 
+          messages.map(m => ({id: m.id.substring(0, 6), role: m.role, preview: m.content.substring(0, 20)})));
+        
         // Save the current messages to the world chat
         await worldStateApi.saveChat(worldId, chatId, {
           messages: messages,
@@ -557,10 +561,23 @@ const WorldCardsPlayView: React.FC = () => {
 
   // --- Render Logic ---
   const npcCount = currentRoom?.npcs?.length || 0;
-  const combinedError = chatError || worldLoadError; // Removed introError
+  const combinedError = chatError || worldLoadError;
+
+  // Debug: Add console log to verify messages when they update
+  useEffect(() => {
+      if (messages && messages.length > 0) {
+          console.log("WorldCardsPlayView: Messages updated:", messages.length, 
+              messages.map(m => ({id: m.id, role: m.role, contentPreview: m.content.substring(0, 30)})));
+      }
+  }, [messages]);
+
+  // Ensure scroll to bottom when new messages appear
+  useEffect(() => {
+      scrollToBottom();
+  }, [messages, scrollToBottom]);
 
   if (isLoadingWorld) {
-    return <div className="flex items-center justify-center h-full">Loading World...</div>;
+      return <div className="flex items-center justify-center h-full">Loading World...</div>;
   }
 
   return (

@@ -259,6 +259,15 @@ export const APICard: React.FC<APICardProps> = ({
         />
       )}
 
+      {/* Add OpenRouter configuration panel */}
+      {api.provider === APIProvider.OPENROUTER && (
+        <APIConfigurationPanel 
+          config={api}
+          onUpdate={onUpdate}
+          modelsDirectory={settings.models_directory || ''}
+        />
+      )}
+
       {/* Action Buttons */}
       <div className="flex justify-end gap-3 pt-2">
         {api.enabled ? (

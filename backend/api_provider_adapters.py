@@ -545,6 +545,80 @@ class OpenRouterAdapter(ApiProviderAdapter):
         except Exception as e:
             self.logger.log_error(f"Error parsing OpenRouter response: {e}")
             return None
+        
+    def list_models(self, base_url: str, api_key: Optional[str]) -> Dict[str, Any]:
+        """Fetch available models from OpenRouter
+        
+        Args:
+            base_url: Base URL for OpenRouter API
+            api_key: API key for authentication
+            
+        Returns:
+            Dictionary containing available models or error information
+        """
+        try:
+            # Ensure URL has protocol
+            if not base_url.startswith(('http://', 'https://')):
+                base_url = f'https://{base_url}'
+                
+            # Normalize the base URL
+            base_url = base_url.rstrip('/')
+            
+            # Build the models endpoint URL - OpenRouter models are at /api/v1/models
+            if base_url.endswith('/api/v1'):
+                url = f"{base_url}/models"
+            elif '/api/v1' in base_url:
+                url = f"{base_url.split('/api/v1')[0]}/api/v1/models"
+            else:
+                url = f"{base_url}/api/v1/models"
+                
+            self.logger.log_step(f"Fetching OpenRouter models from: {url}")
+            
+            # Prepare headers
+            headers = self.prepare_headers(api_key)
+            
+            # Make request
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                error_msg = self._handle_error(response)
+                self.logger.log_error(f"Failed to fetch models: {error_msg}")
+                return {"success": False, "error": error_msg}
+                
+            # Parse response
+            models_data = response.json()
+            if not isinstance(models_data, dict) or 'data' not in models_data:
+                self.logger.log_error("Invalid models response format")
+                return {"success": False, "error": "Invalid response format"}
+                
+            # Format models for the frontend
+            formatted_models = []
+            for model in models_data.get('data', []):
+                model_id = model.get('id')
+                if not model_id:
+                    continue
+                    
+                formatted_models.append({
+                    "id": model_id,
+                    "name": model.get('name', model_id),
+                    "description": model.get('description', ''),
+                    "context_length": model.get('context_length'),
+                    "pricing": {
+                        "prompt": model.get('pricing', {}).get('prompt'),
+                        "completion": model.get('pricing', {}).get('completion')
+                    }
+                })
+                
+            return {
+                "success": True,
+                "models": formatted_models
+            }
+            
+        except Exception as e:
+            error_msg = f"Error fetching models: {str(e)}"
+            self.logger.log_error(error_msg)
+            self.logger.log_error(traceback.format_exc())
+            return {"success": False, "error": error_msg}
 
 
 def get_provider_adapter(provider: str, logger) -> ApiProviderAdapter:

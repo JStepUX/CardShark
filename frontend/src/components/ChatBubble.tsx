@@ -74,6 +74,12 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
 
   // Function to process content with variable replacements and highlighting
   const processContent = useCallback((text: string): string => {
+    // Debug empty content issue
+    if (!text || text.trim() === '') {
+      console.warn(`[ChatBubble] Empty content detected for message ${message.id}, role: ${message.role}`);
+      return message.role === 'assistant' ? '...' : text; 
+    }
+    
     // First trim leading newlines
     const trimmedContent = trimLeadingNewlines(text);
 
@@ -98,7 +104,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     highlightCache.current.set(cacheKey, processedText);
 
     return processedText;
-  }, [currentUser, characterName, trimLeadingNewlines]);
+  }, [currentUser, characterName, trimLeadingNewlines, message.id, message.role]);
 
   // Enhanced streaming content processing with simple HTML tag removal
   const getStreamingDisplay = useCallback((text: string): string => {

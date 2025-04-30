@@ -265,7 +265,7 @@ class ApiHandler:
     def stream_generate(self, request_data: Dict) -> Generator[bytes, None, None]:
         """Stream generate tokens from the API."""
         try:
-            self.logger.log_step("Backend: Entered api_handler.stream_generate") # <<< Use self.logger
+            self.logger.log_step("Backend: Entered api_handler.stream_generate")
             from backend.api_provider_adapters import get_provider_adapter
             
             # Extract API config and generation params from the request
@@ -393,7 +393,6 @@ class ApiHandler:
             # Get the appropriate adapter for this provider
             adapter = get_provider_adapter(provider, self.logger)
             self.logger.log_step(f"Using adapter for provider: {provider}")
-            url = url.rstrip('/') + '/api/extra/generate/stream'
 
             # Use the adapter to stream the response
             self.logger.log_step("Request data prepared with generation settings")
@@ -431,13 +430,4 @@ class ApiHandler:
             error_msg = f"Stream generation failed: {str(e)}"
             self.logger.log_error(error_msg)
             self.logger.log_error(traceback.format_exc())
-            yield f"data: {json.dumps({'error': {'type': 'ServerError', 'message': error_msg}})}\n\n".encode('utf-8')
-
-        except ValueError as ve:
-            error_msg = str(ve)
-            self.logger.log_error(error_msg)
-            yield f"data: {json.dumps({'error': {'type': 'ValueError', 'message': error_msg}})}\n\n".encode('utf-8')
-        except Exception as e:
-            error_msg = f"Stream generation failed: {str(e)}"
-            self.logger.log_error(error_msg)
             yield f"data: {json.dumps({'error': {'type': 'ServerError', 'message': error_msg}})}\n\n".encode('utf-8')
