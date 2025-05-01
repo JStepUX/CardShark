@@ -856,8 +856,11 @@ class FeatherlessAdapter(ApiProviderAdapter):
             # Normalize the base URL
             base_url = base_url.rstrip('/')
             
-            # Build the models endpoint URL with query parameters if needed
-            url = f"{base_url}/v1/models"
+            # Build the models endpoint URL, avoiding duplicate v1 paths
+            if base_url.endswith('/v1'):
+                url = f"{base_url}/models"
+            else:
+                url = f"{base_url}/v1/models"
             
             # Add query parameter for available_on_current_plan if specified
             if available_on_current_plan is not None:

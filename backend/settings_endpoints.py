@@ -424,3 +424,51 @@ async def get_openrouter_models(request: Request):
             status_code=500,
             content={"success": False, "error": f"Failed to fetch models: {str(e)}"}
         )
+@router.post("/api/featherless/models")
+async def get_featherless_models(request: Request):
+    """Fetch available models from Featherless."""
+    try:
+        data = await request.json()
+        url = data.get('url', 'https://api.featherless.ai')
+        api_key = data.get('apiKey')
+        # Optional: Get the filter parameter from the request if needed later
+        # available_on_current_plan = data.get('available_on_current_plan') 
+
+        if not url:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "URL is required for Featherless"}
+            )
+            
+        # Import required classes
+        from backend.api_provider_adapters import FeatherlessAdapter
+        from backend.log_manager import LogManager
+        
+        # Create logger and adapter
+        logger = LogManager() # Consider reusing the instance if possible
+        adapter = FeatherlessAdapter(logger)
+        
+        # Fetch models (pass api_key, even if None, adapter handles it)
+        # Pass the filter parameter if you decide to use it
+        result = adapter.list_models(url, api_key) 
+        
+        if not result.get('success', False):
+            # Log the specific error from the adapter if available
+            error_detail = result.get('error', 'Unknown error from adapter')
+            logger.log_error(f"Featherless adapter failed to list models: {error_detail}")
+            return JSONResponse(
+                status_code=500, # Or map specific errors (e.g., 401 for auth)
+                content=result
+            )
+            
+        return JSONResponse(content=result)
+    except Exception as e:
+        import traceback
+        # Use the existing logger instance if available, otherwise create one
+        local_logger = logger if 'logger' in locals() else LogManager()
+        local_logger.log_error(f"Error fetching Featherless models: {str(e)}")
+        local_logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f"Failed to fetch models: {str(e)}"}
+        )

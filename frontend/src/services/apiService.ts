@@ -185,6 +185,13 @@ class ApiService {
   async listCharacterChats(characterData: any) {
     return this.post('/api/list-character-chats', { character_data: characterData });
   }
+/**
+   * Fetches available models from the Featherless API via the backend
+   */
+  async fetchFeatherlessModels(url: string, apiKey?: string) {
+    console.log(`ApiService: Fetching Featherless models from URL: ${url}`);
+    return this.post('/api/featherless/models', { url, apiKey });
+  }
 }
 
 // Export a singleton instance

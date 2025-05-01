@@ -149,6 +149,17 @@ export interface ModelInfo {
   provider?: string;
   contextLength?: number;
 }
+// Define the Featherless model info interface based on backend adapter
+export interface FeatherlessModelInfo {
+  id: string;
+  name?: string;
+  model_class?: string;
+  context_length?: number;
+  max_tokens?: number; // Corresponds to max_completion_tokens from API
+  description?: string;
+  is_gated?: boolean;
+  available_on_current_plan?: boolean; // Only present for authenticated requests
+}
 
 // Define the connection status interface
 export interface ConnectionStatus {

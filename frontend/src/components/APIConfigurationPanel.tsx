@@ -2,7 +2,8 @@
 // Component for displaying and updating API configuration settings
 import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronUp, ChevronDown, Sliders, Save, AlertCircle, Loader2 } from 'lucide-react';
-import { APIConfig } from '../types/api';
+import { APIConfig, FeatherlessModelInfo } from '../types/api';
+import { apiService } from '../services/apiService';
 
 // Model selection related types
 interface Model {
@@ -642,6 +643,141 @@ const OpenRouterModelSelector: React.FC<OpenRouterModelSelectorProps> = ({
     </div>
   );
 };
+// Featherless model selector props
+interface FeatherlessModelSelectorProps {
+  apiUrl: string;
+  apiKey: string | null;
+  selectedModel: string;
+  onChange: (model: string) => void;
+}
+
+// Featherless model selector component
+const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
+  apiUrl,
+  apiKey,
+  selectedModel,
+  onChange
+}) => {
+  const [models, setModels] = useState<FeatherlessModelInfo[]>([]); // Use FeatherlessModelInfo type
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Fetch available models from Featherless when API URL or key changes
+  useEffect(() => {
+    if (apiUrl) { // API Key might be optional for listing models
+      fetchModels();
+    }
+  }, [apiUrl, apiKey]);
+
+  const fetchModels = async () => {
+    if (!apiUrl) {
+      setError("API URL is required to fetch models");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Use the apiService method we created
+      const data = await apiService.fetchFeatherlessModels(apiUrl, apiKey || undefined);
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to fetch models from backend");
+      }
+
+      setModels(data.models || []);
+    } catch (err) {
+      setError(`Error fetching Featherless models: ${err instanceof Error ? err.message : String(err)}`);
+      console.error("Featherless fetch error:", err); // Add console log for debugging
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Filter models based on search term (name or id)
+  const filteredModels = models.filter(model =>
+    (model.name || model.id).toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (model.id).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Search input */}
+      {models.length > 0 && (
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search models (e.g., Llama-3-8B)..."
+          className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 mb-2"
+        />
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center p-4">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+          <span className="ml-2 text-sm text-gray-400">Loading models...</span>
+        </div>
+      ) : error ? (
+        <div className="text-sm text-red-500 bg-red-900/20 p-2 rounded flex items-center gap-2">
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      ) : models.length === 0 && !isLoading ? (
+        <div className="text-yellow-500 text-sm bg-yellow-900/20 p-2 rounded flex items-center gap-2">
+          <AlertCircle size={16} />
+          <span>No models found. Check API URL/Key or connection.</span>
+        </div>
+      ) : (
+        <div className="max-h-60 overflow-y-auto border border-stone-700 rounded-lg bg-stone-900">
+          <div className="divide-y divide-stone-700">
+            {filteredModels.map((model) => (
+              <div 
+                key={model.id}
+                className={`p-2 flex flex-col cursor-pointer hover:bg-stone-800 transition-colors ${
+                  selectedModel === model.id ? 'bg-blue-900/30 border-l-2 border-blue-500' : ''
+                }`}
+                onClick={() => onChange(model.id)}
+                title={`ID: ${model.id}\nClass: ${model.model_class || 'N/A'}\nContext: ${model.context_length || 'N/A'}\nMax Tokens: ${model.max_tokens || 'N/A'}`} // Add tooltip
+              >
+                <div className="flex justify-between items-center">
+                  <span className="font-medium text-sm">{model.name || model.id}</span>
+                  {model.context_length && (
+                    <span className="text-xs text-gray-400">{model.context_length.toLocaleString()} tokens</span>
+                  )}
+                </div>
+                {model.model_class && (
+                  <p className="text-xs text-gray-400 mt-1">Class: {model.model_class}</p>
+                )}
+                 {model.description && (
+                  <p className="text-xs text-gray-400 mt-1 line-clamp-2">{model.description}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Manual input fallback */}
+      {!isLoading && (
+        <div className="pt-2">
+          <label className="block text-xs text-gray-400 mb-1">
+            Or enter model ID manually:
+          </label>
+          <input
+            type="text"
+            value={selectedModel}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="e.g., vicgalle/Roleplay-Llama-3-8B"
+            className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({ 
   apiUrl, 
@@ -669,6 +805,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   // Check if it's OpenRouter
   const isOpenRouter = apiUrl && 
     (apiUrl.includes('openrouter.ai') || apiUrl.toLowerCase().includes('openrouter'));
+
+  // Check if it's Featherless
+  const isFeatherless = apiUrl &&
+    (apiUrl.includes('featherless.ai') || apiUrl.toLowerCase().includes('featherless'));
+    (apiUrl.includes('featherless.ai') || apiUrl.toLowerCase().includes('featherless'));
 
   // Check if KoboldCPP is running
   const checkKoboldStatus = useCallback(async () => {
@@ -900,9 +1041,16 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           )}
         </>
       ) : isOpenRouter ? (
-        <OpenRouterModelSelector 
-          apiUrl={apiUrl} 
-          apiKey={apiKey || null} 
+        <OpenRouterModelSelector
+          apiUrl={apiUrl}
+          apiKey={apiKey || null}
+          selectedModel={selectedModel || ''}
+          onChange={onChange}
+        />
+      ) : isFeatherless ? ( // Add Featherless case
+        <FeatherlessModelSelector
+          apiUrl={apiUrl}
+          apiKey={apiKey || null}
           selectedModel={selectedModel || ''}
           onChange={onChange}
         />
