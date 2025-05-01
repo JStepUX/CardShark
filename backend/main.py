@@ -1,3 +1,5 @@
+import uuid
+import re
 # backend/main.py
 # Main application file for CardShark
 import argparse
@@ -266,6 +268,88 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "version": VERSION}
+
+# ---------- Utility Endpoints (Migrated from old main.py) ----------
+
+@app.post("/api/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    """Handle image upload for rich text editor."""
+    try:
+        # Check if file is an image
+        content_type = file.content_type.lower() if file.content_type else ""
+        if not content_type.startswith('image/'):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "File must be an image"}
+            )
+
+        # Check allowed image types
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+        if content_type not in allowed_types:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": f"Unsupported image format. Allowed: {', '.join(t.split('/')[1] for t in allowed_types)}"}
+            )
+
+        # Generate a unique filename
+        filename = f"{uuid.uuid4()}.{file.filename.split('.')[-1] if '.' in file.filename else 'png'}"
+
+        # Create uploads directory if it doesn't exist (relative to main.py location)
+        uploads_dir = Path("uploads")
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = uploads_dir / filename
+
+        # Read file content
+        content = await file.read()
+
+        # Write file to disk
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        logger.log_step(f"Uploaded image for editor: {file_path}")
+
+        # Return success with URL for TipTap to use
+        # IMPORTANT: The URL path must match the GET endpoint below
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "url": f"/api/uploads/{filename}" # Use the correct serving path
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error uploading image: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": str(e)}
+        )
+
+@app.get("/api/uploads/{filename}")
+async def get_uploaded_image(filename: str):
+    """Serve uploaded images from the 'uploads' directory."""
+    try:
+        # Basic sanitization to prevent path traversal
+        safe_filename = re.sub(r'[\\/]', '', filename) # Remove slashes
+        if safe_filename != filename:
+             raise HTTPException(status_code=400, detail="Invalid filename")
+
+        uploads_dir = Path("uploads")
+        file_path = uploads_dir / safe_filename
+
+        if not file_path.is_file(): # Check if it's a file and exists
+            logger.log_warning(f"Uploaded image not found: {file_path}")
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        logger.log_step(f"Serving uploaded image: {file_path}")
+        return FileResponse(file_path)
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.log_error(f"Error serving uploaded image '{filename}': {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # ---------- Main entry point ----------
 

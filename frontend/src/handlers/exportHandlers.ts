@@ -66,19 +66,16 @@ export async function exportToCharacterCard(
 // Save character card to PNG
 export async function saveCharacterCardToPng(
     card: CharacterCard,
-    imageBlob: Blob,
-    directory?: string
+    imageBlob: Blob
 ): Promise<Blob> {
     try {
         const formData = new FormData();
         formData.append('file', imageBlob);
-        formData.append('metadata', JSON.stringify(card));
+        formData.append('metadata_json', JSON.stringify(card)); // Changed key to metadata_json
 
-        if (directory) {
-            formData.append('save_directory', directory);
-        }
+        // The new endpoint determines the save path based on metadata, directory parameter removed.
 
-        const response = await fetch('/api/save-png', {
+        const response = await fetch('/api/characters/save-card', { // Changed endpoint URL
             method: 'POST',
             body: formData
         });

@@ -1,3 +1,8 @@
+import logging
+import requests
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 # backend/character_endpoints.py
 # Endpoints for character management
 
@@ -9,10 +14,21 @@ import time
 import urllib.parse
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File, Form, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File, Form, Query, Request # Add Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+import re # Add re for filename sanitization
+from backend.backyard_handler import BackyardHandler # Import BackyardHandler
+
+# Import png_handler from main application instance
+try:
+    from backend.main import png_handler
+except ImportError:
+    # Handle case where main might not be directly importable (e.g., testing)
+    # This is a placeholder, proper dependency injection might be better
+    logger.error("Could not import png_handler from backend.main")
+    png_handler = None
 
 # Create router
 router = APIRouter(
@@ -356,6 +372,125 @@ async def upload_avatar(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload avatar: {str(e)}")
 
+@router.post("/save-card", summary="Save character card PNG with metadata")
+async def save_character_card(
+    file: UploadFile = File(...),
+    metadata_json: str = Form(...) # Frontend sends 'metadata' key
+):
+    """
+    Receives a PNG image file and a JSON string of character metadata.
+    Embeds the metadata into the PNG using PngMetadataHandler
+    and saves it to the characters directory.
+    """
+    if not png_handler:
+        logger.error("PngMetadataHandler not available.")
+        raise HTTPException(status_code=500, detail="Server configuration error: PngMetadataHandler not loaded.")
+
+    try:
+        # 1. Read image data
+        image_bytes = await file.read()
+        logger.info(f"Received image file: {file.filename}, size: {len(image_bytes)} bytes")
+
+        # 2. Parse metadata JSON
+        try:
+            metadata = json.loads(metadata_json)
+            logger.info("Successfully parsed metadata JSON.")
+            # Basic validation: check if 'name' exists
+            if 'name' not in metadata:
+                 logger.warning("Metadata is missing the 'name' field.")
+                 # Optionally raise an error or use a default name
+                 # raise HTTPException(status_code=400, detail="Metadata must include a 'name' field.")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse metadata JSON: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {e}")
+        except Exception as e:
+             logger.error(f"Unexpected error parsing metadata: {e}")
+             raise HTTPException(status_code=400, detail=f"Error processing metadata: {e}")
+
+
+        # 3. Embed metadata into PNG
+        try:
+            output_bytes = png_handler.write_metadata(image_bytes, metadata)
+            logger.info("Successfully embedded metadata into PNG.")
+        except Exception as e:
+            logger.error(f"Failed to write metadata to PNG: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to process PNG metadata: {e}")
+
+        # 4. Determine filename (use character name, sanitize it)
+        character_name = metadata.get('name', f'character_{uuid.uuid4()}') # Use name or fallback to UUID
+        # Sanitize filename: remove invalid characters, limit length
+        sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name) # Remove invalid chars
+        sanitized_name = sanitized_name[:100] # Limit length
+        filename = f"{sanitized_name}.png"
+        save_path = os.path.join(CHARACTERS_DIR, filename)
+        logger.info(f"Determined save path: {save_path}")
+
+        # Handle potential filename conflicts (optional: check if file exists and maybe rename)
+        # For simplicity, we'll overwrite for now.
+
+        # 5. Save the new PNG file
+        try:
+            with open(save_path, "wb") as f:
+                f.write(output_bytes)
+            logger.info(f"Successfully saved character card to {save_path}")
+        except IOError as e:
+            logger.error(f"Failed to save character card file to disk: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to save character file: {e}")
+
+        # 6. Return success response
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Character card saved successfully.",
+                "filename": filename,
+                "path": save_path # Return the server-side path for reference
+            }
+        )
+
+    except HTTPException:
+        # Re-raise HTTPExceptions directly
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in save_character_card: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
+
+@router.post("/extract-metadata", summary="Upload a character PNG and extract metadata")
+async def extract_metadata_from_upload(file: UploadFile = File(...)):
+    """
+    Accepts a PNG file upload, reads its metadata using PngMetadataHandler,
+    and returns the extracted metadata. Does not save the file.
+    """
+    if not png_handler:
+        logger.error("PngMetadataHandler not available.")
+        raise HTTPException(status_code=500, detail="Server configuration error: PngMetadataHandler not loaded.")
+
+    try:
+        # Read file content into memory
+        image_bytes = await file.read()
+        logger.info(f"Received file for metadata extraction: {file.filename}, size: {len(image_bytes)} bytes")
+
+        # Extract metadata using the handler
+        metadata = png_handler.read_metadata(image_bytes)
+        logger.info(f"Successfully extracted metadata from uploaded file.")
+
+        # Return success response with metadata
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Metadata extracted successfully.",
+                "metadata": metadata
+            }
+        )
+
+    except HTTPException:
+        # Re-raise HTTPExceptions directly
+        raise
+    except Exception as e:
+        logger.error(f"Error extracting metadata from upload: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to extract metadata: {e}")
+
+
 # Add character metadata and image endpoints outside the router for direct access
 @router.get("/metadata/{path:path}", summary="Extract metadata from a character file")
 async def get_character_metadata(path: str):
@@ -405,3 +540,102 @@ async def get_character_image(path: str):
     except Exception as e:
         logger.error(f"Error serving character image: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to serve image")
+
+# Instantiate BackyardHandler (consider dependency injection later)
+backyard_handler = BackyardHandler(logger)
+
+@router.post("/import-backyard", summary="Import character from Backyard.ai URL")
+async def import_from_backyard(request: Request):
+    """
+    Accepts a JSON body with a 'url' field pointing to a Backyard.ai character.
+    Uses BackyardHandler to fetch, parse, and convert the character data.
+    Returns the converted V2 metadata and the preview image URL.
+    """
+    try:
+        body = await request.json()
+        url = body.get('url')
+        if not url:
+            raise HTTPException(status_code=400, detail="Missing 'url' in request body")
+
+        logger.info(f"Received Backyard import request for URL: {url}")
+
+        # Use the handler to import the character
+        metadata, image_url = backyard_handler.import_character(url)
+
+        logger.info(f"Successfully imported and converted character from {url}")
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Character imported successfully.",
+                "metadata": metadata,
+                "imageUrl": image_url # Include the image URL if found
+            }
+        )
+
+    except ValueError as e: # Catch specific errors from handler
+        logger.error(f"Backyard import validation error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+    except requests.exceptions.RequestException as e: # Catch network errors
+        logger.error(f"Backyard import network error: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail=f"Could not fetch from Backyard URL: {e}")
+    except HTTPException:
+        # Re-raise HTTPExceptions directly
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during Backyard import: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during import: {e}")
+
+@router.post("/extract-lore", summary="Extract lore items from an uploaded character PNG")
+async def extract_lore_from_upload(file: UploadFile = File(...)):
+    """
+    Accepts a PNG file upload, reads its metadata using PngMetadataHandler,
+    and returns only the lorebook entries found within.
+    """
+    if not png_handler:
+        logger.error("PngMetadataHandler not available.")
+        raise HTTPException(status_code=500, detail="Server configuration error: PngMetadataHandler not loaded.")
+
+    try:
+        # Read file content into memory
+        image_bytes = await file.read()
+        logger.info(f"Received file for lore extraction: {file.filename}, size: {len(image_bytes)} bytes")
+
+        # Extract metadata using the handler
+        metadata = png_handler.read_metadata(image_bytes)
+        logger.info("Successfully extracted metadata for lore extraction.")
+
+        lore_items = []
+        if metadata:
+            # Extract lore items from V2 format
+            if metadata.get('spec') == 'chara_card_v2':
+                logger.log_step("Found V2 spec character")
+                if 'data' in metadata and 'character_book' in metadata['data']:
+                    logger.log_step("Extracting from data.character_book")
+                    lore_items = metadata['data']['character_book'].get('entries', [])
+                elif 'character_book' in metadata: # Fallback for slightly different structures
+                    logger.log_step("Extracting from character_book (fallback)")
+                    lore_items = metadata['character_book'].get('entries', [])
+            else:
+                 logger.log_warning("Metadata does not conform to V2 spec, cannot extract lore reliably.")
+        else:
+            logger.log_warning("No metadata found in PNG, cannot extract lore.")
+
+
+        logger.log_step(f"Found {len(lore_items)} lore items")
+
+        # Return success response with lore items
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Lore extracted successfully.",
+                "loreItems": lore_items # Use the same key as old main.py
+            }
+        )
+
+    except HTTPException:
+        # Re-raise HTTPExceptions directly
+        raise
+    except Exception as e:
+        logger.error(f"Error extracting lore from upload: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to extract lore: {e}")

@@ -148,7 +148,7 @@ const Layout: React.FC = () => {
       const formData = new FormData();
       formData.append("file", file);
       
-      const response = await fetch("/api/upload-png", {
+      const response = await fetch("/api/characters/extract-metadata", { // Changed endpoint URL
         method: "POST",
         body: formData,
       });
@@ -228,17 +228,12 @@ const Layout: React.FC = () => {
       // Create form data
       const formData = new FormData();
       formData.append("file", fileToSave);
-      formData.append("metadata", JSON.stringify(characterData));
+      formData.append("metadata_json", JSON.stringify(characterData)); // Changed key to metadata_json
       
-      // Add save directory if enabled
-      const usingSaveDirectory = Boolean(settings.save_to_character_directory) &&
-                               settings.character_directory;
-      if (usingSaveDirectory && settings.character_directory) {
-        formData.append("save_directory", settings.character_directory);
-      }
+      // The new endpoint determines the save path based on metadata, directory parameter removed.
       
       // Save the file
-      const saveResponse = await fetch("/api/save-png", {
+      const saveResponse = await fetch("/api/characters/save-card", { // Changed endpoint URL
         method: "POST",
         body: formData,
       });
@@ -256,20 +251,8 @@ const Layout: React.FC = () => {
       // Reset newImage state after successful save
       setNewImage(null);
       
-      // Trigger download if not saving to directory
-      if (!usingSaveDirectory) {
-        const sanitizedName = (characterData.data?.name || "character")
-          .replace(/[^a-zA-Z0-9]/g, "_")
-          .replace(/_+/g, "_")
-          .toLowerCase();
-          
-        const link = document.createElement("a");
-        link.href = newImageUrl;
-        link.download = `${sanitizedName}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      // The file is now saved server-side by the /api/characters/save-card endpoint.
+      // Client-side download logic removed.
       
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to save character");
@@ -284,7 +267,7 @@ const Layout: React.FC = () => {
       setIsLoading(true);
       setError(null);
   
-      const response = await fetch("/api/import-backyard", {
+      const response = await fetch("/api/characters/import-backyard", { // Changed endpoint URL
         method: "POST",
         headers: {
           "Content-Type": "application/json",

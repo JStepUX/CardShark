@@ -309,6 +309,24 @@ class ChatEndpoints:
                 self.logger.log_error(f"Error appending chat message: {str(e)}")
                 return {"success": False, "error": str(e)}
 
+        @router.post("/api/clear-context")
+        async def clear_context(request: Request):
+            """Clear the persisted context window for the current session/character."""
+            try:
+                # Assuming context is global or handled internally by chat_handler
+                self.logger.log_step("Clearing context window")
+                # Assuming chat_handler has a method like this:
+                success = self.chat_handler.clear_context_window() # Might need adjustment based on handler method
+
+                if not success:
+                    self.logger.log_warning("Failed to clear context window")
+                    return {"success": False, "error": "Failed to clear context window"}
+
+                return {"success": True}
+            except Exception as e:
+                self.logger.log_error(f"Error clearing context window: {str(e)}")
+                return {"success": False, "error": str(e)}
+
         @router.post("/api/generate")
         async def generate_response(request: Request):
             """Generate an AI response using the provided API configuration."""
