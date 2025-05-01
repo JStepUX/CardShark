@@ -7,7 +7,8 @@ const PROVIDER_TYPES = [
   { id: APIProvider.OPENAI, name: 'OpenAI' },
   { id: APIProvider.CLAUDE, name: 'Claude (Anthropic)' },
   { id: APIProvider.GEMINI, name: 'Gemini (Google)' },
-  { id: APIProvider.OPENROUTER, name: 'OpenRouter' }
+  { id: APIProvider.OPENROUTER, name: 'OpenRouter' },
+  { id: APIProvider.FEATHERLESS, name: 'Featherless.ai' }
 ];
 
 const DEFAULT_MODELS = {
@@ -15,7 +16,8 @@ const DEFAULT_MODELS = {
   [APIProvider.OPENAI]: 'gpt-3.5-turbo',
   [APIProvider.CLAUDE]: 'claude-3-sonnet-20240229',
   [APIProvider.GEMINI]: 'gemini-pro',
-  [APIProvider.OPENROUTER]: 'openai/gpt-3.5-turbo'
+  [APIProvider.OPENROUTER]: 'openai/gpt-3.5-turbo',
+  [APIProvider.FEATHERLESS]: 'nous-hermes-2-mixtral-8x7b-dpo'
 };
 
 export const ApiProviderSelector: React.FC = () => {
@@ -258,6 +260,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
                       api.provider === APIProvider.OPENAI ? 'https://api.openai.com/v1' :
                       api.provider === APIProvider.CLAUDE ? 'https://api.anthropic.com/v1/messages' : 
                       api.provider === APIProvider.GEMINI ? 'https://generativelanguage.googleapis.com/v1beta/models' :
+                      api.provider === APIProvider.FEATHERLESS ? 'https://api.featherless.ai/v1' :
                       'https://api.openrouter.ai/api/v1'}
           className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
         />
@@ -328,6 +331,16 @@ const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIC
       { id: 'anthropic/claude-3-sonnet', name: 'Anthropic: Claude 3 Sonnet' },
       { id: 'meta-llama/llama-3-70b-instruct', name: 'Meta: Llama 3 70B' },
       { id: 'google/gemini-pro', name: 'Google: Gemini Pro' }
+    ],
+    [APIProvider.FEATHERLESS]: [
+      { id: 'nous-hermes-2-mixtral-8x7b-dpo', name: 'Nous Hermes 2 Mixtral 8x7B' },
+      { id: 'llama-3-70b-instruct', name: 'Llama 3 70B Instruct' },
+      { id: 'llama-3-8b-instruct', name: 'Llama 3 8B Instruct' },
+      { id: 'mistral-7b-instruct-v0.2', name: 'Mistral 7B Instruct v0.2' },
+      { id: 'mixtral-8x7b-instruct-v0.1', name: 'Mixtral 8x7B Instruct v0.1' },
+      { id: 'qwen2-72b-instruct', name: 'Qwen2 72B Instruct' },
+      { id: 'openchat-3.5', name: 'OpenChat 3.5' },
+      { id: 'dolphin-2.5-mixtral-8x7b', name: 'Dolphin 2.5 Mixtral 8x7B' }
     ]
   };
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './Layout';
 import CharacterInfoView from './CharacterInfoView'; // Corrected path based on Layout.tsx
 import LoreView from './LoreView'; // Path from Layout.tsx
@@ -29,8 +29,9 @@ const AppRoutes: React.FC = () => (
               <Routes>
                 <Route path="/" element={<Layout />}> {/* Layout is the parent route */}
                   {/* Define nested routes rendered inside Layout's Outlet */}
-                  {/* Default view - Assuming CharacterGallery is the main entry */}
-                  <Route index element={<CharacterGallery />} />
+                  {/* Default view redirects to gallery */}
+                  <Route index element={<Navigate to="/gallery" replace />} />
+                  {/* Only one CharacterGallery route */}
                   <Route path="gallery" element={<CharacterGallery />} />
                   {/* Map other views previously handled by Layout state */}
                   <Route path="info" element={<CharacterInfoView />} />
@@ -47,7 +48,7 @@ const AppRoutes: React.FC = () => (
                   <Route path="worldcards/:worldId/play" element={<WorldCardsPlayView />} />
 
                   {/* Fallback route - Redirects to gallery if no match */}
-                  <Route path="*" element={<CharacterGallery />} />
+                  <Route path="*" element={<Navigate to="/gallery" replace />} />
                 </Route>
                 {/* Remove the separate /play route as it's now nested */}
               </Routes>

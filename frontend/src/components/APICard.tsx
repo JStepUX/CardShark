@@ -267,6 +267,15 @@ export const APICard: React.FC<APICardProps> = ({
           modelsDirectory={settings.models_directory || ''}
         />
       )}
+      
+      {/* Add Featherless configuration panel */}
+      {api.provider === APIProvider.FEATHERLESS && (
+        <APIConfigurationPanel 
+          config={api}
+          onUpdate={onUpdate}
+          modelsDirectory={settings.models_directory || ''}
+        />
+      )}
 
       {/* Action Buttons */}
       <div className="flex justify-end gap-3 pt-2">

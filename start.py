@@ -6,6 +6,7 @@ from threading import Thread
 import signal
 import uvicorn
 import subprocess
+import shutil  # Import shutil for rmtree
 from fastapi import FastAPI
 
 app = FastAPI()
@@ -76,14 +77,31 @@ def signal_handler(signum, frame):
     print("\nShutting down...")
     sys.exit(0)
 
+def clean_pycache(directory):
+    """Recursively find and remove __pycache__ directories."""
+    for root, dirs, files in os.walk(directory):
+        if "__pycache__" in dirs:
+            pycache_path = os.path.join(root, "__pycache__")
+            print(f"Removing cache directory: {pycache_path}")
+            try:
+                shutil.rmtree(pycache_path)
+            except OSError as e:
+                print(f"Error removing {pycache_path}: {e}")
+
 def main():
     root_dir = os.path.dirname(os.path.abspath(__file__))
     os.environ['PYTHONPATH'] = root_dir  # Set PYTHONPATH
+    backend_dir = os.path.join(root_dir, 'backend') # Define backend_dir earlier
+
+    # Clean __pycache__ directories before starting
+    print("Cleaning Python bytecode cache...")
+    clean_pycache(backend_dir)
+    print("Cache cleaning complete.")
 
     # Check and launch KoboldCPP using the new manager
     try:
         # Add the backend directory to Python path for imports
-        backend_dir = os.path.join(root_dir, 'backend')
+        # backend_dir = os.path.join(root_dir, 'backend') # Moved up
         if backend_dir not in sys.path:
             sys.path.insert(0, backend_dir)
             

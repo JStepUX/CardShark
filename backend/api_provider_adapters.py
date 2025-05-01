@@ -711,6 +711,226 @@ class OpenRouterAdapter(ApiProviderAdapter):
             return {"success": False, "error": error_msg}
 
 
+class FeatherlessAdapter(ApiProviderAdapter):
+    """Adapter for Featherless.ai API
+    
+    Featherless.ai is a serverless AI inference platform providing access to
+    over 4,200 Llama-based and other open-weight models via an OpenAI-compatible API.
+    """
+    
+    def get_endpoint_url(self, base_url: str) -> str:
+        """Get the endpoint URL for Featherless"""
+        # Ensure URL has protocol
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = f'https://{base_url}'
+            
+        # Check if URL already contains the path segment we need to add
+        if '/chat/completions' in base_url:
+            return base_url
+            
+        # Special handling to avoid duplicate /v1 segments
+        if base_url.endswith('/v1'):
+            return f"{base_url}/chat/completions"
+        else:
+            # Strip trailing slash and add the path
+            return base_url.rstrip('/') + '/v1/chat/completions'
+        
+    def prepare_headers(self, api_key: Optional[str]) -> Dict[str, str]:
+        """Prepare headers for Featherless"""
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+            'HTTP-Referer': 'https://cardshark.ai',  # Client attribution
+            'X-Title': 'CardShark'  # Client attribution
+        }
+        
+        if api_key:
+            # Clean the API key and ensure proper format
+            api_key = api_key.strip()
+            
+            if not api_key.startswith('Bearer '):
+                headers['Authorization'] = f'Bearer {api_key}'
+                self.logger.log_step("Added Bearer prefix to Featherless API key")
+            else:
+                # Key already has Bearer prefix
+                headers['Authorization'] = api_key
+                self.logger.log_step("Using API key with existing Bearer prefix")
+                
+            self.logger.log_step(f"Featherless auth header length: {len(headers['Authorization'])}")
+        else:
+            self.logger.log_warning("No API key provided for Featherless - authentication will fail")
+            
+        return headers
+        
+    def prepare_request_data(self, 
+                           prompt: str, 
+                           memory: Optional[str],
+                           stop_sequence: List[str],
+                           generation_settings: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare the request data for Featherless"""
+        # Extract settings or use defaults
+        max_tokens = generation_settings.get('max_length', 220)
+        temperature = generation_settings.get('temperature', 0.7)
+        top_p = generation_settings.get('top_p', 0.9)
+        presence_penalty = generation_settings.get('presence_penalty', 0)
+        frequency_penalty = generation_settings.get('frequency_penalty', 0)
+        model = generation_settings.get('model', '')
+        
+        # Create the message structure
+        messages = []
+        
+        # Add system message if memory is provided
+        if memory and memory.strip():
+            messages.append({"role": "system", "content": memory})
+        
+        # Add the prompt as a user message
+        messages.append({"role": "user", "content": prompt})
+        
+        # Create the request data
+        data = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
+            "stop": stop_sequence,
+            "stream": True
+        }
+        
+        # Log the request details
+        self.logger.log_step(f"Featherless request to model: {model}")
+        self.logger.log_step(f"Request contains {len(messages)} messages")
+        
+        return data
+        
+    def parse_streaming_response(self, line: bytes) -> Optional[Dict[str, Any]]:
+        """Parse a streaming response line from Featherless"""
+        try:
+            line_text = line.decode('utf-8')
+            if line_text.startswith('data: '):
+                data_portion = line_text[6:]
+                
+                # Check for completion message
+                if data_portion.strip() == "[DONE]":
+                    return None
+                
+                try:
+                    content = json.loads(data_portion)
+                    
+                    # Extract the delta content from OpenAI-compatible format
+                    if 'choices' in content and len(content['choices']) > 0:
+                        choice = content['choices'][0]
+                        if 'delta' in choice and 'content' in choice['delta']:
+                            return {'content': choice['delta']['content']}
+                    
+                    return None
+                except json.JSONDecodeError:
+                    self.logger.log_error(f"Invalid JSON in Featherless response: {data_portion}")
+                    return None
+            return None
+        except Exception as e:
+            self.logger.log_error(f"Error parsing Featherless response: {e}")
+            return None
+            
+    def list_models(self, base_url: str, api_key: Optional[str], available_on_current_plan: Optional[bool] = None) -> Dict[str, Any]:
+        """Fetch available models from Featherless
+        
+        Args:
+            base_url: Base URL for Featherless API
+            api_key: API key for authentication
+            available_on_current_plan: Optional filter for available models on current plan
+                                      None: Return all models
+                                      True: Return only models available on current plan
+                                      False: Return only models not available on current plan
+            
+        Returns:
+            Dictionary containing available models or error information
+        """
+        try:
+            # Ensure URL has protocol
+            if not base_url.startswith(('http://', 'https://')):
+                base_url = f'https://{base_url}'
+                
+            # Normalize the base URL
+            base_url = base_url.rstrip('/')
+            
+            # Build the models endpoint URL with query parameters if needed
+            url = f"{base_url}/v1/models"
+            
+            # Add query parameter for available_on_current_plan if specified
+            if available_on_current_plan is not None:
+                # Convert boolean to integer (0 for False, 1 for True) as per API docs
+                param_value = 1 if available_on_current_plan else 0
+                url = f"{url}?available_on_current_plan={param_value}"
+            
+            self.logger.log_step(f"Fetching Featherless models from: {url}")
+            
+            # Prepare headers
+            headers = self.prepare_headers(api_key)
+            
+            # Make request
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                error_msg = self._handle_error(response)
+                self.logger.log_error(f"Failed to fetch models: {error_msg}")
+                return {"success": False, "error": error_msg}
+                
+            # Parse response
+            models_data = response.json()
+            if not isinstance(models_data, dict) or 'data' not in models_data:
+                # Try standard OpenAI format which might just be a list under 'data'
+                data = models_data.get('data', [])
+                if not isinstance(data, list):
+                    self.logger.log_error("Invalid models response format")
+                    return {"success": False, "error": "Invalid response format"}
+            else:
+                data = models_data.get('data', [])
+                
+            # Format models for the frontend
+            formatted_models = []
+            for model in data:
+                model_id = model.get('id')
+                if not model_id:
+                    continue
+                    
+                # Build model info with all relevant properties from the API docs
+                model_info = {
+                    "id": model_id,
+                    "name": model.get('name', model_id),
+                    "model_class": model.get('model_class', ''),
+                    "context_length": model.get('context_length'),
+                    "max_tokens": model.get('max_completion_tokens'),
+                }
+                
+                # Only include these fields if they exist
+                if 'description' in model:
+                    model_info["description"] = model.get('description', '')
+                    
+                # Include gating info if present
+                if 'is_gated' in model:
+                    model_info["is_gated"] = model.get('is_gated', False)
+                    
+                # Include plan availability if present (only returned for authenticated requests)
+                if 'available_on_current_plan' in model:
+                    model_info["available_on_current_plan"] = model.get('available_on_current_plan')
+                
+                formatted_models.append(model_info)
+                
+            return {
+                "success": True,
+                "models": formatted_models
+            }
+            
+        except Exception as e:
+            error_msg = f"Error fetching models: {str(e)}"
+            self.logger.log_error(error_msg)
+            self.logger.log_error(traceback.format_exc())
+            return {"success": False, "error": error_msg}
+
+
 def get_provider_adapter(provider: str, logger) -> ApiProviderAdapter:
     """Factory function to get the appropriate adapter for a provider"""
     adapters = {
@@ -718,6 +938,7 @@ def get_provider_adapter(provider: str, logger) -> ApiProviderAdapter:
         'OpenAI': OpenAIAdapter,
         'Claude': ClaudeAdapter,
         'OpenRouter': OpenRouterAdapter,
+        'Featherless': FeatherlessAdapter,
         # Add more adapters as needed
     }
     

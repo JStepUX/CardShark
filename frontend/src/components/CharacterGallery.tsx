@@ -7,6 +7,12 @@ import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from './KoboldCPPDrawerManager';
 
+// Track API calls across component instances with a request cache
+const apiRequestCache = {
+  pendingRequests: new Map<string, Promise<any>>(),
+  lastRequestTime: 0
+};
+
 // Interface for character file data received from the backend
 interface CharacterFile {
   name: string;
@@ -46,6 +52,45 @@ const encodeFilePath = (path: string): string => {
   }
 };
 
+/**
+ * Creates a cached fetch request to prevent duplicate API calls
+ * @param url The URL to fetch
+ * @param options Fetch options
+ * @returns Promise with the fetch response
+ */
+const cachedFetch = (url: string, options?: RequestInit): Promise<Response> => {
+  const cacheKey = `${url}`;
+  
+  // If we have a pending request for this URL, return it
+  const existingRequest = apiRequestCache.pendingRequests.get(cacheKey);
+  if (existingRequest) {
+    console.log(`Using cached request for: ${url}`);
+    return existingRequest;
+  }
+  
+  // If the last request was less than 300ms ago, add a small delay
+  const now = Date.now();
+  const timeSinceLastRequest = now - apiRequestCache.lastRequestTime;
+  const delay = timeSinceLastRequest < 300 ? 300 - timeSinceLastRequest : 0;
+  
+  // Create a new request with optional delay
+  const newRequest = new Promise<Response>((resolve) => {
+    setTimeout(() => {
+      apiRequestCache.lastRequestTime = Date.now();
+      fetch(url, options).then(resolve);
+    }, delay);
+  }).finally(() => {
+    // Clean up the cache after the request is completed
+    setTimeout(() => {
+      apiRequestCache.pendingRequests.delete(cacheKey);
+    }, 500);
+  });
+  
+  // Store the request in the cache
+  apiRequestCache.pendingRequests.set(cacheKey, newRequest);
+  return newRequest;
+};
+
 const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   settingsChangeCount = 0,
   isSecondarySelector = false,
@@ -72,6 +117,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  
+  // Track component instance
+  const componentId = useRef(`gallery-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+  const isFirstLoad = useRef(true);
 
   // Context hooks
   const { setCharacterData, setImageUrl, setIsLoading: setPrimaryLoading } = useCharacter();
@@ -107,7 +156,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   }, [loadMore, isLoading, displayedCount, filteredCharacters.length]);
 
-  // Load from directory function
+  // Load from directory function with caching
   const loadFromDirectory = useCallback(async (directory: string) => {
     try {
       setIsLoading(true);
@@ -115,18 +164,25 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setDeleteError(null);
       setDeletingPath(null); // Reset animation on reload
       setDisplayedCount(25);
+      
+      const url = `/api/characters?directory=${encodeFilePath(directory)}`;
+      console.log(`[${componentId.current}] Loading characters from: ${directory}`);
 
-      const response = await fetch(`/api/characters?directory=${encodeFilePath(directory)}`);
+      // Use the cached fetch to prevent duplicate requests
+      const response = await cachedFetch(url);
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: `Server error (${response.status})` }));
         throw new Error(errorData.message || `Failed to load characters. Status: ${response.status}`);
       }
+      
       const data = await response.json();
       if (data.success === false || data.exists === false) {
          setError(data.message || "Directory not found or inaccessible.");
          setCharacters([]);
          setCurrentDirectory(data.directory || directory);
       } else if (data.exists) {
+        console.log(`[${componentId.current}] Loaded ${data.files.length} characters`);
         setCharacters(data.files);
         setCurrentDirectory(data.directory);
         if (data.files.length === 0) {
@@ -161,8 +217,17 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
   // useEffect for loading settings
   useEffect(() => {
+    // Skip if this is not the first load (prevents duplicate API calls)
+    if (!isFirstLoad.current && settingsChangeCount === 0) {
+      console.log(`[${componentId.current}] Skipping initial load to prevent duplication`);
+      return;
+    }
+    
+    isFirstLoad.current = false;
+    
     const loadSettings = async () => {
       try {
+        console.log(`[${componentId.current}] Loading settings and characters`);
         setIsLoading(true);
         setError(null);
         setDeleteError(null);
@@ -170,7 +235,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         setCurrentDirectory(null);
         setCharacters([]);
 
-        const response = await fetch('/api/settings');
+        // Use cached fetch for settings to prevent duplicate calls
+        const response = await cachedFetch('/api/settings');
+        
         if (!response.ok) throw new Error('Failed to load settings from server.');
         const data = await response.json();
         if (data.success && data.settings.character_directory) {
@@ -186,6 +253,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         setIsLoading(false);
       }
     };
+    
     loadSettings();
   }, [settingsChangeCount, loadFromDirectory]);
 

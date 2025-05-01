@@ -3,6 +3,8 @@
 import argparse
 import os
 import sys
+import urllib.parse
+import glob
 import uvicorn
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -11,8 +13,8 @@ import webbrowser
 from threading import Timer
 
 # FastAPI imports
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Query
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -32,7 +34,7 @@ from backend.lore_handler import LoreHandler
 
 # API endpoint modules
 from backend.chat_endpoints import ChatEndpoints
-from backend.character_endpoints import CharacterEndpoints
+# Remove the CharacterEndpoints import since it doesn't exist
 from backend.user_endpoints import UserEndpoints
 from backend.settings_endpoints import SettingsEndpoints
 from backend.world_endpoints import WorldEndpoints
@@ -100,7 +102,6 @@ world_card_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
 
 # Initialize endpoint classes
 chat_endpoints = ChatEndpoints(logger, chat_handler, api_handler)
-character_endpoints = CharacterEndpoints(logger, png_handler, validator, settings_manager, backyard_handler, api_handler, template_handler)
 user_endpoints = UserEndpoints(logger, settings_manager)
 settings_endpoints = SettingsEndpoints(logger, settings_manager)
 # Add template handler to settings endpoints for templates management
@@ -110,7 +111,6 @@ background_endpoints = BackgroundEndpoints(logger, background_handler, chat_hand
 
 # Register endpoints from classes
 chat_endpoints.register_routes(app)
-character_endpoints.register_routes(app)
 user_endpoints.register_routes(app)
 settings_endpoints.register_routes(app)
 world_endpoints.register_routes(app)
@@ -142,6 +142,97 @@ async def debug_png(file: UploadFile = File(...)):
             status_code=500, 
             content={"error": f"Failed to debug PNG: {str(e)}"}
         )
+
+@app.get("/api/character-image/{path:path}")
+async def get_character_image(path: str):
+    """Serve a character image file by path."""
+    logger.log_step(f"Character image endpoint accessed with path: {path}")
+    # Redirect to the router implementation
+    from fastapi.responses import RedirectResponse
+    
+    # URL encode the path for safe redirection
+    encoded_path = urllib.parse.quote(path)
+    redirect_url = f"/api/characters/image/{encoded_path}"
+    logger.log_step(f"Redirecting to router endpoint: {redirect_url}")
+    return RedirectResponse(url=redirect_url)
+
+@app.get("/api/character-metadata/{path:path}")
+async def get_character_metadata(path: str):
+    """Extract metadata from a character file."""
+    logger.log_step(f"Character metadata endpoint accessed with path: {path}")
+    # Redirect to the router implementation
+    from fastapi.responses import RedirectResponse
+    
+    # URL encode the path for safe redirection
+    encoded_path = urllib.parse.quote(path)
+    redirect_url = f"/api/characters/metadata/{encoded_path}"
+    logger.log_step(f"Redirecting to router endpoint: {redirect_url}")
+    return RedirectResponse(url=redirect_url)
+
+@app.get("/api/character/{path:path}")
+async def get_character_by_path(path: str):
+    """API endpoint for character operations by path."""
+    logger.log_step(f"Character endpoint accessed with path: {path}")
+    # For GET requests, we want to redirect to the appropriate image or metadata endpoint
+    if path.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+        # This is likely an image request, redirect to character-image
+        return {"success": False, "error": "Use /api/character-image/ for image requests"}
+    else:
+        raise HTTPException(status_code=404, detail="Invalid character path or operation")
+
+@app.delete("/api/character/{path:path}")
+async def delete_character_by_path(path: str):
+    """Delete a character file by path."""
+    logger.log_step(f"Delete character request with path: {path}")
+    
+    try:
+        # URL decode the path first
+        path = urllib.parse.unquote(path)
+        # On Windows, convert forward slashes to backslashes
+        if os.name == 'nt':
+            path = path.replace('/', '\\')
+        
+        logger.log_step(f"Normalized path: {path}")
+        
+        if not os.path.exists(path):
+            logger.log_error(f"Character file not found: {path}")
+            raise HTTPException(status_code=404, detail="Character file not found")
+            
+        if not path.lower().endswith('.png'):
+            logger.log_error(f"Invalid file format for character: {path}")
+            raise HTTPException(status_code=400, detail="Invalid file format")
+            
+        try:
+            os.remove(path)
+            logger.log_step(f"Successfully deleted character file: {path}")
+            return {"success": True, "message": "Character deleted successfully"}
+        except Exception as e:
+            logger.log_error(f"Error deleting character file: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
+    except Exception as e:
+        logger.log_error(f"Error in delete_character_by_path: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/characters")
+async def characters_directory_fallback(request: Request, directory: str = Query(None)):
+    """Fallback API endpoint for character directory requests if router fails."""
+    logger.log_step(f"Fallback characters endpoint accessed with directory: {directory}")
+    logger.log_step(f"Full URL: {request.url}")
+    
+    # This is now just a redirect to the router implementation
+    # Forward to the proper router endpoint: /api/characters/?directory=...
+    if directory:
+        # Construct the redirect URL to the router endpoint
+        redirect_url = f"/api/characters/?directory={urllib.parse.quote(directory)}"
+        logger.log_step(f"Redirecting to router endpoint: {redirect_url}")
+        return RedirectResponse(url=redirect_url)
+    else:
+        logger.log_error("No directory parameter provided")
+        return {
+            "success": False,
+            "message": "No directory parameter provided"
+        }
 
 # ---------- Serve frontend if running in production mode ----------
 

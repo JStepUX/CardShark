@@ -49,7 +49,8 @@ export enum APIProvider {
   CLAUDE = 'Claude',
   OPENAI = 'OpenAI',
   GEMINI = 'Gemini',
-  OPENROUTER = 'OpenRouter'
+  OPENROUTER = 'OpenRouter',
+  FEATHERLESS = 'Featherless'
 }
 
 // Keep this enum for backward compatibility
@@ -131,6 +132,11 @@ export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
     defaultUrl: 'https://openrouter.ai/api/v1',
     templateId: ChatTemplate.OPENAI,
     requiresApiKey: true
+  },
+  [APIProvider.FEATHERLESS]: {
+    defaultUrl: 'https://api.featherless.ai/v1',
+    templateId: ChatTemplate.OPENAI,
+    requiresApiKey: true
   }
 };
 
@@ -154,7 +160,7 @@ export interface ConnectionStatus {
 // API Configuration Schema
 export const APIConfigSchema = z.object({
   id: z.string().optional(),
-  provider: z.enum(['KoboldCPP', 'OpenAI', 'Claude', 'Gemini', 'OpenRouter']),
+  provider: z.enum(['KoboldCPP', 'OpenAI', 'Claude', 'Gemini', 'OpenRouter', 'Featherless']),
   url: z.string().url().optional(),
   apiKey: z.string().optional(),
   model: z.string().optional(),
