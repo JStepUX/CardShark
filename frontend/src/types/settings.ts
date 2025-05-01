@@ -46,6 +46,7 @@ export interface Settings {
   character_directory: string | null;  // Updated to allow null
   save_to_character_directory: boolean;
   models_directory?: string;  // Directory for AI model files
+  show_koboldcpp_launcher?: boolean; // Whether to show KoboldCPP launcher on startup
   theme: 'dark' | 'light';
   version: string;
   
@@ -110,6 +111,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // App defaults
   character_directory: '',  // Keep as empty string in defaults
   save_to_character_directory: false,
+  show_koboldcpp_launcher: false, // Default to not showing KoboldCPP launcher on startup
   theme: 'dark',
   version: '1.0',
   

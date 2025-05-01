@@ -774,7 +774,24 @@ class FeatherlessAdapter(ApiProviderAdapter):
         top_p = generation_settings.get('top_p', 0.9)
         presence_penalty = generation_settings.get('presence_penalty', 0)
         frequency_penalty = generation_settings.get('frequency_penalty', 0)
-        model = generation_settings.get('model', '')
+        
+        # Enhanced model selection logic with better error handling
+        model = None
+        
+        # First, explicitly check if there's a direct model provided
+        if 'model' in generation_settings and generation_settings['model']:
+            model = generation_settings['model']
+            self.logger.log_step(f"Using explicitly selected model: {model}")
+        
+        # Check for Featherless specific format
+        elif 'featherless_model' in generation_settings and generation_settings['featherless_model']:
+            model = generation_settings['featherless_model']
+            self.logger.log_step(f"Using model from featherless_model setting: {model}")
+            
+        # Default fallback to a commonly available model
+        if not model:
+            model = 'meta-llama/Meta-Llama-3-8B-Instruct'  # Default model
+            self.logger.log_step(f"No model specified in settings, using default: {model}")
         
         # Create the message structure
         messages = []

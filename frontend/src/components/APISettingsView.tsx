@@ -192,6 +192,28 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                 onDirectoryChange={handleModelDirectoryChange}
               />
             </div>
+
+            {/* KoboldCPP Settings */}
+            <div className="mb-8">
+              <h3 className="text-md font-medium mb-4">KoboldCPP Settings</h3>
+              <div className="mt-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.show_koboldcpp_launcher || false}
+                    onChange={(e) => updateSettings({ show_koboldcpp_launcher: e.target.checked })}
+                    className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-300">
+                    Show KoboldCPP launcher on startup
+                  </span>
+                </label>
+                <p className="mt-2 text-xs text-gray-400">
+                  When enabled, the KoboldCPP launcher will appear in the Character Gallery if KoboldCPP is installed but not running.
+                  Disable this option if you don't use KoboldCPP or if Character Gallery is running slowly.
+                </p>
+              </div>
+            </div>
           </div>
         </SettingsTab>
         

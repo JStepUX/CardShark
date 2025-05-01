@@ -156,6 +156,13 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
   
   // Add state for selected model
   const [selectedModel, setSelectedModel] = useState(config.model || '');
+  
+  // Add provider detection logic
+  const apiUrl = config.url || '';
+  const isFeatherless = apiUrl && 
+    (apiUrl.includes('featherless.ai') || apiUrl.toLowerCase().includes('featherless'));
+  const isOpenRouter = apiUrl && 
+    (apiUrl.includes('openrouter.ai') || apiUrl.toLowerCase().includes('openrouter'));
 
   // Update local state when config changes from outside
   useEffect(() => {
@@ -220,10 +227,35 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
   };
 
   const handleSave = () => {
-    onUpdate({ 
-      generation_settings: settings,
-      model: selectedModel
-    });
+    // Create update object with standard generation settings
+    const updates: Partial<APIConfig> = { 
+      generation_settings: settings
+    };
+    
+    // Always save the selected model to the main model field
+    if (selectedModel) {
+      updates.model = selectedModel;
+      
+      // For provider-specific fields, also save to the specialized field
+      // This ensures the model is available in both places
+      if (isFeatherless) {
+        // If we don't have generation_settings yet, initialize it
+        if (!updates.generation_settings) {
+          updates.generation_settings = {};
+        }
+        // Save specifically for Featherless adapter
+        updates.generation_settings.featherless_model = selectedModel;
+      } else if (isOpenRouter) {
+        // If we don't have generation_settings yet, initialize it
+        if (!updates.generation_settings) {
+          updates.generation_settings = {};
+        }
+        // Save specifically for OpenRouter adapter
+        updates.generation_settings.openrouter_model = selectedModel;
+      }
+    }
+    
+    onUpdate(updates);
   };
 
   return (
@@ -1047,7 +1079,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           selectedModel={selectedModel || ''}
           onChange={onChange}
         />
-      ) : isFeatherless ? ( // Add Featherless case
+      ) : isFeatherless ? (
         <FeatherlessModelSelector
           apiUrl={apiUrl}
           apiKey={apiKey || null}

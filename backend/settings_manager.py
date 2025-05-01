@@ -30,6 +30,7 @@ class SettingsManager:
             "models_directory": "",      # Default directory for AI models
             "last_export_directory": "",
             "save_to_character_directory": False,
+            "show_koboldcpp_launcher": False,  # Default: don't show KoboldCPP launcher on startup
             "theme": "dark",
             "version": "1.2",
             "api": {

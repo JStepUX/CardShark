@@ -1,5 +1,25 @@
 [
     {
+      "search": ["<|im_start|>assistant", "<|im_end|>"],
+      "name": "OpenAI Chat",
+      "id": "openai",
+      "description": "Standard OpenAI chat completion format (often uses ChatML structure)",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|im_start|>system\n\n{{content}}<|im_end|>\n\n",
+      "userFormat": "<|im_start|>user\n\n{{content}}<|im_end|>\n\n",
+      "assistantFormat": "<|im_start|>assistant\n\n{{char}}: {{content}}<|im_end|>\n\n",
+      "memoryFormat": "<|im_start|>system\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>\n\n",
+      "detectionPatterns": ["<|im_start|>", "<|im_end|>"],
+      "stopSequences": [
+        "<|im_end|>\\n<|im_start|>user",
+        "<|im_end|>\\n<|im_start|>assistant",
+        "User:",
+        "Assistant:",
+        "{{user}}:"
+      ]
+    },
+    {
       "search": ["<|im_start|>assistant", "<|im_end|>", "<|im_sep|>"],
       "name": "ChatML (Phi 4)",
       "id": "chatml-phi4",

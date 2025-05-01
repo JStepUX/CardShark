@@ -5,6 +5,9 @@ from fastapi.responses import JSONResponse
 import traceback
 from typing import Dict, Any
 import json
+import os # Add os import
+from pathlib import Path # Add Path import
+from pydantic import BaseModel # Add Pydantic import
 
 # Import handlers
 from backend.log_manager import LogManager
@@ -15,27 +18,31 @@ router = APIRouter()
 # Initialize local instances (for router pattern)
 logger = LogManager()
 
+# Define Pydantic models for request bodies
+class DirectoryPath(BaseModel):
+    directory: str
+
 class SettingsEndpoints:
     """Encapsulates settings-related endpoints."""
-    
+
     def __init__(self, logger, settings_manager):
         """Initialize with dependencies."""
         self.logger = logger
         self.settings_manager = settings_manager
         self.api_handler = None  # Will be set by main.py after initialization
         self.template_handler = None  # Will be set by main.py after initialization
-        
+
     def register_routes(self, router):
         """Register all settings endpoints with the provided router."""
-        
+
         @router.get("/api/settings")
         async def get_settings():
             """Get all settings."""
             try:
                 settings = self.settings_manager.settings
-                
+
                 self.logger.log_step("Serving settings")
-                
+
                 return JSONResponse(
                     status_code=200,
                     content={
@@ -43,7 +50,7 @@ class SettingsEndpoints:
                         "settings": settings
                     }
                 )
-                
+
             except Exception as e:
                 self.logger.log_error(f"Error getting settings: {str(e)}")
                 self.logger.log_error(traceback.format_exc())
@@ -60,16 +67,16 @@ class SettingsEndpoints:
             """Update settings with special handling for APIs and templateId."""
             try:
                 data = await request.json()
-                
+
                 # Handle both formats: direct object or nested under "settings" key
                 if "settings" in data:
                     new_settings = data.get("settings")
                 else:
                     # If data is sent directly without being wrapped in a "settings" property
                     new_settings = data
-                
+
                 self.logger.log_step(f"Received settings update: {json.dumps(new_settings)}")
-                
+
                 if not new_settings:
                     return JSONResponse(
                         status_code=400,
@@ -78,14 +85,14 @@ class SettingsEndpoints:
                             "message": "No settings provided"
                         }
                     )
-                
+
                 # Apply new settings
                 self.logger.log_step("Updating settings")
                 self.settings_manager.update_settings(new_settings)
-                
+
                 # Save settings to file
                 self.settings_manager.save_settings()
-                
+
                 return JSONResponse(
                     status_code=200,
                     content={
@@ -94,7 +101,7 @@ class SettingsEndpoints:
                         "settings": self.settings_manager.settings
                     }
                 )
-                
+
             except Exception as e:
                 self.logger.log_error(f"Error updating settings: {str(e)}")
                 self.logger.log_error(traceback.format_exc())
@@ -112,9 +119,9 @@ class SettingsEndpoints:
             try:
                 if hasattr(self, 'template_handler') and self.template_handler:
                     templates = self.template_handler.get_all_templates()
-                    
+
                     self.logger.log_step(f"Serving {len(templates)} templates")
-                    
+
                     return JSONResponse(
                         status_code=200,
                         content={
@@ -131,7 +138,7 @@ class SettingsEndpoints:
                             "templates": []
                         }
                     )
-                    
+
             except Exception as e:
                 self.logger.log_error(f"Error getting templates: {str(e)}")
                 return JSONResponse(
@@ -155,10 +162,10 @@ class SettingsEndpoints:
                             "message": "Template handler not available"
                         }
                     )
-                
+
                 data = await request.json()
                 templates = data.get("templates")
-                
+
                 if not templates:
                     return JSONResponse(
                         status_code=400,
@@ -167,12 +174,12 @@ class SettingsEndpoints:
                             "message": "No templates provided"
                         }
                     )
-                
+
                 # Save templates
                 self.template_handler.save_templates(templates)
-                
+
                 self.logger.log_step(f"Saved {len(templates)} templates")
-                
+
                 return JSONResponse(
                     status_code=200,
                     content={
@@ -180,7 +187,7 @@ class SettingsEndpoints:
                         "message": "Templates saved successfully"
                     }
                 )
-                
+
             except Exception as e:
                 self.logger.log_error(f"Error saving templates: {str(e)}")
                 return JSONResponse(
@@ -196,43 +203,43 @@ class SettingsEndpoints:
             """Test connection to an API endpoint with provider-specific handling."""
             try:
                 import time
-                
+
                 # Get request data and log it
                 data = await request.json()
                 self.logger.log_step(f"Testing API connection with data: {data}")
-                
+
                 url = data.get('url')
                 api_key = data.get('apiKey')
                 provider = data.get('provider')
                 model = data.get('model')
                 template_id = data.get('templateId')
-                
+
                 if not url:
                     self.logger.log_warning("No URL provided")
                     return JSONResponse(
                         status_code=400,
                         content={"success": False, "message": "URL is required"}
                     )
-                
+
                 # Log the connection attempt details
                 self.logger.log_step(f"Attempting connection to: {url}")
                 self.logger.log_step(f"Provider: {provider}")
                 self.logger.log_step(f"Model: {model}")
-                
+
                 # Import here to avoid circular imports
                 from backend.api_provider_adapters import get_provider_adapter
-                
+
                 # Get the adapter for this provider
                 adapter = get_provider_adapter(provider, self.logger)
-                
+
                 # Get the correct endpoint URL based on provider
                 endpoint_url = adapter.get_endpoint_url(url)
                 self.logger.log_step(f"Using endpoint URL: {endpoint_url}")
-                
+
                 # Get the correct headers based on provider
                 headers = adapter.prepare_headers(api_key)
                 self.logger.log_step(f"Headers prepared (keys only): {list(headers.keys())}")
-                
+
                 # For test purposes, create a non-streaming request
                 test_data = adapter.prepare_request_data(
                     prompt="Hi",
@@ -244,11 +251,11 @@ class SettingsEndpoints:
                         "model": model
                     }
                 )
-                
+
                 # Ensure stream flag is set to False for testing purposes
                 test_data["stream"] = False
                 self.logger.log_step(f"Test data prepared: {test_data}")
-                
+
                 # Make the test request
                 import requests
                 response = requests.post(
@@ -257,9 +264,9 @@ class SettingsEndpoints:
                     json=test_data,
                     timeout=10
                 )
-                
+
                 self.logger.log_step(f"Response status: {response.status_code}")
-                
+
                 # Try to parse as JSON
                 response_data = None
                 try:
@@ -269,36 +276,36 @@ class SettingsEndpoints:
                     self.logger.log_warning(f"Could not parse response as JSON: {str(json_err)}")
                     # Try to get plain text for debug
                     self.logger.log_step(f"Raw response: {response.text[:100]}...")
-                
+
                 # Check for a successful connection
                 if response.status_code == 200:
                     self.logger.log_step("Connection test successful")
-                    
+
                     # Get model info - safely handle None response_data
                     model_info = {
                         "id": model or "unknown",
                         "name": model or provider or "unknown"
                     }
-                    
+
                     # If we successfully parsed JSON, extract model info
                     if response_data:
                         if isinstance(response_data, dict):
                             # Look in various locations for model info
                             model_info["id"] = (
-                                response_data.get("model") or 
-                                response_data.get("id") or 
-                                model or 
+                                response_data.get("model") or
+                                response_data.get("id") or
+                                model or
                                 "unknown"
                             )
                             model_info["name"] = (
-                                response_data.get("model_name") or 
-                                response_data.get("name") or 
-                                response_data.get("model") or 
-                                model or 
-                                provider or 
+                                response_data.get("model_name") or
+                                response_data.get("name") or
+                                response_data.get("model") or
+                                model or
+                                provider or
                                 "unknown"
                             )
-                    
+
                     # Try to detect template from response content
                     detected_template = None
                     if response_data and isinstance(response_data, dict):
@@ -306,7 +313,7 @@ class SettingsEndpoints:
                         if response_data.get("choices") and len(response_data.get("choices", [])) > 0:
                             choice = response_data["choices"][0]
                             content = ""
-                            
+
                             # Try to extract content from various formats
                             if "message" in choice and "content" in choice["message"]:
                                 content = choice["message"]["content"]
@@ -314,7 +321,7 @@ class SettingsEndpoints:
                                 content = choice["text"]
                             elif "delta" in choice and "content" in choice["delta"]:
                                 content = choice["delta"]["content"]
-                            
+
                             # Simple detection - look for common template markers
                             if content:
                                 if "<|im_start|>" in content or "<|im_end|>" in content:
@@ -323,9 +330,9 @@ class SettingsEndpoints:
                                     detected_template = "mistral"
                                 elif "<|start_header_id|>" in content:
                                     detected_template = "llama3"
-                    
+
                     self.logger.log_step(f"Detected template: {detected_template}")
-                
+
                     return JSONResponse(
                         status_code=200,
                         content={
@@ -338,7 +345,7 @@ class SettingsEndpoints:
                     )
                 else:
                     error_msg = f"Connection failed with status {response.status_code}"
-                    
+
                     # Try to extract an error message from the response
                     if response_data and isinstance(response_data, dict) and 'error' in response_data:
                         if isinstance(response_data['error'], dict) and 'message' in response_data['error']:
@@ -347,7 +354,7 @@ class SettingsEndpoints:
                             error_msg = f"{error_msg}: {response_data['error']}"
                     elif response.text:
                         error_msg = f"{error_msg}: {response.text[:200]}"
-                    
+
                     self.logger.log_warning(f"Connection test failed: {error_msg}")
                     return JSONResponse(
                         status_code=400,
@@ -357,7 +364,7 @@ class SettingsEndpoints:
                             "timestamp": time.time()
                         }
                     )
-                
+
             except Exception as e:
                 import time
                 self.logger.log_error(f"API connection test error: {str(e)}")
@@ -368,6 +375,61 @@ class SettingsEndpoints:
                         "success": False,
                         "message": str(e),
                         "timestamp": time.time()
+                    }
+                )
+
+        @router.post("/api/validate-directory")
+        async def validate_directory(payload: DirectoryPath):
+            """Validate if a given path is an existing directory."""
+            try:
+                dir_path_str = payload.directory
+                self.logger.log_step(f"Validating directory path: {dir_path_str}")
+
+                # Basic security check: prevent accessing parent directories excessively
+                # This is a simple check; more robust validation might be needed depending on usage
+                if ".." in dir_path_str:
+                     # Check if path resolves outside the intended base (e.g., user home or project root)
+                     # This requires defining what the 'base' directory should be.
+                     # For now, just disallow '..' for simplicity, though this might be too restrictive.
+                     # A better approach might involve resolving the absolute path and checking
+                     # if it starts with an allowed base path.
+                     # Example:
+                     # allowed_base = Path(get_users_dir()).resolve() # Or project root
+                     # resolved_path = Path(dir_path_str).resolve()
+                     # if not str(resolved_path).startswith(str(allowed_base)):
+                     #    raise HTTPException(status_code=400, detail="Path traversal attempt detected.")
+                    self.logger.log_warning(f"Directory path contains '..': {dir_path_str}")
+                    # Allowing '..' might be necessary, commenting out the exception for now.
+                    # raise HTTPException(status_code=400, detail="Path traversal attempt detected ('..' not allowed).")
+
+
+                dir_path = Path(dir_path_str)
+
+                is_valid = dir_path.is_dir()
+                self.logger.log_step(f"Path '{dir_path_str}' is_dir: {is_valid}")
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": True,
+                        "exists": is_valid,  # Changed key from isValid to exists
+                        "path": dir_path_str
+                    }
+                )
+            except HTTPException as http_exc:
+                # Re-raise HTTPExceptions directly
+                raise http_exc
+            except Exception as e:
+                self.logger.log_error(f"Error validating directory '{payload.directory}': {str(e)}")
+                self.logger.log_error(traceback.format_exc())
+                # Return isValid: false for any server error during validation
+                return JSONResponse(
+                    status_code=200, # Return 200 but indicate failure in the payload
+                    content={
+                        "success": False, # Indicate overall operation success/failure
+                        "exists": False, # Changed key from isValid to exists
+                        "path": payload.directory,
+                        "message": f"Error validating directory: {str(e)}"
                     }
                 )
 
@@ -391,30 +453,30 @@ async def get_openrouter_models(request: Request):
         data = await request.json()
         url = data.get('url', 'https://openrouter.ai')
         api_key = data.get('apiKey')
-        
+
         if not url or not api_key:
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "error": "URL and API key are required"}
             )
-            
+
         # Import required classes
         from backend.api_provider_adapters import OpenRouterAdapter
         from backend.log_manager import LogManager
-        
+
         # Create logger and adapter
         logger = LogManager()
         adapter = OpenRouterAdapter(logger)
-        
+
         # Fetch models
         result = adapter.list_models(url, api_key)
-        
+
         if not result.get('success', False):
             return JSONResponse(
                 status_code=500,
                 content=result
             )
-            
+
         return JSONResponse(content=result)
     except Exception as e:
         import traceback
@@ -432,26 +494,26 @@ async def get_featherless_models(request: Request):
         url = data.get('url', 'https://api.featherless.ai')
         api_key = data.get('apiKey')
         # Optional: Get the filter parameter from the request if needed later
-        # available_on_current_plan = data.get('available_on_current_plan') 
+        # available_on_current_plan = data.get('available_on_current_plan')
 
         if not url:
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "error": "URL is required for Featherless"}
             )
-            
+
         # Import required classes
         from backend.api_provider_adapters import FeatherlessAdapter
         from backend.log_manager import LogManager
-        
+
         # Create logger and adapter
         logger = LogManager() # Consider reusing the instance if possible
         adapter = FeatherlessAdapter(logger)
-        
+
         # Fetch models (pass api_key, even if None, adapter handles it)
         # Pass the filter parameter if you decide to use it
-        result = adapter.list_models(url, api_key) 
-        
+        result = adapter.list_models(url, api_key)
+
         if not result.get('success', False):
             # Log the specific error from the adapter if available
             error_detail = result.get('error', 'Unknown error from adapter')
@@ -460,7 +522,7 @@ async def get_featherless_models(request: Request):
                 status_code=500, # Or map specific errors (e.g., 401 for auth)
                 content=result
             )
-            
+
         return JSONResponse(content=result)
     except Exception as e:
         import traceback
