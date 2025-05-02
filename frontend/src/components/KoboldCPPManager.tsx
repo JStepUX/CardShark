@@ -18,15 +18,32 @@ interface VersionInfo {
   error?: string;
 }
 
+interface ServerStatus {
+  is_responding: boolean;
+  port: number;
+  last_checked: string;
+  error?: string;
+}
+
 const KoboldCPPManager: React.FC = () => {
   // Use the centralized hook for KoboldCPP status
-  const { status, isLoading, refresh: fetchStatus } = useKoboldCPP();
+  const { status, isLoading, refresh: fetchStatus, error: statusError } = useKoboldCPP();
   
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [checkingForUpdates, setCheckingForUpdates] = useState(false);
+  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  const [, setCheckingServerStatus] = useState(false);
+  const [, setCleaningUp] = useState(false);
+  
+  // Update component error state when the hook's error changes
+  useEffect(() => {
+    if (statusError) {
+      setError(`Error getting KoboldCPP status: ${statusError}`);
+    }
+  }, [statusError]);
   
   // Check for KoboldCPP updates
   const checkForUpdates = useCallback(async (force: boolean = false) => {
@@ -48,9 +65,87 @@ const KoboldCPPManager: React.FC = () => {
     }
   }, []);
   
+  // Check if KoboldCPP server is responding
+  const checkServerStatus = useCallback(async () => {
+    if (!status || !status.is_running) return;
+    
+    try {
+      setCheckingServerStatus(true);
+      const port = 5001; // Default KoboldCPP port
+      const response = await fetch(`/api/koboldcpp/ping-server?port=${port}`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await response.json();
+      
+      setServerStatus({
+        is_responding: data.is_responding,
+        port: port,
+        last_checked: new Date().toISOString(),
+        error: data.error
+      });
+      
+      if (!data.is_responding && data.error) {
+        // Show error but don't set main error state to avoid cluttering UI
+        console.error(`KoboldCPP server error: ${data.error}`);
+      }
+    } catch (err) {
+      setServerStatus({
+        is_responding: false,
+        port: 5001,
+        last_checked: new Date().toISOString(),
+        error: err instanceof Error ? err.message : String(err)
+      });
+    } finally {
+      setCheckingServerStatus(false);
+    }
+  }, [status]);
+  
+  // Check server status when KoboldCPP is reported as running
+  useEffect(() => {
+    if (status?.is_running) {
+      checkServerStatus();
+    }
+  }, [status?.is_running, checkServerStatus]);
+  
+  // Clean up orphaned _MEI directories
+  const cleanupOrphanedDirectories = useCallback(async () => {
+    try {
+      setCleaningUp(true);
+      setError(null);
+      
+      const response = await fetch('/api/koboldcpp/cleanup-mei', {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to clean up orphaned directories: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        setError(`Cleanup error: ${data.error}`);
+      } else if (data.cleaned_count > 0) {
+        console.log(`Cleaned up ${data.cleaned_count} orphaned _MEI directories`);
+      }
+      
+      return data.success;
+    } catch (err) {
+      setError(`Error cleaning up orphaned directories: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    } finally {
+      setCleaningUp(false);
+    }
+  }, []);
+  
   // Launch KoboldCPP - Function will be used in the UI
   const launchKoboldCPP = useCallback(async () => {
     try {
+      // First clean up any orphaned _MEI directories
+      await cleanupOrphanedDirectories();
+      
       const response = await fetch('/api/koboldcpp/launch', {
         method: 'POST',
       });
@@ -65,7 +160,7 @@ const KoboldCPPManager: React.FC = () => {
     } catch (err) {
       setError(`Error launching KoboldCPP: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [fetchStatus]);
+  }, [fetchStatus, cleanupOrphanedDirectories]);
   
   // Download KoboldCPP
   const downloadKoboldCPP = async () => {
@@ -266,6 +361,34 @@ const KoboldCPPManager: React.FC = () => {
           {status.exe_path && (
             <div className="mb-4 p-2 bg-zinc-900 rounded text-gray-300 text-sm overflow-x-auto">
               <code>{status.exe_path}</code>
+            </div>
+          )}
+          
+          {/* Server status */}
+          {serverStatus && (
+            <div className="mb-4 p-4 rounded-lg border flex items-center gap-2" 
+              style={{ 
+                backgroundColor: serverStatus.is_responding ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                borderColor: serverStatus.is_responding ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+              }}>
+              {serverStatus.is_responding ? (
+                <CheckCircle className="h-6 w-6 text-green-500" />
+              ) : (
+                <AlertCircle className="h-6 w-6 text-yellow-500" />
+              )}
+              <div>
+                <div className="font-medium">
+                  {serverStatus.is_responding ? 'KoboldCPP server is responding' : 'KoboldCPP server is not responding'}
+                </div>
+                <div className="text-sm text-gray-400">
+                  {serverStatus.is_responding ? 
+                    `Server is running on port ${serverStatus.port}` : 
+                    `Failed to connect to server on port ${serverStatus.port}`}
+                </div>
+                <div className="text-xs text-gray-500">
+                  Last checked: {new Date(serverStatus.last_checked).toLocaleString()}
+                </div>
+              </div>
             </div>
           )}
           

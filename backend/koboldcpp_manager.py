@@ -662,5 +662,62 @@ class KoboldCPPManager:
         
         return config
 
+    def cleanup_orphaned_mei_directories(self) -> Dict[str, Any]:
+        """
+        Clean up orphaned _MEI directories in temp folder
+        
+        Returns:
+            Dictionary with status information including number of directories cleaned
+        """
+        try:
+            import tempfile
+            import shutil
+            import time
+            
+            now = time.time()
+            tmp_dir = tempfile.gettempdir()
+            logger.info(f"Cleaning orphaned _MEI folders in: {tmp_dir}")
+
+            cleaned_count = 0
+            skipped_count = 0
+            
+            for folder in os.listdir(tmp_dir):
+                if folder.startswith("_MEI"):
+                    path = os.path.join(tmp_dir, folder)
+                    try:
+                        if os.path.isdir(path):
+                            # We'll clean up all _MEI folders regardless of age 
+                            # since we're explicitly doing this before launching KoboldCPP
+                            logger.info(f"Removing orphaned folder: {path}")
+                            shutil.rmtree(path)
+                            cleaned_count += 1
+                    except FileNotFoundError:
+                        # Folder might have been deleted by another process
+                        logger.debug(f"Folder not found during cleanup (likely already removed): {path}")
+                    except PermissionError:
+                        # If folder is in use, skip it
+                        logger.debug(f"Permission denied trying to remove: {path} (likely in use)")
+                        skipped_count += 1
+                    except Exception as e:
+                        # Catch other potential errors during removal
+                        logger.warning(f"Error removing {path}: {e}")
+                        skipped_count += 1
+            
+            logger.info(f"Cleaned up {cleaned_count} orphaned _MEI folders. Skipped {skipped_count} folders.")
+            
+            return {
+                'success': True,
+                'cleaned_count': cleaned_count,
+                'skipped_count': skipped_count,
+                'message': f"Cleaned up {cleaned_count} orphaned _MEI folders."
+            }
+        except Exception as e:
+            logger.error(f"Error during cleanup process: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'message': f"Error cleaning up orphaned _MEI folders: {str(e)}"
+            }
+
 # Create a single instance of the manager
 manager = KoboldCPPManager()

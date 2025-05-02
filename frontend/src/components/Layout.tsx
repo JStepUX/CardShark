@@ -194,46 +194,55 @@ const Layout: React.FC = () => {
 
   // Save handler
   const handleSave = async () => {
-    if (!characterData) return;
+    if (!characterData) {
+      setError("No character data available to save");
+      return;
+    }
     
     try {
       setIsLoading(true);
       setError(null);
       
-      // Settings are already available from context
+      // Prepare the file - simplified approach that preserves the original image
+      let fileToSave: File | null = null;
       
-      // Prepare the file
-      let fileToSave: File;
-      
-      if (newImage) {
-        // Use the new image from state
-        if (typeof newImage === 'string') {
-          // Convert data URL to Blob/File
+      if (newImage instanceof File) {
+        // If we have a valid File object, use it directly
+        fileToSave = newImage;
+      } else if (newImage && typeof newImage === 'string' && newImage.startsWith('data:image/')) {
+        // Convert data URL to File if it's a valid image data URL
+        try {
           const response = await fetch(newImage);
           const blob = await response.blob();
           fileToSave = new File([blob], "character.png", { type: "image/png" });
-        } else {
-          // It's already a File object
-          fileToSave = newImage;
+        } catch (error) {
+          console.error("Error converting data URL to File:", error);
+          throw new Error("Failed to process the image data");
         }
       } else if (imageUrl) {
-        // Fall back to current imageUrl
-        const response = await fetch(imageUrl);
-        const blob = await response.blob();
-        fileToSave = new File([blob], "character.png", { type: "image/png" });
-      } else {
-        throw new Error("No image available to save");
+        // Fall back to the current imageUrl if newImage is not available or valid
+        try {
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          fileToSave = new File([blob], "character.png", { type: "image/png" });
+        } catch (error) {
+          console.error("Error fetching current image:", error);
+          throw new Error("Failed to access the current image");
+        }
+      }
+      
+      // Final check - if we still don't have a valid image, throw an error
+      if (!fileToSave) {
+        throw new Error("No valid image available to save");
       }
       
       // Create form data
       const formData = new FormData();
       formData.append("file", fileToSave);
-      formData.append("metadata_json", JSON.stringify(characterData)); // Changed key to metadata_json
-      
-      // The new endpoint determines the save path based on metadata, directory parameter removed.
+      formData.append("metadata_json", JSON.stringify(characterData));
       
       // Save the file
-      const saveResponse = await fetch("/api/characters/save-card", { // Changed endpoint URL
+      const saveResponse = await fetch("/api/characters/save-card", {
         method: "POST",
         body: formData,
       });
@@ -243,18 +252,20 @@ const Layout: React.FC = () => {
         throw new Error(`Save failed: ${errorText}`);
       }
       
-      // Handle the saved file
-      const savedBlob = await saveResponse.blob();
-      const newImageUrl = URL.createObjectURL(savedBlob);
-      setImageUrl(newImageUrl);
+      // Handle successful save
+      const saveResult = await saveResponse.json();
       
-      // Reset newImage state after successful save
-      setNewImage(null);
-      
-      // The file is now saved server-side by the /api/characters/save-card endpoint.
-      // Client-side download logic removed.
+      // Update the UI - preserve our reference to the image
+      if (saveResult.success) {
+        // Don't reset newImage state - keep our reference to the original file
+        // setNewImage(null);
+        console.log("Character saved successfully:", saveResult);
+      } else {
+        throw new Error(saveResult.message || "Unknown error during save");
+      }
       
     } catch (error) {
+      console.error("Save error:", error);
       setError(error instanceof Error ? error.message : "Failed to save character");
     } finally {
       setIsLoading(false);

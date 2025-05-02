@@ -32,6 +32,23 @@ class LogManager:
             # Running from source
             return Path(__file__).parent.parent
 
+    # Standard logging methods (aliases) to support common logging patterns
+    def info(self, message):
+        """Standard info logging method (alias for log_info)"""
+        self.log_info(message)
+        
+    def error(self, message, exc_info=False, error=None):
+        """Standard error logging method (alias for log_error)"""
+        self.log_error(message, error=error if error else exc_info if isinstance(exc_info, Exception) else None)
+        
+    def warning(self, message):
+        """Standard warning logging method (alias for log_warning)"""
+        self.log_warning(message)
+        
+    def debug(self, message):
+        """Standard debug logging method"""
+        self.log_step(f"DEBUG: {message}")
+
     def log_info(self, message):
         """Log an info message."""
         self.log_step(f"INFO: {message}")

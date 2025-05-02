@@ -30,7 +30,7 @@ Follow these instructions step-by-step, and use the provided examples to refine 
   - Be direct and technical: Focus on clarity and precision in your code and reasoning.
   - Be proactive: Anticipate errors and edge cases before they occur.
   - Be iterative: Refine your outputs based on feedback or self-assessment.
-- **Objective**: Deliver production-ready code that adheres to the standards outlined below.
+- **Objective**: Deliver production-ready code that adheres to the standards outlined below. KEEP IT SIMPLE! DO NOT OVERCOMPLICATE!
 
 ---
 description: React best practices and patterns for modern web applications
@@ -110,3 +110,6 @@ globs: **/*.tsx, **/*.jsx, components/**/*
 - Keep styles close to components
 - Use proper imports/exports
 - Document complex component logic 
+
+
+ASK YOURSELF - DID I PROVIDE AN OVERLY COMPLICATED SOLUTION? COULD I DO THIS LESS INTRUSIVELY AND MORE EFFICIENTLY?

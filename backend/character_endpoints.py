@@ -25,6 +25,7 @@ import re # Add re for filename sanitization
 from backend.log_manager import LogManager
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.backyard_handler import BackyardHandler # Import BackyardHandler
+from backend.settings_manager import SettingsManager # Add SettingsManager import
 
 # Dependency provider functions (defined locally, import from main inside)
 def get_logger() -> LogManager:
@@ -41,6 +42,11 @@ def get_backyard_handler() -> BackyardHandler:
     from backend.main import backyard_handler # Import locally
     if backyard_handler is None: raise HTTPException(status_code=500, detail="Backyard handler not initialized")
     return backyard_handler
+
+def get_settings_manager() -> SettingsManager:
+    from backend.main import settings_manager  # Import locally
+    if settings_manager is None: raise HTTPException(status_code=500, detail="Settings manager not initialized")
+    return settings_manager
 
 # Create router
 router = APIRouter(
@@ -446,39 +452,61 @@ async def upload_avatar(
         logger.error(f"Error uploading avatar for {character_id}: {e}") # Log error
         raise HTTPException(status_code=500, detail=f"Failed to upload avatar: {str(e)}")
 
-@router.post("/characters/save-card", summary="Save character card PNG with metadata") # Corrected path
+@router.post("/characters/save-card", summary="Save character card PNG with metadata")
 async def save_character_card(
     file: UploadFile = File(...),
-    metadata_json: str = Form(...), # Frontend sends 'metadata' key
-    png_handler: PngMetadataHandler = Depends(get_png_handler), # Inject dependency
+    metadata_json: str = Form(...),
+    png_handler: PngMetadataHandler = Depends(get_png_handler),
+    settings_manager: SettingsManager = Depends(get_settings_manager),
     logger: LogManager = Depends(get_logger)
 ):
     """
     Receives a PNG image file and a JSON string of character metadata.
     Embeds the metadata into the PNG using PngMetadataHandler
-    and saves it to the characters directory.
+    and saves it to the appropriate character directory based on settings.
     """
     try:
         # 1. Read image data
         image_bytes = await file.read()
         logger.info(f"Received image file: {file.filename}, size: {len(image_bytes)} bytes")
+        
+        # 1.1 Validate image data - check for minimum size and PNG signature
+        if len(image_bytes) < 100:  # Minimum size check - a valid PNG is at least this big
+            logger.warning(f"Image file too small ({len(image_bytes)} bytes). Not a valid PNG.")
+            raise HTTPException(status_code=400, detail=f"Invalid image file: too small to be a valid PNG")
+            
+        # Check PNG signature (first 8 bytes)
+        png_signature = b'\x89PNG\r\n\x1a\n'
+        if not image_bytes.startswith(png_signature):
+            logger.warning("Image file does not have PNG signature")
+            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG image")
 
         # 2. Parse metadata JSON
         try:
             metadata = json.loads(metadata_json)
             logger.info("Successfully parsed metadata JSON.")
-            # Basic validation: check if 'name' exists
-            if 'name' not in metadata:
-                 logger.warning("Metadata is missing the 'name' field.")
-                 # Optionally raise an error or use a default name
-                 # raise HTTPException(status_code=400, detail="Metadata must include a 'name' field.")
+            
+            # Extract character name from metadata
+            character_name = None
+            
+            # Try to get name directly from top-level metadata
+            if 'name' in metadata:
+                character_name = metadata['name']
+                logger.info(f"Found character name in top-level metadata: {character_name}")
+            # Try to get name from data structure if it exists
+            elif 'data' in metadata and isinstance(metadata['data'], dict) and 'name' in metadata['data']:
+                character_name = metadata['data']['name']
+                logger.info(f"Found character name in metadata.data: {character_name}")
+            
+            # If no name found, log warning but continue with UUID fallback
+            if not character_name:
+                logger.warning("Metadata is missing the 'name' field, will use UUID for filename.")
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse metadata JSON: {e}")
             raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {e}")
         except Exception as e:
-             logger.error(f"Unexpected error parsing metadata: {e}")
-             raise HTTPException(status_code=400, detail=f"Error processing metadata: {e}")
-
+            logger.error(f"Unexpected error parsing metadata: {e}")
+            raise HTTPException(status_code=400, detail=f"Error processing metadata: {e}")
 
         # 3. Embed metadata into PNG
         try:
@@ -488,20 +516,49 @@ async def save_character_card(
             logger.error(f"Failed to write metadata to PNG: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to process PNG metadata: {e}")
 
-        # 4. Determine filename (use character name, sanitize it)
-        character_name = metadata.get('name', f'character_{uuid.uuid4()}') # Use name or fallback to UUID
+        # 4. Determine filename using character name
+        # Use character name (from either location) or fall back to UUID if not found
+        if not character_name:
+            character_name = f'character_{uuid.uuid4()}'
+            
         # Sanitize filename: remove invalid characters, limit length
-        sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name) # Remove invalid chars
-        sanitized_name = sanitized_name[:100] # Limit length
-        filename = f"{sanitized_name}.png"
-        save_path = os.path.join(CHARACTERS_DIR, filename)
-        logger.info(f"Determined save path: {save_path}")
-
-        # Handle potential filename conflicts (optional: check if file exists and maybe rename)
-        # For simplicity, we'll overwrite for now.
+        sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name)
+        sanitized_name = sanitized_name[:100]  # Limit length
+        
+        # Get save directory based on settings
+        save_to_user_dir = settings_manager.get_setting('save_to_character_directory')
+        user_character_dir = settings_manager.get_setting('character_directory')
+        
+        # Determine where to save the file
+        save_directory = CHARACTERS_DIR  # Default to app's characters directory
+        
+        if save_to_user_dir and user_character_dir:
+            # Use user-selected directory if setting is enabled and directory is set
+            if os.path.isdir(user_character_dir):
+                save_directory = user_character_dir
+                logger.info(f"Using character directory from settings: {save_directory}")
+            else:
+                logger.warning(f"Character directory from settings doesn't exist: {user_character_dir}, using default")
+        
+        # Handle filename conflicts properly to avoid overwriting
+        base_filename = f"{sanitized_name}.png"
+        save_path = os.path.join(save_directory, base_filename)
+        
+        # Check if file exists and generate a unique name if needed
+        counter = 1
+        while os.path.exists(save_path):
+            new_filename = f"{sanitized_name} ({counter}).png"
+            save_path = os.path.join(save_directory, new_filename)
+            counter += 1
+            logger.info(f"File exists, trying alternative name: {new_filename}")
+        
+        logger.info(f"Final save path: {save_path}")
 
         # 5. Save the new PNG file
         try:
+            # Ensure the save directory exists
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            
             with open(save_path, "wb") as f:
                 f.write(output_bytes)
             logger.info(f"Successfully saved character card to {save_path}")
@@ -514,7 +571,7 @@ async def save_character_card(
             content={
                 "success": True,
                 "message": "Character card saved successfully.",
-                "filename": filename,
+                "filename": os.path.basename(save_path),
                 "path": save_path # Return the server-side path for reference
             }
         )
@@ -525,7 +582,6 @@ async def save_character_card(
     except Exception as e:
         logger.error(f"Unexpected error in save_character_card: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
-
 
 @router.post("/characters/extract-metadata", summary="Upload a character PNG and extract metadata") # Corrected path
 async def extract_metadata_from_upload(
@@ -541,6 +597,17 @@ async def extract_metadata_from_upload(
         # Read file content into memory
         image_bytes = await file.read()
         logger.info(f"Received file for metadata extraction: {file.filename}, size: {len(image_bytes)} bytes")
+        
+        # Validate image data
+        if len(image_bytes) < 100:  # Minimum size check
+            logger.warning(f"Image file too small ({len(image_bytes)} bytes). Not a valid PNG.")
+            raise HTTPException(status_code=400, detail=f"Invalid image file: too small to be a valid PNG")
+            
+        # Check PNG signature
+        png_signature = b'\x89PNG\r\n\x1a\n'
+        if not image_bytes.startswith(png_signature):
+            logger.warning("Image file does not have PNG signature")
+            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG image")
 
         # Extract metadata using the handler
         metadata = png_handler.read_metadata(image_bytes)
@@ -563,7 +630,6 @@ async def extract_metadata_from_upload(
         raise HTTPException(status_code=500, detail=f"Failed to extract metadata: {e}")
 
 
-# Add character metadata and image endpoints outside the router for direct access
 @router.get("/characters/metadata/{path:path}", summary="Extract metadata from a character file") # Corrected path
 async def get_character_metadata(
     path: str,
@@ -708,8 +774,9 @@ class BackyardImportRequest(BaseModel):
 @router.post("/characters/import-backyard", summary="Import character from Backyard.ai URL") # Corrected path
 async def import_from_backyard(
     request: BackyardImportRequest,
-    backyard_handler: BackyardHandler = Depends(lambda: get_backyard_handler()), # Example if provider needed
+    backyard_handler: BackyardHandler = Depends(lambda: get_backyard_handler()),
     png_handler: PngMetadataHandler = Depends(get_png_handler),
+    settings_manager: SettingsManager = Depends(get_settings_manager),
     logger: LogManager = Depends(get_logger)
 ):
     """
@@ -738,11 +805,41 @@ async def import_from_backyard(
         # Determine filename and save path
         character_name = metadata.get('name', f'backyard_import_{uuid.uuid4().hex[:8]}')
         sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name)[:100]
-        filename = f"{sanitized_name}.png"
-        save_path = os.path.join(CHARACTERS_DIR, filename)
+        
+        # Get save directory based on settings
+        save_to_user_dir = settings_manager.get_setting('save_to_character_directory')
+        user_character_dir = settings_manager.get_setting('character_directory')
+        
+        # Determine where to save the file
+        save_directory = CHARACTERS_DIR  # Default to app's characters directory
+        
+        if save_to_user_dir and user_character_dir:
+            # Use user-selected directory if setting is enabled and directory is set
+            if os.path.isdir(user_character_dir):
+                save_directory = user_character_dir
+                logger.info(f"Using character directory from settings: {save_directory}")
+            else:
+                logger.warning(f"Character directory from settings doesn't exist: {user_character_dir}, using default")
+        
+        # Handle filename conflicts properly to avoid overwriting
+        base_filename = f"{sanitized_name}.png"
+        save_path = os.path.join(save_directory, base_filename)
+        
+        # Check if file exists and generate a unique name if needed
+        counter = 1
+        while os.path.exists(save_path):
+            new_filename = f"{sanitized_name} ({counter}).png"
+            save_path = os.path.join(save_directory, new_filename)
+            counter += 1
+            logger.info(f"File exists, trying alternative name: {new_filename}")
+        
+        logger.info(f"Final save path for imported character: {save_path}")
 
         # Save the downloaded PNG file (with its original metadata)
         try:
+            # Ensure the save directory exists
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            
             with open(save_path, "wb") as f:
                 f.write(image_bytes)
             logger.info(f"Successfully saved imported character card to {save_path}")
@@ -755,7 +852,7 @@ async def import_from_backyard(
             content={
                 "success": True,
                 "message": "Character imported successfully from Backyard.ai.",
-                "filename": filename,
+                "filename": os.path.basename(save_path),
                 "path": save_path,
                 "metadata": metadata # Return extracted metadata
             }
@@ -767,9 +864,6 @@ async def import_from_backyard(
         logger.error(f"Error importing from Backyard URL {request.url}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to import from Backyard: {str(e)}")
 
-
-# --- Lore Extraction ---
-# Consider moving this to a separate 'lore' module if complexity grows
 
 @router.post("/characters/extract-lore", summary="Extract lore items from an uploaded character PNG") # Corrected path
 async def extract_lore_from_upload(
@@ -784,6 +878,17 @@ async def extract_lore_from_upload(
     try:
         image_bytes = await file.read()
         logger.info(f"Received file for lore extraction: {file.filename}, size: {len(image_bytes)} bytes")
+        
+        # Validate image data
+        if len(image_bytes) < 100:  # Minimum size check
+            logger.warning(f"Image file too small ({len(image_bytes)} bytes). Not a valid PNG.")
+            raise HTTPException(status_code=400, detail=f"Invalid image file: too small to be a valid PNG")
+            
+        # Check PNG signature
+        png_signature = b'\x89PNG\r\n\x1a\n'
+        if not image_bytes.startswith(png_signature):
+            logger.warning("Image file does not have PNG signature")
+            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG image")
 
         metadata = png_handler.read_metadata(image_bytes)
         logger.info(f"Extracted metadata for lore check.")
