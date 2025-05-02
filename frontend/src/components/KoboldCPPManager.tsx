@@ -1,12 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Download, AlertCircle, X, CheckCircle, Loader2, RefreshCw, ArrowUpCircle } from 'lucide-react';
-
-interface KoboldStatus {
-  status: 'running' | 'present' | 'missing';
-  exe_path: string;
-  is_running: boolean;
-  message?: string;
-}
+import { useKoboldCPP } from '../hooks/useKoboldCPP';
 
 interface DownloadProgress {
   bytes_downloaded: number;
@@ -25,31 +19,14 @@ interface VersionInfo {
 }
 
 const KoboldCPPManager: React.FC = () => {
-  const [status, setStatus] = useState<KoboldStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Use the centralized hook for KoboldCPP status
+  const { status, isLoading, refresh: fetchStatus } = useKoboldCPP();
+  
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [checkingForUpdates, setCheckingForUpdates] = useState(false);
-  
-  // Fetch KoboldCPP status - using useCallback to prevent unnecessary rerenders
-  const fetchStatus = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('/api/koboldcpp/status');
-      if (!response.ok) {
-        throw new Error(`Failed to get KoboldCPP status: ${response.statusText}`);
-      }
-      const data = await response.json();
-      setStatus(data);
-      setError(null);
-    } catch (err) {
-      setError(`Error checking KoboldCPP status: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
   
   // Check for KoboldCPP updates
   const checkForUpdates = useCallback(async (force: boolean = false) => {
@@ -165,7 +142,6 @@ const KoboldCPPManager: React.FC = () => {
   // Recheck status manually
   const recheckStatus = async () => {
     try {
-      setIsLoading(true);
       const response = await fetch('/api/koboldcpp/recheck', {
         method: 'POST',
       });
@@ -175,7 +151,6 @@ const KoboldCPPManager: React.FC = () => {
       }
       
       const data = await response.json();
-      setStatus(data);
       
       if (data.message) {
         setError(data.message);
@@ -183,27 +158,20 @@ const KoboldCPPManager: React.FC = () => {
         setError(null);
       }
       
+      // Refresh status using the context hook
+      await fetchStatus();
+      
       // Also check for updates
       await checkForUpdates();
     } catch (err) {
       setError(`Error rechecking KoboldCPP: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsLoading(false);
     }
   };
   
-  // Load status on component mount and poll less frequently
+  // Load version info on component mount
   useEffect(() => {
-    // Initial load
-    fetchStatus();
     checkForUpdates();
-    
-    // Poll for status updates less frequently (every 60s instead of 30s)
-    // This helps reduce UI jitter from too many status checks
-    const intervalId = setInterval(fetchStatus, 60000);
-    
-    return () => clearInterval(intervalId);
-  }, [fetchStatus, checkForUpdates]);
+  }, [checkForUpdates]);
   
   // Format byte size for display
   const formatBytes = (bytes: number) => {
@@ -222,7 +190,7 @@ const KoboldCPPManager: React.FC = () => {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-white">KoboldCPP Integration</h2>
         <button
-          onClick={fetchStatus}
+          onClick={() => fetchStatus()}
           className="text-gray-300 hover:text-white"
           title="Refresh Status"
           disabled={isLoading}
@@ -295,9 +263,11 @@ const KoboldCPPManager: React.FC = () => {
           </div>
           
           {/* Path info */}
-          <div className="mb-4 p-2 bg-zinc-900 rounded text-gray-300 text-sm overflow-x-auto">
-            <code>{status.exe_path}</code>
-          </div>
+          {status.exe_path && (
+            <div className="mb-4 p-2 bg-zinc-900 rounded text-gray-300 text-sm overflow-x-auto">
+              <code>{status.exe_path}</code>
+            </div>
+          )}
           
           {/* Action buttons based on status */}
           <div className="flex flex-col sm:flex-row gap-2 justify-center mb-4">

@@ -15,10 +15,69 @@ import webbrowser
 from threading import Timer
 
 # FastAPI imports
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Query
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse, RedirectResponse
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Query, APIRouter
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse, RedirectResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+# Add a custom StaticFiles implementation to handle cross-drive paths
+from starlette.staticfiles import StaticFiles as StarletteStaticFiles
+from starlette.types import Scope, Receive, Send
+import os
+import anyio
+
+# Extend StaticFiles to handle cross-drive paths
+class CrossDriveStaticFiles(StarletteStaticFiles):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Handle a request and return a response."""
+        assert scope["type"] == "http"
+        request = Request(scope)
+        path = request.path_params.get("path", "")
+        response = await self.get_response(path, scope)
+        await response(scope, receive, send)
+
+    async def get_response(self, path: str, scope: Scope):
+        """Get a response for a given path."""
+        if path.startswith("/"):
+            path = path[1:]
+
+        try:
+            full_path, stat_result = await anyio.to_thread.run_sync(
+                self.safe_lookup_path, path
+            )
+            return self.file_response(full_path, stat_result, scope)
+        except (FileNotFoundError, PermissionError):
+            return self.not_found(scope)
+
+    def not_found(self, scope: Scope):
+        """Return a 404 Not Found response."""
+        if self.html:
+            return HTMLResponse(content="Not Found", status_code=404)
+        return PlainTextResponse(content="Not Found", status_code=404)
+    
+    def safe_lookup_path(self, path: str):
+        """Modified lookup path that handles cross-drive paths."""
+        try:
+            full_path = os.path.join(self.directory, path)
+            
+            # Skip the path containment check if paths are on different drives
+            if os.path.splitdrive(full_path)[0] != os.path.splitdrive(self.directory)[0]:
+                if not os.path.exists(full_path):
+                    raise FileNotFoundError()
+            else:
+                # If same drive, perform the normal security check
+                if not os.path.exists(full_path):
+                    raise FileNotFoundError()
+                if os.path.commonpath([full_path, self.directory]) != self.directory:
+                    raise PermissionError()
+                    
+            stat_result = os.stat(full_path)
+            if stat_result.st_mode & 0o100000 == 0:
+                raise FileNotFoundError()
+                
+            return full_path, stat_result
+        except (FileNotFoundError, PermissionError) as exc:
+            raise exc
 
 # Internal modules/handlers
 from backend.log_manager import LogManager
@@ -35,19 +94,16 @@ from backend.background_handler import BackgroundHandler
 from backend.lore_handler import LoreHandler
 
 # API endpoint modules
-from backend.chat_endpoints import ChatEndpoints
-# Remove the CharacterEndpoints import since it doesn't exist
-from backend.user_endpoints import UserEndpoints
-from backend.settings_endpoints import SettingsEndpoints
-from backend.world_endpoints import WorldEndpoints
-from backend.background_endpoints import BackgroundEndpoints, setup_router as setup_background_router
+from backend.chat_endpoints import router as chat_router
+# Import routers directly, no need for class instances
 from backend.background_endpoints import router as background_router
 from backend.room_card_endpoint import router as room_card_router
 from backend.character_endpoints import router as character_router
 from backend.user_endpoints import router as user_router
 from backend.settings_endpoints import router as settings_router
 from backend.world_endpoints import router as world_router
-from backend.world_chat_endpoints import router as world_chat_router
+from backend.template_endpoints import router as template_router  # Import the new template router
+# from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
 
 # Import koboldcpp handler & manager
 from backend.koboldcpp_handler import router as koboldcpp_router
@@ -66,6 +122,15 @@ DEBUG = os.environ.get("DEBUG", "").lower() in ("true", "1", "t")
 # Initialize FastAPI app
 logger = LogManager()
 app = FastAPI(debug=DEBUG)
+
+# Create a dedicated router for health check
+health_router = APIRouter(prefix="/api", tags=["health"])
+
+@health_router.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    # Optionally add more checks here (e.g., database connection)
+    return {"status": "ok", "version": VERSION}
 
 # Add CORS middleware to allow all origins (for development)
 app.add_middleware(
@@ -101,32 +166,24 @@ logger.log_step(f"Initializing world chat handler with worlds directory: {worlds
 world_card_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
 
 # ---------- Initialize and register endpoints ----------
+# NOTE: Removed initialization and registration of endpoint classes (ChatEndpoints, UserEndpoints, etc.)
+# as routers are included directly below using app.include_router.
+# Removed stray marker and duplicate comment block from previous failed diff
 
-# Initialize endpoint classes
-chat_endpoints = ChatEndpoints(logger, chat_handler, api_handler)
-user_endpoints = UserEndpoints(logger, settings_manager)
-settings_endpoints = SettingsEndpoints(logger, settings_manager)
-# Add template handler to settings endpoints for templates management
-settings_endpoints.template_handler = template_handler
-world_endpoints = WorldEndpoints(logger, world_state_handler, world_card_chat_handler)
-background_endpoints = BackgroundEndpoints(logger, background_handler, chat_handler)  # Pass chat_handler here
-
-# Register endpoints from classes
-chat_endpoints.register_routes(app)
-user_endpoints.register_routes(app)
-settings_endpoints.register_routes(app)
-world_endpoints.register_routes(app)
-background_endpoints.register_routes(app)
+# Cleaned up duplicated lines from previous failed diffs
 
 # Set up and include routers directly
-setup_background_router(background_handler, logger, chat_handler)  # Pass chat_handler here as well
+# setup_background_router call removed as it's no longer needed
+app.include_router(health_router) # Include the health check router
+app.include_router(chat_router) # Include the refactored chat router
 app.include_router(koboldcpp_router)
 app.include_router(room_card_router)
 app.include_router(character_router)
 app.include_router(user_router)
 app.include_router(settings_router)
 app.include_router(world_router)
-app.include_router(world_chat_router)
+app.include_router(template_router)  # Include the new template router
+# app.include_router(world_chat_router) # Removed, functionality merged into world_router
 app.include_router(background_router)
 
 # ---------- Direct routes that haven't been modularized yet ----------
@@ -145,96 +202,8 @@ async def debug_png(file: UploadFile = File(...)):
             content={"error": f"Failed to debug PNG: {str(e)}"}
         )
 
-@app.get("/api/character-image/{path:path}")
-async def get_character_image(path: str):
-    """Serve a character image file by path."""
-    logger.log_step(f"Character image endpoint accessed with path: {path}")
-    # Redirect to the router implementation
-    from fastapi.responses import RedirectResponse
-    
-    # URL encode the path for safe redirection
-    encoded_path = urllib.parse.quote(path)
-    redirect_url = f"/api/characters/image/{encoded_path}"
-    logger.log_step(f"Redirecting to router endpoint: {redirect_url}")
-    return RedirectResponse(url=redirect_url)
-
-@app.get("/api/character-metadata/{path:path}")
-async def get_character_metadata(path: str):
-    """Extract metadata from a character file."""
-    logger.log_step(f"Character metadata endpoint accessed with path: {path}")
-    # Redirect to the router implementation
-    from fastapi.responses import RedirectResponse
-    
-    # URL encode the path for safe redirection
-    encoded_path = urllib.parse.quote(path)
-    redirect_url = f"/api/characters/metadata/{encoded_path}"
-    logger.log_step(f"Redirecting to router endpoint: {redirect_url}")
-    return RedirectResponse(url=redirect_url)
-
-@app.get("/api/character/{path:path}")
-async def get_character_by_path(path: str):
-    """API endpoint for character operations by path."""
-    logger.log_step(f"Character endpoint accessed with path: {path}")
-    # For GET requests, we want to redirect to the appropriate image or metadata endpoint
-    if path.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-        # This is likely an image request, redirect to character-image
-        return {"success": False, "error": "Use /api/character-image/ for image requests"}
-    else:
-        raise HTTPException(status_code=404, detail="Invalid character path or operation")
-
-@app.delete("/api/character/{path:path}")
-async def delete_character_by_path(path: str):
-    """Delete a character file by path."""
-    logger.log_step(f"Delete character request with path: {path}")
-    
-    try:
-        # URL decode the path first
-        path = urllib.parse.unquote(path)
-        # On Windows, convert forward slashes to backslashes
-        if os.name == 'nt':
-            path = path.replace('/', '\\')
-        
-        logger.log_step(f"Normalized path: {path}")
-        
-        if not os.path.exists(path):
-            logger.log_error(f"Character file not found: {path}")
-            raise HTTPException(status_code=404, detail="Character file not found")
-            
-        if not path.lower().endswith('.png'):
-            logger.log_error(f"Invalid file format for character: {path}")
-            raise HTTPException(status_code=400, detail="Invalid file format")
-            
-        try:
-            os.remove(path)
-            logger.log_step(f"Successfully deleted character file: {path}")
-            return {"success": True, "message": "Character deleted successfully"}
-        except Exception as e:
-            logger.log_error(f"Error deleting character file: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
-    except Exception as e:
-        logger.log_error(f"Error in delete_character_by_path: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/characters")
-async def characters_directory_fallback(request: Request, directory: str = Query(None)):
-    """Fallback API endpoint for character directory requests if router fails."""
-    logger.log_step(f"Fallback characters endpoint accessed with directory: {directory}")
-    logger.log_step(f"Full URL: {request.url}")
-    
-    # This is now just a redirect to the router implementation
-    # Forward to the proper router endpoint: /api/characters/?directory=...
-    if directory:
-        # Construct the redirect URL to the router endpoint
-        redirect_url = f"/api/characters/?directory={urllib.parse.quote(directory)}"
-        logger.log_step(f"Redirecting to router endpoint: {redirect_url}")
-        return RedirectResponse(url=redirect_url)
-    else:
-        logger.log_error("No directory parameter provided")
-        return {
-            "success": False,
-            "message": "No directory parameter provided"
-        }
+# NOTE: Removed character-related routes (/api/character-image, /api/character-metadata, /api/character, /api/characters)
+# as they are now handled by the router included from backend.character_endpoints
 
 # ---------- Serve frontend if running in production mode ----------
 
@@ -245,7 +214,7 @@ if getattr(sys, 'frozen', False):
     static_dir = Path(sys._MEIPASS) / "frontend"
     if static_dir.exists():
         logger.log_step(f"Serving frontend from {static_dir}")
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+        app.mount("/", CrossDriveStaticFiles(directory=static_dir, html=True), name="frontend")
     else:
         logger.log_warning(f"Frontend directory not found at {static_dir}")
 else:
@@ -253,21 +222,16 @@ else:
     static_dir = Path(__file__).parent.parent / "frontend" / "dist"
     if static_dir.exists():
         logger.log_step(f"Serving frontend from {static_dir}")
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+        app.mount("/", CrossDriveStaticFiles(directory=static_dir, html=True), name="frontend")
     else:
         logger.log_warning(f"Frontend build directory not found at {static_dir}, API endpoints only")
 
 # Also mount the uploads directory to serve uploaded files
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+app.mount("/uploads", CrossDriveStaticFiles(directory=uploads_dir), name="uploads")
 
-# ---------- Health check endpoint ----------
-
-@app.get("/api/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "ok", "version": VERSION}
+# Removed direct @app.get("/api/health") definition, now handled by health_router
 
 # ---------- Utility Endpoints (Migrated from old main.py) ----------
 
@@ -351,6 +315,8 @@ async def get_uploaded_image(filename: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Removed duplicate @app.get("/api/health") definition.
+# The health check is now handled solely by the health_router included earlier.
 # ---------- Main entry point ----------
 
 def main():

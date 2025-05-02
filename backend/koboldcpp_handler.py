@@ -248,3 +248,80 @@ async def stop_koboldcpp():
     except Exception as e:
         logger.error(f"Error stopping KoboldCPP: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to stop KoboldCPP: {str(e)}")
+# --- External Model Listing Endpoints ---
+import traceback
+from backend.api_provider_adapters import OpenRouterAdapter # Assuming FeatherlessAdapter might not exist yet
+
+@router.post("/openrouter/models", tags=["external_models"])
+async def get_openrouter_models(request: Request):
+    """Fetch available models from OpenRouter."""
+    logger.info("Received request for OpenRouter models")
+    try:
+        data = await request.json()
+        url = data.get('url', 'https://openrouter.ai/api/v1') # Use v1 API endpoint
+        api_key = data.get('apiKey')
+
+        if not api_key: # API Key is essential for OpenRouter
+            logger.warning("OpenRouter API key missing")
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "OpenRouter API key is required"}
+            )
+
+        adapter = OpenRouterAdapter(logger)
+        result = adapter.list_models(url, api_key) # Pass URL and key
+
+        if not result.get('success', False):
+             logger.error(f"Failed to fetch OpenRouter models: {result.get('error', 'Unknown error')}")
+             return JSONResponse(
+                 status_code=result.get('status_code', 500),
+                 content=result
+             )
+
+        logger.info(f"Successfully fetched {len(result.get('models', []))} OpenRouter models")
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"Error fetching OpenRouter models: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f"Failed to fetch models: {str(e)}"}
+        )
+
+@router.post("/featherless/models", tags=["external_models"])
+async def get_featherless_models(request: Request):
+    """Fetch available models from Featherless."""
+    logger.info("Received request for Featherless models")
+    try:
+        # Attempt to import FeatherlessAdapter dynamically
+        try:
+            from backend.api_provider_adapters import FeatherlessAdapter
+        except ImportError:
+             logger.error("FeatherlessAdapter not found in api_provider_adapters.py")
+             raise HTTPException(status_code=501, detail="Featherless model listing not implemented")
+
+        data = await request.json()
+        url = data.get('url', 'https://api.featherless.ai/v1') # Use v1 API endpoint
+        api_key = data.get('apiKey') # May not be needed for Featherless list
+
+        adapter = FeatherlessAdapter(logger)
+        result = adapter.list_models(url, api_key) # Pass URL and key (if needed)
+
+        if not result.get('success', False):
+            logger.error(f"Failed to fetch Featherless models: {result.get('error', 'Unknown error')}")
+            return JSONResponse(
+                status_code=result.get('status_code', 500),
+                content=result
+            )
+
+        logger.info(f"Successfully fetched {len(result.get('models', []))} Featherless models")
+        return JSONResponse(content=result)
+    except HTTPException as http_exc:
+         raise http_exc # Re-raise specific HTTP exceptions (like 501 Not Implemented)
+    except Exception as e:
+        logger.error(f"Error fetching Featherless models: {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f"Failed to fetch models: {str(e)}"}
+        )

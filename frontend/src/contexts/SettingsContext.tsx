@@ -1,71 +1,84 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
+// Rename the imported hook to avoid naming conflicts
+import useSettingsHook from "../hooks/useSettings";
+import { useResilientApi } from "../context/ResilientApiContext";
 
 interface SettingsContextType {
   settings: Settings;
   updateSettings: (updates: Partial<Settings>) => Promise<void>;
   isLoading: boolean;
+  error: Error | null;
+  retry: () => void;
 }
 
 const defaultContext: SettingsContextType = {
   settings: DEFAULT_SETTINGS,
   updateSettings: async () => {},
   isLoading: true,
+  error: null,
+  retry: () => {},
 };
 
 const SettingsContext = createContext<SettingsContextType>(defaultContext);
 
+// Export only one hook name for consistency
 export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [isLoading, setIsLoading] = useState(true);
+  const { retryAllConnections } = useResilientApi();
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Load settings on mount
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch("/api/settings");
-        if (!response.ok) throw new Error("Failed to load settings");
-        const data = await response.json();
-        if (data.success) {
-          setSettings(data.settings);
-        }
-      } catch (err) {
-        console.error("Failed to load settings:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadSettings();
-  }, []);
+  // Use our resilient settings hook (renamed to avoid conflict)
+  const { 
+    settings: fetchedSettings, 
+    loading, 
+    error, 
+    retry: retryFetch, 
+    updateSettings: updateSettingsApi
+  } = useSettingsHook({
+    retryCount: 5,
+    retryDelay: 2000,
+    onSettingsError: (err) => {
+      console.error("Failed to load settings after retries:", err);
+    }
+  });
 
-  // Update settings handler
+  // Combine the fetched settings with defaults
+  const settings = fetchedSettings ? { ...DEFAULT_SETTINGS, ...fetchedSettings } : DEFAULT_SETTINGS;
+
+  // Update settings handler with error handling and retries
   const updateSettings = async (updates: Partial<Settings>) => {
     try {
-      const response = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
+      await updateSettingsApi(updates);
       
-      if (!response.ok) throw new Error("Failed to save settings");
-      
-      const data = await response.json();
-      if (data.success) {
-        setSettings((prev) => ({ ...prev, ...updates }));
-        return;
-      }
-      throw new Error("Failed to update settings: no success response");
+      // Refresh context for components that depend on settings
+      setRefreshKey(prev => prev + 1);
+
+      return;
     } catch (err) {
       console.error("Failed to save settings:", err);
       throw err;
     }
   };
 
+  // Combined retry handler that retries both settings and other API connections
+  const handleRetry = () => {
+    retryFetch();
+    retryAllConnections();
+  };
+
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, isLoading }}>
+    <SettingsContext.Provider 
+      key={`settings-context-${refreshKey}`}
+      value={{ 
+        settings, 
+        updateSettings, 
+        isLoading: loading,
+        error,
+        retry: handleRetry
+      }}
+    >
       {children}
     </SettingsContext.Provider>
   );

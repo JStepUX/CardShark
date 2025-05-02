@@ -496,14 +496,17 @@ const WorldCardsPlayView: React.FC = () => {
       }
       
       const data = await metadataResponse.json();
-      if (data.success && data.metadata) {
+      // Handle both formats: either {success: true, metadata: {...}} or just the raw metadata object
+      const metadata = data.success && data.metadata ? data.metadata : data;
+      
+      if (metadata) {
         // Create a modified version of the metadata that skips first_mes
         // This prevents the character's default greeting from being used in world context
         const modifiedMetadata = {
-          ...data.metadata,
+          ...metadata,
           first_mes: "", // Empty the first_mes to prevent it from being used
           data: {
-            ...data.metadata.data,
+            ...metadata.data,
             first_mes: "" // Also empty it in the data property
           }
         };
@@ -532,7 +535,7 @@ const WorldCardsPlayView: React.FC = () => {
         // The message will be sent as a hidden system message to the LLM but won't be displayed
         generateResponse(`__system__: Narrator, you now inhabit the role of ${characterName}, please respond to the presence of ${userName} while remaining in the context of ${roomName}. ${roomContext}`);
       } else {
-        throw new Error(data.message || "Failed to get valid character metadata");
+        throw new Error("Failed to get valid character metadata");
       }
     } catch (error) {
       console.error("Error loading NPC character:", error);

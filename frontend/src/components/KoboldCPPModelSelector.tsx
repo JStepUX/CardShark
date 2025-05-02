@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FolderOpen, Rocket, Lightbulb } from 'lucide-react';
+import { useKoboldCPP } from '../hooks/useKoboldCPP';
 
 interface Model {
   name: string;
@@ -48,6 +49,9 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [isFetchingDirectory, setIsFetchingDirectory] = useState(true);
   
+  // Use the centralized KoboldCPP hook
+  const { status, refresh: refreshKoboldStatus } = useKoboldCPP();
+  
   // Model configuration
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     contextsize: 4096,
@@ -85,6 +89,13 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
 
     fetchModelsDirectory();
   }, []);
+
+  // Pass status to parent if available and onStatusChange prop is provided
+  useEffect(() => {
+    if (status && onStatusChange) {
+      onStatusChange(status);
+    }
+  }, [status, onStatusChange]);
 
   // Save the models directory to settings when it changes
   const saveModelsDirectoryToSettings = async (directory: string) => {
@@ -241,36 +252,13 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
         });
       }
       
-      // Get updated status
-      await fetchStatus();
+      // Refresh KoboldCPP status through the hook
+      await refreshKoboldStatus();
       
     } catch (err) {
       setError(`Error launching model: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
-    }
-  };
-  
-  // Fetch KoboldCPP status
-  const fetchStatus = async () => {
-    try {
-      const response = await fetch('/api/koboldcpp/status');
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || response.statusText);
-      }
-      
-      const status = await response.json();
-      
-      // Notify parent component if callback provided
-      if (onStatusChange) {
-        onStatusChange(status);
-      }
-      
-      return status;
-    } catch (err) {
-      setError(`Error fetching status: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
   

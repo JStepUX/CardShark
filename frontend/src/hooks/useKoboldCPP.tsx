@@ -1,0 +1,132 @@
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useSettings } from '../contexts/SettingsContext';
+
+// Define KoboldCPP status type
+export interface KoboldStatus {
+  status: 'running' | 'present' | 'missing';
+  is_running: boolean;
+  model_loaded?: boolean;
+  model_name?: string;
+  error?: string;
+  last_updated?: number;
+  exe_path?: string; // Added exe_path property to fix type errors
+}
+
+// Context to store and provide the KoboldCPP status
+interface KoboldCPPContextType {
+  status: KoboldStatus | null;
+  isLoading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  lastUpdated: number;
+}
+
+// Create the KoboldCPP context
+const KoboldCPPContext = createContext<KoboldCPPContextType>({
+  status: null,
+  isLoading: false,
+  error: null,
+  refresh: async () => {},
+  lastUpdated: 0
+});
+
+// Default polling interval (2 minutes)
+const DEFAULT_POLL_INTERVAL = 120000;
+
+// Minimum interval between forced refreshes (10 seconds)
+const MIN_REFRESH_INTERVAL = 10000;
+
+// Provider component that fetches and manages KoboldCPP status
+export const KoboldCPPProvider = ({ 
+  children, 
+  pollInterval = DEFAULT_POLL_INTERVAL 
+}: { 
+  children: ReactNode;
+  pollInterval?: number;
+}) => {
+  const [status, setStatus] = useState<KoboldStatus | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number>(0);
+  const { settings } = useSettings();
+
+  // Function to fetch KoboldCPP status
+  const fetchStatus = async (force = false) => {
+    // Skip if not using KoboldCPP or if loading and not forced
+    if (!settings.show_koboldcpp_launcher || (isLoading && !force)) {
+      return;
+    }
+
+    // Throttle refreshes if manually triggered
+    if (force && Date.now() - lastUpdated < MIN_REFRESH_INTERVAL) {
+      console.log('Throttling KoboldCPP status refresh, too frequent');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/koboldcpp/status');
+      if (!response.ok) {
+        throw new Error(`Error fetching KoboldCPP status: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      // Add timestamp to the status
+      const statusWithTimestamp = {
+        ...data,
+        last_updated: Date.now()
+      };
+      
+      setStatus(statusWithTimestamp);
+      setLastUpdated(Date.now());
+      setError(null);
+    } catch (err) {
+      console.error('Failed to fetch KoboldCPP status:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error fetching KoboldCPP status');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Set up polling interval
+  useEffect(() => {
+    // Initial fetch when component mounts
+    if (settings.show_koboldcpp_launcher) {
+      fetchStatus();
+      
+      // Set up polling
+      const intervalId = setInterval(() => fetchStatus(), pollInterval);
+      return () => clearInterval(intervalId);
+    }
+  }, [settings.show_koboldcpp_launcher, pollInterval]);
+
+  // Manual refresh function (with throttling)
+  const refresh = async () => {
+    await fetchStatus(true);
+  };
+
+  const value = {
+    status,
+    isLoading,
+    error,
+    refresh,
+    lastUpdated
+  };
+
+  return (
+    <KoboldCPPContext.Provider value={value}>
+      {children}
+    </KoboldCPPContext.Provider>
+  );
+};
+
+// Custom hook to use the KoboldCPP context
+export const useKoboldCPP = () => {
+  const context = useContext(KoboldCPPContext);
+  if (!context) {
+    throw new Error('useKoboldCPP must be used within a KoboldCPPProvider');
+  }
+  return context;
+};
+
+export default useKoboldCPP;

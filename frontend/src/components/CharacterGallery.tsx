@@ -276,25 +276,30 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       const imageResponse = await fetch(`/api/character-image/${encodeFilePath(character.path)}`);
       if (!imageResponse.ok) throw new Error(`Failed to load image (${imageResponse.status})`);
       const blob = await imageResponse.blob();
+      
       // Fetch metadata separately using the new endpoint
       const metadataResponse = await fetch(`/api/character-metadata/${encodeFilePath(character.path)}`);
       if (!metadataResponse.ok) {
         const errorData = await metadataResponse.json().catch(() => ({ message: `Failed to load metadata (${metadataResponse.status})` }));
         throw new Error(errorData.message || `Failed to load metadata. Status: ${metadataResponse.status}`);
       }
+      
       const data = await metadataResponse.json();
-      if (data.success && data.metadata) {
+      // Handle both formats: either {success: true, metadata: {...}} or just the raw metadata object
+      const metadata = data.success && data.metadata ? data.metadata : data;
+      
+      if (metadata) {
         const newImageUrl = URL.createObjectURL(blob);
         if (isSecondarySelector) {
-          setSecondaryCharacterData(data.metadata);
+          setSecondaryCharacterData(metadata);
           setSecondaryImageUrl(newImageUrl);
           if (onCharacterSelected) onCharacterSelected();
         } else {
-          setCharacterData(data.metadata);
+          setCharacterData(metadata);
           setImageUrl(newImageUrl);
         }
       } else {
-        throw new Error(data.error || 'Failed to get metadata.');
+        throw new Error('Failed to get metadata. Invalid response format.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error selecting character.');

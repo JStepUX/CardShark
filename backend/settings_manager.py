@@ -67,44 +67,66 @@ class SettingsManager:
         
         try:
             if self.settings_file.exists():
-                with open(self.settings_file, 'r') as f:
-                    stored_settings = json.load(f)
-                    
-                    # Merge with defaults in case new settings were added
-                    merged = {**default_settings, **stored_settings}
-                    
-                    # Ensure API settings exist with defaults
-                    if 'api' not in merged:
-                        merged['api'] = default_settings['api']
-                    
-                    # Ensure the API config uses templateId
-                    if 'api' in merged and isinstance(merged['api'], dict):
-                        api_config = merged['api']
-                        # Remove any legacy template field
-                        if 'template' in api_config:
-                            self.logger.log_step("Removing legacy 'template' field from settings")
-                            api_config.pop('template')
-                        
-                        # Ensure templateId exists
-                        if 'templateId' not in api_config:
-                            self.logger.log_step("Adding missing 'templateId' field to settings")
-                            api_config['templateId'] = 'mistral'  # Default template
-                    
-                    # Check all API configs in the 'apis' field
-                    if 'apis' in merged and isinstance(merged['apis'], dict):
-                        for api_id, api_config in merged['apis'].items():
-                            if isinstance(api_config, dict):
+                try:
+                    with open(self.settings_file, 'r', encoding='utf-8') as f:
+                        try:
+                            stored_settings = json.load(f)
+                            
+                            # Merge with defaults in case new settings were added
+                            merged = {**default_settings, **stored_settings}
+                            
+                            # Ensure API settings exist with defaults
+                            if 'api' not in merged:
+                                merged['api'] = default_settings['api']
+                            
+                            # Ensure the API config uses templateId
+                            if 'api' in merged and isinstance(merged['api'], dict):
+                                api_config = merged['api']
                                 # Remove any legacy template field
                                 if 'template' in api_config:
-                                    self.logger.log_step(f"Removing legacy 'template' field from API {api_id}")
+                                    self.logger.log_step("Removing legacy 'template' field from settings")
                                     api_config.pop('template')
                                 
                                 # Ensure templateId exists
                                 if 'templateId' not in api_config:
-                                    self.logger.log_step(f"Adding missing 'templateId' field to API {api_id}")
+                                    self.logger.log_step("Adding missing 'templateId' field to settings")
                                     api_config['templateId'] = 'mistral'  # Default template
-                    
-                    return merged
+                            
+                            # Check all API configs in the 'apis' field
+                            if 'apis' in merged and isinstance(merged['apis'], dict):
+                                for api_id, api_config in merged['apis'].items():
+                                    if isinstance(api_config, dict):
+                                        # Remove any legacy template field
+                                        if 'template' in api_config:
+                                            self.logger.log_step(f"Removing legacy 'template' field from API {api_id}")
+                                            api_config.pop('template')
+                                        
+                                        # Ensure templateId exists
+                                        if 'templateId' not in api_config:
+                                            self.logger.log_step(f"Adding missing 'templateId' field to API {api_id}")
+                                            api_config['templateId'] = 'mistral'  # Default template
+                            
+                            return merged
+                        except json.JSONDecodeError as json_err:
+                            self.logger.log_error(f"Invalid JSON in settings file: {str(json_err)}")
+                            self.logger.log_error(traceback.format_exc())
+                            
+                            # Try to recover the file by making a backup
+                            backup_file = self.settings_file.parent / f"{self.settings_file.name}.bak"
+                            try:
+                                import shutil
+                                shutil.copy2(self.settings_file, backup_file)
+                                self.logger.log_step(f"Created backup of settings file at {backup_file}")
+                            except Exception as backup_err:
+                                self.logger.log_error(f"Failed to create backup of settings file: {str(backup_err)}")
+                            
+                            # Use default settings
+                            self._save_settings(default_settings)
+                            return default_settings
+                except IOError as io_err:
+                    self.logger.log_error(f"IO error reading settings file: {str(io_err)}")
+                    self._save_settings(default_settings)
+                    return default_settings
             
             # If no settings file exists, create one with defaults
             self._save_settings(default_settings)
@@ -113,6 +135,14 @@ class SettingsManager:
         except Exception as e:
             self.logger.log_error(f"Error loading settings: {str(e)}")
             self.logger.log_error(traceback.format_exc()) # Add traceback
+            
+            # Always return default settings if there's any error
+            try:
+                # Try to save default settings
+                self._save_settings(default_settings)
+            except Exception as save_err:
+                self.logger.log_error(f"Also failed to save default settings: {str(save_err)}")
+                
             return default_settings
 
     def update_settings_with_apis(self, data):

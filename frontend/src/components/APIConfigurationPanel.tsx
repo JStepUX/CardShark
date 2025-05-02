@@ -1,9 +1,10 @@
 // components/APIConfigurationPanel.tsx
 // Component for displaying and updating API configuration settings
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Sliders, Save, AlertCircle, Loader2 } from 'lucide-react';
 import { APIConfig, FeatherlessModelInfo } from '../types/api';
 import { apiService } from '../services/apiService';
+import { useKoboldCPP } from '../hooks/useKoboldCPP';
 
 // Model selection related types
 interface Model {
@@ -825,7 +826,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
+  
+  // Use the centralized KoboldCPP hook instead of direct API calls
+  const { status, refresh: refreshKoboldStatus } = useKoboldCPP();
+  const isRunning = status?.is_running || false;
   
   // Determine provider from URL
   const isLocalKobold = apiUrl && (
@@ -842,30 +846,6 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const isFeatherless = apiUrl &&
     (apiUrl.includes('featherless.ai') || apiUrl.toLowerCase().includes('featherless'));
     (apiUrl.includes('featherless.ai') || apiUrl.toLowerCase().includes('featherless'));
-
-  // Check if KoboldCPP is running
-  const checkKoboldStatus = useCallback(async () => {
-    try {
-      const response = await fetch('/api/koboldcpp/status');
-      if (!response.ok) {
-        setIsRunning(false);
-        return;
-      }
-      const data = await response.json();
-      setIsRunning(data.is_running);
-    } catch (err) {
-      setIsRunning(false);
-    }
-  }, []);
-
-  // Poll for status updates
-  useEffect(() => {
-    if (isLocalKobold) {
-      checkKoboldStatus();
-      const interval = setInterval(checkKoboldStatus, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [isLocalKobold, checkKoboldStatus]);
 
   useEffect(() => {
     if (isLocalKobold && modelsDirectory) {
@@ -941,9 +921,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         throw new Error(errorData.detail || response.statusText);
       }
 
-      // Wait for a moment before checking status
+      // Wait a moment and then refresh KoboldCPP status using our hook
       setTimeout(() => {
-        checkKoboldStatus();
+        refreshKoboldStatus();
         setIsConnecting(false);
       }, 2000);
 
@@ -968,9 +948,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         throw new Error('Failed to stop KoboldCPP');
       }
       
-      // Wait a moment before checking status
+      // Wait a moment and then refresh KoboldCPP status using our hook
       setTimeout(() => {
-        checkKoboldStatus();
+        refreshKoboldStatus();
         setIsDisconnecting(false);
       }, 1000);
       
