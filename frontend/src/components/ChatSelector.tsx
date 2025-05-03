@@ -17,9 +17,10 @@ interface ChatInfo {
 interface ChatSelectorProps {
   onSelect?: (chatId: string) => void;
   onClose?: () => void;
+  currentChatId?: string | null;
 }
 
-const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose }) => {
+const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentChatId }) => {
   const { characterData } = useCharacter();
   const { createNewChat, loadExistingChat } = useChat();
   const [availableChats, setAvailableChats] = useState<ChatInfo[]>([]);
@@ -58,7 +59,12 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose }) => {
           preview: chat.preview || chat.last_message || 'No messages'
         }));
         
-        setAvailableChats(chatInfoList);
+        // Filter out the current chat if currentChatId is provided
+        const filteredChatList = currentChatId 
+          ? chatInfoList.filter(chat => chat.id !== currentChatId)
+          : chatInfoList;
+        
+        setAvailableChats(filteredChatList);
       } else {
         setError('Failed to load chats');
         setAvailableChats([]);
@@ -303,7 +309,11 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose }) => {
         </div>
       ) : availableChats.length === 0 ? (
         <div className="no-chats p-8 text-center text-stone-400">
-          <p>No previous chats found</p>
+          <p>
+            {currentChatId ? 
+              "No other chats found for this character" : 
+              "No previous chats found"}
+          </p>
           <button 
             onClick={handleCreateNewChat}
             className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors"

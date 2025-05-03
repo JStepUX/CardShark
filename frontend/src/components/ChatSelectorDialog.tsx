@@ -8,6 +8,7 @@ interface ChatSelectorDialogProps {
   onClose: () => void;
   onSelect: (chatId: string) => void;
   characterData: CharacterCard | null;
+  currentChatId?: string | null;
 }
 
 /**
@@ -18,7 +19,8 @@ const ChatSelectorDialog: React.FC<ChatSelectorDialogProps> = ({
   isOpen,
   onClose,
   onSelect,
-  characterData
+  characterData,
+  currentChatId
 }) => {
   if (!isOpen) return null;
 
@@ -47,6 +49,7 @@ const ChatSelectorDialog: React.FC<ChatSelectorDialogProps> = ({
           <ChatSelector 
             onSelect={handleSelectChat}
             onClose={onClose}
+            currentChatId={currentChatId}
           />
         </div>
       </div>

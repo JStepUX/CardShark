@@ -1752,6 +1752,23 @@ class ChatHandler:
         self._save_interval = max(1, seconds)
         self.logger.log_step(f"Set autosave interval to {self._save_interval} seconds")
     
+    def save_chat(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None, metadata: Optional[Dict] = None) -> bool:
+        """
+        Save a chat to storage. Wrapper for save_chat_state to maintain API compatibility.
+        
+        Args:
+            character_data: Character data dictionary
+            messages: List of messages to save
+            lastUser: Last user information (optional)
+            api_info: API information (optional)
+            metadata: Additional metadata (optional)
+            
+        Returns:
+            bool: True if successful, False on error
+        """
+        self.logger.log_step(f"Saving chat for character: {character_data.get('data', {}).get('name')}")
+        return self.save_chat_state(character_data, messages, lastUser, api_info, metadata)
+    
     def append_message_debounced(self, character_data: Dict, message: Dict) -> bool:
         """
         Append a message with debounced saving to reduce disk writes.
@@ -2467,3 +2484,19 @@ class ChatHandler:
             self.logger.log_error(f"Error renaming chat session: {str(e)}")
             self.logger.log_error(traceback.format_exc())
             return False
+
+    def save_chat(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None, metadata: Optional[Dict] = None) -> bool:
+        """
+        Wrapper method for save_chat_state to maintain backward compatibility with existing code.
+        
+        Args:
+            character_data: Character data dictionary
+            messages: List of messages to save
+            lastUser: Last user information
+            api_info: API information
+            metadata: Additional metadata
+            
+        Returns:
+            bool: True if successful, False on error
+        """
+        return self.save_chat_state(character_data, messages, lastUser, api_info, metadata)

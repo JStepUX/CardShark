@@ -260,6 +260,10 @@ const ChatView: React.FC = () => {
     clearError
   } = useChatMessages(characterData);
   
+  // Get current chat ID from the last context window
+  const currentChatId = lastContextWindow?.chatId || 
+                       (lastContextWindow?.type === 'chat_loaded' ? lastContextWindow.chatId : null);
+
   // Load background settings from localStorage
   useEffect(() => {
     try {
@@ -851,6 +855,7 @@ const ChatView: React.FC = () => {
         onClose={() => setShowChatSelector(false)}
         onSelect={handleLoadChat}
         characterData={characterData}
+        currentChatId={currentChatId}
       />
 
       {/* Context Window Modal */}
