@@ -111,5 +111,92 @@ globs: **/*.tsx, **/*.jsx, components/**/*
 - Use proper imports/exports
 - Document complex component logic 
 
-
 ASK YOURSELF - DID I PROVIDE AN OVERLY COMPLICATED SOLUTION? COULD I DO THIS LESS INTRUSIVELY AND MORE EFFICIENTLY?
+
+## CardShark-Specific AI Development Guidelines
+
+### Architectural Patterns
+- **Component Organization**: Always structure components according to their domain (chat, settings, templates, etc.)
+- **Data Flow**: Follow the established pattern of hooks → contexts → components for state management
+- **API Integration**: Use the existing API service pattern for all backend interactions
+
+### Implementation Strategy
+- **Incremental Changes**: Prefer minimal, targeted changes over large refactors
+- **Feature Implementation**: Start with core functionality, then add progressive enhancement
+- **Decision Framework**:
+  1. Is this solution consistent with existing patterns?
+  2. Does it minimize state complexity?
+  3. Is it performant for chat interactions?
+  4. Does it handle error cases gracefully?
+
+### CardShark-Specific Patterns
+- **Chat System**: 
+  - Always handle streaming responses with proper buffering
+  - Maintain message history with proper ID tracking
+  - Use the established context window mechanism
+- **Settings System**:
+  - Follow the tab-based organization pattern
+  - Implement real-time validation with appropriate feedback
+  - Ensure settings are properly persisted to backend
+- **Template System**:
+  - Maintain the separation between built-in and custom templates
+  - Follow the established editing and validation patterns
+
+### Self-Assessment Checklist
+Before completing any implementation, verify:
+1. Does the code handle all error states appropriately?
+2. Is state management optimized to prevent unnecessary re-renders?
+3. Are all user inputs properly validated?
+4. Does the feature gracefully degrade if backend services are unavailable?
+5. Are all user interactions properly debounced where appropriate?
+6. Has accessibility been maintained throughout the implementation?
+
+## Decision-Making Framework for CardShark Development
+
+When faced with implementation decisions, follow this structured approach:
+
+### Feature Implementation Decision Tree
+1. **State Management Decision**:
+   - Is this state used by multiple components? → Use Context API
+   - Is this state complex with many operations? → Use useReducer
+   - Is this state local to a component? → Use useState
+   - Does this state need persistence? → Use domain-specific storage services:
+     - For chat data → Use ChatStorage service
+     - For settings → Use settings_manager.py endpoints
+     - For templates → Use template_handler.py endpoints
+     - For user profiles → Use user_endpoints.py
+     - For world data → Use world_state_manager.py
+
+2. **Component Structure Decision**:
+   - Is this UI pattern used in multiple places? → Create a reusable component
+   - Is this component getting too large (>300 lines)? → Split into smaller components
+   - Does this component have multiple responsibilities? → Split by responsibility
+
+3. **API Integration Decision**:
+   - Is this a read operation? → Use GET endpoints with proper error handling
+   - Is this a write operation? → Use POST endpoints with optimistic updates
+   - Is this a streaming operation? → Use streaming pattern with buffer management
+
+### Technical Approach Prioritization
+When implementing features, prioritize approaches in this order:
+1. **Consistency**: Match existing patterns in the codebase
+2. **Simplicity**: Choose the simplest solution that meets requirements
+3. **Performance**: Optimize for chat responsiveness and rendering performance
+4. **Extensibility**: Design for future enhancement without overengineering
+
+## Troubleshooting Guide for Common Issues
+
+### Chat System Issues
+- **Message not appearing in chat**: Check message ID tracking and state updates
+- **Streaming message not updating**: Verify buffer management and stream handling
+- **Chat history not loading**: Check ChatStorage service and error handling
+
+### Settings System Issues
+- **Settings not persisting**: Verify API call to `/api/settings` endpoint
+- **Settings tabs not working**: Check component hierarchy and tab selection logic
+- **API configuration not taking effect**: Verify proper API service integration
+
+### Template System Issues
+- **Template not formatting correctly**: Debug variable substitution in template strings
+- **Custom templates not saving**: Check template persistence and validation logic
+- **Template detection not working**: Verify detection patterns are correctly implemented

@@ -755,7 +755,18 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       await processStream(
         response, messageId, false, // isThinking = false
         (finalContent, receivedChunks) => {
-          setGenerationComplete(messageId, finalContent, 'regeneration_complete', receivedChunks, messageToRegenerate.content);
+          // Add validation for empty content
+          if (!finalContent || finalContent.trim() === '') {
+            console.warn("Received empty content from API during regeneration");
+            // Use original content or a fallback message
+            const fallbackContent = messageToRegenerate.content || "I'm sorry, I couldn't generate a response. Please try again.";
+            setGenerationComplete(messageId, fallbackContent, 'regeneration_failed_empty', receivedChunks, messageToRegenerate.content);
+            handleGenerationError(new Error("Received empty response from API"), messageId, 'regeneration');
+          } else {
+            // Normal completion with content
+            setGenerationComplete(messageId, finalContent, 'regeneration_complete', receivedChunks, messageToRegenerate.content);
+          }
+          
           // Only save/append if it's a real character
           if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
         },
@@ -769,7 +780,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       setState(prev => prev.generatingId === messageId ? {...prev, isGenerating: false, generatingId: null} : prev);
       currentGenerationRef.current = null;
     }
-  }, [effectiveCharacterData, isGenericAssistant, state.isGenerating, state.messages, state.currentUser, apiConfig, handleGenerationError, saveChat, appendMessage, prepareAPIConfig, processStream]); // Add dependencies
+  }, [effectiveCharacterData, isGenericAssistant, state.isGenerating, state.messages, state.currentUser, apiConfig, handleGenerationError, saveChat, appendMessage, prepareAPIConfig, processStream]);
 
   const generateVariation = useCallback(async (messageToVary: Message) => {
     // Use effectiveCharacterData for checks

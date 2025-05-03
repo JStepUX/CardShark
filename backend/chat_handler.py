@@ -831,24 +831,37 @@ class ChatHandler:
                         else:
                             chat_id = file_path.stem  # Use filename without extension as ID
                         
-                        # Count messages and get preview
-                        for i, line in enumerate(f):
-                            if line.strip():
-                                message_count += 1
-                                # Get preview from first few user/assistant messages
-                                if i < 5 and not chat_preview:
-                                    try:
-                                        msg = json.loads(line)
-                                        if not msg.get('is_system', False):
-                                            # Try to get message content from different possible formats
-                                            message_content = msg.get('mes', msg.get('content', ''))
-                                            if message_content:
-                                                # Truncate message for preview
-                                                preview_text = message_content[:50].replace('\n', ' ')
-                                                if preview_text:
-                                                    chat_preview = preview_text + "..."
-                                    except json.JSONDecodeError:
-                                        pass
+                        # Reset file pointer to start and count total lines
+                        f.seek(0)
+                        total_lines = sum(1 for line in f if line.strip())
+                        # Subtract metadata line to get message count
+                        message_count = max(0, total_lines - 1)
+                        
+                        # Reset file pointer and look for preview content
+                        f.seek(0)
+                        # Skip first line (metadata)
+                        f.readline()
+                        # Look at first few messages for preview
+                        preview_attempts = 0
+                        while preview_attempts < 5 and not chat_preview:
+                            line = f.readline().strip()
+                            if not line:
+                                break
+                                
+                            try:
+                                msg = json.loads(line)
+                                if not msg.get('is_system', False):
+                                    # Try to get message content from different possible formats
+                                    message_content = msg.get('mes', msg.get('content', ''))
+                                    if message_content:
+                                        # Truncate message for preview
+                                        preview_text = message_content[:50].replace('\n', ' ')
+                                        if preview_text:
+                                            chat_preview = preview_text + "..."
+                            except json.JSONDecodeError:
+                                pass
+                                
+                            preview_attempts += 1
                     
                     # Format the time for display
                     try:
@@ -958,11 +971,13 @@ class ChatHandler:
             
             # Find the file with the matching chat_id
             found = False
+            target_file = None
             
-            # Search through chat files to find the one with matching ID
+            # First pass - find the file with matching ID but don't delete yet
             chat_files = list(chat_dir.glob("*.jsonl"))
             for file_path in chat_files:
                 try:
+                    # Use a context manager to ensure the file is properly closed
                     with open(file_path, 'r', encoding='utf-8') as f:
                         first_line = f.readline().strip()
                         if first_line:
@@ -970,20 +985,31 @@ class ChatHandler:
                             file_chat_id = metadata.get('chat_metadata', {}).get('chat_id')
                             
                             if file_chat_id == chat_id:
-                                # Remove file
+                                # Found the file, but don't delete within the file open block
                                 self.logger.log_step(f"Found chat file with ID {chat_id}: {file_path}")
-                                file_path.unlink()  # Delete the file
+                                target_file = file_path
                                 found = True
-                                
-                                # Reset current chat file if it matches the deleted one
-                                if self._current_chat_file == file_path:
-                                    self._current_chat_file = None
-                                
-                                self.logger.log_step(f"Successfully deleted chat file: {file_path}")
                                 break
                 except Exception as e:
                     self.logger.log_error(f"Error checking chat file {file_path}: {str(e)}")
                     continue
+            
+            # Second pass - delete the file if found
+            if found and target_file:
+                try:
+                    # Make sure this file is not being used as current chat file
+                    if self._current_chat_file == target_file:
+                        self._current_chat_file = None
+                        
+                    # Sleep briefly to ensure all file handles are released
+                    time.sleep(0.1)
+                    
+                    # Now delete the file
+                    target_file.unlink()
+                    self.logger.log_step(f"Successfully deleted chat file: {target_file}")
+                except Exception as e:
+                    self.logger.log_error(f"Error deleting chat file {target_file}: {str(e)}")
+                    return False
             
             if not found:
                 self.logger.log_warning(f"Chat file with ID {chat_id} not found for deletion")
