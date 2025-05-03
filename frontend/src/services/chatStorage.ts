@@ -525,4 +525,237 @@ export class ChatStorage {
       console.error('Error saving current user:', err);
     }
   }
+
+  /**
+   * Validates a chat file for structure and content integrity
+   * @param character The character associated with the chat
+   * @param chatId The ID of the chat to validate
+   * @param attemptRepair Whether to attempt automatic repair
+   * @returns Validation results including any issues found
+   */
+  static async validateChat(character: CharacterCard, chatId: string, attemptRepair: boolean = false): Promise<any> {
+    if (!character) {
+      console.error('Cannot validate chat: No character provided');
+      return { success: false, error: 'No character selected' };
+    }
+
+    if (!chatId) {
+      console.error('Cannot validate chat: No chat ID provided');
+      return { success: false, error: 'No chat ID provided' };
+    }
+
+    try {
+      console.log(`Validating chat ${chatId} for character:`, character.data?.name);
+      
+      const response = await fetch('/api/validate-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          character_data: character,
+          chat_id: chatId,
+          attempt_repair: attemptRepair
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to validate chat:', response.status, errorText);
+        return { success: false, error: `Failed to validate chat: ${response.status}` };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error validating chat:', error);
+      return { 
+        success: false, 
+        error: `Error: ${error}`,
+        issues: [`Exception occurred: ${error}`]
+      };
+    }
+  }
+
+  /**
+   * Repairs a corrupted chat file
+   * @param character The character associated with the chat
+   * @param chatId The ID of the chat to repair
+   * @returns Result of the repair operation
+   */
+  static async repairChat(character: CharacterCard, chatId: string): Promise<any> {
+    if (!character) {
+      console.error('Cannot repair chat: No character provided');
+      return { success: false, error: 'No character selected' };
+    }
+
+    if (!chatId) {
+      console.error('Cannot repair chat: No chat ID provided');
+      return { success: false, error: 'No chat ID provided' };
+    }
+
+    try {
+      console.log(`Repairing chat ${chatId} for character:`, character.data?.name);
+      
+      const response = await fetch('/api/repair-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          character_data: character,
+          chat_id: chatId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to repair chat:', response.status, errorText);
+        return { success: false, error: `Failed to repair chat: ${response.status}` };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error repairing chat:', error);
+      return { success: false, error: `Error: ${error}` };
+    }
+  }
+
+  /**
+   * Lists available backups for a chat
+   * @param character The character associated with the chat
+   * @param chatId The ID of the chat to list backups for
+   * @returns List of available backups
+   */
+  static async listChatBackups(character: CharacterCard, chatId: string): Promise<any> {
+    if (!character) {
+      console.error('Cannot list backups: No character provided');
+      return { success: false, error: 'No character selected', backups: [] };
+    }
+
+    if (!chatId) {
+      console.error('Cannot list backups: No chat ID provided');
+      return { success: false, error: 'No chat ID provided', backups: [] };
+    }
+
+    try {
+      console.log(`Listing backups for chat ${chatId}, character:`, character.data?.name);
+      
+      const response = await fetch('/api/list-chat-backups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          character_data: character,
+          chat_id: chatId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to list backups:', response.status, errorText);
+        return { success: false, error: `Failed to list backups: ${response.status}`, backups: [] };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error listing backups:', error);
+      return { success: false, error: `Error: ${error}`, backups: [] };
+    }
+  }
+
+  /**
+   * Creates a manual backup of a chat
+   * @param character The character associated with the chat
+   * @param chatId The ID of the chat to backup
+   * @returns Result of the backup operation
+   */
+  static async createChatBackup(character: CharacterCard, chatId: string): Promise<any> {
+    if (!character) {
+      console.error('Cannot create backup: No character provided');
+      return { success: false, error: 'No character selected' };
+    }
+
+    if (!chatId) {
+      console.error('Cannot create backup: No chat ID provided');
+      return { success: false, error: 'No chat ID provided' };
+    }
+
+    try {
+      console.log(`Creating backup for chat ${chatId}, character:`, character.data?.name);
+      
+      const response = await fetch('/api/create-chat-backup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          character_data: character,
+          chat_id: chatId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to create backup:', response.status, errorText);
+        return { success: false, error: `Failed to create backup: ${response.status}` };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error creating backup:', error);
+      return { success: false, error: `Error: ${error}` };
+    }
+  }
+
+  /**
+   * Restores a chat from a backup
+   * @param character The character associated with the chat
+   * @param chatId The ID of the chat to restore
+   * @param backupPath Optional path to a specific backup. If not provided, uses the most recent backup.
+   * @returns Result of the restore operation including the restored chat data
+   */
+  static async restoreChatBackup(character: CharacterCard, chatId: string, backupPath?: string): Promise<any> {
+    if (!character) {
+      console.error('Cannot restore backup: No character provided');
+      return { success: false, error: 'No character selected' };
+    }
+
+    if (!chatId) {
+      console.error('Cannot restore backup: No chat ID provided');
+      return { success: false, error: 'No chat ID provided' };
+    }
+
+    try {
+      console.log(`Restoring chat ${chatId} from backup${backupPath ? ': ' + backupPath : ''}`);
+      
+      const response = await fetch('/api/restore-chat-backup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          character_data: character,
+          chat_id: chatId,
+          backup_path: backupPath
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to restore from backup:', response.status, errorText);
+        return { success: false, error: `Failed to restore from backup: ${response.status}` };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error restoring from backup:', error);
+      return { success: false, error: `Error: ${error}` };
+    }
+  }
 }
