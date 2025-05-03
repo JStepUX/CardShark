@@ -78,9 +78,9 @@ class ChatHandler:
             # Atomically replace the target file with the temporary file
             # On Windows, we need special handling for atomic replace
             if os.name == 'nt':  # Windows
+                target_path_old = target_path.with_suffix(f"{target_path.suffix}.old")
                 if target_path.exists():
                     # Windows needs the target file to be removed first
-                    target_path_old = target_path.with_suffix(f"{target_path.suffix}.old")
                     if target_path_old.exists():
                         target_path_old.unlink()
                     os.replace(str(target_path), str(target_path_old))
@@ -101,8 +101,8 @@ class ChatHandler:
             try:
                 if 'tmp_path' in locals() and Path(tmp_path).exists():
                     Path(tmp_path).unlink()
-            except:
-                pass
+            except Exception as cleanup_error:
+                self.logger.log_error(f"Error cleaning up temp file: {str(cleanup_error)}")
             return False
 
     def _verify_file_integrity(self, file_path: Path) -> bool:

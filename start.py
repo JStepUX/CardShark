@@ -8,6 +8,7 @@ import uvicorn
 import subprocess
 import shutil  # Import shutil for rmtree
 from fastapi import FastAPI
+import tempfile  # Import tempfile for getting temp directory
 
 app = FastAPI()
 
@@ -88,11 +89,47 @@ def clean_pycache(directory):
             except OSError as e:
                 print(f"Error removing {pycache_path}: {e}")
 
+def clean_mei_folders(max_age_hours=1):
+    """Find and remove _MEI folders in the temp directory that are older than specified hours."""
+    try:
+        temp_dir = tempfile.gettempdir()
+        print(f"Checking for old _MEI folders in: {temp_dir}")
+        now = time.time()
+        count = 0
+        
+        for item in os.listdir(temp_dir):
+            if item.startswith("_MEI"):
+                folder_path = os.path.join(temp_dir, item)
+                if os.path.isdir(folder_path):
+                    # Check if folder is older than max_age_hours
+                    modified_time = os.path.getmtime(folder_path)
+                    age_hours = (now - modified_time) / 3600  # Convert seconds to hours
+                    
+                    if age_hours > max_age_hours:
+                        print(f"Removing old _MEI folder: {folder_path} (Age: {age_hours:.1f} hours)")
+                        try:
+                            shutil.rmtree(folder_path)
+                            count += 1
+                        except (PermissionError, OSError) as e:
+                            print(f"Could not remove {folder_path}: {e}")
+        
+        if count > 0:
+            print(f"Removed {count} old _MEI folder(s)")
+        else:
+            print("No old _MEI folders found to clean up")
+            
+    except Exception as e:
+        print(f"Error while cleaning _MEI folders: {e}")
+
 def main():
     root_dir = os.path.dirname(os.path.abspath(__file__))
     os.environ['PYTHONPATH'] = root_dir  # Set PYTHONPATH
     backend_dir = os.path.join(root_dir, 'backend') # Define backend_dir earlier
 
+    # Clean _MEI folders from temp directory
+    print("Cleaning old _MEI folders...")
+    clean_mei_folders(max_age_hours=1)
+    
     # Clean __pycache__ directories before starting
     print("Cleaning Python bytecode cache...")
     clean_pycache(backend_dir)

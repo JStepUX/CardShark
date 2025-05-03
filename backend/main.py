@@ -103,6 +103,7 @@ from backend.user_endpoints import router as user_router
 from backend.settings_endpoints import router as settings_router
 from backend.world_endpoints import router as world_router
 from backend.template_endpoints import router as template_router  # Import the new template router
+from backend.lore_endpoints import router as lore_router  # Import the lore router
 # from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
 
 # Import koboldcpp handler & manager
@@ -183,6 +184,7 @@ app.include_router(user_router)
 app.include_router(settings_router)
 app.include_router(world_router)
 app.include_router(template_router)  # Include the new template router
+app.include_router(lore_router)  # Include the lore router
 # app.include_router(world_chat_router) # Removed, functionality merged into world_router
 app.include_router(background_router)
 

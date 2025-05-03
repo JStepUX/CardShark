@@ -304,11 +304,14 @@ async def append_chat_message(
             )
             
         logger.log_step(f"Appending message to chat for character: {character_data.get('name', 'Unknown')}")
-        result = chat_handler.append_chat_message(character_data, message)
+        result = chat_handler.append_message(character_data, message)
         
         return JSONResponse(
             status_code=200,
-            content=result
+            content={
+                "success": True,
+                "message": "Message appended successfully"
+            }
         )
     except Exception as e:
         logger.log_error(f"Error appending chat message: {str(e)}")

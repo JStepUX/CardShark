@@ -234,10 +234,10 @@ export function useKoboldCPP() {
   useEffect(() => {
     fetchStatus();
     
-    // Refresh status every 30 seconds
+    // Refresh status every 5 minutes (increased from 30 seconds)
     const interval = setInterval(() => {
       fetchStatus();
-    }, 30000);
+    }, 300000); // 5 minutes
     
     return () => clearInterval(interval);
   }, [fetchStatus]);
