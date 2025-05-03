@@ -42,9 +42,16 @@ class WorldDataService {
       worldData.worldItems = [];
     }
 
-    // Ensure current_position is set
-    if (!worldData.current_position && Object.keys(worldData.locations).length > 0) {
-      worldData.current_position = Object.keys(worldData.locations)[0];
+    // Ensure current_position is set and valid
+    const locationKeys = Object.keys(worldData.locations);
+    if (!worldData.current_position && locationKeys.length > 0) {
+      // If no current position but we have locations, use the first one
+      worldData.current_position = locationKeys[0];
+      console.log('Setting default current_position to', worldData.current_position);
+    } else if (worldData.current_position && !worldData.locations[worldData.current_position] && locationKeys.length > 0) {
+      // If current position is invalid (doesn't exist in locations), reset it to a valid one
+      worldData.current_position = locationKeys[0];
+      console.log('Resetting invalid current_position to', worldData.current_position);
     }
 
     return worldData;
@@ -55,30 +62,36 @@ class WorldDataService {
    */
   getCurrentRoom(worldData: FullWorldState): { room: WorldLocation | null, position: string | null } {
     if (!worldData || !worldData.locations) {
+      console.warn('getCurrentRoom: No world data or locations');
+      return { room: null, position: null };
+    }
+
+    const locationKeys = Object.keys(worldData.locations);
+    if (locationKeys.length === 0) {
+      console.warn('getCurrentRoom: No locations in world data');
       return { room: null, position: null };
     }
 
     // Try to get room from current position
     const currentPosition = worldData.current_position;
     if (currentPosition && worldData.locations[currentPosition]) {
+      console.log('getCurrentRoom: Using current_position', currentPosition);
       return { room: worldData.locations[currentPosition], position: currentPosition };
     }
 
-    // Try default position "0,0,0"
-    const defaultPosition = "0,0,0";
-    if (worldData.locations[defaultPosition]) {
-      return { room: worldData.locations[defaultPosition], position: defaultPosition };
+    // Try common position formats
+    const commonPositions = ["0,0,0", "0,0", "1,0", "start"];
+    for (const pos of commonPositions) {
+      if (worldData.locations[pos]) {
+        console.log('getCurrentRoom: Using common position', pos);
+        return { room: worldData.locations[pos], position: pos };
+      }
     }
 
     // Fall back to the first available location
-    const locationKeys = Object.keys(worldData.locations);
-    if (locationKeys.length > 0) {
-      const firstPosition = locationKeys[0];
-      return { room: worldData.locations[firstPosition], position: firstPosition };
-    }
-
-    // No rooms found
-    return { room: null, position: null };
+    const firstPosition = locationKeys[0];
+    console.log('getCurrentRoom: Falling back to first available location', firstPosition);
+    return { room: worldData.locations[firstPosition], position: firstPosition };
   }
 
   /**

@@ -389,6 +389,65 @@ const WorldCardsPlayView: React.FC = () => {
     return () => clearTimeout(timer);
   }, [messages, isGenerating, scrollToBottom]);
 
+  // Add this function to process world data and ensure all locations are properly initialized
+  const ensureAllLocationsConnected = (worldData: any): any => {
+    if (!worldData || !worldData.locations) return worldData;
+    
+    // Create a deep copy to avoid mutating the original
+    const updatedWorldData = JSON.parse(JSON.stringify(worldData));
+    
+    // Ensure all locations have connected=true unless explicitly set to false
+    Object.entries(updatedWorldData.locations).forEach(([coordKey, location]: [string, any]) => {
+      if (location && location.connected !== false) {
+        location.connected = true;
+      }
+    });
+    
+    console.log(`Processed ${Object.keys(updatedWorldData.locations).length} locations, ensuring they are connected`);
+    
+    return updatedWorldData;
+  };
+
+  // Load world data when the component mounts or when the worldId changes
+  useEffect(() => {
+    if (!worldId) return;
+    
+    setIsLoadingWorld(true);
+    setWorldLoadError(null);
+
+    worldStateApi.getWorldState(worldId)
+      .then(data => {
+        // Process the world data to ensure all locations are properly connected
+        const processedData = ensureAllLocationsConnected(data);
+        
+        // Log the counts before and after processing
+        const locationCount = Object.keys(data.locations || {}).length;
+        const processedLocationCount = Object.keys(processedData.locations || {}).length;
+        console.log(`World loaded with ${locationCount} locations, processed to ensure ${processedLocationCount} connected locations`);
+        
+        // Set the processed world data
+        setWorldState(processedData);
+        
+        // Get the current room from the world state
+        const currentPosition = processedData.current_position;
+        const currentRoom = processedData.locations[currentPosition];
+        
+        // Update the current room state
+        if (currentRoom) {
+          setCurrentRoom(currentRoom);
+          setCurrentRoomName(currentRoom.name || 'Unknown Location');
+        } else {
+          console.error('Current position does not correspond to a valid location');
+        }
+        
+        setIsLoadingWorld(false);
+      })
+      .catch(error => {
+        console.error('Error loading world state:', error);
+        setWorldLoadError(`Failed to load world: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setIsLoadingWorld(false);
+      });
+  }, [worldId]);
 
   // --- Room Navigation ---
   const handleRoomSelect = useCallback(async (position: string) => {

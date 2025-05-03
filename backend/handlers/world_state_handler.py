@@ -66,67 +66,136 @@ class WorldStateHandler:
 
     def _sanitize_world_name(self, world_name: str) -> str:
         """Sanitizes a world name to be safe for directory/file names."""
-        # Basic sanitization: remove potentially problematic characters
-        # Allow letters, numbers, underscores, hyphens, spaces
-        sanitized = "".join(c for c in world_name if c.isalnum() or c in ('-', '_', ' '))
-        # Replace spaces with underscores for better compatibility
-        sanitized = sanitized.replace(' ', '_').strip()
-        # Prevent empty names
-        return sanitized if sanitized else "unnamed_world"
+        # Basic sanitization to prevent path traversal and ensure safe filenames
+        import re
+        sanitized = re.sub(r'[^\w\-]', '_', world_name)
+        if not sanitized:
+            self.logger.log_warning(f"Invalid world name provided: {world_name}")
+            sanitized = "unnamed_world"
+        return sanitized
 
     def _get_world_path(self, world_name: str) -> Path:
         """Gets the path to a specific world's directory."""
-        sanitized_name = self._sanitize_world_name(world_name)
-        world_dir = self._worldcards_base_dir / sanitized_name
-        world_dir.mkdir(parents=True, exist_ok=True)
-        return world_dir
+        return self._worldcards_base_dir / self._sanitize_world_name(world_name)
 
     def _get_world_state_file_path(self, world_name: str) -> Path:
         """Gets the path to the world_state.json file for a specific world."""
         world_dir = self._get_world_path(world_name)
         return world_dir / "world_state.json"
 
+    def _check_alternate_paths(self, world_name: str) -> Optional[Path]:
+        """Checks for alternate paths where the world state might be stored.
+        This handles cases where frontend and backend might use different paths."""
+        sanitized_name = self._sanitize_world_name(world_name)
+        
+        # List of potential alternative locations
+        alternate_paths = [
+            # Frontend worlds directory (common in development)
+            Path.cwd() / "frontend" / "worlds" / sanitized_name / "world_state.json",
+            # Backend worlds in development
+            Path.cwd() / "backend" / "worlds" / sanitized_name / "world_state.json",
+            # Root directory worlds (relative path)
+            Path.cwd() / "worlds" / sanitized_name / "world_state.json"
+        ]
+        
+        # Add additional path patterns here if needed
+        
+        for path in alternate_paths:
+            if path.exists() and path.is_file():
+                self.logger.log_step(f"Found world state at alternate path: {path}")
+                return path
+                
+        return None
+
     def list_worlds(self) -> List[Dict[str, Any]]:
         """Lists available worlds by checking subdirectories."""
         worlds = []
-        if not self._worldcards_base_dir or not self._worldcards_base_dir.exists():
-            self.logger.log_warning("Worldcards base directory does not exist.")
-            return []
-
-        for item in self._worldcards_base_dir.iterdir():
-            if item.is_dir():
-                state_file = item / "world_state.json"
-                if state_file.exists():
-                    try:
-                        # Basic metadata - enhance later if needed
-                        metadata = {
-                            "name": item.name, # Use directory name as world name
-                            "last_modified": datetime.fromtimestamp(state_file.stat().st_mtime).isoformat()
-                        }
-                        # Try to load more metadata from the state file itself
-                        with open(state_file, 'r', encoding='utf-8') as f:
-                            state_data = json.load(f)
-                            metadata["base_character_id"] = state_data.get("base_character_id")
-                            metadata["location_count"] = len(state_data.get("locations", {}))
-                            metadata["unconnected_location_count"] = len(state_data.get("unconnected_locations", {}))
-                            # Add base character name if possible (requires reading character)
-                            # metadata["base_character_name"] = self._get_char_name(state_data.get("base_character_id"))
-
-                        worlds.append(metadata)
-                    except Exception as e:
-                        self.logger.log_error(f"Error reading metadata for world '{item.name}': {e}")
+        
+        # Ensure world directory exists
+        self._worldcards_base_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Also check frontend worlds directory if it exists
+        alt_paths = [
+            Path.cwd() / "frontend" / "worlds",
+            Path.cwd() / "backend" / "worlds",
+            Path.cwd() / "worlds"
+        ]
+        
+        paths_to_check = [self._worldcards_base_dir] + [p for p in alt_paths if p.exists()]
+        self.logger.log_step(f"Checking for worlds in {len(paths_to_check)} directories")
+        
+        # Get all world directories from all potential locations
+        for base_dir in paths_to_check:
+            try:
+                for world_dir in base_dir.iterdir():
+                    if world_dir.is_dir():
+                        world_name = world_dir.name
+                        state_file = world_dir / "world_state.json"
+                        
+                        if state_file.exists():
+                            # Load basic world info
+                            try:
+                                with open(state_file, 'r', encoding='utf-8') as f:
+                                    state = json.load(f)
+                                    
+                                # Get counts of connected and unconnected locations
+                                location_count = len(state.get("locations", {}))
+                                unconnected_count = len(state.get("unconnected_locations", {}))
+                                
+                                # Construct world info
+                                world_info = {
+                                    "name": state.get("name", world_name),
+                                    "location_count": location_count,
+                                    "unconnected_location_count": unconnected_count,
+                                    "base_character_id": state.get("base_character_id"),
+                                    # You might want to extract base_character_name from actual character file later
+                                    "base_character_name": os.path.basename(state.get("base_character_id", "")) if state.get("base_character_id") else None,
+                                    "last_modified_date": os.path.getmtime(state_file),
+                                    "path": str(world_dir),
+                                }
+                                
+                                # Skip duplicates
+                                if not any(w["name"] == world_info["name"] for w in worlds):
+                                    worlds.append(world_info)
+                                    self.logger.log_step(f"Found world: {world_name} with {location_count} locations")
+                            except Exception as e:
+                                self.logger.log_warning(f"Error loading world state for '{world_name}': {e}")
+            except Exception as e:
+                self.logger.log_error(f"Error listing worlds in {base_dir}: {e}")
+        
         return worlds
 
     def load_world_state(self, world_name: str) -> WorldState:
         """Loads the WorldState from its JSON file."""
         state_file = self._get_world_state_file_path(world_name)
+        
+        # If the file doesn't exist in the primary location, check alternative paths
         if not state_file.exists():
-            self.logger.log_error(f"World state file not found for: {world_name}")
-            raise CardSharkError(ErrorMessages.WORLD_NOT_FOUND.format(world_name=world_name), ErrorType.WORLD_NOT_FOUND)
+            self.logger.log_warning(f"World state file not found at primary path: {state_file}")
+            alt_path = self._check_alternate_paths(world_name)
+            
+            if alt_path:
+                self.logger.log_step(f"Found world state at alternate path: {alt_path}")
+                state_file = alt_path
+            else:
+                self.logger.log_error(f"World state file not found for: {world_name}")
+                raise CardSharkError(ErrorMessages.WORLD_NOT_FOUND.format(world_name=world_name), ErrorType.WORLD_NOT_FOUND)
 
         try:
             with open(state_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+            
+            # Ensure connected=true is properly set on all locations
+            if 'locations' in data:
+                for key, loc in data['locations'].items():
+                    # If connected is not explicitly false, ensure it's true
+                    if loc.get('connected') != False:
+                        loc['connected'] = True
+            
+            # Log the number of locations found (for debugging)
+            location_count = len(data.get('locations', {}))
+            self.logger.log_step(f"Loaded world state with {location_count} locations")
+                
             # Validate and parse with Pydantic
             world_state = WorldState(**data)
             self.logger.log_step(f"Successfully loaded world state for: {world_name}")
@@ -151,6 +220,17 @@ class WorldStateHandler:
 
             with open(state_file, 'w', encoding='utf-8') as f:
                 json.dump(state_dict, f, indent=2)
+                
+            # Also save to frontend worlds directory if it exists (for development environments)
+            frontend_worlds_dir = Path.cwd() / "frontend" / "worlds"
+            if frontend_worlds_dir.exists():
+                frontend_world_dir = frontend_worlds_dir / self._sanitize_world_name(world_name)
+                frontend_world_dir.mkdir(parents=True, exist_ok=True)
+                frontend_state_file = frontend_world_dir / "world_state.json"
+                
+                with open(frontend_state_file, 'w', encoding='utf-8') as f:
+                    json.dump(state_dict, f, indent=2)
+                self.logger.log_step(f"Also saved world state to frontend path: {frontend_state_file}")
 
             self.logger.log_step(f"Successfully saved world state for: {world_name}")
             return True
@@ -261,26 +341,86 @@ class WorldStateHandler:
             )
 
             # 3. Extract potential locations from character lore
+            self.logger.log_step(f"Extracting locations from character lore...")
             unconnected_locations_list = self.extract_locations_from_lore(character_metadata)
-            unconnected_locations_dict = {loc.location_id: loc for loc in unconnected_locations_list}
-
-            # 4. Create the initial WorldState
+            self.logger.log_step(f"Found {len(unconnected_locations_list)} locations in character lore")
+            
+            # 4. Place all locations on map in a grid pattern around the starting location
+            # Initialize with starting room at origin
+            locations_dict = {"0,0,0": start_location}
+            
+            # Use fixed grid positioning to place locations around the origin
+            # Create a grid (adjusting size based on number of locations)
+            grid_size = max(5, int(1 + (len(unconnected_locations_list) / 4) ** 0.5 * 2))  # Dynamic grid size
+            self.logger.log_step(f"Using grid size {grid_size}x{grid_size} for {len(unconnected_locations_list)} locations")
+            
+            grid_positions = []
+            
+            # Generate a grid with origin at center
+            for x in range(-grid_size//2, grid_size//2 + 1):
+                for y in range(-grid_size//2, grid_size//2 + 1):
+                    # Skip the origin (0,0,0) which is already occupied
+                    if not (x == 0 and y == 0):
+                        grid_positions.append((x, y, 0))
+            
+            # Sort positions by distance from origin for more logical placement
+            grid_positions.sort(key=lambda pos: abs(pos[0]) + abs(pos[1]))
+            
+            # Place each extracted location on the grid - ENSURING they are all connected/active
+            self.logger.log_step(f"Placing {len(unconnected_locations_list)} locations on a {grid_size}x{grid_size} grid")
+            
+            for i, loc in enumerate(unconnected_locations_list):
+                if i < len(grid_positions):
+                    # Get coordinates from our pre-calculated grid
+                    x, y, z = grid_positions[i]
+                    coord_str = f"{x},{y},{z}"
+                    
+                    # Create a fully connected location - EXPLICITLY setting connected=True
+                    new_location = Location(
+                        name=loc.name,
+                        coordinates=[x, y, z],
+                        location_id=loc.location_id,
+                        description=loc.description or f"A location associated with {char_actual_name}.",
+                        introduction=f"You have arrived at {loc.name}. {loc.description}" if loc.description else f"You have arrived at {loc.name}, a location associated with {char_actual_name}.",
+                        lore_source=loc.lore_source,
+                        connected=True,  # CRITICAL: This must be True for active locations!
+                        zone_id=None,
+                        room_type=None,
+                        notes=None,
+                        background=None,
+                        events=[],
+                        npcs=[]
+                    )
+                    
+                    # Add to the locations dictionary
+                    locations_dict[coord_str] = new_location
+                    self.logger.log_step(f"Placed location '{loc.name}' at coordinates {coord_str} (connected=True)")
+                else:
+                    # If we run out of grid positions, log a warning
+                    self.logger.log_warning(f"No more grid positions available for location '{loc.name}'")
+                    # Could implement a secondary grid or extension mechanism here if needed
+            
+            # 5. Create the initial WorldState with all locations properly placed and connected
             initial_state = WorldState(
                 name=sanitized_name,
+                version="1.0",  # Add explicit version for future compatibility
                 current_position="0,0,0",
-                locations={"0,0,0": start_location},
+                locations=locations_dict,
                 visited_positions=["0,0,0"],
-                unconnected_locations=unconnected_locations_dict,
+                unconnected_locations={},  # No unconnected locations - all are placed on the map
+                player=PlayerState(),
                 base_character_id=str(char_path)  # Store character file path as reference
-                # player state uses default factory
             )
+            
+            self.logger.log_step(f"Created world state with {len(locations_dict)} active locations")
+            self.logger.log_step(f"Sanity check - all locations connected: {all(loc.connected for loc in locations_dict.values())}")
 
-            # 5. Save the initial state
+            # 6. Save the initial state
             world_success = self.save_world_state(sanitized_name, initial_state)
             if not world_success:
                 raise CardSharkError(f"Failed to save initial world state for '{sanitized_name}' from character", ErrorType.PROCESSING_ERROR)
             
-            # 6. Copy the character PNG to world_card.png in the world directory
+            # 7. Copy the character PNG to world_card.png in the world directory
             world_dir = self._get_world_path(sanitized_name)
             world_card_path = world_dir / "world_card.png"
             
@@ -305,6 +445,127 @@ class WorldStateHandler:
             self.logger.log_error(traceback.format_exc())
             raise CardSharkError(f"Failed to initialize world from character: {e}", ErrorType.PROCESSING_ERROR)
 
+    def _auto_place_locations(self, location_list: List[UnconnectedLocation], existing_locations: Dict[str, Location] = None) -> Dict[str, Location]:
+        """
+        Automatically places extracted lore locations on the coordinate grid in a structured pattern.
+        Uses a grid-based placement strategy, starting from the origin and moving outward.
+        
+        Args:
+            location_list: List of UnconnectedLocation objects to place
+            existing_locations: Dictionary of already placed locations (coordinate string -> Location)
+            
+        Returns:
+            Updated dictionary with all locations placed
+        """
+        if existing_locations is None:
+            existing_locations = {}
+        
+        # Import math module for grid calculations
+        import math
+        
+        result_locations = dict(existing_locations)  # Create a copy to avoid modifying the original
+        
+        self.logger.log_step(f"DEBUG: Auto-placing {len(location_list)} locations in a spiral pattern")
+        
+        # Define a spiral pattern - we'll place locations in concentric rings around the origin
+        # Start with a simple ring pattern to ensure reasonable spacing
+        
+        # Precalculated coordinates in a spiral pattern around the origin
+        # Order from closest to origin outward, skipping (0,0,0) which is already occupied
+        spiral_coords = [
+            # Inner ring
+            (1, 0, 0), (1, 1, 0), (0, 1, 0), (-1, 1, 0), (-1, 0, 0), (-1, -1, 0), (0, -1, 0), (1, -1, 0),
+            # Second ring
+            (2, 0, 0), (2, 1, 0), (2, 2, 0), (1, 2, 0), (0, 2, 0), (-1, 2, 0), (-2, 2, 0), (-2, 1, 0),
+            (-2, 0, 0), (-2, -1, 0), (-2, -2, 0), (-1, -2, 0), (0, -2, 0), (1, -2, 0), (2, -2, 0), (2, -1, 0),
+            # Extend to third ring if needed
+            (3, 0, 0), (3, 1, 0), (3, 2, 0), (3, 3, 0), (2, 3, 0), (1, 3, 0), (0, 3, 0), (-1, 3, 0), 
+            (-2, 3, 0), (-3, 3, 0), (-3, 2, 0), (-3, 1, 0), (-3, 0, 0), (-3, -1, 0), (-3, -2, 0), (-3, -3, 0),
+            (-2, -3, 0), (-1, -3, 0), (0, -3, 0), (1, -3, 0), (2, -3, 0), (3, -3, 0), (3, -2, 0), (3, -1, 0),
+        ]
+        
+        # If we have more locations than precalculated coordinates, generate additional ones
+        extra_coords = []
+        if len(location_list) > len(spiral_coords):
+            # Generate coordinates on the 4th and 5th rings
+            for r in range(4, 6):  # 4th and 5th rings
+                # Top and bottom edges
+                for x in range(-r, r+1):
+                    extra_coords.append((x, r, 0))    # Top edge
+                    extra_coords.append((x, -r, 0))   # Bottom edge
+                # Left and right edges (excluding corners already added)
+                for y in range(-(r-1), r):
+                    extra_coords.append((r, y, 0))    # Right edge
+                    extra_coords.append((-r, y, 0))   # Left edge
+            
+            # Append to spiral coordinates
+            spiral_coords.extend(extra_coords)
+        
+        # Ensure we have enough coordinates for all locations
+        if len(location_list) > len(spiral_coords):
+            # Fall back to simple grid-based positioning if we need even more
+            self.logger.log_warning(f"More locations ({len(location_list)}) than predefined coordinates ({len(spiral_coords)}). Adding grid positions.")
+            grid_size = int(math.ceil(math.sqrt(len(location_list))))
+            for x in range(-grid_size, grid_size+1):
+                for y in range(-grid_size, grid_size+1):
+                    if (x, y, 0) not in spiral_coords and (x != 0 or y != 0):
+                        spiral_coords.append((x, y, 0))
+        
+        # Track which coordinates have been used
+        used_coords = {coord_str: True for coord_str in result_locations.keys()}
+        
+        # Place each location at the next available position in our spiral
+        for i, loc in enumerate(location_list):
+            coord_idx = 0
+            while coord_idx < len(spiral_coords):
+                coordinates = list(spiral_coords[coord_idx])
+                coord_str = ",".join(map(str, coordinates))
+                
+                # Check if this position is already occupied
+                if coord_str not in used_coords:
+                    break  # Found an available position
+                
+                coord_idx += 1
+                
+            if coord_idx >= len(spiral_coords):
+                # We ran out of predefined positions, generate a random one
+                self.logger.log_warning(f"Ran out of predefined positions for location {loc.name}, using random coordinates")
+                import random
+                while True:
+                    random_x = random.randint(-5, 5)
+                    random_y = random.randint(-5, 5)
+                    random_z = 0
+                    coord_str = f"{random_x},{random_y},{random_z}"
+                    if coord_str not in used_coords and (random_x != 0 or random_y != 0):
+                        coordinates = [random_x, random_y, random_z]
+                        break
+            
+            # Mark this position as used
+            used_coords[coord_str] = True
+            
+            # Convert UnconnectedLocation to proper Location
+            new_location = Location(
+                name=loc.name,
+                coordinates=coordinates,
+                location_id=loc.location_id,
+                description=loc.description,
+                introduction=f"You have arrived at {loc.name}. {loc.description}",
+                lore_source=loc.lore_source,
+                connected=True,
+                zone_id=None,
+                room_type=None,
+                notes=None,
+                background=None,
+                events=[],
+                npcs=[]
+            )
+            
+            # Add to the locations dictionary
+            result_locations[coord_str] = new_location
+            self.logger.log_step(f"Placed location '{loc.name}' at coordinates {coord_str}")
+        
+        self.logger.log_step(f"Successfully placed {len(location_list)} locations on the map")
+        return result_locations
 
     def extract_locations_from_lore(self, character_data: Dict) -> List[UnconnectedLocation]:
         """Extracts potential locations from character lore entries."""

@@ -75,69 +75,148 @@ const WorldBuilderView: React.FC = () => {
       setError(null);
       try {
         const data: FullWorldState = await worldStateApi.getWorldState(worldId);
-        setWorldData(data);
+        
+        // Log the original data for debugging
+        console.log(`Loaded world data with ${Object.keys(data.locations || {}).length} locations`);
+        
+        // Add explicit connected=true to each location if not explicitly set to false
+        // This ensures all locations can be displayed on the map
+        const processedData = { ...data };
+        if (processedData.locations) {
+          Object.keys(processedData.locations).forEach(locationKey => {
+            const location = processedData.locations[locationKey];
+            if (location && location.connected !== false) {
+              location.connected = true;
+            }
+          });
+        }
+        
+        setWorldData(processedData);
 
         const initialRooms: Record<string, Room> = {};
         const initialPosToId: Record<string, string> = {};
         let initialSelectedRoomId: string | null = null;
         let defaultRoomCreated = false;
 
-        const locationsSource = data.locations || {};
+        const locationsSource = processedData.locations || {};
         const locationKeys = Object.keys(locationsSource);
 
         if (locationKeys.length > 0) {
+          // Log number of locations for debugging
+          console.log(`Processing ${locationKeys.length} locations from world data`);
+          
+          // Track locations with invalid coordinates for debugging
+          const invalidLocations: string[] = [];
+          
           locationKeys.forEach((coordKey) => {
             const loc: WorldLocation = locationsSource[coordKey];
-            if (!loc || !loc.coordinates || !loc.location_id || !loc.name) return;
+            
+            // Skip locations that are explicitly marked as not connected
+            // (but process all others, including those with no connected property)
+            if (loc.connected === false) {
+              console.log(`Skipping location ${loc.name} as it's marked as not connected`);
+              return;
+            }
+            
+            if (!loc || !loc.location_id) {
+              console.warn("Skipping location due to missing location_id:", loc);
+              return;
+            }
+            
+            // Handle potentially missing coordinates by parsing from the coordinate key
+            let x = 0, y = 0;
+            
+            if (loc.coordinates && Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+              // Use coordinates from location object if available
+              x = loc.coordinates[0];
+              y = loc.coordinates[1];
+            } else {
+              // Parse coordinates from the key (format: "x,y,z" or "x,y")
+              try {
+                const coords = coordKey.split(',').map(Number);
+                if (coords.length >= 2) {
+                  x = coords[0];
+                  y = coords[1];
+                } else {
+                  invalidLocations.push(coordKey);
+                  console.warn(`Invalid coordinate key format: ${coordKey} for location: ${loc.name}`);
+                  return; // Skip this location
+                }
+              } catch (err) {
+                invalidLocations.push(coordKey);
+                console.warn(`Failed to parse coordinates from key: ${coordKey}`);
+                return; // Skip this location
+              }
+            }
 
-            const x = loc.coordinates[0];
-            const y = loc.coordinates[1];
-
+            // Create Room object from WorldLocation
             const room: Room = {
               id: loc.location_id,
-              name: loc.name,
+              name: loc.name || `Room at (${x},${y})`,
               description: loc.description || '',
               x: x,
               y: y,
               neighbors: (loc as any).neighbors || {},
               npcs: (loc.npcs || []).map(normalizeNpc).map((npc: NpcGridItem) => ({ path: npc.path, name: npc.name }))
             };
+            
+            const roomPosKey = posKey(x, y);
             initialRooms[room.id] = room;
-            initialPosToId[posKey(x, y)] = room.id;
+            initialPosToId[roomPosKey] = room.id;
+            
+            // Log for debugging
+            console.log(`Processed location: ${room.name} at (${x},${y}) with ID ${room.id}`);
           });
-
-          const currentCoords = data.current_position?.split(',').map(Number);
-          if (currentCoords && currentCoords.length >= 2) {
-            const currentPosKey = posKey(currentCoords[0], currentCoords[1]);
-            initialSelectedRoomId = initialPosToId[currentPosKey] || null;
+          
+          // Log any locations with invalid coordinates
+          if (invalidLocations.length > 0) {
+            console.warn(`${invalidLocations.length} locations had invalid coordinates and were skipped:`, invalidLocations);
           }
 
-          if (!initialSelectedRoomId) {
-            initialSelectedRoomId = initialRooms[Object.keys(initialRooms)[0]]?.id || null;
+          // Check if we successfully created any rooms from locations
+          if (Object.keys(initialRooms).length === 0) {
+            console.warn("No valid rooms could be created from locations, creating a default room");
+            defaultRoomCreated = true;
+          } else {
+            // Set the selected room ID based on current position
+            const currentCoords = processedData.current_position?.split(',').map(Number);
+            if (currentCoords && currentCoords.length >= 2) {
+              const currentPosKey = posKey(currentCoords[0], currentCoords[1]);
+              initialSelectedRoomId = initialPosToId[currentPosKey] || null;
+            }
+
+            if (!initialSelectedRoomId) {
+              initialSelectedRoomId = Object.keys(initialRooms)[0] || null;
+            }
           }
 
         } else {
+          console.log("No locations found in world data, creating default starting room");
+          defaultRoomCreated = true;
+        }
+        
+        // Create a default room if needed (no valid locations or empty world)
+        if (defaultRoomCreated) {
           const defaultRoom: Room = {
-             id: `room-${worldId}-start`,
-             name: 'Starting Room',
-             description: 'Configure this room.',
-             x: 0,
-             y: 0,
-             neighbors: {},
-             npcs: []
+            id: `room-${worldId}-start`,
+            name: 'Starting Room',
+            description: 'Configure this room.',
+            x: 0,
+            y: 0,
+            neighbors: {},
+            npcs: []
           };
           initialRooms[defaultRoom.id] = defaultRoom;
           initialPosToId[posKey(0,0)] = defaultRoom.id;
           initialSelectedRoomId = defaultRoom.id;
-          defaultRoomCreated = true;
         }
+        
+        // Log summary of processed data
+        console.log(`Processed world data: ${Object.keys(initialRooms).length} rooms created`);
 
         setRoomsById(initialRooms);
         setPosToId(initialPosToId);
         setSelectedRoomId(initialSelectedRoomId);
-
-        if (defaultRoomCreated && data) {
-        }
 
       } catch (err: any) {
         console.error("Failed to fetch world details:", err);

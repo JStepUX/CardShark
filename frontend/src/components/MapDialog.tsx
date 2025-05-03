@@ -27,19 +27,25 @@ const MapDialog: React.FC<MapDialogProps> = ({
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [roomDebug, setRoomDebug] = useState<string | null>(null);
   
+  // Room state for the map
+  const [roomsById, setRoomsById] = useState<Record<string, Room>>({});
+  const [posToId, setPosToId] = useState<Record<string, string>>({});
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  
   // Process the world data with useMemo to prevent recalculations on every render
-  const { roomsById, posToId, hasRooms, selectedRoomId } = useMemo(() => {
+  const { hasRooms } = useMemo(() => {
     // Create empty collections
-    const roomsById: Record<string, Room> = {};
-    const posToId: Record<string, string> = {};
+    const processedRoomsById: Record<string, Room> = {};
+    const processedPosToId: Record<string, string> = {};
     
     // Process locations if we have world data
     if (worldData?.locations) {
       const coordDebug: string[] = [];
       
       Object.entries(worldData.locations).forEach(([position, location]) => {
-        if (!location || !location.location_id) {
-          console.warn(`Skipping location at ${position} due to missing location_id`);
+        // Skip unconnected locations or locations without IDs
+        if (!location || !location.location_id || location.connected === false) {
+          console.warn(`Skipping location at ${position} due to missing location_id or not connected`);
           return;
         }
 
@@ -48,7 +54,6 @@ const MapDialog: React.FC<MapDialogProps> = ({
         const x = coords[0] || 0;
         const y = coords[1] || 0;
         
-        // Store multiple position formats to ensure lookup works
         // The issue was in the lookup mechanism - we need to create various position keys
         const posKey = `${x},${y}`; // This is the key format used in the RoomMap component
         const pos3DKey = position; // Original 3D position from world state
@@ -71,11 +76,9 @@ const MapDialog: React.FC<MapDialogProps> = ({
         };
 
         // Add the room to our collections
-        roomsById[location.location_id] = room;
-        
-        // Store BOTH position formats to ensure lookup works regardless of format
-        posToId[pos3DKey] = location.location_id;  // Original 3D format
-        posToId[posKey] = location.location_id;    // 2D format for RoomMap
+        processedRoomsById[location.location_id] = room;
+        processedPosToId[posKey] = location.location_id;
+        processedPosToId[pos3DKey] = location.location_id;
       });
 
       // Update room debug info in a useEffect, not directly in render
@@ -88,7 +91,7 @@ const MapDialog: React.FC<MapDialogProps> = ({
     // Get the currently selected room ID from the current position
     const currentPosition = worldData?.current_position || '';
     // First try the full position format
-    let selectedId = currentPosition ? posToId[currentPosition] : null;
+    let selectedId = currentPosition ? processedPosToId[currentPosition] : null;
     
     // If that doesn't work, try extracting the x,y coords only
     if (!selectedId && currentPosition) {
@@ -96,18 +99,20 @@ const MapDialog: React.FC<MapDialogProps> = ({
       const x = coords[0] || 0;
       const y = coords[1] || 0;
       const simplifiedPos = `${x},${y}`;
-      selectedId = posToId[simplifiedPos];
+      selectedId = processedPosToId[simplifiedPos];
     }
     
     // Check if we have rooms to display
-    const hasRooms = Object.keys(roomsById).length > 0;
+    const hasRooms = Object.keys(processedRoomsById).length > 0;
 
-    return { 
-      roomsById, 
-      posToId, 
-      hasRooms, 
-      selectedRoomId: selectedId, 
-    };
+    // Update state in a separate effect
+    useEffect(() => {
+      setRoomsById(processedRoomsById);
+      setPosToId(processedPosToId);
+      setSelectedRoomId(selectedId);
+    }, [processedRoomsById, processedPosToId, selectedId]);
+    
+    return { hasRooms };
   }, [worldData]); // Only recalculate when worldData changes
   
   // Load world data when the dialog opens

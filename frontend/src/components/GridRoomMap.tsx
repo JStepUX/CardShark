@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Room } from '../types/room';
 
 interface GridRoomMapProps {
@@ -25,19 +25,60 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
   // Calculate grid center
   const center = Math.floor(gridSize / 2);
   
+  // Enhanced debugging for location rendering
+  useEffect(() => {
+    if (debugMode) {
+      console.log("GridRoomMap rendering with:", {
+        roomsCount: Object.keys(roomsById).length,
+        posToIdCount: Object.keys(posToId).length,
+        gridSize,
+        selectedRoomId,
+        playMode
+      });
+    }
+  }, [roomsById, posToId, gridSize, selectedRoomId, playMode, debugMode]);
+  
   // Find existing rooms by coordinates
   const roomByCoords: Record<string, Room> = {};
+  
+  // Map both from roomsById values and posToId to ensure we catch all rooms
+  // First approach - map directly from roomsById values
   Object.values(roomsById).forEach(room => {
     const key = `${room.x},${room.y}`;
     roomByCoords[key] = room;
   });
   
-  // Debug: log position to ID mapping for troubleshooting
-  React.useEffect(() => {
-    if (debugMode && Object.keys(posToId).length > 0) {
-      console.log("Position to ID mappings available:", Object.keys(posToId).length);
+  // Second approach - ensure posToId mapping is used as well
+  // This is critical for locations that might be in posToId but not directly mapped in roomByCoords
+  Object.entries(posToId).forEach(([pos, roomId]) => {
+    const room = roomsById[roomId];
+    if (room) {
+      // Parse the coordinates from the position string
+      // Handle both "x,y" and "x,y,z" formats
+      const coords = pos.split(',').map(Number);
+      if (coords.length >= 2) {
+        const x = coords[0];
+        const y = coords[1];
+        // Add to our mapping with the expected format for the grid
+        const key = `${x},${y}`;
+        roomByCoords[key] = room;
+      }
     }
-  }, [posToId, debugMode]);
+  });
+  
+  // Debug info for troubleshooting
+  React.useEffect(() => {
+    if (debugMode) {
+      console.log("Room counts - roomsById:", Object.keys(roomsById).length);
+      console.log("Room counts - roomByCoords:", Object.keys(roomByCoords).length);
+      console.log("Room counts - posToId:", Object.keys(posToId).length);
+      
+      if (Object.keys(roomByCoords).length === 0 && Object.keys(roomsById).length > 0) {
+        console.warn("No rooms found for the grid despite having rooms in roomsById!");
+        console.log("Sample rooms:", Object.values(roomsById).slice(0, 3));
+      }
+    }
+  }, [roomsById, roomByCoords, posToId, debugMode]);
   
   // Check if we have any rooms at all
   const roomCount = Object.keys(roomsById).length;

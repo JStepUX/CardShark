@@ -1,5 +1,7 @@
 // frontend/src/utils/worldStateApi.ts
 import { FullWorldState } from '../types/worldState';
+import { CharacterData } from '../types/schema';
+import { WorldState } from '../types/world';
 
 /**
  * API client for interacting with the World Card system
@@ -8,79 +10,114 @@ export const worldStateApi = {
   /**
    * Get a list of all available worlds
    */
-  listWorlds: async () => {
-    const response = await fetch('/api/world-cards');
-    if (!response.ok) {
-      throw new Error(`Failed to list worlds: ${response.statusText}`);
+  listWorlds: async (): Promise<any[]> => {
+    try {
+      const response = await fetch('/api/world-cards');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Failed to list worlds: ${
+          errorData.detail || errorData.message || response.statusText
+        }`);
+      }
+      
+      const data = await response.json();
+      return data.worlds || [];
+    } catch (error) {
+      console.error('Error in listWorlds:', error);
+      throw error;
     }
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to list worlds');
-    }
-    return data.worlds;
   },
 
   /**
    * Create a new world, either empty or based on a character
    */
-  createWorld: async (worldName: string, characterFilePath?: string) => {
-    const response = await fetch('/api/world-cards/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: worldName,
-        character_path: characterFilePath,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create world: ${response.statusText}`);
+  createWorld: async (name: string, characterPath?: string): Promise<any> => {
+    try {
+      const payload: any = { name };
+      if (characterPath) {
+        payload.character_path = characterPath;
+      }
+      
+      const response = await fetch('/api/world-cards/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Failed to create world: ${
+          errorData.detail || errorData.message || response.statusText
+        }`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error in createWorld:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to create world');
-    }
-
-    return {
-      success: true,
-      world_name: worldName,
-    };
   },
 
   /**
    * Get the state for a specific world
    */
-  getWorldState: async (worldName: string): Promise<FullWorldState> => {
-    const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/state`);
-    if (!response.ok) {
-      throw new Error(`Failed to get world state: ${response.statusText}`);
+  getWorldState: async (worldId: string): Promise<any> => {
+    try {
+      // Send request to backed API
+      const response = await fetch(`/api/world-cards/${encodeURIComponent(worldId)}/state`);
+      
+      if (!response.ok) {
+        // Handle API error
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`Error loading world state: ${response.status} - ${JSON.stringify(errorData)}`);
+        throw new Error(`Failed to load world: ${
+          errorData.detail || errorData.message || response.statusText
+        }`);
+      }
+      
+      const data = await response.json();
+      if (data && data.success && data.state) {
+        console.log(`Successfully loaded world state with ${Object.keys(data.state.locations || {}).length} locations`);
+        return data.state;
+      } else {
+        throw new Error('Invalid response format from server');
+      }
+    } catch (error) {
+      console.error('Error in getWorldState:', error);
+      throw error;
     }
-    return await response.json();
   },
 
   /**
    * Save the state for a specific world
    */
-  saveWorldState: async (worldName: string, state: FullWorldState): Promise<boolean> => {
-    const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/state`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        state: state
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to save world state: ${response.statusText}`);
+  saveWorldState: async (worldId: string, state: any): Promise<boolean> => {
+    try {
+      // Make direct API call to backend
+      const response = await fetch(`/api/world-cards/${encodeURIComponent(worldId)}/state`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ state }),
+      });
+      
+      if (!response.ok) {
+        // Handle API error
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`Error saving world state: ${response.status} - ${JSON.stringify(errorData)}`);
+        return false;
+      }
+      
+      const data = await response.json();
+      return data && data.success === true;
+    } catch (error) {
+      console.error('Error in saveWorldState:', error);
+      return false;
     }
-
-    const data = await response.json();
-    return data.success === true;
   },
 
   /**
@@ -157,79 +194,55 @@ export const worldStateApi = {
   /**
    * Load the latest chat for a world card
    */
-  loadLatestChat: async (worldName: string) => {
+  loadLatestChat: async (worldId: string): Promise<any> => {
     try {
-      // Sanitize the world name for URL safety - consistently across all API calls
-      const safeWorldName = worldName.replace(/[^\w\-]+/g, '_');
-      
-      // Use chat endpoint instead of world-cards endpoint
-      const response = await fetch(`/api/world-chat/${encodeURIComponent(safeWorldName)}/latest`);
+      const response = await fetch(`/api/world-chat/${encodeURIComponent(worldId)}/latest`);
       
       if (response.status === 404) {
-        console.log('No chat found for this world, creating a new one');
-        
-        // Create a new chat automatically when none exists
-        const newChat = await worldStateApi.createNewChat(worldName);
-        if (newChat) {
-          console.log('Successfully created new chat for world:', worldName);
-          return newChat;
-        } else {
-          console.error('Failed to auto-create chat for world:', worldName);
-          return null;
-        }
-      }
-      
-      if (!response.ok) {
-        console.warn(`Failed to load latest chat for world ${worldName}: ${response.status} ${response.statusText}`);
+        // No chat yet, return null (not an error)
         return null;
       }
       
-      const data = await response.json();
-      return data.chat;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Failed to load latest chat: ${
+          errorData.detail || errorData.message || response.statusText
+        }`);
+      }
+      
+      return await response.json();
     } catch (error) {
-      console.error(`Error loading latest chat for world ${worldName}:`, error);
-      // Return null instead of throwing to avoid breaking the UI flow
-      return null;
+      console.error('Error in loadLatestChat:', error);
+      throw error;
     }
   },
 
   /**
    * Save a chat for a world card
    */
-  saveChat: async (worldName: string, chatId: string, chatData: any) => {
+  saveChat: async (worldId: string, chatId: string, chatData: any): Promise<boolean> => {
     try {
-      // Sanitize the world name for URL safety - consistent with backend
-      const safeWorldName = worldName.replace(/[^\w\-]+/g, '_');
-      
-      // Include the chatId in the request body to ensure it's used by the backend
-      const dataWithChatId = {
-        ...chatData,
-        metadata: {
-          ...chatData.metadata,
-          chat_id: chatId,
-          world_name: worldName // Ensure worldName is explicitly set in metadata
-        }
-      };
-      
-      // Use chat endpoint instead of world-cards endpoint
-      const response = await fetch(`/api/world-chat/${encodeURIComponent(safeWorldName)}/save`, {
+      const response = await fetch(`/api/world-chat/${encodeURIComponent(worldId)}/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(dataWithChatId),
+        body: JSON.stringify({
+          chat_id: chatId,
+          data: chatData
+        }),
       });
       
       if (!response.ok) {
-        console.error(`Failed to save chat: ${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`Error saving chat: ${response.status} - ${JSON.stringify(errorData)}`);
         return false;
       }
       
       const data = await response.json();
-      return data.success === true;
+      return data && data.success === true;
     } catch (error) {
-      console.error(`Error saving chat for world ${worldName}:`, error);
-      // Return false instead of throwing to avoid breaking the UI flow
+      console.error('Error in saveChat:', error);
       return false;
     }
   },
