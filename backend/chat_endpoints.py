@@ -1,7 +1,7 @@
 # backend/chat_endpoints.py
 # Implements API endpoints for chat operations
-import json
 import traceback
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -140,6 +140,7 @@ async def load_latest_chat(
     try:
         data = await request.json()
         character_data = data.get("character_data")
+        scan_all_files = data.get("scan_all_files", True)  # Default to scanning all files
         
         if not character_data:
             return JSONResponse(
@@ -150,13 +151,46 @@ async def load_latest_chat(
                 }
             )
             
-        logger.log_step(f"Loading latest chat for character: {character_data.get('name', 'Unknown')}")
-        result = chat_handler.load_latest_chat(character_data)
+        character_name = character_data.get("data", {}).get("name", "Unknown")
+        logger.log_step(f"Loading latest chat for character: {character_name}")
         
-        return JSONResponse(
-            status_code=200,
-            content=result
-        )
+        # If data contains character_id, log it for debugging
+        character_id = data.get("character_id")
+        if character_id:
+            logger.log_step(f"Using provided character_id: {character_id}")
+        
+        # Pass scan_all_files parameter if the chat handler supports it
+        result = None
+        try:
+            # Try with scan_all_files parameter first
+            result = chat_handler.load_latest_chat(character_data, scan_all_files=scan_all_files)
+        except TypeError:
+            # Fall back to standard call if parameter isn't supported
+            result = chat_handler.load_latest_chat(character_data)
+            
+        if result:
+            # Log the number of messages loaded
+            message_count = len(result.get("messages", []))
+            logger.log_step(f"Successfully loaded {message_count} messages for character: {character_name}")
+            
+            # Add additional information to the response
+            result["message_count"] = message_count
+            
+            # Return the result
+            return JSONResponse(
+                status_code=200,
+                content=result
+            )
+        else:
+            logger.log_warning(f"No chat found for character: {character_name}")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "message": "No chat found for this character",
+                    "messages": []
+                }
+            )
     except Exception as e:
         logger.log_error(f"Error loading latest chat: {str(e)}")
         logger.log_error(traceback.format_exc())
@@ -164,7 +198,8 @@ async def load_latest_chat(
             status_code=500,
             content={
                 "success": False,
-                "message": f"Failed to load latest chat: {str(e)}"
+                "message": f"Failed to load latest chat: {str(e)}",
+                "messages": []
             }
         )
         
@@ -220,8 +255,9 @@ async def save_chat(
         data = await request.json()
         character_data = data.get("character_data")
         messages = data.get("messages", [])
-        last_user = data.get("last_user")
+        last_user = data.get("lastUser")  # Note the camelCase name matching frontend
         api_info = data.get("api_info")
+        metadata = data.get("metadata")
         
         if not character_data:
             return JSONResponse(
@@ -232,43 +268,27 @@ async def save_chat(
                 }
             )
             
-        logger.log_step(f"Saving chat for character: {character_data.get('name', 'Unknown')}")
-        result = chat_handler.save_chat(character_data, messages, last_user, api_info)
+        # Log the number of messages being saved for debugging
+        logger.log_step(f"Saving chat for character: {character_data.get('data', {}).get('name', 'Unknown')}")
+        logger.log_step(f"Saving {len(messages)} messages")
         
-        # Handle different return types from the chat_handler.save_chat method
-        if isinstance(result, dict) and "chat_id" in result:
-            # If result is a dictionary with chat_id
+        # Make sure we're passing all messages to the save function
+        result = chat_handler.save_chat_state(character_data, messages, last_user, api_info, metadata)
+        
+        if result:
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
-                    "chat_id": result["chat_id"]
+                    "message_count": len(messages)
                 }
             )
-        elif isinstance(result, bool):
-            # If result is a boolean (likely indicating success/failure)
-            if result:
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "success": True
-                    }
-                )
-            else:
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "success": False,
-                        "message": "Failed to save chat (operation returned false)"
-                    }
-                )
         else:
-            # Handle any other unexpected return type
             return JSONResponse(
-                status_code=200,
+                status_code=500,
                 content={
-                    "success": True,
-                    "chat_id": str(result) if result else None
+                    "success": False,
+                    "message": "Failed to save chat (operation returned false)"
                 }
             )
     except Exception as e:
@@ -501,17 +521,77 @@ async def delete_all_character_chats(
     pass
 """
 
-"""
 @router.post("/autosave-settings")
 async def autosave_settings(
     request: Request,
     chat_handler: ChatHandler = Depends(get_chat_handler),
     logger: LogManager = Depends(get_logger)
 ):
-    '''Configure autosave behavior for chats.'''
-    # Implementation details:
-    # 1. Parse settings from request (interval, enabled, etc)
-    # 2. Call chat_handler.set_autosave_settings(settings)
-    # 3. Return success response with updated settings
-    pass
-"""
+    """Configure autosave behavior for chats."""
+    try:
+        data = await request.json()
+        
+        # Extract settings from the request
+        enabled = data.get("enabled", True)  # Default to enabled
+        interval_seconds = data.get("interval_seconds", 30)  # Default 30 seconds
+        save_threshold = data.get("save_threshold", 3)  # Default after 3 changes
+        
+        # Validate settings
+        if not isinstance(enabled, bool):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Enabled must be a boolean value"
+                }
+            )
+            
+        if not isinstance(interval_seconds, int) or interval_seconds < 1:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Interval seconds must be a positive integer"
+                }
+            )
+            
+        if not isinstance(save_threshold, int) or save_threshold < 1:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "Save threshold must be a positive integer"
+                }
+            )
+        
+        # Apply the settings to the chat handler
+        chat_handler.set_autosave_interval(interval_seconds)
+        
+        # Store the full settings for persistence and future retrieval
+        settings = {
+            "enabled": enabled,
+            "interval_seconds": interval_seconds,
+            "save_threshold": save_threshold,
+            "last_updated": datetime.now().isoformat()
+        }
+        
+        logger.log_step(f"Configured chat autosave: enabled={enabled}, interval={interval_seconds}s, threshold={save_threshold}")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "settings": settings,
+                "message": "Autosave settings updated successfully"
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error configuring autosave settings: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"Failed to configure autosave settings: {str(e)}"
+            }
+        )

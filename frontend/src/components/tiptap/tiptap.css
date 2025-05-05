@@ -146,3 +146,28 @@
   border-radius: 0.25rem;
   color: #a3e635;
 }
+
+/* Image styling for both editor and streaming content */
+.ProseMirror img,
+.streaming-content img,
+.chat-bubble-editor img,
+.prose img,
+.chat-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+  margin: 0.5rem 0;
+  display: block;
+}
+
+/* Additional styles for TipTap image nodes */
+.ProseMirror .image-container {
+  display: block;
+  margin: 0.5rem 0;
+  position: relative;
+}
+
+/* Image resize handles if needed in the future */
+.ProseMirror .image-resizer {
+  display: inline-flex;
+}

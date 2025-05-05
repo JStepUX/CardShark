@@ -627,61 +627,94 @@ class ChatHandler:
 
     def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None, metadata: Optional[Dict] = None) -> bool:
         """Save complete chat state to a file with API information and additional metadata."""
-        self.logger.log_step(f"Saving chat state for character: {character_data.get('data', {}).get('name')}")
+        character_name = character_data.get('data', {}).get('name', 'unknown')
+        self.logger.log_step(f"Saving chat state for character: {character_name}")
         
         try:
-            # Get or create chat file with current chat_id
+            # Ensure we have a valid character ID
+            char_id = self._get_character_uuid(character_data)
+            if not char_id:
+                self.logger.log_error("Failed to get character UUID")
+                return False
+                
+            # Get or create chat file without forcing a new one
             chat_file = self._get_or_create_chat_file(character_data, force_new=False)
-            char_name = character_data.get('data', {}).get('name', 'unknown')
+            self.logger.log_step(f"Using chat file: {chat_file}")
             
-            # Try to preserve the current chat_id if possible
+            # Try to preserve existing metadata including current chat_id
             current_chat_id = None
             current_metadata = {}
+            background_settings = None
+            
             if chat_file.exists():
                 try:
                     with open(chat_file, 'r', encoding='utf-8') as f:
                         first_line = f.readline().strip()
-                        if first_line:
+                        if (first_line):
                             current_metadata = json.loads(first_line)
-                            current_chat_id = current_metadata.get('chat_metadata', {}).get('chat_id')
-                            # Preserve existing metadata entries we don't want to overwrite
-                            current_background_settings = current_metadata.get('chat_metadata', {}).get('backgroundSettings')
+                            if 'chat_metadata' in current_metadata:
+                                # Extract important fields to preserve
+                                current_chat_id = current_metadata.get('chat_metadata', {}).get('chat_id')
+                                background_settings = current_metadata.get('chat_metadata', {}).get('backgroundSettings')
+                                # Preserve any other custom fields that might be set
+                                custom_fields = {k: v for k, v in current_metadata.get('chat_metadata', {}).items() 
+                                               if k not in ['chat_id', 'lastUser', 'api_info', 'tainted', 'timedWorldInfo']}
                 except Exception as e:
                     self.logger.log_warning(f"Error reading existing metadata: {str(e)}")
+                    # Create a backup before we potentially overwrite the file with issues
+                    try:
+                        backup_path = self._create_backup(chat_file)
+                        self.logger.log_step(f"Created backup due to metadata read error: {backup_path}")
+                    except Exception as backup_error:
+                        self.logger.log_error(f"Failed to create backup: {str(backup_error)}")
             
-            # Create metadata with lastUser and preserve chat_id if available
-            char_id = self._get_character_uuid(character_data)
+            # Use existing chat_id or generate a new one with our improved method
+            chat_id = current_chat_id if current_chat_id else self.generate_chat_id(character_data)
+            self.logger.log_step(f"Using chat ID: {chat_id}")
             
-            # Use existing chat_id or generate a new one
-            chat_id = current_chat_id if current_chat_id else f"chat_{uuid.uuid4().hex}"
+            # Prepare chat metadata with consistent structure
+            current_time = datetime.now()
+            timestamp_millis = int(current_time.timestamp() * 1000)
             
-            # Merge existing and new metadata
+            # Create a complete chat metadata object
             chat_metadata = {
                 "chat_id": chat_id,
                 "tainted": False,
+                "updated_timestamp": timestamp_millis,
                 "timedWorldInfo": {
                     "sticky": {},
                     "cooldown": {}
                 },
                 "lastUser": lastUser,
-                "api_info": api_info or {}  # Add API information
+                "api_info": api_info or {}
             }
             
-            # Add background settings from the input metadata if provided
+            # Add background settings from input metadata (highest priority)
             if metadata and 'backgroundSettings' in metadata:
                 chat_metadata['backgroundSettings'] = metadata.get('backgroundSettings')
-                self.logger.log_step(f"Including background settings in chat metadata")
-            # Preserve background settings from current metadata if available
-            elif current_background_settings:
-                chat_metadata['backgroundSettings'] = current_background_settings
+                self.logger.log_step(f"Including background settings from input metadata")
+                
+            # Or preserve existing background settings (if not in input)
+            elif background_settings:
+                chat_metadata['backgroundSettings'] = background_settings
                 self.logger.log_step(f"Preserving existing background settings")
+                
+            # Add any preserved custom fields back to maintain compatibility with other components
+            if 'custom_fields' in locals() and custom_fields:
+                for key, value in custom_fields.items():
+                    chat_metadata[key] = value
+                    
+            # Add title if not present (and not in preserved custom fields)
+            if 'title' not in chat_metadata and 'title' not in custom_fields:
+                chat_metadata['title'] = f"Chat with {character_name} - {current_time.strftime('%b %d, %Y')}"
             
-            # Prepare full metadata with version information
+            # Prepare full metadata object with version information
             metadata_obj = {
                 "user_name": "User",
-                "character_name": char_name,
+                "character_name": character_name,
                 "character_id": char_id,
-                "create_date": current_metadata.get('create_date', datetime.now().isoformat()),
+                "create_date": current_metadata.get('create_date', current_time.isoformat()),
+                "timestamp": timestamp_millis, 
                 "version": self._file_version,
                 "chat_metadata": chat_metadata
             }
@@ -692,18 +725,36 @@ class ChatHandler:
                 json.dump(metadata_obj, f)
                 f.write('\n')
                 
-                # Write all messages
+                # Write all messages with proper formatting
                 for msg in messages:
-                    formatted_msg = self._format_message(msg, char_name)
+                    formatted_msg = self._format_message(msg, character_name)
                     json.dump(formatted_msg, f)
                     f.write('\n')
             
-            # Use atomic file write operation
-            success = self._atomic_write_file(chat_file, content_writer)
+            # Use atomic file write operation which includes creating a backup
+            success = self._atomic_write_file(chat_file, content_writer, create_backup=True)
             
             if success:
                 # Update the active chat tracking
                 self._update_active_chat(character_data, chat_id)
+                
+                # Update session cache if available
+                if chat_id in self._session_metadata:
+                    # Update cache with the latest metadata
+                    self._session_metadata[chat_id]['lastUser'] = lastUser
+                    if api_info:
+                        self._session_metadata[chat_id]['api_info'] = api_info
+                
+                # Update our tracking of the last saved state for optimized saves
+                self._update_last_saved_state(char_id, messages, lastUser, api_info, metadata)
+                
+                # Reset the change counter
+                self._changes_since_save[char_id] = 0
+                
+                # Clear any pending saves for this chat
+                if char_id in self._pending_saves:
+                    self._pending_saves[char_id]['needs_save'] = False
+                
                 self.logger.log_step(f"Successfully saved chat with {len(messages)} messages to {chat_file}")
                 return True
             else:

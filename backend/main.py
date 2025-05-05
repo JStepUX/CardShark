@@ -190,6 +190,87 @@ app.include_router(background_router)
 
 # ---------- Direct routes that haven't been modularized yet ----------
 
+@app.post("/api/generate")
+async def generate(request: Request):
+    """Generate a chat response using the LLM API with streaming."""
+    try:
+        logger.log_step("Received generation request at /api/generate")
+        # Parse the request JSON
+        request_data = await request.json()
+        
+        # Use the ApiHandler to stream the response
+        return StreamingResponse(
+            api_handler.stream_generate(request_data),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.log_error(f"Error in /api/generate endpoint: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500, 
+            content={"error": f"Generation failed: {str(e)}"}
+        )
+
+@app.post("/api/generate-greeting")
+async def generate_greeting(request: Request):
+    """Generate a greeting using the LLM API without streaming."""
+    try:
+        logger.log_step("Received greeting generation request")
+        # Parse the request JSON
+        request_data = await request.json()
+        
+        # Extract character data and API config
+        character_data = request_data.get('character_data')
+        api_config = request_data.get('api_config')
+        
+        if not character_data:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "Character data is required"}
+            )
+            
+        if not api_config:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "API configuration is required"}
+            )
+            
+        # Generate a simple prompt for the greeting
+        prompt = f"You are tasked with crafting a new, engaging first message for the character {character_data.get('data', {}).get('name', 'Character')}. Use the character's personality traits and background to write a brief, natural introduction. Keep it concise and in character."
+        
+        # Use the ApiHandler to generate a non-streaming response
+        result = await api_handler.generate_with_config(
+            api_config,
+            {
+                "prompt": prompt,
+                "memory": character_data.get('data', {}).get('system_prompt', ''),
+                "stop_sequence": ["User:", "Human:", "</s>"]
+            }
+        )
+        
+        # Check for errors
+        if "error" in result:
+            logger.log_error(f"Error generating greeting: {result['error']}")
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "message": result["error"]}
+            )
+            
+        # Return the generated greeting
+        return JSONResponse(
+            content={
+                "success": True,
+                "greeting": result.get("content", "Hello! How are you today?")
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error generating greeting: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Failed to generate greeting: {str(e)}"}
+        )
+
 @app.post("/api/debug-png")
 async def debug_png(file: UploadFile = File(...)):
     """Debug a PNG file to extract all chunks and metadata."""

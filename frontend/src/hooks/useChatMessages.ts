@@ -411,7 +411,13 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
                   // Handle OpenAI/OpenRouter token format
                   if (typeof parsed.token === 'string') {
                     contentDelta = parsed.token;
+                    console.log(`[Stream] Token received: "${contentDelta}"`);
                   } 
+                  // Also check for direct content format
+                  else if (typeof parsed.content === 'string') {
+                    contentDelta = parsed.content;
+                    console.log(`[Stream] Direct content received: "${contentDelta.substring(0, 20)}..."`);
+                  }
                   // Also check for direct content_delta format
                   else if (typeof parsed.content_delta === 'string') {
                     contentDelta = parsed.content_delta;
@@ -424,19 +430,38 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
                   else if (isThinking && typeof parsed.content === 'string') {
                     contentDelta = parsed.content;
                   }
-                  // Handle explicit empty content delta
+                  // Handle explicit empty content delta (but don't consider it empty if it's an empty string)
                   else if (parsed.choices?.[0]?.delta && 'content' in parsed.choices[0].delta && parsed.choices[0].delta.content === null) {
                     emptyChunkCount++;
+                    console.log('[Stream] Empty content delta received');
+                  }
+                  // Handle the case where we get an empty token (valid for streaming!)
+                  else if ('token' in parsed && parsed.token === '') {
+                    contentDelta = '';
+                    console.log('[Stream] Empty token received');
                   }
                   else if (parsed.error) { 
                     throw new Error(parsed.error.message || "Error from stream"); 
+                  }
+                  // If we have a finish_reason, it might be a final empty message
+                  else if (parsed.finish_reason || (parsed.choices?.[0]?.finish_reason)) {
+                    console.log('[Stream] Received finish_reason');
+                    // Just continue - don't treat as content or error
+                  }
+                  else {
+                    // We got JSON but couldn't extract content in a known format
+                    // This is a common case when APIs send metadata or system messages
+                    console.log(`[Stream] Unrecognized JSON format: ${JSON.stringify(parsed).substring(0, 100)}...`);
                   }
                 } catch (e) {
                   // Don't crash on parse error - log it and continue
                   console.warn('[Stream] Failed to parse JSON data line:', line, e);
                   
-                  // Only log a warning, don't treat as fatal error since some APIs
-                  // send multiple partial data lines that won't parse individually
+                  // If it's not valid JSON, but could be raw text, use it directly
+                  if (typeof jsonData === 'string' && jsonData.trim().length > 0) {
+                    contentDelta = jsonData.trim();
+                    console.log(`[Stream] Using raw data as content: "${contentDelta.substring(0, 20)}..."`);
+                  }
                 }
               }
             } else {

@@ -202,11 +202,18 @@ class KoboldCppAdapter(ApiProviderAdapter):
         if not base_url.startswith(('http://', 'https://')):
             base_url = f'http://{base_url}'
             
-        # Different endpoints for different versions
-        if '/api/extra/generate/stream' not in base_url and '/api/generate' not in base_url:
-            # Append the appropriate endpoint if not already there
-            return base_url.rstrip('/') + '/api/extra/generate/stream'
-        return base_url
+        # Log the original URL for debugging
+        self.logger.log_step(f"KoboldCPP adapter received base URL: {base_url}")
+            
+        # First check if the URL already has a known endpoint pattern
+        if '/api/extra/generate/stream' in base_url or '/api/generate' in base_url:
+            self.logger.log_step(f"Using existing endpoint in URL: {base_url}")
+            return base_url
+        
+        # Try the streaming endpoint first, which is preferred
+        stream_url = base_url.rstrip('/') + '/api/extra/generate/stream'
+        self.logger.log_step(f"Using streaming endpoint: {stream_url}")
+        return stream_url
         
     def prepare_headers(self, api_key: Optional[str]) -> Dict[str, str]:
         """Prepare headers for KoboldCPP"""
@@ -217,48 +224,230 @@ class KoboldCppAdapter(ApiProviderAdapter):
         if api_key:
             headers['Authorization'] = f'Bearer {api_key}'
         return headers
-        
+    
     def prepare_request_data(self, 
-                            prompt: str, 
-                            memory: Optional[str],
-                            stop_sequence: List[str],
-                            generation_settings: Dict[str, Any]) -> Dict[str, Any]:
+                           prompt: str, 
+                           memory: Optional[str],
+                           stop_sequence: List[str],
+                           generation_settings: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare the request data for KoboldCPP"""
-        # Combine generation settings with required fields
+        # Extract KoboldCPP-specific settings or use defaults
+        max_tokens = generation_settings.get('max_length', 220)
+        temperature = generation_settings.get('temperature', 0.7)
+        top_p = generation_settings.get('top_p', 0.9)
+        top_k = generation_settings.get('top_k', 40)
+        typical_p = generation_settings.get('typical_p', 1.0)
+        repetition_penalty = generation_settings.get('repetition_penalty', 1.1)
+        
+        # Log the preparation
+        self.logger.log_step(f"Preparing KoboldCPP request data with max_tokens={max_tokens}")
+        
+        # Create full prompt including memory if provided
+        full_prompt = ""
+        if memory:
+            full_prompt = memory + "\n\n" + prompt
+        else:
+            full_prompt = prompt
+            
+        # Create the KoboldCPP request format
         data = {
-            **generation_settings,
-            "prompt": prompt,
-            "memory": memory if memory else "",
-            "stop_sequence": stop_sequence,
-            "quiet": True,
-            "trim_stop": True
+            "prompt": full_prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "typical_p": typical_p,
+            "rep_pen": repetition_penalty,
+            "stopping_strings": stop_sequence
         }
+        
         return data
         
     def parse_streaming_response(self, line: bytes) -> Optional[Dict[str, Any]]:
-        """Parse a streaming response line from KoboldCPP"""
+        """Parse a streaming response line from KoboldCPP
+        
+        KoboldCPP sends data in Server-Sent Events (SSE) format with alternating
+        'event: message' and 'data: {...}' lines. We need to handle both formats.
+        """
         try:
-            line_text = line.decode('utf-8')
-            if line_text.startswith('data: '):
-                # Extract the data portion (after "data: ")
-                data_portion = line_text[6:]
+            line_text = line.decode('utf-8').strip()
+            
+            # Skip processing empty lines
+            if not line_text:
+                return None
                 
-                # Parse the response to ensure it's valid JSON
+            # Log the raw line for debugging (truncated for readability)
+            self.logger.log_step(f"KoboldCPP raw response: {line_text[:200]}")
+            
+            # Handle event lines - these indicate a message is coming but don't contain content
+            if line_text.startswith('event:'):
+                # Just log that we received an event line but don't treat it as an error
+                self.logger.log_step(f"KoboldCPP event line received: {line_text}")
+                return None
+            
+            # Handle data lines with JSON content
+            if line_text.startswith('data:'):
+                # Extract the JSON part after 'data: '
+                json_text = line_text[5:].strip()
+                
                 try:
-                    content = json.loads(data_portion)
+                    data = json.loads(json_text)
                     
-                    # Handle different response formats
-                    if isinstance(content, str):
-                        return {'content': content}
-                    else:
-                        return content
+                    # Extract token from the JSON content
+                    if 'token' in data:
+                        token = data.get('token', '')
+                        self.logger.log_step(f"KoboldCPP token received: '{token}'")
+                        return {'content': token}
+                    
+                    # Check for text format (standard endpoint)
+                    elif 'text' in data:
+                        text = data.get('text', '')
+                        self.logger.log_step(f"KoboldCPP text received: '{text[:50]}...'")
+                        return {'content': text}
+                    
+                    # Check for results format (batch endpoint)
+                    elif 'results' in data and isinstance(data['results'], list) and len(data['results']) > 0:
+                        result = data['results'][0]
+                        if 'text' in result:
+                            text = result.get('text', '')
+                            self.logger.log_step(f"KoboldCPP results/text received: '{text[:50]}...'")
+                            return {'content': text}
+                    
+                    # If we have a finish reason, return empty content to signal completion
+                    if 'finish_reason' in data and data['finish_reason'] is not None:
+                        self.logger.log_step(f"KoboldCPP finish reason: {data['finish_reason']}")
+                        return {'content': ''}
+                    
+                    # As a fallback, for any response that has no recognizable format
+                    # but is a valid JSON object, return an empty content to keep the stream alive
+                    self.logger.log_step(f"Unknown KoboldCPP data format: {json_text[:100]}")
+                    return {'content': ''}
+                    
                 except json.JSONDecodeError:
-                    # If not valid JSON, just pass through the raw content
-                    return {'content': data_portion}
-            return None
+                    self.logger.log_step(f"Non-JSON data received: {json_text[:100]}")
+                    # Even if it's not valid JSON, don't treat it as an error
+                    # Just return the raw text as content
+                    return {'content': json_text}
+            
+            # For other non-event, non-data lines, try to extract useful content
+            try:
+                # Try to parse as JSON directly
+                data = json.loads(line_text)
+                
+                if 'token' in data:
+                    token = data.get('token', '')
+                    self.logger.log_step(f"KoboldCPP direct token received: '{token}'")
+                    return {'content': token}
+                elif 'text' in data:
+                    text = data.get('text', '')
+                    self.logger.log_step(f"KoboldCPP direct text received: '{text[:50]}...'")
+                    return {'content': text}
+                
+                # Return empty content for unrecognized but valid JSON
+                return {'content': ''}
+            except json.JSONDecodeError:
+                # Not JSON and not a recognized line format
+                # Log this but don't treat as an error - just return None to skip this line
+                self.logger.log_step(f"Skipping unrecognized line format: {line_text[:100]}")
+                return None
+                
         except Exception as e:
+            # Only log actual exceptions as errors
             self.logger.log_error(f"Error parsing KoboldCPP response: {e}")
             return None
+        
+    def stream_generate(self, 
+                       base_url: str, 
+                       api_key: Optional[str], 
+                       prompt: str,
+                       memory: Optional[str],
+                       stop_sequence: List[str],
+                       generation_settings: Dict[str, Any]) -> Generator[bytes, None, None]:
+        """Generate a streaming response from KoboldCPP API with fallback support
+        
+        This implementation tries the streaming endpoint first, and falls back to
+        the standard endpoint if the streaming endpoint returns a 404.
+        """
+        try:
+            self.logger.log_step("KoboldCPP: Entered stream_generate method")
+            
+            # First try the streaming endpoint
+            url = self.get_endpoint_url(base_url)
+            self.logger.log_step(f"KoboldCPP: Using primary endpoint URL: {url}")
+            
+            # Prepare headers and data
+            headers = self.prepare_headers(api_key)
+            data = self.prepare_request_data(prompt, memory, stop_sequence, generation_settings)
+            
+            # Make the streaming request
+            self.logger.log_step(f"KoboldCPP: Attempting POST to streaming endpoint: {url}")
+            try:
+                with requests.post(url, headers=headers, json=data, stream=True, timeout=60) as response:
+                    if response.status_code == 404:
+                        # Streaming endpoint not found, try the standard endpoint
+                        self.logger.log_step("KoboldCPP: Streaming endpoint returned 404, trying standard endpoint")
+                        standard_url = base_url.rstrip('/') + '/api/generate'
+                        self.logger.log_step(f"KoboldCPP: Trying standard endpoint: {standard_url}")
+                        
+                        # Make a non-streaming request to the standard endpoint
+                        standard_response = requests.post(standard_url, headers=headers, json=data, timeout=60)
+                        
+                        if standard_response.status_code != 200:
+                            error_msg = self._handle_error(standard_response)
+                            self.logger.log_error(f"KoboldCPP API error on standard endpoint: {error_msg}")
+                            yield f"data: {json.dumps({'error': {'message': error_msg}})}\n\n".encode('utf-8')
+                            return
+                            
+                        # Parse the standard response
+                        try:
+                            result = standard_response.json()
+                            text = result.get('results', [{}])[0].get('text', '')
+                            
+                            # Yield the response as a single chunk to simulate streaming
+                            self.logger.log_step(f"KoboldCPP: Got response from standard endpoint, length: {len(text)}")
+                            yield f"data: {json.dumps({'content': text})}\n\n".encode('utf-8')
+                            yield b"data: [DONE]\n\n"
+                            return
+                        except Exception as e:
+                            self.logger.log_error(f"Error processing standard response: {e}")
+                            yield f"data: {json.dumps({'error': {'message': f'Failed to parse response: {str(e)}'}})}\n\n".encode('utf-8')
+                            return
+                    
+                    # If not a 404, process the streaming response as before
+                    self.logger.log_step(f"KoboldCPP: Streaming endpoint returned status: {response.status_code}")
+                    if response.status_code != 200:
+                        error_msg = self._handle_error(response)
+                        self.logger.log_error(f"KoboldCPP API error: {error_msg}")
+                        yield f"data: {json.dumps({'error': {'message': error_msg}})}\n\n".encode('utf-8')
+                        return
+                    
+                    # Process streaming response
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                            
+                        try:
+                            # Parse the streaming response line
+                            parsed_content = self.parse_streaming_response(line)
+                            if parsed_content:
+                                yield f"data: {json.dumps(parsed_content)}\n\n".encode('utf-8')
+                        except Exception as e:
+                            self.logger.log_error(f"Error processing line: {e}")
+                            continue
+                    
+                    # Send completion message
+                    yield b"data: [DONE]\n\n"
+                    
+            except requests.exceptions.RequestException as e:
+                self.logger.log_error(f"KoboldCPP request failed: {str(e)}")
+                error_msg = f"Failed to connect to KoboldCPP: {str(e)}"
+                yield f"data: {json.dumps({'error': {'message': error_msg}})}\n\n".encode('utf-8')
+                
+        except Exception as e:
+            error_msg = f"KoboldCPP stream generation failed: {str(e)}"
+            self.logger.log_error(error_msg)
+            self.logger.log_error(traceback.format_exc())
+            yield f"data: {json.dumps({'error': {'type': 'ServerError', 'message': error_msg}})}\n\n".encode('utf-8')
 
 
 class OpenAIAdapter(ApiProviderAdapter):

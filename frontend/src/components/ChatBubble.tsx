@@ -12,6 +12,7 @@ import {
 import { Message } from '../types/messages';
 import RichTextEditor from './RichTextEditor';
 import { formatUserName } from '../utils/formatters';
+import { markdownToHtml } from '../utils/contentUtils';  // Import markdownToHtml directly
 
 interface ChatBubbleProps {
   message: Message;
@@ -53,6 +54,16 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const [copied, setCopied] = useState(false);
   const [streamingStarted, setStreamingStarted] = useState(false);
   const hasReceivedContent = useRef(false);
+  const generationStartTime = useRef<number | null>(null);
+  
+  // Initialize generation start time
+  useEffect(() => {
+    if (isGenerating && !generationStartTime.current) {
+      generationStartTime.current = Date.now();
+    } else if (!isGenerating) {
+      generationStartTime.current = null;
+    }
+  }, [isGenerating]);
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
@@ -89,33 +100,50 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         hasReceivedContent.current = true;
       }
       
-      // Return empty string for streaming instead of placeholder
-      if (!text || text.trim() === '') {
-        return '';
+      // Return the content we have so far, even if it's empty
+      // This ensures we start showing content as soon as it arrives
+      const trimmedContent = trimLeadingNewlines(text || '');
+      
+      // Create a cache key based on content and variables
+      const cacheKey = `${trimmedContent}_${currentUser || ''}_${characterName || ''}`;
+
+      // Check if we have this content processed already
+      if (highlightCache.current.has(cacheKey)) {
+        return highlightCache.current.get(cacheKey)!;
       }
+
+      // Replace variables while preserving asterisks and other syntax
+      let processedText = trimmedContent;
+      if (currentUser) {
+        processedText = processedText.replace(/\{\{user\}\}/gi, currentUser);
+      }
+      if (characterName) {
+        processedText = processedText.replace(/\{\{char\}\}/gi, characterName);
+      }
+
+      // Cache the result
+      highlightCache.current.set(cacheKey, processedText);
+
+      return processedText;
     }
+    
+    // Non-generating messages should always be processed without special handling
     
     // Handle completely empty content for non-streaming cases
     if ((!text || text.trim() === '') && !isGenerating) {
-      console.warn(`[ChatBubble] Empty content detected for message ${message.id}, role: ${message.role}, status: ${message.status}`);
-      
-      // IMPORTANT: Never return "..." placeholder for empty content
-      // OpenRouter sometimes sends valid empty responses
-      return '';
+      // For completed messages with no content, return an empty space
+      // This ensures the bubble renders properly
+      return ' '; 
     }
     
-    // First trim leading newlines
+    // Regular processing for non-generating messages
     const trimmedContent = trimLeadingNewlines(text || '');
-
-    // Create a cache key based on content and variables
     const cacheKey = `${trimmedContent}_${currentUser || ''}_${characterName || ''}`;
-
-    // Check if we have this content processed already
+    
     if (highlightCache.current.has(cacheKey)) {
       return highlightCache.current.get(cacheKey)!;
     }
 
-    // Replace variables while preserving asterisks and other syntax
     let processedText = trimmedContent;
     if (currentUser) {
       processedText = processedText.replace(/\{\{user\}\}/gi, currentUser);
@@ -128,12 +156,21 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     highlightCache.current.set(cacheKey, processedText);
 
     return processedText;
-  }, [currentUser, characterName, trimLeadingNewlines, message.id, message.role, message.status, isGenerating, streamingStarted]);
+  }, [currentUser, characterName, isGenerating, message.role, streamingStarted, trimLeadingNewlines]);
 
   // Process the message content with variables replaced
   useEffect(() => {
     const processedContent = processContent(message.content);
-    setHtmlContent(processedContent);
+    
+    // Process any markdown images that might be in the content
+    // This ensures images render properly in both editing and generating states
+    let contentWithImages = processedContent;
+    if (processedContent.includes('![')) {
+      // Use the existing markdownToHtml function from your utils
+      contentWithImages = markdownToHtml(processedContent);
+    }
+    
+    setHtmlContent(contentWithImages);
     previousContent.current = message.content;
   }, [message.content, processContent]);
 

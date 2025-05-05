@@ -5,6 +5,8 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
 import { MarkdownSyntaxHighlighter } from './tiptap/extensions/MarkdownSyntaxHighlighter';
+import { MarkdownImage } from './tiptap/extensions/MarkdownImage';
+import { markdownToHtml } from '../utils/contentUtils';
 
 // Import the CSS file
 import './tiptap/tiptap.css';
@@ -33,6 +35,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const cursorPosRef = useRef<{ from: number, to: number } | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   
+  // Pre-process content for initial rendering
+  const initialContent = content?.includes('![') 
+    ? markdownToHtml(content)
+    : content;
+  
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -50,7 +57,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         orderedList: false,
         blockquote: false,
       }),
-      Image,
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+      }),
+      MarkdownImage, // Add the fixed MarkdownImage extension
       Placeholder.configure({
         placeholder,
       }),
@@ -61,7 +72,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       // Use only the consolidated markdown highlighter
       MarkdownSyntaxHighlighter,
     ],
-    content,
+    content: initialContent,
     editable: !readOnly,
     autofocus,
     onUpdate: ({ editor }: { editor: Editor }) => {
@@ -96,16 +107,20 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         cursorPosRef.current = editor.state.selection;
       }
       
-      // Handle content with newlines but no HTML
+      // Process content for update
       let contentToSet = content;
       
-      // If content has newlines but no HTML tags, convert newlines to <br> tags
-      // This helps TipTap properly display them in the editor
+      // Handle newlines
       if (!contentToSet.includes('<p>') && !contentToSet.includes('<br>') && contentToSet.includes('\n')) {
         contentToSet = contentToSet.replace(/\n/g, '<br>');
       }
       
-      // Set content with proper newline handling
+      // Process markdown images
+      if (contentToSet.includes('![')) {
+        contentToSet = markdownToHtml(contentToSet);
+      }
+      
+      // Set content
       editor.commands.setContent(contentToSet);
       
       // Restore cursor position after content update

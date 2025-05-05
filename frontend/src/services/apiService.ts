@@ -133,16 +133,31 @@ class ApiService {
   /**
    * Saves the current chat state
    */
-  async saveChat(characterData: any, messages: any[], lastUser?: any, apiInfo?: any) {
+  async saveChat(characterData: any, messages: any[], lastUser?: any, apiInfo?: any, backgroundSettings?: any) {
     console.debug(`apiService.saveChat called with ${messages.length} messages`);
     
     try {
-      const response = await this.post('/api/save-chat', {
+      // Create the payload with all necessary data
+      const payload = {
         character_data: characterData,
         messages,
         lastUser,
-        api_info: apiInfo
+        api_info: apiInfo,
+        metadata: {
+          backgroundSettings
+        }
+      };
+      
+      // Log the full payload for debugging
+      console.debug('Saving chat with payload:', {
+        characterName: characterData?.data?.name || 'Unknown',
+        messageCount: messages.length,
+        hasLastUser: !!lastUser,
+        hasApiInfo: !!apiInfo,
+        hasBackgroundSettings: !!backgroundSettings
       });
+      
+      const response = await this.post('/api/save-chat', payload);
       
       console.debug('API response from save-chat:', response);
       return response;

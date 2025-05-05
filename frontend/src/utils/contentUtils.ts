@@ -22,6 +22,24 @@ export function markdownToHtml(markdown: string): string {
 }
 
 /**
+ * Converts markdown image syntax ![alt](url) to HTML <img> tags
+ * Used specifically for handling images in messages
+ */
+export const convertMarkdownImagesToHtml = (content: string): string => {
+  // Match markdown image syntax ![alt](url)
+  const imageRegex = /!\[(.*?)\]\((.*?)\)/g;
+  
+  return content.replace(imageRegex, (_matchStr, alt, url) => {
+    // Clean the URL and alt text
+    const cleanUrl = url.trim();
+    const cleanAlt = alt.trim();
+    
+    // Create an HTML img tag with proper attributes
+    return `<img src="${cleanUrl}" alt="${cleanAlt}" class="chat-image" />`;
+  });
+};
+
+/**
  * Extract image URLs from HTML content
  */
 export function extractImagesFromHtml(html: string): Array<{src: string, alt?: string}> {

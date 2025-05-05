@@ -347,7 +347,8 @@ export class ChatStorage {
         body: JSON.stringify({
           character_data: character, // Send full character object
           character_id: characterId,
-          char_name: character.data?.name || ''
+          char_name: character.data?.name || '',
+          scan_all_files: true // Add parameter to ensure we scan all chat files
         }),
       });
 
@@ -358,6 +359,33 @@ export class ChatStorage {
       }
 
       const data = await response.json();
+      
+      // Log message details for debugging
+      if (data.success && data.messages) {
+        console.log(`Successfully loaded chat with ${data.messages.length} messages`);
+        
+        // Log a summary of the messages
+        if (data.messages.length > 0) {
+          console.debug('First message:', {
+            role: data.messages[0].role,
+            content: data.messages[0].content?.substring(0, 50) + '...',
+            id: data.messages[0].id
+          });
+          
+          if (data.messages.length > 1) {
+            console.debug('Last message:', {
+              role: data.messages[data.messages.length - 1].role,
+              content: data.messages[data.messages.length - 1].content?.substring(0, 50) + '...',
+              id: data.messages[data.messages.length - 1].id
+            });
+          }
+        } else {
+          console.warn('Loaded chat contains no messages');
+        }
+      } else {
+        console.warn('Failed to load chat or no messages found:', data);
+      }
+      
       return data;
     } catch (error) {
       console.error('Error loading latest chat:', error);
@@ -375,11 +403,19 @@ export class ChatStorage {
     }
 
     try {
-      console.log('Appending message to chat for character:', character.data?.name);
+      // Ensure we're using the consistent character name from character data
+      const characterName = character.data?.name || '';
+      console.log(`Appending message to chat for character: ${characterName}`);
       
       const characterId = this.getCharacterId(character);
       
-      const response = await fetch('/api/append-chat-message', { // Corrected endpoint path
+      // Create a normalized message that ensures character name consistency
+      const normalizedMessage = {
+        ...message,
+        characterName: characterName // Add explicit character name to the message
+      };
+      
+      const response = await fetch('/api/append-chat-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -387,8 +423,8 @@ export class ChatStorage {
         body: JSON.stringify({
           character_data: character, // Send full character object
           character_id: characterId,
-          char_name: character.data?.name || '',
-          message: message
+          char_name: characterName, // Use the consistent name
+          message: normalizedMessage
         }),
       });
 
