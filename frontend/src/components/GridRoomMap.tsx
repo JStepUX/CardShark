@@ -1,42 +1,29 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Room } from '../types/room';
 
 interface GridRoomMapProps {
   roomsById: Record<string, Room>;
-  posToId: Record<string, string>; // Added posToId property
+  posToId: Record<string, string>;
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string) => void;
   onCreateRoom: (x: number, y: number) => void;
-  gridSize?: number; // Now defaults to 5
+  gridSize?: number;
   playMode?: boolean;
-  debugMode?: boolean;
+  debugMode?: boolean; // Keeping for backward compatibility, but not using it
 }
 
 const GridRoomMap: React.FC<GridRoomMapProps> = ({
   roomsById,
-  posToId, // Added the posToId parameter
+  posToId,
   selectedRoomId,
   onSelectRoom,
   onCreateRoom,
-  gridSize = 5, // Changed default from 6 to 5
+  gridSize = 5,
   playMode = false,
-  debugMode = false,
+  // Remove debugMode from props destructuring as it's unused
 }) => {
   // Calculate grid center
   const center = Math.floor(gridSize / 2);
-  
-  // Enhanced debugging for location rendering
-  useEffect(() => {
-    if (debugMode) {
-      console.log("GridRoomMap rendering with:", {
-        roomsCount: Object.keys(roomsById).length,
-        posToIdCount: Object.keys(posToId).length,
-        gridSize,
-        selectedRoomId,
-        playMode
-      });
-    }
-  }, [roomsById, posToId, gridSize, selectedRoomId, playMode, debugMode]);
   
   // Find existing rooms by coordinates
   const roomByCoords: Record<string, Room> = {};
@@ -65,20 +52,6 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
       }
     }
   });
-  
-  // Debug info for troubleshooting
-  React.useEffect(() => {
-    if (debugMode) {
-      console.log("Room counts - roomsById:", Object.keys(roomsById).length);
-      console.log("Room counts - roomByCoords:", Object.keys(roomByCoords).length);
-      console.log("Room counts - posToId:", Object.keys(posToId).length);
-      
-      if (Object.keys(roomByCoords).length === 0 && Object.keys(roomsById).length > 0) {
-        console.warn("No rooms found for the grid despite having rooms in roomsById!");
-        console.log("Sample rooms:", Object.values(roomsById).slice(0, 3));
-      }
-    }
-  }, [roomsById, roomByCoords, posToId, debugMode]);
   
   // Check if we have any rooms at all
   const roomCount = Object.keys(roomsById).length;
@@ -112,11 +85,6 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
                     {isCenter ? "S" : ""}
                   </span>
                   {isCenter && <span className="text-xs text-white mt-1">Start Here</span>}
-                  {debugMode && (
-                    <span className="text-xs text-stone-500 absolute bottom-2">
-                      ({x},{y})
-                    </span>
-                  )}
                 </div>
               </div>
             );
@@ -128,13 +96,7 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
   
   // Create grid for rooms
   return (
-    <div className="relative bg-stone-900/90 rounded-lg p-4">
-      {debugMode && (
-        <div className="absolute top-2 right-2 text-xs text-amber-400 bg-black/70 p-1 rounded z-20">
-          Grid: {gridSize}x{gridSize} | Center: ({center},{center})
-        </div>
-      )}
-      
+    <div className="relative bg-stone-900/90 rounded-lg p-4">      
       <div className="mb-4 text-center text-white text-lg">Room Map</div>
       
       <div className="grid gap-2" style={{ 
@@ -172,11 +134,6 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
                   <span className="text-xs block mt-1 truncate max-w-full px-1">
                     {room.name}
                   </span>
-                  {debugMode && (
-                    <div className="mt-1 text-xs text-stone-300">
-                      ({x},{y})
-                    </div>
-                  )}
                 </div>
               </div>
             );
@@ -190,15 +147,10 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
                     ${isCenter ? 'border-green-400 bg-green-900/20' : 'border-stone-600 bg-stone-900/60'} 
                     opacity-70 cursor-pointer hover:border-white hover:opacity-100 transition rounded relative`}
                   onClick={() => onCreateRoom(x, y)}
-                  title={`Add new room at (${x},${y})`}
+                  title="Add new room here"
                 >
                   <div className="flex items-center justify-center h-full">
                     <span className="text-2xl text-stone-400">+</span>
-                    {debugMode && (
-                      <span className="text-xs text-stone-500 absolute bottom-2">
-                        ({x},{y})
-                      </span>
-                    )}
                   </div>
                 </div>
               );

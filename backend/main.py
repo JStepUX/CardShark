@@ -216,9 +216,92 @@ if getattr(sys, 'frozen', False):
     static_dir = Path(sys._MEIPASS) / "frontend"
     if static_dir.exists():
         logger.log_step(f"Serving frontend from {static_dir}")
+        
+        # Create explicit index route to handle root path
+        @app.get("/")
+        async def serve_index():
+            index_path = static_dir / "index.html"
+            if index_path.exists():
+                logger.log_step(f"Serving index.html explicitly: {index_path}")
+                return FileResponse(index_path)
+            else:
+                logger.log_warning("index.html not found in frontend directory")
+                return {"error": "Frontend not found"}
+        
+        # Mount static files handler for assets
+        @app.get("/assets/{file_path:path}")
+        async def serve_assets(file_path: str):
+            # First try to find the asset in the frontend directory
+            asset_path = static_dir / file_path
+            
+            # Then try to find it directly in the frontend directory
+            if not asset_path.exists():
+                direct_asset_path = static_dir / Path(file_path).name
+                if direct_asset_path.exists():
+                    logger.log_step(f"Serving asset from direct path: {direct_asset_path}")
+                    return FileResponse(direct_asset_path)
+            
+            # If we found the asset in the frontend/assets directory
+            if asset_path.exists():
+                logger.log_step(f"Serving asset: {asset_path}")
+                return FileResponse(asset_path)
+                
+            # Finally check if assets are in an assets subdirectory
+            assets_dir_path = static_dir / "assets" / file_path
+            if assets_dir_path.exists():
+                logger.log_step(f"Serving asset from assets subdirectory: {assets_dir_path}")
+                return FileResponse(assets_dir_path)
+            
+            logger.log_warning(f"Asset not found: {file_path}, tried paths: {asset_path}, {direct_asset_path}, {assets_dir_path}")
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        # Mount static files for all other assets
         app.mount("/", CrossDriveStaticFiles(directory=static_dir, html=True), name="frontend")
+        
+        # Log directory contents for debugging
+        try:
+            logger.log_step(f"Frontend directory contents: {list(static_dir.iterdir())}")
+            index_path = static_dir / "index.html"
+            if index_path.exists():
+                logger.log_step("index.html found")
+            else:
+                logger.log_warning("index.html not found in frontend directory")
+                
+            assets_dir = static_dir / "assets"
+            if assets_dir.exists():
+                logger.log_step(f"Assets directory exists with contents: {list(assets_dir.iterdir())[:5]}...")
+            else:
+                logger.log_warning("Assets directory not found")
+        except Exception as e:
+            logger.log_error(f"Error checking frontend directory: {str(e)}")
     else:
         logger.log_warning(f"Frontend directory not found at {static_dir}")
+        
+        # Fallback: try to find frontend files at the root level
+        try:
+            root_dir = Path(sys._MEIPASS)
+            logger.log_step(f"Checking root directory for frontend files: {root_dir}")
+            if (root_dir / "index.html").exists():
+                logger.log_step("Found index.html in root directory, serving from there")
+                
+                # Create explicit index route to handle root path
+                @app.get("/")
+                async def serve_index():
+                    index_path = root_dir / "index.html"
+                    logger.log_step(f"Serving index.html explicitly from root: {index_path}")
+                    return FileResponse(index_path)
+                
+                # Mount static files for all other assets
+                app.mount("/", CrossDriveStaticFiles(directory=root_dir, html=True), name="frontend")
+                
+                # Log contents
+                logger.log_step(f"Root directory contents: {list(root_dir.iterdir())}")
+            else:
+                logger.log_warning("No frontend files found in root directory either")
+                # Log what's in the root directory for debugging
+                logger.log_step(f"Root directory contents: {list(root_dir.iterdir())}")
+        except Exception as e:
+            logger.log_error(f"Error checking root directory: {str(e)}")
 else:
     # Running as script - serve from frontend/dist if exists
     static_dir = Path(__file__).parent.parent / "frontend" / "dist"

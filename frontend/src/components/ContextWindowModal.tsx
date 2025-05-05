@@ -204,7 +204,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           {/* Progress bar */}
           <div className="w-full h-2 bg-stone-700 rounded-full overflow-hidden">
             <div 
-              className={`h-full ${tokenAnalysis.usagePercentage > 90 ? 'bg-red-500' : tokenAnalysis.usagePercentage > 70 ? 'bg-yellow-500' : 'bg-green-500'}`}
+              className={`h-full ${tokenAnalysis.usagePercentage > 90 ? 'bg-red-500' : tokenAnalysis.usagePercentage > 70 ? 'bg-orange-500' : 'bg-green-500'}`}
               style={{ width: `${tokenAnalysis.usagePercentage}%` }}
             />
           </div>

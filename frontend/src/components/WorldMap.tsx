@@ -45,6 +45,9 @@ export const WorldMap: React.FC = () => {
   const zoomIn = () => setZoom(prev => Math.min(prev + 10, 200));
   const zoomOut = () => setZoom(prev => Math.max(prev - 10, 50));
   
+  // Find current location name
+  const currentLocationName = worldState.locations[worldState.current_position]?.name || "Unknown location";
+  
   return (
     <div role="region" aria-label="World Map" className="bg-stone-800 rounded-lg p-4 mt-4">
       <div className="flex justify-between items-center mb-4">
@@ -95,7 +98,7 @@ export const WorldMap: React.FC = () => {
                   height: cellSize
                 }}
                 className={`absolute border-2 flex items-center justify-center 
-                      ${isCurrentLocation ? 'border-yellow-400 bg-stone-700' : 'border-stone-600 bg-stone-800'}
+                      ${isCurrentLocation ? 'border-orange-400 bg-stone-700' : 'border-stone-600 bg-stone-800'}
                       cursor-pointer hover:bg-stone-700
                     `}
                 onClick={() => {
@@ -114,7 +117,7 @@ export const WorldMap: React.FC = () => {
                 aria-label={`${location.name}${isCurrentLocation ? ' (current location)' : ''}`}
               >
                 {isCurrentLocation && (
-                  <div className="absolute inset-0 bg-yellow-400 opacity-25"></div>
+                  <div className="absolute inset-0 bg-orange-400 opacity-25"></div>
                 )}
                 <span className="text-xs truncate">{location.name}</span>
               </div>
@@ -124,7 +127,7 @@ export const WorldMap: React.FC = () => {
       </div>
       
       <div className="mt-2 text-stone-400 text-xs" aria-live="polite">
-        <p>Current position: {worldState.current_position}</p>
+        <p>Your current location: {currentLocationName}</p>
       </div>
     </div>
   );

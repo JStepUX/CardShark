@@ -15,7 +15,7 @@ const NpcSelectorModal: React.FC<NpcSelectorModalProps> = ({ isOpen, onClose, on
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
       <div className="bg-stone-950 rounded-lg shadow-lg w-full max-w-2xl p-6 relative">
         <button
-          className="absolute top-3 right-3 text-gray-400 hover:text-yellow-400 text-xl font-bold"
+          className="absolute top-3 right-3 text-gray-400 hover:text-orange-400 text-xl font-bold"
           onClick={onClose}
           aria-label="Close"
         >

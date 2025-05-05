@@ -1,5 +1,5 @@
 // src/components/APISettingsView.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Save } from 'lucide-react';
 import DirectoryPicker from './DirectoryPicker';
 import { APICard } from './APICard';
@@ -24,8 +24,23 @@ interface APISettingsViewProps {}
 export const APISettingsView: React.FC<APISettingsViewProps> = () => {
   const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts' | 'highlighting'>('general');
   const { setAPIConfig } = useAPIConfig();
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, isLoading } = useSettings();
   const [isRefetching, setIsRefetching] = useState(false);
+
+  // Get the effective model directory from either field
+  const effectiveModelDirectory = settings.models_directory || settings.model_directory || '';
+  const characterDirectory = settings.character_directory || '';
+
+  // Debug log to verify we're getting the correct settings
+  useEffect(() => {
+    console.log("Settings in APISettingsView:", {
+      characterDirectory: settings.character_directory,
+      modelsDirectory: settings.models_directory,
+      modelDirectory: settings.model_directory,
+      effectiveModelDirectory,
+      isLoading
+    });
+  }, [settings, effectiveModelDirectory, isLoading]);
 
   const handleAPIUpdate = (id: string, updates: Partial<APIConfig>) => {
     // Disable update button while refetching
@@ -37,7 +52,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
     updateSettings({
         apis: {
             ...settings.apis,
-            [id]: { // No need for the 'as string' type assertion since id is already a string
+            [id]: {
                 ...settings.apis[id],
                 ...updates
             }
@@ -66,7 +81,6 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
             }
         } catch (error) {
             console.error("Error re-fetching settings after API update:", error);
-            // No user notification of the error
         } finally {
             setIsRefetching(false);
         }
@@ -98,7 +112,8 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
     handleAPIUpdate(id, newConfig);
   };
 
-  const handleDirectoryChange = (directory: string | null) => {
+  const handleDirectoryChange = (directory: string) => {
+    console.log("Setting character directory to:", directory);
     updateSettings({
       character_directory: directory,
       save_to_character_directory: true
@@ -106,14 +121,15 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
   };
 
   const handleModelDirectoryChange = (directory: string) => {
+    // Update both models_directory and model_directory fields for compatibility
+    console.log("Setting model directory to:", directory);
     updateSettings({
-      models_directory: directory
+      models_directory: directory,
+      model_directory: directory
     });
   };
 
   const handleHighlightingUpdate = (highlightSettings: SyntaxHighlightSettings) => {
-    // Make a specific API call to ensure settings are saved to disk
-    // This ensures we see any errors that might occur during the save process
     const saveHighlightSettings = async () => {
       try {
         const response = await fetch("/api/settings", {
@@ -131,23 +147,31 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
         const data = await response.json();
         if (data.success) {
           console.log("Successfully saved syntax highlighting settings to disk");
-          // Update local state after confirmed save
           updateSettings({ syntaxHighlighting: highlightSettings });
         } else {
           throw new Error("Server returned failure status");
         }
       } catch (err) {
         console.error("Error saving syntax highlighting settings:", err);
-        // Still update local state for better UX, but show an error message
         updateSettings({ syntaxHighlighting: highlightSettings });
-        // TODO: Add a toast or notification here about the save failure
       }
     };
     
     saveHighlightSettings();
   };
 
-  // Add visual indicator when API settings are being refetched
+  // If still loading settings, show a loading indicator
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto"></div>
+          <p className="text-gray-400">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       {isRefetching && (
@@ -164,11 +188,11 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
             <div className="mb-8">
               <h3 className="text-md font-medium mb-4">Character Directory</h3>
               <DirectoryPicker
-                currentDirectory={settings.character_directory}
+                currentDirectory={characterDirectory}
                 onDirectoryChange={handleDirectoryChange}
               />
               
-              {settings.character_directory && (
+              {characterDirectory && (
                 <div className="mt-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -188,7 +212,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
             {/* Model Directory Settings */}
             <div className="mb-8">
               <ModelDirectorySettings
-                directory={settings.models_directory || null}
+                directory={effectiveModelDirectory}
                 onDirectoryChange={handleModelDirectoryChange}
               />
             </div>

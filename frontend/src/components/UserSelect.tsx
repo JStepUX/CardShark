@@ -319,9 +319,9 @@ const UserSelect: React.FC<UserSelectProps> = ({
             </div>
         )}
         {!deleteError && error && (
-            <div className="flex-none p-3 mx-4 mt-4 bg-yellow-900 border border-yellow-700 text-yellow-100 rounded-md text-sm flex justify-between items-center shadow-lg">
+            <div className="flex-none p-3 mx-4 mt-4 bg-orange-900 border border-orange-700 text-orange-100 rounded-md text-sm flex justify-between items-center shadow-lg">
             <span className="break-words mr-2"><strong>Notice:</strong> {error}</span>
-            <button onClick={() => setError(null)} className="ml-auto flex-shrink-0 px-2 py-0.5 bg-yellow-700 hover:bg-yellow-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-white" aria-label="Dismiss notice">Dismiss</button>
+            <button onClick={() => setError(null)} className="ml-auto flex-shrink-0 px-2 py-0.5 bg-orange-700 hover:bg-orange-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-white" aria-label="Dismiss notice">Dismiss</button>
             </div>
         )}
 

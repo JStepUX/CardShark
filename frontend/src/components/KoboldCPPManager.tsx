@@ -313,7 +313,7 @@ const KoboldCPPManager: React.FC = () => {
             {status.is_running ? (
               <CheckCircle className="h-6 w-6 text-green-500" />
             ) : (
-              <AlertCircle className="h-6 w-6 text-yellow-500" />
+              <AlertCircle className="h-6 w-6 text-orange-500" />
             )}
             <div>
               <div className="font-medium">
@@ -374,7 +374,7 @@ const KoboldCPPManager: React.FC = () => {
               {serverStatus.is_responding ? (
                 <CheckCircle className="h-6 w-6 text-green-500" />
               ) : (
-                <AlertCircle className="h-6 w-6 text-yellow-500" />
+                <AlertCircle className="h-6 w-6 text-orange-500" />
               )}
               <div>
                 <div className="font-medium">

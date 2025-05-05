@@ -66,7 +66,7 @@ export const WorldMap: React.FC = () => {
             tabIndex={0}
             className={`absolute border ${
               isCurrentLocation 
-                ? 'bg-stone-700 border-yellow-400 ring-2 ring-yellow-400' 
+                ? 'bg-stone-700 border-orange-400 ring-2 ring-orange-400' 
                 : location 
                   ? 'bg-stone-800 border-stone-600 hover:bg-stone-700'
                   : 'border-stone-900 bg-stone-900 hover:bg-stone-800'

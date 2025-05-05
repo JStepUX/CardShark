@@ -46,7 +46,7 @@ const GameWorldIconBar: React.FC<GameWorldIconBarProps> = ({
         <button
           key={key}
           onClick={handlers[key]}
-          className={`flex flex-col items-center px-4 py-2 text-blue-200 hover:text-yellow-400 focus:outline-none group relative ${
+          className={`flex flex-col items-center px-4 py-2 text-blue-200 hover:text-orange-400 focus:outline-none group relative ${
             key === 'npcs' && (!handlers[key] || (npcCount !== undefined && npcCount === 0)) ? 'opacity-50 cursor-not-allowed' : ''
           }`}
           title={label}

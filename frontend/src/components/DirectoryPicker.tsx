@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FolderOpen } from 'lucide-react';
 
 interface DirectoryPickerProps {
@@ -10,9 +10,20 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
   currentDirectory,
   onDirectoryChange 
 }) => {
-  const [inputValue, setInputValue] = useState(currentDirectory || '');
+  // Initialize with the currentDirectory prop value or empty string if null
+  const [inputValue, setInputValue] = useState<string>(currentDirectory || '');
   const [error, setError] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Update input when currentDirectory changes from parent component
+  useEffect(() => {
+    console.log("DirectoryPicker received currentDirectory:", currentDirectory);
+    // Only update if we have a non-null, non-undefined value
+    if (currentDirectory !== null && currentDirectory !== undefined) {
+      setInputValue(currentDirectory);
+    }
+  }, [currentDirectory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +33,9 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
     }
 
     try {
+      // Show loading state
+      setIsLoading(true);
+      
       // Validate directory exists and contains PNGs
       const response = await fetch('/api/validate-directory', {
         method: 'POST',
@@ -46,12 +60,14 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
       console.error('Directory validation error:', err);
       setError('Failed to validate directory');
       setValidationMessage(null);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="w-full space-y-2">
-      <form onSubmit={handleSubmit} className="space-y-2">
+      <form onSubmit={handleSubmit} className="flex space-x-2">
         <input
           type="text"
           value={inputValue}
@@ -60,18 +76,22 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
             setError(null);
             setValidationMessage(null);
           }}
-          className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
+          className="flex-grow px-3 py-2 bg-stone-950 border border-slate-700 
                    rounded-lg focus:ring-1 focus:ring-blue-500"
           placeholder="Enter full directory path"
         />
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 
-                   bg-purple-800 text-white rounded-lg hover:bg-purple-700 
-                   transition-colors"
+          disabled={isLoading || !inputValue.trim()}
+          className="px-4 py-2 bg-purple-800 text-white rounded-lg hover:bg-purple-700 
+                   transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          <FolderOpen size={18} />
-          Set Directory
+          {isLoading ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+          ) : (
+            <FolderOpen size={18} />
+          )}
+          <span>Set</span>
         </button>
       </form>
       {error && (

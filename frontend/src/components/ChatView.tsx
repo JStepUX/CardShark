@@ -725,7 +725,7 @@ const ChatView: React.FC = () => {
                 console.error("Debug API call failed:", err);
               }
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-yellow-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-orange-700 transition-colors"
             title="Debug Chat Loading"
           >
             Debug

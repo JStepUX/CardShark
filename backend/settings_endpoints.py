@@ -333,4 +333,47 @@ async def validate_directory(
             }
         )
 
-# Health check endpoint removed from here, should be in main.py or its own router
+@router.put("/settings")
+async def update_settings_put(
+    payload: Dict[str, Any],
+    settings_manager: SettingsManager = Depends(get_settings_manager),
+    logger: LogManager = Depends(get_logger)
+):
+    """Update application settings via PUT request."""
+    try:
+        # Handle both formats: direct object or nested under "settings" key
+        if "settings" in payload:
+            new_settings = payload.get("settings")
+        else:
+            new_settings = payload  # Assume direct payload is the settings object
+
+        logger.log_step(f"Received settings update via PUT: {json.dumps(new_settings)}")
+
+        if not new_settings or not isinstance(new_settings, dict):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "Invalid or no settings provided"}
+            )
+
+        # Apply new settings
+        logger.log_step("Updating settings")
+        settings_manager.update_settings(new_settings)
+
+        # Save settings to file
+        settings_manager.save_settings()
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": "Settings updated successfully",
+                "settings": settings_manager.settings
+            }
+        )
+    except Exception as e:
+        logger.log_error(f"Error updating settings via PUT: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Failed to update settings: {str(e)}"}
+        )

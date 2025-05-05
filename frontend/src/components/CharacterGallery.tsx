@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
-import { Trash2, AlertTriangle, X } from 'lucide-react';
+import { Trash2, AlertTriangle, X, Loader2 } from 'lucide-react';
 import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from './KoboldCPPDrawerManager';
@@ -105,9 +105,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // State for infinite scrolling
-  const [displayedCount, setDisplayedCount] = useState(25);
-
+  // State for infinite scrolling with a more reasonable initial batch size
+  const [displayedCount, setDisplayedCount] = useState(20);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
   // State for the currently loaded directory and search term
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -130,6 +131,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   // Use external ref if provided
   const activeContainerRef = scrollContainerRef || containerRef;
+  
+  // Ref for the load more trigger element (for Intersection Observer)
+  const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
 
   // Memoized filtering - MOVED UP before it's used
   const filteredCharacters = useMemo(() => {
@@ -140,21 +144,62 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
      );
   }, [characters, searchTerm]);
 
-  // loadMore function definition
+  // loadMore function definition with improved loading behavior
   const loadMore = useCallback(() => {
-    if (isLoading || displayedCount >= filteredCharacters.length) return;
-    setDisplayedCount(prev => Math.min(prev + 20, filteredCharacters.length));
-  }, [isLoading, displayedCount, filteredCharacters.length]);
+    if (isLoadingMore || displayedCount >= filteredCharacters.length) return;
+    
+    setIsLoadingMore(true);
+    
+    // Use setTimeout to avoid blocking the main thread during loading
+    setTimeout(() => {
+      // Calculate how many more to load - aim for a batch size that balances performance
+      const batchSize = Math.min(15, filteredCharacters.length - displayedCount);
+      
+      if (batchSize > 0) {
+        setDisplayedCount(prev => prev + batchSize);
+      }
+      
+      setIsLoadingMore(false);
+    }, 100); // Small delay to allow UI to update
+    
+  }, [isLoadingMore, displayedCount, filteredCharacters.length]);
 
-  // handleScroll for infinite scrolling
+  // Set up Intersection Observer for infinite scrolling
+  useEffect(() => {
+    if (!loadMoreTriggerRef.current) return;
+    
+    const options = {
+      root: activeContainerRef.current,
+      rootMargin: '200px', // Load more before user reaches the end
+      threshold: 0.1 // Trigger when 10% of the element is visible
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+      const [entry] = entries;
+      if (entry.isIntersecting && !isLoading && filteredCharacters.length > displayedCount) {
+        loadMore();
+      }
+    }, options);
+    
+    observer.observe(loadMoreTriggerRef.current);
+    
+    return () => {
+      if (loadMoreTriggerRef.current) {
+        observer.unobserve(loadMoreTriggerRef.current);
+      }
+    };
+  }, [loadMore, isLoading, filteredCharacters.length, displayedCount, activeContainerRef]);
+
+  // Legacy scroll handler for browsers that might not support Intersection Observer
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const scrollBottom = container.scrollTop + container.clientHeight;
     const threshold = container.scrollHeight - 300;
-    if (scrollBottom >= threshold && !isLoading && displayedCount < filteredCharacters.length) {
+    
+    if (scrollBottom >= threshold && !isLoading && !isLoadingMore && displayedCount < filteredCharacters.length) {
       loadMore();
     }
-  }, [loadMore, isLoading, displayedCount, filteredCharacters.length]);
+  }, [loadMore, isLoading, isLoadingMore, displayedCount, filteredCharacters.length]);
 
   // Load from directory function with caching
   const loadFromDirectory = useCallback(async (directory: string) => {
@@ -163,7 +208,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setError(null);
       setDeleteError(null);
       setDeletingPath(null); // Reset animation on reload
-      setDisplayedCount(25);
+      setDisplayedCount(20); // Reset to initial batch size
       
       const url = `/api/characters?directory=${encodeFilePath(directory)}`;
       console.log(`[${componentId.current}] Loading characters from: ${directory}`);
@@ -200,7 +245,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   }, []); // Empty dependency array
 
-  // Attach scroll handler for lazy loading (external or internal)
+  // Attach scroll handler for lazy loading (external or internal) as fallback
   useEffect(() => {
     if ((lazyLoad || scrollContainerRef) && activeContainerRef.current) {
       const el = activeContainerRef.current;
@@ -256,6 +301,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     
     loadSettings();
   }, [settingsChangeCount, loadFromDirectory]);
+
+  // Reset displayedCount when search term changes
+  useEffect(() => {
+    // When the search term changes, reset to show the initial batch
+    setDisplayedCount(20);
+  }, [searchTerm]);
 
   // Handle character selection
   const handleCharacterClick = async (character: CharacterFile) => {
@@ -535,17 +586,32 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           />
         )}
         
-        {/* Loading Indicator / Scroll Trigger */}
-        {isLoading && displayedCount > 0 && characters.length > 0 && (
-          <div className="h-20 flex items-center justify-center">
-            <div className="relative w-8 h-8">
-              <div className="absolute top-0 left-0 w-full h-full rounded-full border-t-2 border-l-2 border-r-2 border-transparent border-t-blue-500 border-l-blue-400 animate-spin"></div>
+        {/* Loading Indicator / Intersection Observer Trigger */}
+        <div 
+          ref={loadMoreTriggerRef}
+          className={`p-4 flex justify-center items-center transition-opacity duration-300
+            ${(isLoadingMore || displayedCount < filteredCharacters.length) ? 'opacity-100 h-16' : 'opacity-0 h-0'}`}
+        >
+          {isLoadingMore && (
+            <div className="flex items-center text-blue-400">
+              <Loader2 size={20} className="animate-spin mr-2" />
+              <span>Loading more characters...</span>
             </div>
-            <span className="ml-3 text-blue-400">Loading more characters...</span>
+          )}
+          {!isLoadingMore && displayedCount < filteredCharacters.length && (
+            <div className="p-1 text-sm text-slate-500">
+              Scroll to load more
+            </div>
+          )}
+        </div>
+        
+        {/* Progress indicator */}
+        {filteredCharacters.length > 0 && (
+          <div className="sticky bottom-0 w-full flex justify-center py-1 bg-gradient-to-t from-stone-900 to-transparent pointer-events-none">
+            <div className="text-xs text-slate-400 bg-stone-800/80 px-2 py-1 rounded-full backdrop-blur-sm">
+              {displayedCount} of {filteredCharacters.length}
+            </div>
           </div>
-        )}
-        {!isLoading && displayedCount < filteredCharacters.length && (
-          <div className="h-10" />
         )}
       </div>
 

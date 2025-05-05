@@ -1,7 +1,5 @@
 // frontend/src/utils/worldStateApi.ts
 import { FullWorldState } from '../types/worldState';
-import { CharacterData } from '../types/schema';
-import { WorldState } from '../types/world';
 
 /**
  * API client for interacting with the World Card system

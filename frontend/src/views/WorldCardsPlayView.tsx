@@ -397,7 +397,7 @@ const WorldCardsPlayView: React.FC = () => {
     const updatedWorldData = JSON.parse(JSON.stringify(worldData));
     
     // Ensure all locations have connected=true unless explicitly set to false
-    Object.entries(updatedWorldData.locations).forEach(([coordKey, location]: [string, any]) => {
+    Object.entries(updatedWorldData.locations).forEach(([_, location]: [string, any]) => {
       if (location && location.connected !== false) {
         location.connected = true;
       }
@@ -638,96 +638,103 @@ const WorldCardsPlayView: React.FC = () => {
       scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  // Move rendering logic below all hooks to avoid early returns that break hook rules
+  // Prepare the UI elements based on loading state
+  let content;
   if (isLoadingWorld) {
-      return <div className="flex items-center justify-center h-full">Loading World...</div>;
+      content = <div className="flex items-center justify-center h-full">Loading World...</div>;
+  } else {
+      content = (
+        <>
+          {/* Foreground Content Layer */}
+          <div className="relative h-full flex flex-col z-10">
+            {/* Top Bar */}
+            <nav className="flex-none flex items-center gap-2 p-4 bg-stone-900/80">
+              <button onClick={() => navigate('/worldcards')} className="px-3 py-1 bg-stone-700 hover:bg-stone-600 text-white rounded text-sm">Back to Worlds</button>
+              <span className="font-bold text-lg">{currentRoomName}</span>
+              {npcCount > 0 && (
+                 <button onClick={handleNpcIconClick} className="px-3 py-1 bg-stone-700 hover:bg-stone-600 text-white rounded text-sm flex items-center gap-1" title={`View NPCs (${npcCount})`}>
+                   <User size={18} /> <span>({npcCount})</span>
+                 </button>
+              )}
+            </nav>
+
+            {/* Error Display */}
+            {combinedError && (
+              <div className="relative z-10 px-8 py-2">
+                {/* Ensure ErrorMessage is rendered correctly */}
+                <ErrorMessage
+                  message={combinedError}
+                  onDismiss={handleClearError} // Use combined handler
+                />
+              </div>
+            )}
+
+            {/* Chat Messages Area */}
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+               {messages.map((message: Message) => (
+                <React.Fragment key={message.id}>
+                  {message.role === 'thinking' && (
+                      // Correct props for ThoughtBubble
+                      <ThoughtBubble
+                        message={message}
+                        isGenerating={message.id === generatingId && isGenerating}
+                        onContentChange={(newContent: string) => updateMessage(message.id, newContent)} // Add type
+                        onDelete={() => deleteMessage(message.id)}
+                        characterName={activeCharacterData?.data?.name}
+                      />
+                  )}
+                  {message.role !== 'thinking' && (
+                    // Correct props for ChatBubble
+                    <ChatBubble
+                      message={message}
+                      isGenerating={message.id === generatingId && isGenerating}
+                      onContentChange={(newContent: string) => updateMessage(message.id, newContent)} // Add type
+                      onDelete={() => deleteMessage(message.id)}
+                      onStop={getStopHandler(message)}
+                      onTryAgain={() => regenerateMessage(message)} // Map onRegenerate to onTryAgain
+                      // onContinue prop is optional and not used here
+                      onNextVariation={() => cycleVariation(message.id, 'next')} // Split cycleVariation
+                      onPrevVariation={() => cycleVariation(message.id, 'prev')} // Split cycleVariation
+                      currentUser={currentUser?.name} // Pass name string
+                      characterName={activeCharacterData?.data?.name} // Pass name string
+                    />
+                  )}
+                </React.Fragment>
+               ))}
+              <div ref={messagesEndRef} /> {/* Scroll target */}
+            </div>
+
+            {/* Icon Bar - Inserted between chat and input */}
+            <div className="px-4 py-2 bg-stone-900/90 border-t border-b border-stone-700">
+              <GameWorldIconBar 
+                onNpcs={npcCount > 0 ? handleNpcIconClick : undefined}
+                npcCount={npcCount}
+                onMap={handleMapIconClick}
+                onInventory={handleInventoryIconClick}
+                onSpells={handleSpellsIconClick}
+                onMelee={handleMeleeIconClick}
+              />
+            </div>
+
+            {/* Input Area */}
+            <div className="bg-stone-900/95 border-t border-stone-700">
+              <InputArea
+                onSend={handleSendMessage}
+                isGenerating={isGenerating} // Removed isIntroGenerating
+                currentUser={currentUser}
+                onUserSelect={() => setShowUserSelect(true)}
+                emotion={{}} // Pass empty object as emotion is no longer calculated
+              />
+            </div>
+          </div>
+        </>
+      );
   }
 
   return (
     <div className="w-full h-full relative">
-      {/* Background Layer Removed */}
-
-      {/* Foreground Content Layer */}
-      <div className="relative h-full flex flex-col z-10">
-        {/* Top Bar */}
-        <nav className="flex-none flex items-center gap-2 p-4 bg-stone-900/80">
-          <button onClick={() => navigate('/worldcards')} className="px-3 py-1 bg-stone-700 hover:bg-stone-600 text-white rounded text-sm">Back to Worlds</button>
-          <span className="font-bold text-lg">{currentRoomName}</span>
-          {npcCount > 0 && (
-             <button onClick={handleNpcIconClick} className="px-3 py-1 bg-stone-700 hover:bg-stone-600 text-white rounded text-sm flex items-center gap-1" title={`View NPCs (${npcCount})`}>
-               <User size={18} /> <span>({npcCount})</span>
-             </button>
-          )}
-        </nav>
-
-        {/* Error Display */}
-        {combinedError && (
-          <div className="relative z-10 px-8 py-2">
-            {/* Ensure ErrorMessage is rendered correctly */}
-            <ErrorMessage
-              message={combinedError}
-              onDismiss={handleClearError} // Use combined handler
-            />
-          </div>
-        )}
-
-        {/* Chat Messages Area */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-           {messages.map((message: Message) => (
-            <React.Fragment key={message.id}>
-              {message.role === 'thinking' && (
-                  // Correct props for ThoughtBubble
-                  <ThoughtBubble
-                    message={message}
-                    isGenerating={message.id === generatingId && isGenerating}
-                    onContentChange={(newContent: string) => updateMessage(message.id, newContent)} // Add type
-                    onDelete={() => deleteMessage(message.id)}
-                    characterName={activeCharacterData?.data?.name}
-                  />
-              )}
-              {message.role !== 'thinking' && (
-                // Correct props for ChatBubble
-                <ChatBubble
-                  message={message}
-                  isGenerating={message.id === generatingId && isGenerating}
-                  onContentChange={(newContent: string) => updateMessage(message.id, newContent)} // Add type
-                  onDelete={() => deleteMessage(message.id)}
-                  onStop={getStopHandler(message)}
-                  onTryAgain={() => regenerateMessage(message)} // Map onRegenerate to onTryAgain
-                  // onContinue prop is optional and not used here
-                  onNextVariation={() => cycleVariation(message.id, 'next')} // Split cycleVariation
-                  onPrevVariation={() => cycleVariation(message.id, 'prev')} // Split cycleVariation
-                  currentUser={currentUser?.name} // Pass name string
-                  characterName={activeCharacterData?.data?.name} // Pass name string
-                />
-              )}
-            </React.Fragment>
-           ))}
-          <div ref={messagesEndRef} /> {/* Scroll target */}
-        </div>
-
-        {/* Icon Bar - Inserted between chat and input */}
-        <div className="px-4 py-2 bg-stone-900/90 border-t border-b border-stone-700">
-          <GameWorldIconBar 
-            onNpcs={npcCount > 0 ? handleNpcIconClick : undefined}
-            npcCount={npcCount}
-            onMap={handleMapIconClick}
-            onInventory={handleInventoryIconClick}
-            onSpells={handleSpellsIconClick}
-            onMelee={handleMeleeIconClick}
-          />
-        </div>
-
-        {/* Input Area */}
-        <div className="bg-stone-900/95 border-t border-stone-700">
-          <InputArea
-            onSend={handleSendMessage}
-            isGenerating={isGenerating} // Removed isIntroGenerating
-            currentUser={currentUser}
-            onUserSelect={() => setShowUserSelect(true)}
-            emotion={{}} // Pass empty object as emotion is no longer calculated
-          />
-        </div>
-      </div>
+      {content}
 
       {/* Modals */}
       {/* Use the custom Dialog component */}

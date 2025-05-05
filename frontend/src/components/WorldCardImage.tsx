@@ -5,7 +5,8 @@ interface WorldCardImageProps {
   className?: string;
   fallbackClassName?: string;
   alt?: string;
-  onError?: () => void; // Added onError callback prop
+  onError?: () => void; 
+  onClick?: (e: React.MouseEvent) => void; // Update onClick handler to accept event parameter
 }
 
 /**
@@ -17,7 +18,8 @@ const WorldCardImage: React.FC<WorldCardImageProps> = ({
   className = "w-full h-full object-cover",
   fallbackClassName = "flex items-center justify-center h-full w-full bg-stone-800 text-stone-400",
   alt = "World card",
-  onError
+  onError,
+  onClick
 }) => {
   const [imageError, setImageError] = useState(false);
   
@@ -37,7 +39,7 @@ const WorldCardImage: React.FC<WorldCardImageProps> = ({
   
   if (imageError) {
     return (
-      <div className={fallbackClassName}>
+      <div className={fallbackClassName} onClick={onClick}>
         <div className="flex flex-col items-center">
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
@@ -60,6 +62,7 @@ const WorldCardImage: React.FC<WorldCardImageProps> = ({
       className={className}
       onError={handleImageError}
       loading="lazy"
+      onClick={onClick} // onClick handler now accepts the event parameter
     />
   );
 };

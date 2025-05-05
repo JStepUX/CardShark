@@ -20,7 +20,17 @@ import { useCharacter } from '../contexts/CharacterContext';
 import DropdownMenu from './DropDownMenu';
 import ImagePreview from './ImagePreview';
 import TokenCounter from './TokenCounter';
+import usePrefetchRoute from '../hooks/usePrefetchRoute';
 import logo from '../assets/cardshark_justfin.png';
+
+// Route component imports for prefetching
+const importCharacterGallery = () => import('./CharacterGallery');
+const importCharacterInfoView = () => import('./CharacterInfoView');
+const importLoreView = () => import('./LoreView');
+const importMessagesView = () => import('./MessagesView');
+const importChatView = () => import('./ChatView');
+const importAPISettingsView = () => import('./APISettingsView');
+const importWorldCardsView = () => import('../views/WorldCardsView');
 
 const NAV_ICONS = {
   gallery: FolderOpen,
@@ -31,6 +41,17 @@ const NAV_ICONS = {
   settings: SettingsIcon,
   worldcards: Globe
 } as const;
+
+// Map route paths to their import functions for prefetching
+const ROUTE_IMPORTS: Record<string, () => Promise<any>> = {
+  '/gallery': importCharacterGallery,
+  '/info': importCharacterInfoView,
+  '/lore': importLoreView,
+  '/messages': importMessagesView,
+  '/chat': importChatView,
+  '/settings': importAPISettingsView,
+  '/worldcards': importWorldCardsView
+};
 
 interface SideNavProps {
   // Remove props related to internal view state management
@@ -105,7 +126,7 @@ const SideNav: React.FC<SideNavProps> = ({
 
             {/* Navigation */}
             <nav className="flex flex-col items-center space-y-2 w-10">
-              {/* Replace NavButton with NavLink */}
+              {/* Enhanced NavLinkHelper with prefetching */}
               <NavLinkHelper isCollapsed={isCollapsed} to="/gallery" label="Character Folder" Icon={NAV_ICONS.gallery} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/info" label="Basic Info & Greetings" Icon={NAV_ICONS.info} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore Manager" Icon={NAV_ICONS.lore} />
@@ -156,7 +177,7 @@ const SideNav: React.FC<SideNavProps> = ({
 
             {/* Navigation */}
             <nav className="space-y-2">
-              {/* Replace NavButton with NavLink */}
+              {/* Enhanced NavLinkHelper with prefetching */}
               <NavLinkHelper isCollapsed={isCollapsed} to="/gallery" label="Character Folder" Icon={NAV_ICONS.gallery} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/info" label="Basic Info & Greetings" Icon={NAV_ICONS.info} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore" Icon={NAV_ICONS.lore} />
@@ -195,13 +216,16 @@ const SideNav: React.FC<SideNavProps> = ({
   );
 };
 
-// Helper component using NavLink
+// Enhanced NavLinkHelper with prefetching
 const NavLinkHelper: React.FC<{
   isCollapsed: boolean;
   to: string;
   label: string;
   Icon: React.ElementType; // Lucide icon component
 }> = ({ isCollapsed, to, label, Icon }) => {
+  // Use our custom hook to get prefetching handlers
+  const prefetchHandlers = usePrefetchRoute(ROUTE_IMPORTS[to] || (() => Promise.resolve()));
+
   return (
     <NavLink
       to={to}
@@ -216,6 +240,8 @@ const NavLinkHelper: React.FC<{
       aria-label={label}
       title={label}
       end // Use 'end' prop for exact matching on index routes like gallery if needed
+      // Apply prefetching handlers
+      {...prefetchHandlers}
     >
       <Icon className="w-5 h-5" />
       {!isCollapsed && <span>{label}</span>}

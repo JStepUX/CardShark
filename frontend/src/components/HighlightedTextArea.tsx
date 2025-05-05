@@ -67,7 +67,7 @@ const HighlightedTextArea = forwardRef<HTMLTextAreaElement, HighlightedTextAreaP
       .replace(/>/g, '&gt;')
       .replace(/("([^"\\]|\\.)*")/g, '<span class="text-orange-200">$1</span>')
       .replace(/(\*[^*\n]+\*)/g, '<span class="text-blue-300">$1</span>')
-      .replace(/(`[^`\n]+`)/g, '<span class="text-yellow-300">$1</span>')
+      .replace(/(`[^`\n]+`)/g, '<span class="text-orange-300">$1</span>')
       .replace(/(\{\{[^}\n]+\}\})/g, '<span class="text-pink-300">$1</span>')
       .replace(/\n$/g, '\n\n');
   };

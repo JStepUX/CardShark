@@ -175,7 +175,7 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
       )}
 
       {!settings.enabled && (
-        <div className="text-sm text-yellow-500 bg-yellow-950/50 p-4 rounded-lg">
+        <div className="text-sm text-orange-500 bg-orange-950/50 p-4 rounded-lg">
           Please test the connection before using the API features.
         </div>
       )}

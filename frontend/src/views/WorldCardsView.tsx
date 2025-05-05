@@ -9,8 +9,7 @@ import { worldStateApi } from "../utils/worldStateApi";
 import { WorldMetadata } from "../types/world";
 import { formatWorldName } from "../utils/formatters"; // Import our formatter function
 import { Trash2, AlertTriangle, X } from 'lucide-react'; // Added AlertTriangle and X icons
-// Remove WorldBuilderView import, it's rendered via route now
-// import WorldBuilderView from "./WorldBuilderView";
+import { useCharacter } from '../contexts/CharacterContext'; // Import character context
 
 
 const WorldCardsView: React.FC = () => {
@@ -22,6 +21,7 @@ const WorldCardsView: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true); // Add loading state
   const [error, setError] = useState<string | null>(null); // Add error state
   const [deleteError, setDeleteError] = useState<string | null>(null); // Add delete error state
+  const { setCharacterData, setImageUrl } = useCharacter(); // Get access to both character context functions
 
   // Add new state for image loading errors
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
@@ -31,22 +31,53 @@ const WorldCardsView: React.FC = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Remove handleCreateWorld - worlds are fetched from API now
-  // const handleCreateWorld = (world: WorldStub) => {
-  //   setWorlds((prev) => [...prev, world]);
-  // };
+  // Clear character data when component mounts to ensure we're viewing World Cards and not Character data
+  useEffect(() => {
+    // Clear character data to ensure it doesn't override world images
+    setCharacterData(null);
+    
+    // Reset the image URL state without clearing existing images
+    // This allows world card images to appear when navigating from characters
+  }, [setCharacterData]);
+
+  // Update the world image in the side nav when the component mounts
+  useEffect(() => {
+    // After worlds are loaded, set the first world's image if available
+    if (!isLoading && worlds.length > 0) {
+      const firstWorld = worlds[0];
+      const worldCardImageUrl = `/api/worlds/${encodeURIComponent(firstWorld.name)}/card`;
+      setImageUrl(worldCardImageUrl);
+    }
+  }, [isLoading, worlds, setImageUrl]);
 
   // Define handleWorldClick for better event handling
   const handleWorldClick = useCallback((world: WorldMetadata, e: React.MouseEvent) => {
     // Log the navigation attempt
     console.log(`Navigating to builder for world: ${world.name}`);
     
+    // Set the world card image in the side navigation before navigation
+    const worldCardImageUrl = `/api/worlds/${encodeURIComponent(world.name)}/card`;
+    setImageUrl(worldCardImageUrl);
+    
     // Stop event propagation to prevent parent elements from capturing the click
     e.stopPropagation();
     
     // Navigate to the world builder
     navigate(`/worldcards/${encodeURIComponent(world.name)}/builder`);
-  }, [navigate]);
+  }, [navigate, setImageUrl]);
+
+  // Update image preview directly when user clicks on a world card image
+  const handleCardImageClick = useCallback((worldName: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent navigation when clicking directly on the image
+    
+    const worldCardImageUrl = `/api/worlds/${encodeURIComponent(worldName)}/card`;
+    
+    // Clear any character data to ensure world image displays properly
+    setCharacterData(null);
+    setImageUrl(worldCardImageUrl);
+    
+    console.log(`Updated preview image to world card: ${worldName}`);
+  }, [setImageUrl, setCharacterData]);
   
   // Define fetchWorlds using useCallback
   const fetchWorlds = useCallback(async () => {
@@ -200,13 +231,24 @@ useEffect(() => {
                     hover:shadow-xl
                   `}
                   // Use dedicated click handler for better control
-                  onClick={(e) => handleWorldClick(world, e)}
+                  onClick={(e) => {
+                    // Always update the image URL when clicking on the card
+                    const worldCardImageUrl = `/api/worlds/${encodeURIComponent(world.name)}/card`;
+                    setImageUrl(worldCardImageUrl);
+                    
+                    // Then handle navigation
+                    handleWorldClick(world, e);
+                  }}
                   tabIndex={0}
                   role="button"
                   aria-label={`Open builder for ${world.name}`}
                   onKeyPress={(e) => {
                     // Navigate on Enter/Space key press (only if not deleting)
                     if (!isDeleting && (e.key === "Enter" || e.key === " ")) {
+                      // Also update the image URL when using keyboard navigation
+                      const worldCardImageUrl = `/api/worlds/${encodeURIComponent(world.name)}/card`;
+                      setImageUrl(worldCardImageUrl);
+                      
                       navigate(`/worldcards/${encodeURIComponent(world.name)}/builder`);
                     }
                   }}
@@ -235,6 +277,7 @@ useEffect(() => {
                       className={`object-cover w-full h-full transition-transform duration-300 ${isDeleting ? '' : 'group-hover:scale-110'}`}
                       alt={`${world.name} world card`}
                       onError={() => handleImageError(world.name)}
+                      onClick={(e) => handleCardImageClick(world.name, e)} // Add onClick handler to update the side nav image
                     />
                     {imageErrors[world.name] && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/50">

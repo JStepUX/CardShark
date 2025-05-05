@@ -78,6 +78,17 @@ hidden_imports = [
     'backend.test_module',
     'backend.world_state_manager',
     
+    # All endpoint files
+    'backend.background_endpoints',
+    'backend.character_endpoints',
+    'backend.chat_endpoints',
+    'backend.lore_endpoints',
+    'backend.settings_endpoints',
+    'backend.template_endpoints',
+    'backend.user_endpoints',
+    'backend.world_chat_endpoints',
+    'backend.world_endpoints',
+    
     # Handlers subdirectory
     'backend.handlers',
     'backend.handlers.world_card_chat_handler',

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { WorldStateProvider } from '../contexts/WorldStateContext';
-import { LocationDetail } from '@components/world/LocationDetail';
-import { WorldMap } from '@components/world/WorldMap';
-import PlayerStatus from '@components/PlayerStatus';
-import UnconnectedLocations from '@components/UnconnectedLocations';
-import EventDisplay from '@components/EventDisplay';
+import { LocationDetail } from '../components/world/LocationDetail';
+import { WorldMap } from '../components/world/WorldMap';
+import PlayerStatus from '../components/PlayerStatus';
+import UnconnectedLocations from '../components/UnconnectedLocations';
+import EventDisplay from '../components/EventDisplay';
+import { useCharacter } from '../contexts/CharacterContext';
 
 // Error boundary fallback component
 const ErrorFallback = () => (
@@ -45,6 +46,24 @@ interface WorldViewProps {
 }
 
 export const WorldView: React.FC<WorldViewProps> = ({ worldName }) => {
+  // Get access to character context to update image preview
+  const { setImageUrl } = useCharacter();
+  
+  // Set the world card image in the side navigation when the component mounts
+  useEffect(() => {
+    // Use the world card API endpoint for the image
+    const worldCardImageUrl = `/api/worlds/${encodeURIComponent(worldName)}/card`;
+    
+    // Update the image URL in the character context to display in the side nav
+    setImageUrl(worldCardImageUrl);
+    
+    // Clean up when component unmounts
+    return () => {
+      // Reset the image URL when navigating away
+      setImageUrl(undefined);
+    };
+  }, [worldName, setImageUrl]);
+
   return (
     <WorldErrorBoundary>
       <WorldStateProvider worldName={worldName}>

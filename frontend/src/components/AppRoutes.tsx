@@ -1,58 +1,126 @@
-import React from 'react';
+import React, { lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './Layout';
-import CharacterInfoView from './CharacterInfoView'; // Corrected path based on Layout.tsx
-import LoreView from './LoreView'; // Path from Layout.tsx
-import MessagesView from './MessagesView'; // Path from Layout.tsx
-import ChatView from './ChatView'; // Path from Layout.tsx
-import CharacterGallery from './CharacterGallery'; // Path from Layout.tsx
-import APISettingsView from './APISettingsView'; // Path from Layout.tsx
-import WorldCardsView from '../views/WorldCardsView';
-import WorldBuilderView from '../views/WorldBuilderView';
-import WorldCardsPlayView from '../views/WorldCardsPlayView';
+import LazyRoute from './common/LazyRoute';
+
+// Keep context providers eagerly loaded to avoid context inconsistency issues
 import { ComparisonProvider } from '../contexts/ComparisonContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
 import { APIConfigProvider } from '../contexts/APIConfigContext';
 import { TemplateProvider } from '../contexts/TemplateContext';
 import { CharacterProvider } from '../contexts/CharacterContext';
 import { ChatProvider } from '../contexts/ChatContext';
+import { ImageHandlerProvider } from '../contexts/ImageHandlerContext';
+import { KoboldCPPProvider } from '../hooks/useKoboldCPP';
 import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
 
+// Lazily load route components
+// Character and Gallery views
+const CharacterGallery = lazy(() => import('./CharacterGallery'));
+const CharacterInfoView = lazy(() => import('./CharacterInfoView'));
+const LoreView = lazy(() => import('./LoreView'));
+const MessagesView = lazy(() => import('./MessagesView'));
+
+// Chat view
+const ChatView = lazy(() => import('./ChatView'));
+
+// Settings view
+const APISettingsView = lazy(() => import('./APISettingsView'));
+
+// World-related views (grouped by feature)
+const WorldCardsView = lazy(() => import('../views/WorldCardsView'));
+const WorldBuilderView = lazy(() => import('../views/WorldBuilderView'));
+const WorldCardsPlayView = lazy(() => import('../views/WorldCardsPlayView'));
+
 const AppRoutes: React.FC = () => (
+  // Global providers needed by most features
   <ComparisonProvider>
     <SettingsProvider>
       <APIConfigProvider>
         <TemplateProvider>
           <CharacterProvider>
-            <ChatProvider>
-              <HighlightStylesUpdater />
-              <Routes>
-                <Route path="/" element={<Layout />}> {/* Layout is the parent route */}
-                  {/* Define nested routes rendered inside Layout's Outlet */}
-                  {/* Default view redirects to gallery */}
-                  <Route index element={<Navigate to="/gallery" replace />} />
-                  {/* Only one CharacterGallery route */}
-                  <Route path="gallery" element={<CharacterGallery />} />
-                  {/* Map other views previously handled by Layout state */}
-                  <Route path="info" element={<CharacterInfoView />} />
-                  <Route path="lore" element={<LoreView />} />
-                  <Route path="messages" element={<MessagesView />} />
-                  <Route path="chat" element={<ChatView />} />
-                  <Route path="settings" element={<APISettingsView />} />
+            <HighlightStylesUpdater />
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                {/* Default view redirects to gallery */}
+                <Route index element={<Navigate to="/gallery" replace />} />
+                
+                {/* Routes that don't need chat or special contexts */}
+                <Route path="gallery" element={
+                  <LazyRoute routeName="Character Gallery">
+                    <CharacterGallery />
+                  </LazyRoute>
+                } />
+                
+                {/* Character routes with ImageHandler for avatar handling */}
+                <Route path="info" element={
+                  <LazyRoute routeName="Character Info">
+                    <ImageHandlerProvider>
+                      <CharacterInfoView />
+                    </ImageHandlerProvider>
+                  </LazyRoute>
+                } />
+                
+                <Route path="lore" element={
+                  <LazyRoute routeName="Lore Manager">
+                    <LoreView />
+                  </LazyRoute>
+                } />
+                
+                <Route path="messages" element={
+                  <LazyRoute routeName="Messages">
+                    <MessagesView />
+                  </LazyRoute>
+                } />
+                
+                {/* Chat route with chat-specific providers */}
+                <Route path="chat" element={
+                  <LazyRoute routeName="Chat">
+                    <ChatProvider>
+                      <KoboldCPPProvider pollInterval={120000}>
+                        <ChatView />
+                      </KoboldCPPProvider>
+                    </ChatProvider>
+                  </LazyRoute>
+                } />
+                
+                {/* Settings view */}
+                <Route path="settings" element={
+                  <LazyRoute routeName="Settings">
+                    <APISettingsView />
+                  </LazyRoute>
+                } />
 
-                  {/* World Cards Routes */}
-                  <Route path="worldcards" element={<WorldCardsView />} />
-                  {/* Use a unique param like worldId */}
-                  {/* Remove props, components fetch data via useParams */}
-                  <Route path="worldcards/:worldId/builder" element={<WorldBuilderView />} />
-                  <Route path="worldcards/:worldId/play" element={<WorldCardsPlayView />} />
-
-                  {/* Fallback route - Redirects to gallery if no match */}
-                  <Route path="*" element={<Navigate to="/gallery" replace />} />
+                {/* World Cards Routes - Group related routes */}
+                <Route path="worldcards">
+                  <Route index element={
+                    <LazyRoute routeName="World Cards">
+                      <WorldCardsView />
+                    </LazyRoute>
+                  } />
+                  
+                  <Route path=":worldId/builder" element={
+                    <LazyRoute routeName="World Builder">
+                      <WorldBuilderView />
+                    </LazyRoute>
+                  } />
+                  
+                  {/* World Cards Play route with chat providers */}
+                  <Route path=":worldId/play" element={
+                    <LazyRoute routeName="World Play">
+                      <ChatProvider>
+                        <KoboldCPPProvider pollInterval={120000}>
+                          <WorldCardsPlayView />
+                        </KoboldCPPProvider>
+                      </ChatProvider>
+                    </LazyRoute>
+                  } />
                 </Route>
-                {/* Remove the separate /play route as it's now nested */}
-              </Routes>
-            </ChatProvider>
+
+                {/* Fallback route - Redirects to gallery if no match */}
+                <Route path="*" element={<Navigate to="/gallery" replace />} />
+              </Route>
+            </Routes>
           </CharacterProvider>
         </TemplateProvider>
       </APIConfigProvider>

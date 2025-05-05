@@ -46,6 +46,7 @@ export interface Settings {
   character_directory: string | null;  // Updated to allow null
   save_to_character_directory: boolean;
   models_directory?: string;  // Directory for AI model files
+  model_directory?: string;   // Legacy field for backward compatibility
   show_koboldcpp_launcher?: boolean; // Whether to show KoboldCPP launcher on startup
   theme: 'dark' | 'light';
   version: string;

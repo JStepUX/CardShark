@@ -1,15 +1,7 @@
 // src/App.tsx
-import { CharacterProvider } from './contexts/CharacterContext';
-import { APIConfigProvider } from './contexts/APIConfigContext';
-import { TemplateProvider } from './contexts/TemplateContext';
-import { ChatProvider } from './contexts/ChatContext';
-import { ComparisonProvider } from './contexts/ComparisonContext';
-import { SettingsProvider } from './contexts/SettingsContext';
-import { KoboldCPPProvider } from './hooks/useKoboldCPP';
-import Layout from './components/Layout';
-import HighlightStylesUpdater from './components/tiptap/HighlightStylesUpdater';
-import ResilientApiProvider from './context/ResilientApiContext';
 import ApiErrorBoundary from './components/common/ApiErrorBoundary';
+import ResilientApiProvider from './context/ResilientApiContext';
+import AppRoutes from './components/AppRoutes';
 import './styles/fonts.css';
 
 function App() {
@@ -38,22 +30,7 @@ function App() {
       )}
     >
       <ResilientApiProvider retryCount={5} retryDelay={2000}>
-        <ComparisonProvider>
-          <SettingsProvider>
-            <APIConfigProvider>
-              <TemplateProvider>
-                <CharacterProvider>
-                  <ChatProvider>
-                    <KoboldCPPProvider pollInterval={120000}>
-                      <HighlightStylesUpdater />
-                      <Layout />
-                    </KoboldCPPProvider>
-                  </ChatProvider>
-                </CharacterProvider>
-              </TemplateProvider>
-            </APIConfigProvider>
-          </SettingsProvider>
-        </ComparisonProvider>
+        <AppRoutes />
       </ResilientApiProvider>
     </ApiErrorBoundary>
   );

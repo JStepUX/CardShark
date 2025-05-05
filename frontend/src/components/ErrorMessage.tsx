@@ -23,7 +23,7 @@ const ErrorMessage: React.FC<ErrorMessageProps> = ({
       case 'error':
         return 'bg-red-900/50 border-red-700/60 text-red-200';
       case 'warning':
-        return 'bg-yellow-900/50 border-yellow-700/60 text-yellow-200';
+        return 'bg-orange-900/50 border-orange-700/60 text-orange-200';
       case 'info':
         return 'bg-blue-900/50 border-blue-700/60 text-blue-200';
       default:

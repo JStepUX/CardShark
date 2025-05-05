@@ -4,29 +4,16 @@ import { Outlet, useLocation } from "react-router-dom"; // Added useLocation for
 import { useCharacter } from "../contexts/CharacterContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
-// Remove direct view imports if they are only rendered via routes now
-// import LoreView from "./LoreView";
-// import MessagesView from "./MessagesView";
-// import CharacterInfoView from "./CharacterInfoView";
-// import APISettingsView from "./APISettingsView";
 import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
-// import CharacterGallery from "./CharacterGallery"; // Rendered via Outlet
 import ComparisonPanel from "./ComparisonPanel";
-// import ChatView from "./ChatView"; // Rendered via Outlet
 import SideNav from "./SideNav";
-// import WorldCardsView from '../views/WorldCardsView'; // Rendered via Outlet
-// import WorldCardsPlayView from '../views/WorldCardsPlayView'; // Rendered via Outlet
 
-// Remove View type if no longer needed
-// import { View } from '../types/navigation';
 const Layout: React.FC = () => {
   // File handling refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // State management
-  // Remove currentView state, router handles the view
-  // const [currentView, setCurrentView] = useState<View>("gallery");
   const [showBackyardDialog, setShowBackyardDialog] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
@@ -48,6 +35,10 @@ const Layout: React.FC = () => {
     error, 
     setError 
   } = useCharacter();
+
+  // Detect if we're in the WorldView by checking the URL path
+  const isWorldView = location.pathname.includes('/worldcards/') && location.pathname.includes('/view');
+  const worldName = isWorldView ? location.pathname.split('/').pop() : null;
 
   // Comparison context
   const { isCompareMode } = useComparison();
@@ -176,7 +167,48 @@ const Layout: React.FC = () => {
   };
 
   // Handle image change from ImagePreview component
-  const handleImageChange = (newImageData: File | string) => {
+  const handleImageChange = async (newImageData: File | string) => {
+    if (isWorldView && worldName) {
+      // Handle world image update
+      try {
+        // Prepare FormData with the new image
+        const formData = new FormData();
+        
+        if (newImageData instanceof File) {
+          // If it's a File object, use it directly
+          formData.append('file', newImageData);
+        } else if (typeof newImageData === 'string' && newImageData.startsWith('data:image/')) {
+          // Convert data URL to File if it's a valid image data URL
+          const response = await fetch(newImageData);
+          const blob = await response.blob();
+          const file = new File([blob], "world_card.png", { type: "image/png" });
+          formData.append('file', file);
+        } else {
+          throw new Error("Invalid image format");
+        }
+        
+        // Upload the image to the backend
+        const uploadResponse = await fetch(`/api/worlds/${encodeURIComponent(worldName)}/upload-png`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json().catch(() => ({}));
+          throw new Error(errorData.detail || errorData.message || "Failed to upload world image");
+        }
+        
+        // Refresh the image by updating the URL with a cache-busting parameter
+        const refreshedUrl = `/api/worlds/${encodeURIComponent(worldName)}/card?t=${Date.now()}`;
+        setImageUrl(refreshedUrl);
+      } catch (error) {
+        console.error("Error updating world image:", error);
+        setError(error instanceof Error ? error.message : "Failed to update world image");
+      }
+      return;
+    }
+
+    // Default character image handling
     if (newImageData) {
       // Update the new image state
       setNewImage(newImageData);
@@ -318,9 +350,6 @@ const Layout: React.FC = () => {
   useEffect(() => {
     incrementSettingsChangeCount();
   }, [settings]);
-
-  // Remove renderContent function, Outlet handles rendering
-  // const renderContent = () => { ... };
 
   return (
     <div className="h-screen w-screen flex bg-stone-950 text-gray-100 overflow-hidden">

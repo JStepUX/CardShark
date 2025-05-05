@@ -617,7 +617,7 @@ const OpenRouterModelSelector: React.FC<OpenRouterModelSelectorProps> = ({
           <span>{error}</span>
         </div>
       ) : models.length === 0 && !isLoading ? (
-        <div className="text-yellow-500 text-sm bg-yellow-900/20 p-2 rounded flex items-center gap-2">
+        <div className="text-orange-500 text-sm bg-orange-900/20 p-2 rounded flex items-center gap-2">
           <AlertCircle size={16} />
           <span>No models found. Please check your API key and URL.</span>
         </div>
@@ -759,7 +759,7 @@ const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
           <span>{error}</span>
         </div>
       ) : models.length === 0 && !isLoading ? (
-        <div className="text-yellow-500 text-sm bg-yellow-900/20 p-2 rounded flex items-center gap-2">
+        <div className="text-orange-500 text-sm bg-orange-900/20 p-2 rounded flex items-center gap-2">
           <AlertCircle size={16} />
           <span>No models found. Check API URL/Key or connection.</span>
         </div>
@@ -965,7 +965,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
       <label className="block text-sm font-medium text-gray-300 mb-1">
         Model Selection
         {isLocalKobold && !modelsDirectory && (
-          <span className="ml-2 text-yellow-500 text-xs">
+          <span className="ml-2 text-orange-500 text-xs">
             Set models directory in General Settings first
           </span>
         )}
@@ -1036,7 +1036,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
               )}
             </>
           ) : (
-            <div className="text-sm text-yellow-500 flex items-center gap-2 p-2 bg-yellow-900/20 rounded">
+            <div className="text-sm text-orange-500 flex items-center gap-2 p-2 bg-orange-900/20 rounded">
               <AlertCircle size={16} />
               <span>Please set a models directory in General Settings</span>
             </div>
@@ -1047,7 +1047,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           )}
           
           {models.length === 0 && !isLoading && modelsDirectory && !error && (
-            <div className="text-sm text-yellow-500">
+            <div className="text-sm text-orange-500">
               No models found in the specified directory
             </div>
           )}
