@@ -5,7 +5,7 @@ import os
 import time
 import traceback
 from pathlib import Path
-from typing import Dict, Any, Optional, List # Added List
+from typing import Dict, Any, Optional, List
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
@@ -49,6 +49,10 @@ class TestConnectionPayload(BaseModel):
     model: Optional[str] = None
     templateId: Optional[str] = None # Keep if used by adapters
 
+class FeatherlessModelsPayload(BaseModel):
+    url: str
+    apiKey: Optional[str] = None
+
 # --- Settings Endpoints ---
 
 @router.get("/settings") # Corrected path
@@ -59,7 +63,8 @@ async def get_settings(
     """Get all application settings."""
     try:
         settings = settings_manager.settings
-        logger.log_step("Serving settings")
+        # Log the specific settings being served, especially models_directory
+        logger.log_step(f"Serving settings. models_directory: '{settings.get('models_directory')}', model_directory: '{settings.get('model_directory')}'")
         return JSONResponse(
             status_code=200,
             content={
@@ -123,9 +128,6 @@ async def update_settings(
             content={"success": False, "message": f"Failed to update settings: {str(e)}"}
         )
 
-# --- Template Endpoints Removed ---
-# (These should be in template_endpoints.py)
-
 # --- Utility Endpoints ---
 
 @router.post("/test-connection") # Corrected path
@@ -154,130 +156,205 @@ async def test_api_connection(
         logger.log_step(f"Provider: {provider}")
         logger.log_step(f"Model: {model}")
 
-        # Get the adapter for this provider
         adapter = get_provider_adapter(provider, logger)
 
-        # Get the correct endpoint URL based on provider
-        endpoint_url = adapter.get_endpoint_url(url)
-        logger.log_step(f"Using endpoint URL: {endpoint_url}")
-
-        # Get the correct headers based on provider
-        headers = adapter.prepare_headers(api_key)
-        logger.log_step(f"Headers prepared (keys only): {list(headers.keys())}")
-
-        # For test purposes, create a non-streaming request
-        test_data = adapter.prepare_request_data(
-            prompt="Hi",
-            memory="You are a helpful assistant.",
-            stop_sequence=["User:", "Human:", "Assistant:"],
-            generation_settings={
-                "max_length": 10,
-                "temperature": 0.7,
-                "model": model
-            }
-        )
-
-        # Ensure stream flag is set to False for testing purposes
-        test_data["stream"] = False
-        logger.log_step(f"Test data prepared: {test_data}")
-
-        # Make the test request
-        response = requests.post(
-            endpoint_url,
-            headers=headers,
-            json=test_data,
-            timeout=10
-        )
-
-        logger.log_step(f"Response status: {response.status_code}")
-
-        # Try to parse as JSON
-        response_data = None
-        try:
-            response_data = response.json()
-            logger.log_step(f"Response data: {json.dumps(response_data)[:500]}...")
-        except Exception as json_err:
-            logger.log_warning(f"Could not parse response as JSON: {str(json_err)}")
-            logger.log_step(f"Raw response: {response.text[:100]}...")
-
-        # Check for a successful connection
-        if response.status_code == 200:
-            logger.log_step("Connection test successful")
-
-            # Get model info - safely handle None response_data
-            model_info = {
-                "id": model or "unknown",
-                "name": model or provider or "unknown"
-            }
-
-            if response_data and isinstance(response_data, dict):
-                model_info["id"] = (
-                    response_data.get("model") or
-                    response_data.get("id") or
-                    model or
-                    "unknown"
+        if provider == 'Featherless':
+            logger.log_step(f"Testing Featherless AI chat completion (streamed) from: {url}")
+            try:
+                # Assuming adapter.get_endpoint_url can provide the chat completions URL
+                # If it needs a specific type, like "chat_completions", that should be handled by the adapter or passed.
+                endpoint_url = adapter.get_endpoint_url(url)
+                headers = adapter.prepare_headers(api_key)
+                
+                # Prepare a minimal payload for testing streaming chat completion
+                # The adapter's prepare_request_data must handle stream=True to format the API request body correctly.
+                test_data = adapter.prepare_request_data(
+                    prompt="Test stream connection. Please send a short reply.", # A simple prompt
+                    memory=None, # No extensive memory needed for a connection test
+                    stop_sequence=[], # No specific stop sequences needed
+                    generation_settings={
+                        "model": model,  # Use the model from the payload, adapter should handle if None
+                        "max_tokens": 10  # Request a very short response
+                    },
+                    stream=True # Crucial: instruct adapter to request a stream from the API
                 )
-                model_info["name"] = (
-                    response_data.get("model_name") or
-                    response_data.get("name") or
-                    response_data.get("model") or
-                    model or
-                    provider or
-                    "unknown"
+                logger.log_step(f"Featherless stream test request data: {json.dumps(test_data)}")
+
+                # Make the request with stream=True for the requests library itself
+                response = requests.post(
+                    endpoint_url,
+                    headers=headers,
+                    json=test_data,
+                    timeout=20,  # Timeout for the entire request, including stream start
+                    stream=True  # Crucial: requests library's flag to handle response as a stream
                 )
 
-            # Try to detect template from response content
-            detected_template = None
-            if response_data and isinstance(response_data, dict):
-                if response_data.get("choices") and len(response_data.get("choices", [])) > 0:
-                    choice = response_data["choices"][0]
-                    content = ""
-                    if "message" in choice and "content" in choice["message"]:
-                        content = choice["message"]["content"]
-                    elif "text" in choice:
-                        content = choice["text"]
-                    elif "delta" in choice and "content" in choice["delta"]:
-                        content = choice["delta"]["content"]
+                logger.log_step(f"Featherless stream test response status: {response.status_code}")
 
-                    if content:
-                        if "<|im_start|>" in content or "<|im_end|>" in content:
-                            detected_template = "chatml"
-                        elif "[/INST]" in content:
-                            detected_template = "mistral"
-                        elif "<|start_header_id|>" in content:
-                            detected_template = "llama3"
+                if response.status_code == 200:
+                    first_chunk_received = False
+                    try:
+                        for chunk in response.iter_lines(chunk_size=512, decode_unicode=True):
+                            # iter_lines is suitable for text/event-stream common in chat APIs
+                            if chunk: # Ensure chunk is not empty (e.g. keep-alive newlines)
+                                logger.log_step(f"Featherless stream test: Received first chunk (first 100 chars): {chunk[:100]}")
+                                first_chunk_received = True
+                                break # We only need to confirm the stream started and received data
+                    except requests.exceptions.ChunkedEncodingError as ce:
+                        logger.log_warning(f"Featherless stream test: ChunkedEncodingError while reading stream: {str(ce)}. Assuming stream started if status is 200.")
+                        # If status is 200, but chunk reading fails, it's ambiguous.
+                        # For now, if we hit this with a 200, we might still consider it a partial success
+                        # if the API tends to close streams quickly after a small payload.
+                        # However, not receiving a chunk is problematic.
+                        # Let's require first_chunk_received to be true.
+                    except Exception as stream_read_exc:
+                        logger.log_warning(f"Featherless stream test: Exception while reading stream: {str(stream_read_exc)}")
+                    finally:
+                        response.close() # Always close the response to free resources
 
-            logger.log_step(f"Detected template: {detected_template}")
-
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "message": "Connection successful",
-                    "model": model_info,
-                    "detected_template": detected_template,
-                    "timestamp": time.time()
-                }
-            )
-        else:
-            error_msg = f"Connection failed with status {response.status_code}"
-            if response_data and isinstance(response_data, dict) and 'error' in response_data:
-                if isinstance(response_data['error'], dict) and 'message' in response_data['error']:
-                    error_msg = f"{error_msg}: {response_data['error']['message']}"
+                    if first_chunk_received:
+                        logger.log_step("Featherless AI stream connection test successful: Stream started and data received.")
+                        model_id_to_report = model or "unknown_or_default_model"
+                        model_name_to_report = model or provider or "Unknown or Default Model"
+                        
+                        return JSONResponse(
+                            status_code=200,
+                            content={
+                                "success": True,
+                                "message": "Connection successful: Stream started and data received.",
+                                "model": {"id": model_id_to_report, "name": model_name_to_report},
+                                "timestamp": time.time()
+                            }
+                        )
+                    else:
+                        logger.log_warning("Featherless AI stream test: Status 200 but no stream data was successfully read.")
+                        return JSONResponse(
+                            status_code=400, # Or 500, as it's an unexpected server behavior
+                            content={"success": False, "message": "Connection test returned status 200, but no stream data could be read.", "timestamp": time.time()}
+                        )
                 else:
-                    error_msg = f"{error_msg}: {response_data['error']}"
-            elif response.text:
-                error_msg = f"{error_msg}: {response.text[:200]}"
+                    # Handle non-200 status codes
+                    error_message = f"Featherless AI stream test failed with status {response.status_code}"
+                    response_text = ""
+                    try:
+                        response_text = response.text # Read the full response text for error details
+                        response.close() # Close after reading
+                        error_detail_json = json.loads(response_text)
+                        if isinstance(error_detail_json, dict):
+                            if 'error' in error_detail_json:
+                                if isinstance(error_detail_json['error'], dict) and 'message' in error_detail_json['error']:
+                                    error_message += f". Detail: {error_detail_json['error']['message']}"
+                                else:
+                                    error_message += f". Detail: {str(error_detail_json['error'])}"
+                            elif 'message' in error_detail_json:
+                                 error_message += f". Detail: {error_detail_json['message']}"
+                            else:
+                                error_message += f". Response: {response_text[:200]}" if response_text else "(empty response)"
+                        else:
+                             error_message += f". Response: {response_text[:200]}" if response_text else "(empty response)"
+                    except json.JSONDecodeError:
+                        error_message += f". Raw Response: {response_text[:200]}" if response_text else "(empty response)"
+                    except Exception as e_resp:
+                        logger.log_warning(f"Could not fully parse error response: {str(e_resp)}")
+                        error_message += f". Raw Response: {response_text[:200]}" if response_text else "(empty response)"
+                    finally:
+                        # Ensure the response is closed. Calling close() multiple times is generally safe.
+                        response.close()
+                    
+                    logger.log_warning(error_message)
+                    return JSONResponse(
+                        status_code=response.status_code if response.status_code >= 400 else 400, # Ensure client/server error status
+                        content={"success": False, "message": error_message, "timestamp": time.time()}
+                    )
 
-            logger.log_warning(f"Connection test failed: {error_msg}")
-            return JSONResponse(
-                status_code=400, # Use 400 for client-side config errors or connection failures
-                content={
-                    "success": False,
-                    "message": error_msg,
-                    "timestamp": time.time()
+            except requests.exceptions.RequestException as req_exc:
+                logger.log_error(f"RequestException during Featherless AI stream test: {str(req_exc)}")
+                logger.log_error(traceback.format_exc())
+                return JSONResponse(
+                    status_code=503, # Service Unavailable or connection error
+                    content={"success": False, "message": f"Connection error: {str(req_exc)}", "timestamp": time.time()}
+                )
+            except Exception as e:
+                logger.log_error(f"Error testing Featherless AI stream connection: {str(e)}")
+                logger.log_error(traceback.format_exc())
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "message": f"An unexpected error occurred: {str(e)}", "timestamp": time.time()}
+                )
+        else:
+            # Generic provider test (remains non-streaming for now)
+            endpoint_url = adapter.get_endpoint_url(url)
+            logger.log_step(f"Using generic endpoint URL: {endpoint_url}")
+
+            headers = adapter.prepare_headers(api_key)
+            logger.log_step(f"Headers prepared (keys only): {list(headers.keys())}")
+
+            test_data = adapter.prepare_request_data(
+                prompt="Hi",
+                memory="You are a helpful assistant.",
+                stop_sequence=["User:", "Human:", "Assistant:"],
+                generation_settings={
+                    "max_length": 10,
+                    "temperature": 0.7,
+                    "model": model
                 }
             )
+            test_data["stream"] = False
+            logger.log_step(f"Test data prepared: {test_data}")
+
+            response = requests.post(
+                endpoint_url,
+                headers=headers,
+                json=test_data,
+                timeout=10
+            )
+            logger.log_step(f"Response status: {response.status_code}")
+
+            response_data = None
+            try:
+                response_data = response.json()
+                logger.log_step(f"Response data: {json.dumps(response_data)[:500]}...")
+            except Exception as json_err:
+                logger.log_warning(f"Could not parse response as JSON: {str(json_err)}")
+                logger.log_step(f"Raw response: {response.text[:100]}...")
+
+            if response.status_code == 200:
+                logger.log_step("Connection test successful")
+                model_info_data = {
+                    "id": model or (response_data.get("model") if response_data else None) or "unknown",
+                    "name": model or (response_data.get("model") if response_data else None) or provider or "unknown"
+                }
+                if response_data and isinstance(response_data, dict) and response_data.get("id"):
+                    model_info_data["id"] = response_data.get("id")
+                
+                detected_template = None
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": True,
+                        "message": "Connection successful",
+                        "model": model_info_data,
+                        "detected_template": detected_template,
+                        "timestamp": time.time()
+                    }
+                )
+            else:
+                error_msg = f"Connection failed with status {response.status_code}"
+                if response_data and isinstance(response_data, dict) and 'error' in response_data:
+                    if isinstance(response_data['error'], dict) and 'message' in response_data['error']:
+                        error_msg = f"{error_msg}: {response_data['error']['message']}"
+                    else:
+                        error_msg = f"{error_msg}: {response_data['error']}"
+                elif response_data and isinstance(response_data, dict) and 'message' in response_data:
+                     error_msg = f"{error_msg}: {response_data['message']}"
+                elif response.text:
+                    error_msg = f"{error_msg}: {response.text[:200]}"
+                logger.log_warning(f"Connection test failed: {error_msg}")
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "message": error_msg, "timestamp": time.time()}
+                )
 
     except Exception as e:
         logger.log_error(f"API connection test error: {str(e)}")
@@ -301,11 +378,6 @@ async def validate_directory(
         dir_path_str = payload.directory
         logger.log_step(f"Validating directory path: {dir_path_str}")
 
-        # Basic security check (optional, adjust as needed)
-        # if ".." in dir_path_str:
-        #     logger.log_warning(f"Directory path contains '..': {dir_path_str}")
-            # raise HTTPException(status_code=400, detail="Path traversal attempt detected ('..' not allowed).")
-
         dir_path = Path(dir_path_str)
         is_valid = dir_path.is_dir()
         logger.log_step(f"Path '{dir_path_str}' is_dir: {is_valid}")
@@ -324,7 +396,7 @@ async def validate_directory(
         logger.log_error(f"Error validating directory '{payload.directory}': {str(e)}")
         logger.log_error(traceback.format_exc())
         return JSONResponse(
-            status_code=200, # Return 200 but indicate failure in payload
+            status_code=200, 
             content={
                 "success": False,
                 "exists": False,
@@ -341,11 +413,10 @@ async def update_settings_put(
 ):
     """Update application settings via PUT request."""
     try:
-        # Handle both formats: direct object or nested under "settings" key
         if "settings" in payload:
             new_settings = payload.get("settings")
         else:
-            new_settings = payload  # Assume direct payload is the settings object
+            new_settings = payload
 
         logger.log_step(f"Received settings update via PUT: {json.dumps(new_settings)}")
 
@@ -355,11 +426,8 @@ async def update_settings_put(
                 content={"success": False, "message": "Invalid or no settings provided"}
             )
 
-        # Apply new settings
         logger.log_step("Updating settings")
         settings_manager.update_settings(new_settings)
-
-        # Save settings to file
         settings_manager.save_settings()
 
         return JSONResponse(
@@ -376,4 +444,45 @@ async def update_settings_put(
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": f"Failed to update settings: {str(e)}"}
+        )
+
+@router.post("/featherless/models")
+async def get_featherless_models_proxy(
+    payload: FeatherlessModelsPayload,
+    logger: LogManager = Depends(get_logger)
+):
+    """Proxy to fetch available models from Featherless AI."""
+    try:
+        logger.log_step(f"Proxying Featherless models request for URL: {payload.url}")
+        adapter = get_provider_adapter("Featherless", logger)
+        
+        models_response = adapter.list_models(payload.url, payload.apiKey)
+        
+        # Check the structure returned by adapter.list_models
+        if models_response and isinstance(models_response, dict):
+            if models_response.get("success") is True and "models" in models_response:
+                logger.log_step("Successfully fetched models from Featherless adapter.")
+                return JSONResponse(
+                    status_code=200,
+                    content={"success": True, "models": models_response["models"]}
+                )
+            elif models_response.get("success") is False and "error" in models_response:
+                logger.log_warning(f"Error reported by Featherless adapter list_models: {models_response['error']}")
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": models_response['error']}
+                )
+        
+        # Fallback for truly unexpected response structure from adapter
+        logger.log_warning(f"Unexpected response format from Featherless adapter: {models_response}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": "Unexpected response format from Featherless adapter"}
+        )
+    except Exception as e:
+        logger.log_error(f"Error proxying Featherless models request: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
         )

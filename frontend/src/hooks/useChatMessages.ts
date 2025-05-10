@@ -1,11 +1,13 @@
 // useChatMessages.ts (refactored)
-import { useState, useRef, useEffect, useContext, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { CharacterData } from '../contexts/CharacterContext';
 import { Message, UserProfile, ChatState } from '../types/messages'; // Import IMessage
 import { PromptHandler } from '../handlers/promptHandler';
-import { APIConfigContext } from '../contexts/APIConfigContext';
+import { useAPIConfig } from '../contexts/APIConfigContext'; // Use the hook
+// Removed useSettings import as it's not needed for API selection here anymore
 import { APIConfig } from '../types/api';
 import { ChatStorage } from '../services/chatStorage';
+import { toast } from 'sonner'; // Import toast
 import { generateUUID } from '../utils/generateUUID'; // Ensure this is imported
 import { CharacterCard } from '../types/schema'; // Import CharacterCard type
 
@@ -15,6 +17,14 @@ interface ReasoningSettings {
   visible: boolean;
   instructions?: string;
 }
+
+// Define a stricter type for messages passed to PromptHandler
+type PromptContextMessage = {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    // Include other relevant fields if needed by PromptHandler, but exclude 'thinking' role
+};
+
 
 interface EnhancedChatState extends ChatState {
   generatingId: string | null; // ID of the message currently being generated/regenerated/varied
@@ -37,7 +47,7 @@ const debounce = <T extends (...args: any[]) => any>(
   wait: number
 ): ((...args: Parameters<T>) => void) => {
   let timeout: NodeJS.Timeout | null = null;
-  
+
   return (...args: Parameters<T>) => {
     if (timeout) clearTimeout(timeout);
     timeout = setTimeout(() => {
@@ -124,7 +134,15 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
   const effectiveCharacterData = characterData || DEFAULT_ASSISTANT_CHARACTER;
   const isGenericAssistant = !characterData; // Flag to check if we're using the default
 
-  const { apiConfig } = useContext(APIConfigContext);
+  // Get API and Settings contexts
+  const { apiConfig: globalApiConfig } = useAPIConfig(); // Get the globally active config
+
+  // Toast for character load
+  useEffect(() => {
+    if (characterData && characterData.data?.name) { // Ensure it's a specific character, not default assistant
+      toast.info(`Chatting with ${characterData.data.name}`);
+    }
+  }, [characterData?.data?.name]); // Trigger when character name changes
 
   // --- State Initialization ---
   const [state, setState] = useState<EnhancedChatState>(() => {
@@ -171,8 +189,11 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       generation_settings: { max_length: 220, max_context_length: 6144, temperature: 1.05, top_p: 0.92, top_k: 100 }
     };
     if (!config) return defaultConfig;
+    // Deep copy to avoid modifying original settings object
     const fullConfig = JSON.parse(JSON.stringify(config));
+    // Merge generation settings with defaults, ensuring nested objects are handled
     fullConfig.generation_settings = { ...defaultConfig.generation_settings, ...(fullConfig.generation_settings || {}) };
+    // Merge the rest of the config with defaults
     return { ...defaultConfig, ...fullConfig };
   }, []);
 
@@ -219,14 +240,25 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     });
   };
 
+  const clearStreamTimeout = useCallback(() => {
+    if (streamTimeoutRef.current) {
+      clearTimeout(streamTimeoutRef.current);
+      streamTimeoutRef.current = null;
+    }
+  }, []); // No dependencies needed
+
   const setGenerationComplete = (
       messageId: string, finalContent: string, contextWindowType: string,
       receivedChunks: number, originalContentForVariation?: string
     ) => {
     // console.log('[DEBUG] setGenerationComplete called with:', { messageId, finalContent, contextWindowType, receivedChunks, originalContentForVariation }); // Reduced logging
     setState(prev => {
+      // Check if we are still generating *this specific message*
       if (!prev.isGenerating || prev.generatingId !== messageId) {
         console.log(`Completion ignored: Generation for ${messageId} already stopped/changed.`);
+        // If generation stopped but this is the final update, ensure state reflects non-generating
+        if (!prev.isGenerating && prev.generatingId === null) return prev;
+        // Otherwise, reset generation state if ID doesn't match
         return { ...prev, isGenerating: false, generatingId: null };
       }
 
@@ -248,12 +280,17 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     });
   };
 
-  const clearStreamTimeout = useCallback(() => {
-    if (streamTimeoutRef.current) {
-      clearTimeout(streamTimeoutRef.current);
-      streamTimeoutRef.current = null;
+  // Define stopGeneration early so it can be used in resetStreamTimeout's dependencies
+  const stopGeneration = useCallback(() => {
+    if (!state.isGenerating || !currentGenerationRef.current) {
+      if (state.isGenerating) setState(prev => ({...prev, isGenerating: false, generatingId: null})); // Ensure state is reset if ref is missing
+      return;
     }
-  }, []); // No dependencies needed
+    console.log("Attempting to stop generation...");
+    currentGenerationRef.current.abort(); // Abort the fetch request
+    clearStreamTimeout(); // Clear inactivity timeout
+    // State update (isGenerating=false, generatingId=null) will be handled by handleGenerationError or setGenerationComplete
+  }, [state.isGenerating, clearStreamTimeout]);
 
   const resetStreamTimeout = useCallback(() => {
     clearStreamTimeout();
@@ -261,31 +298,49 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       console.warn(`Stream timed out after ${STREAM_INACTIVITY_TIMEOUT_MS / 1000}s. Aborting.`);
       stopGeneration(); // Call stopGeneration on timeout
     }, STREAM_INACTIVITY_TIMEOUT_MS);
-  }, [clearStreamTimeout]); // Removed stopGeneration dependency (defined later)
+  }, [clearStreamTimeout, stopGeneration]); // Add stopGeneration dependency
 
   const handleGenerationError = useCallback((err: any, messageId: string | null, operationType: string = 'generation') => {
     const isAbort = err instanceof DOMException && err.name === 'AbortError';
     const errorMessage = isAbort ? `${operationType} cancelled.` : (err instanceof Error ? err.message : `Unknown ${operationType} error`);
-    console.error(`Error during ${operationType}${messageId ? ` for message ${messageId}` : ''}:`, err);
+    // Avoid logging abort errors as actual errors unless debugging
+    if (!isAbort) {
+        console.error(`Error during ${operationType}${messageId ? ` for message ${messageId}` : ''}:`, err);
+    } else {
+        console.log(`${operationType} aborted for message ${messageId}`);
+    }
 
     setState(prev => {
-      let updatedMessages = prev.messages;
-      if (messageId) {
-          updatedMessages = prev.messages.map(msg => {
-            if (msg.id === messageId) {
-              if (msg.role === 'thinking') return null; // Remove thinking message on error
-              return { ...msg, status: (isAbort ? 'aborted' : 'error') as Message['status'], content: msg.content || (isAbort ? "" : `[${operationType} Error]`) };
-            }
-            return msg;
-          }).filter(msg => msg !== null) as Message[];
+      // Only update state if we were actually generating this message or if messageId is null (setup error)
+      if (messageId === null || prev.generatingId === messageId) {
+          let updatedMessages = prev.messages;
+          if (messageId) {
+              updatedMessages = prev.messages.map(msg => {
+                if (msg.id === messageId) {
+                  if (msg.role === 'thinking') return null; // Remove thinking message on error/abort
+                  // Keep existing content on abort, add error marker on actual error
+                  const finalContent = msg.content || (isAbort ? "" : `[${operationType} Error]`);
+                  return { ...msg, status: (isAbort ? 'aborted' : 'error') as Message['status'], content: finalContent };
+                }
+                return msg;
+              }).filter(msg => msg !== null) as Message[];
+          }
+          return {
+            ...prev, messages: updatedMessages, error: isAbort ? null : errorMessage, // Don't show abort as error message in UI
+            isGenerating: false, generatingId: null,
+            lastContextWindow: { ...prev.lastContextWindow, type: `${operationType}_${isAbort ? 'aborted' : 'error'}`, timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data?.name || 'Unknown', messageId: messageId, error: errorMessage }
+          };
       }
-      return {
-        ...prev, messages: updatedMessages, error: errorMessage, isGenerating: false, generatingId: null,
-        lastContextWindow: { ...prev.lastContextWindow, type: `${operationType}_error`, timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data?.name || 'Unknown', messageId: messageId, error: errorMessage }
-      };
+      // If the error/abort is for a generation that's already stopped/changed, just return previous state
+      return prev;
     });
-    clearStreamTimeout(); // Clear timeout on error
+    clearStreamTimeout(); // Clear timeout on error/abort
   }, [effectiveCharacterData, clearStreamTimeout]); // Use effectiveCharacterData, add clearStreamTimeout
+
+  // Define clearError here, before other callbacks that use it
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null }));
+  }, []);
 
   // --- Persistence ---
   // saveChat now requires explicit messageList and user arguments
@@ -298,14 +353,16 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       try {
         // Use effectiveCharacterData here, but the check above ensures it's not the generic one
         if (effectiveCharacterData) {
-          const apiInfo = apiConfig ? { provider: apiConfig.provider, model: apiConfig.model, url: apiConfig.url, template: apiConfig.templateId, enabled: apiConfig.enabled } : null;
-          await ChatStorage.saveChat(effectiveCharacterData, messagesToSave, user, apiInfo);
+          // Use the globally active config for saving metadata for now
+          const apiInfo = globalApiConfig ? { provider: globalApiConfig.provider, model: globalApiConfig.model, url: globalApiConfig.url, template: globalApiConfig.templateId, enabled: globalApiConfig.enabled } : null;
+          // Pass null for backgroundSettings, let backend handle it if needed or load from file
+          await ChatStorage.saveChat(effectiveCharacterData, messagesToSave, user, apiInfo, null);
           // console.debug(`Saved ${messagesToSave.length} messages`); // Reduced logging
         }
       } catch (err) { console.error('Error saving chat:', err); }
       finally { saveTimeoutRef.current = null; }
     }, 1000);
-  }, [effectiveCharacterData, apiConfig, isGenericAssistant]); // Add dependencies
+  }, [effectiveCharacterData, globalApiConfig, isGenericAssistant]); // Use globalApiConfig in dependency array
 
   // Direct API call implementation (non-debounced)
   const appendMessageDirect = useCallback(async (message: Message) => {
@@ -315,7 +372,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       // Use effectiveCharacterData, check ensures it's not generic
       if (effectiveCharacterData) await ChatStorage.appendMessage(effectiveCharacterData, message);
     } catch (err) { console.error('Error appending/updating message:', err); }
-  }, [effectiveCharacterData, isGenericAssistant]); // Removed apiConfig from dependencies as it's not used
+  }, [effectiveCharacterData, isGenericAssistant]);
 
   // Create a debounced version of appendMessage
   const appendMessage = useCallback(
@@ -331,542 +388,487 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     onComplete: (finalContent: string, receivedChunks: number) => void,
     onError: (error: Error) => void
   ) => {
+    if (!response.ok) { // Check response status before processing body
+        const errorText = await response.text().catch(() => `HTTP error ${response.status}`);
+        onError(new Error(`API request failed: ${response.status} ${errorText}`));
+        return;
+    }
     if (!response.body) { onError(new Error("Response body is missing")); return; }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let accumulatedContent = '';
-    let receivedChunks = 0;
-    let done = false;
-    let buffer = ''; // Buffer for UI updates
-    let bufferTimer: NodeJS.Timeout | null = null;
-    
-    // Track empty chunks to help diagnose OpenRouter issues
-    let emptyChunkCount = 0;
-    let lastChunkTime = Date.now();
-    let contentStarted = false; // Keep track if we received the first content chunk
 
-    const updateUIBuffer = () => {
-      if (buffer.length > 0) {
-        const contentToAdd = buffer;
-        buffer = '';
-        // Use functional update for setState based on potentially stale accumulatedContent
-        if (isThinking) {
-          updateThinkingMessageContent(messageId, contentToAdd);
-        } else {
-          updateGeneratingMessageContent(messageId, contentToAdd);
-        }
-      }
-    };
-
-    if (!isThinking) { // Only buffer UI updates for assistant messages
-      bufferTimer = setInterval(updateUIBuffer, 100);
-    }
-
+    // Use the static streamResponse generator from PromptHandler
     try {
-      while (!done) {
-        if (!currentGenerationRef.current || currentGenerationRef.current.signal.aborted) {
-          throw new DOMException('Aborted by user', 'AbortError');
-        }
-        
-        const { value, done: streamDone } = await reader.read();
-        done = streamDone;
-        
-        // Track time between chunks for debugging
-        const now = Date.now();
-        const timeSinceLastChunk = now - lastChunkTime;
-        lastChunkTime = now;
-        
-        if (value) {
-          const decodedChunk = decoder.decode(value, { stream: true });
-          resetStreamTimeout(); // Reset inactivity timer on receiving data
-          
-          // Log chunk details for debugging if needed
-          if (receivedChunks === 0 || receivedChunks % 50 === 0) {
-            console.log(`[Stream] Received chunk #${receivedChunks}, length: ${decodedChunk.length}, time since last: ${timeSinceLastChunk}ms`);
-          }
-          
-          receivedChunks++;
-          
-          // Split the chunk into lines and process each line separately
-          const lines = decodedChunk.split('\n');
-          
-          for (const line of lines) {
-            if (!line.trim()) continue; // Skip empty lines
-            
-            let contentDelta: string | null = null;
-            let isDoneSignal = false;
-
-            // Process each data line independently
-            if (line.startsWith('data: ')) {
-              const jsonData = line.substring(6).trim();
-              
-              if (jsonData === '[DONE]') { 
-                console.log('[Stream] Received [DONE] marker');
-                isDoneSignal = true; 
-              } else {
-                try {
-                  // Parse the JSON string
-                  const parsed = JSON.parse(jsonData);
-                  
-                  // Handle OpenAI/OpenRouter token format
-                  if (typeof parsed.token === 'string') {
-                    contentDelta = parsed.token;
-                    console.log(`[Stream] Token received: "${contentDelta}"`);
-                  } 
-                  // Also check for direct content format
-                  else if (typeof parsed.content === 'string') {
-                    contentDelta = parsed.content;
-                    console.log(`[Stream] Direct content received: "${contentDelta.substring(0, 20)}..."`);
-                  }
-                  // Also check for direct content_delta format
-                  else if (typeof parsed.content_delta === 'string') {
-                    contentDelta = parsed.content_delta;
-                  } 
-                  // Fallback to OpenAI/OpenRouter chat format
-                  else if (parsed.choices?.[0]?.delta?.content) {
-                    contentDelta = parsed.choices[0].delta.content;
-                  } 
-                  // Another format used by some APIs
-                  else if (isThinking && typeof parsed.content === 'string') {
-                    contentDelta = parsed.content;
-                  }
-                  // Handle explicit empty content delta (but don't consider it empty if it's an empty string)
-                  else if (parsed.choices?.[0]?.delta && 'content' in parsed.choices[0].delta && parsed.choices[0].delta.content === null) {
-                    emptyChunkCount++;
-                    console.log('[Stream] Empty content delta received');
-                  }
-                  // Handle the case where we get an empty token (valid for streaming!)
-                  else if ('token' in parsed && parsed.token === '') {
-                    contentDelta = '';
-                    console.log('[Stream] Empty token received');
-                  }
-                  else if (parsed.error) { 
-                    throw new Error(parsed.error.message || "Error from stream"); 
-                  }
-                  // If we have a finish_reason, it might be a final empty message
-                  else if (parsed.finish_reason || (parsed.choices?.[0]?.finish_reason)) {
-                    console.log('[Stream] Received finish_reason');
-                    // Just continue - don't treat as content or error
-                  }
-                  else {
-                    // We got JSON but couldn't extract content in a known format
-                    // This is a common case when APIs send metadata or system messages
-                    console.log(`[Stream] Unrecognized JSON format: ${JSON.stringify(parsed).substring(0, 100)}...`);
-                  }
-                } catch (e) {
-                  // Don't crash on parse error - log it and continue
-                  console.warn('[Stream] Failed to parse JSON data line:', line, e);
-                  
-                  // If it's not valid JSON, but could be raw text, use it directly
-                  if (typeof jsonData === 'string' && jsonData.trim().length > 0) {
-                    contentDelta = jsonData.trim();
-                    console.log(`[Stream] Using raw data as content: "${contentDelta.substring(0, 20)}..."`);
-                  }
-                }
-              }
+        let accumulatedContent = '';
+        let receivedChunks = 0;
+        for await (const chunk of PromptHandler.streamResponse(response)) {
+            if (!currentGenerationRef.current || currentGenerationRef.current.signal.aborted) {
+              throw new DOMException('Aborted by user', 'AbortError');
+            }
+            resetStreamTimeout(); // Reset inactivity timer on receiving data
+            accumulatedContent += chunk;
+            receivedChunks++;
+            if (isThinking) {
+                updateThinkingMessageContent(messageId, chunk);
             } else {
-               // Handle lines that are NOT SSE (don't start with 'data: ')
-               try {
-                 const parsed = JSON.parse(line);
-                 if (typeof parsed.token === 'string') {
-                   contentDelta = parsed.token;
-                 } else if (typeof parsed.content_delta === 'string') {
-                   contentDelta = parsed.content_delta;
-                 } else if (isThinking && typeof parsed.content === 'string') {
-                   contentDelta = parsed.content;
-                 } else if (parsed.error) {
-                   throw new Error(parsed.error.message || "Error from plain JSON stream");
-                 }
-               } catch (e) {
-                 // Plain text might be sent directly
-                 // This is rare but can happen with some APIs
-               }
+                updateGeneratingMessageContent(messageId, chunk);
             }
-
-            // Process any extracted content
-            if (contentDelta !== null) {
-               if (!contentStarted) {
-                 console.log('[Stream] First content chunk received:', contentDelta.substring(0, 50) + (contentDelta.length > 50 ? '...' : ''));
-                 contentStarted = true;
-               }
-               
-               accumulatedContent += contentDelta;
-               buffer += contentDelta;
-               
-               if (isThinking) {
-                 // Update thinking message immediately (no buffering needed)
-                 updateThinkingMessageContent(messageId, contentDelta);
-               }
-            }
-
-            if (isDoneSignal) {
-              done = true;
-              break; // Exit inner loop once DONE is received
-            }
-          } // End for loop over lines
-        } // End if(value)
-        
-        // Force update UI buffer for non-thinking messages
-        if (buffer.length > 0 && !isThinking) {
-          updateUIBuffer();
         }
-        
-        if (done) break; // Exit outer loop if done
-      } // End while loop
-      
-      // Log streaming statistics for debugging
-      console.log(`[Stream] Streaming complete. Chunks: ${receivedChunks}, Empty chunks: ${emptyChunkCount}, Total content length: ${accumulatedContent.length}`);
-      
-      // Process any remaining buffer content
-      if (buffer.length > 0) {
-        updateUIBuffer();
-      }
-      
-      onComplete(accumulatedContent, receivedChunks);
+        onComplete(accumulatedContent, receivedChunks);
     } catch (err) {
-      console.error('[Stream] Stream error:', err);
-      onError(err as Error);
-    } finally {
-      if (bufferTimer) clearInterval(bufferTimer);
+        onError(err instanceof Error ? err : new Error('Unknown stream processing error'));
     }
-  }, [updateGeneratingMessageContent, updateThinkingMessageContent, resetStreamTimeout]);
+  }, [resetStreamTimeout, updateGeneratingMessageContent, updateThinkingMessageContent]); // Dependencies for stream processing
 
-  // --- Generation Functions ---
-  // Helper to get context messages, ensuring full Message type for formatChatHistory
-  const getContextMessages = (currentState: EnhancedChatState, excludeId?: string): Message[] => {
-      return currentState.messages
-        .filter(msg => msg.role !== 'thinking' && msg.id !== excludeId)
-        .map((msg): Message => { // Use full msg object and explicitly type the return
-           let finalContent = msg.content;
-           // Use the current variation's content if available
-           if (msg.variations && msg.variations.length > 0 && typeof msg.currentVariation === 'number' && msg.variations[msg.currentVariation]) {
-             finalContent = msg.variations[msg.currentVariation];
-           }
-           const cleanContent = PromptHandler.stripHtmlTags(finalContent);
+  // --- Context Message Retrieval ---
+  const getContextMessages = useCallback((currentState: EnhancedChatState, excludeId?: string): Message[] => {
+    // Simple context: last N messages, excluding 'thinking' and the excluded ID
+    const MAX_CONTEXT_MESSAGES = 20; // Example: Adjust as needed
+    return currentState.messages
+      .filter(msg => msg.role !== 'thinking' && msg.id !== excludeId)
+      .slice(-MAX_CONTEXT_MESSAGES)
+      .map((msg): Message => { // Use full msg object and explicitly type the return
+        // Ensure variations and currentVariation are handled correctly
+        const content = (msg.variations && typeof msg.currentVariation === 'number')
+          ? msg.variations[msg.currentVariation]
+          : msg.content;
+        return {
+          ...msg,
+          content: PromptHandler.stripHtmlTags(content || ''), // Ensure content is always a string and stripped
+          // Omit variations/currentVariation from context if desired, or keep them
+           variations: undefined,
+           currentVariation: undefined,
+        };
+      });
+  }, []); // No dependencies needed for this simple version
 
-           // Ensure only valid roles are passed through
-           let validRole: 'user' | 'assistant' | 'system';
-           if (msg.role === 'user') validRole = 'user';
-           else if (msg.role === 'assistant') validRole = 'assistant';
-           else validRole = 'system'; // Treat original 'system' messages as system
-
-           // Return object matching the full Message structure
-           return {
-               id: msg.id,
-               role: validRole,
-               content: cleanContent,
-               timestamp: msg.timestamp,
-               variations: msg.variations,
-               currentVariation: msg.currentVariation,
-               aborted: msg.aborted,
-               isFirst: msg.isFirst,
-               order: msg.order,
-               parentMessageId: msg.parentMessageId,
-               status: msg.status
-            };
-        });
-  };
-
-
+  // --- Reasoning Generation ---
   const generateReasoning = useCallback(async (userInput: string, baseContextMessages: Message[]): Promise<string | null> => {
-      // Use effectiveCharacterData for checks and logic
-      if (!state.reasoningSettings.enabled || !effectiveCharacterData || !apiConfig) return null;
-      console.log("Starting reasoning generation...");
-      const thinkingMessage = createThinkingMessage();
-      setState(prev => ({ ...prev, messages: [...prev.messages, thinkingMessage], isGenerating: true, generatingId: thinkingMessage.id }));
-      resetStreamTimeout(); // Start/reset timeout for reasoning
+    // Ensure reasoning is enabled and we have necessary data (use globalApiConfig)
+    if (!state.reasoningSettings.enabled || !effectiveCharacterData || !globalApiConfig) return null;
 
-      try {
-          const formattedAPIConfig = prepareAPIConfig(apiConfig);
-          const template = PromptHandler.getTemplate(formattedAPIConfig.templateId);
-          const memory = PromptHandler.createMemoryContext(effectiveCharacterData, template);
-          const stopSequences = PromptHandler.getStopSequences(template, effectiveCharacterData.data?.name || 'Character');
-          const reasoningInstructions = (state.reasoningSettings.instructions || DEFAULT_REASONING_SETTINGS.instructions || '')
-              .replace(/\{\{char\}\}/g, effectiveCharacterData.data?.name || 'Character')
-              .replace(/\{\{user\}\}/g, state.currentUser?.name || 'User');
-          const reasoningHistory = PromptHandler.formatChatHistory(baseContextMessages, effectiveCharacterData.data?.name || 'Character', formattedAPIConfig.templateId);
-          const reasoningUserPrompt = PromptHandler.formatPromptWithTemplate("", userInput, effectiveCharacterData.data?.name || 'Character', template);
-          const reasoningSystemInstruction = `<thinking_instructions>${reasoningInstructions}</thinking_instructions>`;
-          const requestBody = {
-              api_config: formattedAPIConfig,
-              generation_params: {
-                  prompt: `${reasoningHistory}\n${reasoningUserPrompt}\n${reasoningSystemInstruction}`,
-                  memory: memory, stop_sequence: [...stopSequences, '</thinking>']
-              }
-          };
-          const abortController = new AbortController();
-          currentGenerationRef.current = abortController;
-          const response = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody), signal: abortController.signal });
-          if (!response.ok) { const errorText = await response.text(); throw new Error(`Reasoning failed: ${response.status} ${errorText || "(No details)"}`); }
-
-          let finalReasoningContent: string | null = null;
-          await processStream(
-              response, thinkingMessage.id, true, // isThinking = true
-              (finalContent, receivedChunks) => {
-                  finalReasoningContent = finalContent;
-                  // Note: setGenerationComplete removes the thinking message and clears timeouts
-                  setGenerationComplete(thinkingMessage.id, finalContent, 'reasoning_complete', receivedChunks);
-              },
-              (error) => {
-                clearStreamTimeout(); // Clear timeout on reasoning error
-                handleGenerationError(error, thinkingMessage.id, 'reasoning');
-              }
-          );
-          return finalReasoningContent;
-      } catch (err) {
-          handleGenerationError(err, thinkingMessage.id, 'reasoning');
-          return null;
-      } finally {
-           // Timeouts are cleared within setGenerationComplete or handleGenerationError
-           setState(prev => prev.generatingId === thinkingMessage.id ? {...prev, isGenerating: false, generatingId: null} : prev);
-          currentGenerationRef.current = null;
-      }
-  }, [effectiveCharacterData, state.reasoningSettings, state.currentUser, state.messages, apiConfig, handleGenerationError, prepareAPIConfig, processStream, setGenerationComplete, resetStreamTimeout, clearStreamTimeout]); // Use effectiveCharacterData, add timeout fns
-
-  const generateResponse = useCallback(async (userInput: string) => {
-    // Use effectiveCharacterData for checks, allow generation even if original characterData is null
-    if (!effectiveCharacterData || state.isGenerating || !apiConfig) return;
-    // Only allow /new command if it's a real character chat
-    if (userInput === '/new' && !isGenericAssistant) { handleNewChat(); return; }
-
-    // Check if this is a system message that should be hidden from the chat
-    const isSystemMessage = userInput.startsWith('__system__:');
-    const cleanedInput = isSystemMessage ? userInput.replace('__system__:', '').trim() : userInput;
-
-    // Only create a visible user message if it's not a system message
-    const userMessage = isSystemMessage ? null : createUserMessage(cleanedInput);
-    const assistantMessage = createAssistantMessage();
-    const baseContextMessages = getContextMessages(state); // Context before user message
-
-    // If it's a system message, we still want to send it to the LLM, but not display it to the user
-    const systemMessage = isSystemMessage ? { 
-      id: generateUUID(),
-      role: 'system' as const,  // Use 'as const' to narrow the type to a literal
-      content: cleanedInput,
-      timestamp: Date.now(),
-      status: 'complete' as Message['status']
-    } : null;
-
-    // Include system message in context if present, but don't display it in the UI
-    const contextMessages = systemMessage 
-      ? [...baseContextMessages, systemMessage] 
-      : userMessage ? [...baseContextMessages, userMessage] : baseContextMessages;
-
-    // Only show assistant message in UI, not the system message
-    setGeneratingStart(userMessage, assistantMessage);
-    resetStreamTimeout(); // Start/reset timeout for main response
-    
-    // Only append user message to storage if it's a real character and not a system message
-    if (!isGenericAssistant && userMessage) await appendMessage(userMessage);
-    
-    // REMOVED: Save immediately BEFORE streaming - this was causing the issue
-    // if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); return prev; });
+    const reasoningMessage = createThinkingMessage();
+    // Add thinking message immediately, but don't include it in the context for its own generation
+    setState(prev => ({ ...prev, messages: [...prev.messages, reasoningMessage], isGenerating: true, generatingId: reasoningMessage.id, error: null }));
 
     try {
-      let reasoningResult: string | null = null;
-      if (state.reasoningSettings.enabled) {
-        reasoningResult = await generateReasoning(cleanedInput, baseContextMessages);
-         if (reasoningResult === null && state.error && !state.isGenerating) { return; } // Stop if reasoning failed
-      }
+      const formattedAPIConfig = prepareAPIConfig(globalApiConfig); // Use global config for reasoning
+      const reasoningApiConfig = { ...formattedAPIConfig, generation_settings: { ...formattedAPIConfig.generation_settings, max_length: 512 } }; // Increase max length for reasoning
 
-      // Ensure still generating main response
-      setState(prev => ({...prev, isGenerating: true, generatingId: assistantMessage.id}));
-
-      const formattedAPIConfig = prepareAPIConfig(apiConfig);
-      const template = PromptHandler.getTemplate(formattedAPIConfig.templateId);
+      // Construct the prompt specifically for reasoning
+      const template = PromptHandler.getTemplate(reasoningApiConfig.templateId);
       const memory = PromptHandler.createMemoryContext(effectiveCharacterData, template);
-      const stopSequences = PromptHandler.getStopSequences(template, effectiveCharacterData.data?.name || 'Character');
+      // Filter baseContextMessages to ensure only valid roles are passed
+      const filteredBaseContext = baseContextMessages.filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      const history = PromptHandler.formatChatHistory(filteredBaseContext, effectiveCharacterData.data.name || 'Character', reasoningApiConfig.templateId);
+      // Combine memory, history, user input, and reasoning instructions
+      const reasoningPrompt = `${memory}\n${history}\n${PromptHandler.replaceVariables(template?.userFormat || 'User: {{content}}', { content: userInput })}\n${state.reasoningSettings.instructions || ''}`;
 
-      // Prepare final context potentially reasoning
-      let finalContextMessages: Message[] = contextMessages;
-      if (reasoningResult && state.reasoningSettings.visible) {
-          // Create a temporary system message for reasoning
-          const reasoningSystemMessage: Message = { role: 'system', content: `<thinking>${reasoningResult}</thinking>`, id: generateUUID(), timestamp: Date.now(), status: 'complete' }; // Added status
-          finalContextMessages = [...contextMessages, reasoningSystemMessage];
+      currentGenerationRef.current = new AbortController();
+      // Use the generic generateChatResponse, passing the constructed prompt and reasoning-specific config
+      const response = await PromptHandler.generateChatResponse(
+          effectiveCharacterData,
+          reasoningPrompt, // Pass the fully constructed reasoning prompt
+          [], // Pass empty contextMessages as history is already in the prompt
+          reasoningApiConfig,
+          currentGenerationRef.current.signal
+      );
+
+      let finalReasoning: string | null = null;
+      await processStream(
+        response, reasoningMessage.id, true, // isThinking = true
+        (finalContent, receivedChunks) => {
+          finalReasoning = finalContent;
+          // Update the thinking message content as it streams
+          setState(prev => ({
+            ...prev,
+            messages: prev.messages.map(msg => msg.id === reasoningMessage.id ? { ...msg, content: finalContent, status: 'complete' as Message['status'] } : msg),
+            // Keep generatingId until main response starts or error occurs
+          }));
+          console.log(`Reasoning generation complete (${receivedChunks} chunks).`);
+        },
+        (error) => {
+          handleGenerationError(error, reasoningMessage.id, 'reasoning');
+          finalReasoning = null; // Ensure null on error
+        }
+      );
+      return finalReasoning; // Return the generated reasoning text
+    } catch (err) {
+      handleGenerationError(err, reasoningMessage.id, 'reasoning'); // Use reasoningMessage.id
+      return null; // Return null on error
+    }
+    // Update dependencies: use globalApiConfig
+  }, [effectiveCharacterData, state.reasoningSettings, state.currentUser, state.messages, globalApiConfig, handleGenerationError, prepareAPIConfig, processStream, stopGeneration]); // Removed unused dependencies, added stopGeneration
+
+  // --- Main Response Generation ---
+  const generateResponse = useCallback(async (userInput: string) => { // Removed apiId parameter
+    if (state.isGenerating) {
+      console.warn("Generation already in progress.");
+      return;
+    }
+    // Use the globally active API config
+    if (!globalApiConfig || !globalApiConfig.enabled) {
+        handleGenerationError(new Error("No active API configuration is enabled."), null, 'setup');
+        return;
+    }
+    clearError(); // Clear previous errors
+
+    const preparedApiConfig = prepareAPIConfig(globalApiConfig); // Prepare the global config
+
+    const userMessage = createUserMessage(userInput);
+    const assistantMessage = createAssistantMessage(); // Start with empty assistant message
+
+    // Add user message immediately, start generation state with assistant message
+    setGeneratingStart(userMessage, assistantMessage);
+    // Save immediately after adding user message if auto-save is on
+    if (!isGenericAssistant && autoSaveEnabled.current) {
+        appendMessageDirect(userMessage); // Use direct append for user message
+    }
+
+    try {
+      // Get context *before* reasoning, including the new user message
+      const contextMessagesForReasoning = getContextMessages(state, assistantMessage.id);
+
+      // --- Reasoning Step (Optional) ---
+      let reasoningText: string | null = null;
+      if (state.reasoningSettings.enabled) {
+        // Pass the actual user input and the context *before* the user message was added
+        reasoningText = await generateReasoning(userInput, contextMessagesForReasoning.slice(0, -1)); // Exclude the latest user message from reasoning context
+        if (reasoningText === null && state.error) {
+             console.log("Reasoning failed or was aborted, stopping main generation.");
+             setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
+             return;
+        }
+         // Update generating ID back to the assistant message before main generation
+         setState(prev => ({ ...prev, generatingId: assistantMessage.id }));
       }
 
-      const requestBody = {
-        api_config: formattedAPIConfig,
-        generation_params: {
-          prompt: PromptHandler.formatPromptWithTemplate( PromptHandler.formatChatHistory(finalContextMessages, effectiveCharacterData.data?.name || 'Character', formattedAPIConfig.templateId), "", effectiveCharacterData.data?.name || 'Character', template ),
-          memory: memory, stop_sequence: stopSequences, character_data: effectiveCharacterData, chat_history: finalContextMessages, current_message: ""
-        }
-      };
-      const contextWindow = { type: 'generation_start', timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data?.name || 'Unknown', messageId: assistantMessage.id, promptUsed: requestBody.generation_params.prompt, memoryUsed: memory, stopSequencesUsed: stopSequences, contextMessageCount: finalContextMessages.length, config: formattedAPIConfig, reasoningProvided: reasoningResult !== null };
-      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+      // --- Prompt Construction & Context Window ---
+      // Get context *including* the new user message for the main prompt
+      const contextMessagesForPrompt = getContextMessages(state, assistantMessage.id);
+      // Filter context messages *before* passing to formatPromptWithContextMessages
+      const filteredContextForPrompt = contextMessagesForPrompt.filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      const finalPrompt = PromptHandler.formatPromptWithContextMessages(
+          effectiveCharacterData,
+          userInput, // Pass the current user input here
+          filteredContextForPrompt, // Pass filtered context
+          state.currentUser?.name || 'User', // Pass current user's name
+          preparedApiConfig.templateId
+      );
 
-      const abortController = new AbortController();
-      currentGenerationRef.current = abortController;
-      const response = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody), signal: abortController.signal });
-      if (!response.ok) { const errorText = await response.text(); throw new Error(`Generation failed: ${response.status} ${errorText || "(No details)"}`); }
+      const contextWindow = {
+        type: 'generation_start', timestamp: new Date().toISOString(),
+        characterName: effectiveCharacterData.data?.name || 'Unknown',
+        messageId: assistantMessage.id, promptUsed: finalPrompt, // Log the fully formatted prompt
+        contextMessageCount: filteredContextForPrompt.length, config: preparedApiConfig,
+        reasoningUsed: reasoningText
+      };
+      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow)); // Persist context window info
+
+      // --- API Call ---
+      currentGenerationRef.current = new AbortController();
+      // Use the static generateChatResponse method
+      // Filter context messages *before* passing to generateChatResponse
+      const filteredContextForAPI = contextMessagesForPrompt.filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      const response = await PromptHandler.generateChatResponse(
+          effectiveCharacterData,
+          userInput, // Pass the raw user input again, backend/handler reconstructs prompt
+          filteredContextForAPI, // Pass filtered context
+          preparedApiConfig, // Pass the chosen, prepared config
+          currentGenerationRef.current.signal
+      );
 
       await processStream(
         response, assistantMessage.id, false, // isThinking = false
         (finalContent, receivedChunks) => {
-          // Use accumulatedContent for assistant
           setGenerationComplete(assistantMessage.id, finalContent, 'generation_complete', receivedChunks);
-          
-          // MOVED: Save/append AFTER streaming is complete - fixing the issue
+          // Save/append after successful generation only if it's a real character
           if (!isGenericAssistant) {
-            setState(prev => { 
-              // Get the updated message with finalContent from current state
-              const msg = prev.messages.find(m => m.id === assistantMessage.id); 
-              if (msg) {
-                // First save the complete chat with the fully streamed message
-                saveChat(prev.messages, prev.currentUser);
-                // Then append/update that specific message in storage
-                appendMessageDirect(msg); // Use direct (non-debounced) version
-              }
-              return prev;
+            // Use setState callback to get the most up-to-date messages after completion
+            setState(prev => {
+              const finalStateMessages = prev.messages;
+              saveChat(finalStateMessages, prev.currentUser); // Save the complete chat
+              const finalAssistantMsg = finalStateMessages.find(m => m.id === assistantMessage.id);
+              if (finalAssistantMsg) appendMessage(finalAssistantMsg); // Debounced append for the final assistant message
+              return prev; // No state change needed here, just accessing latest state
             });
           }
         },
-        (error) => { 
-          handleGenerationError(error, assistantMessage.id); 
-          // Only save if there's an error, but still AFTER streaming attempt
-          if (!isGenericAssistant) setState(prev => { 
-            saveChat(prev.messages, prev.currentUser); 
-            const msg = prev.messages.find(m => m.id === assistantMessage.id); 
-            if (msg) appendMessageDirect(msg);
-            return prev; 
-          }); 
-        }
-      );
-    } catch (err) {
-      if (!state.error) handleGenerationError(err, assistantMessage.id);
-      // Only save/append if it's a real character
-      if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === assistantMessage.id); if (msg) appendMessageDirect(msg); return prev; });
-    } finally {
-      currentGenerationRef.current = null;
-      setState(prev => prev.generatingId === assistantMessage.id ? {...prev, isGenerating: false, generatingId: null} : prev);
-    }
-  }, [effectiveCharacterData, isGenericAssistant, state.isGenerating, state.messages, state.reasoningSettings, state.currentUser, apiConfig, handleGenerationError, saveChat, appendMessage, appendMessageDirect, prepareAPIConfig, processStream, generateReasoning, resetStreamTimeout]);
-
-  const regenerateMessage = useCallback(async (messageToRegenerate: Message) => {
-    // Use effectiveCharacterData for checks
-    if (!effectiveCharacterData || state.isGenerating || !apiConfig || messageToRegenerate.role !== 'assistant') return;
-    const messageId = messageToRegenerate.id;
-    const messageIndex = state.messages.findIndex(msg => msg.id === messageId);
-    if (messageIndex < 1) { console.error("Cannot regenerate: No preceding message."); return; }
-    let precedingUserMessage: Message | null = null;
-    for (let i = messageIndex - 1; i >= 0; i--) { if (state.messages[i].role === 'user') { precedingUserMessage = state.messages[i]; break; } }
-    if (!precedingUserMessage) { console.error("Cannot regenerate: No preceding user message."); return; }
-    // const promptText = htmlToText(precedingUserMessage.content); // Not used directly
-
-    setState(prev => ({ ...prev, isGenerating: true, generatingId: messageId, error: null, messages: prev.messages.map(msg => msg.id === messageId ? { ...msg, content: '', status: 'streaming' as Message['status'] } : msg) }));
-
-    try {
-      const formattedAPIConfig = prepareAPIConfig(apiConfig);
-      const template = PromptHandler.getTemplate(formattedAPIConfig.templateId);
-      const memory = PromptHandler.createMemoryContext(effectiveCharacterData, template);
-      const stopSequences = PromptHandler.getStopSequences(template, effectiveCharacterData.data?.name || 'Character');
-      // Context includes messages *up to and including* the preceding user message
-      const contextMessages = getContextMessages(state, messageId).slice(0, state.messages.findIndex(msg => msg.id === precedingUserMessage!.id) + 1);
-      const requestBody = {
-        api_config: formattedAPIConfig,
-        generation_params: {
-          prompt: PromptHandler.formatPromptWithTemplate( PromptHandler.formatChatHistory(contextMessages, effectiveCharacterData.data?.name || 'Character', formattedAPIConfig.templateId), "", effectiveCharacterData.data?.name || 'Character', template ),
-          memory: memory, stop_sequence: stopSequences, character_data: effectiveCharacterData, chat_history: contextMessages, current_message: ""
-        }
-      };
-      const contextWindow = { type: 'regeneration_start', timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data?.name || 'Unknown', messageId: messageId, promptUsed: requestBody.generation_params.prompt, memoryUsed: memory, stopSequencesUsed: stopSequences, contextMessageCount: contextMessages.length, config: formattedAPIConfig };
-      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
-      const abortController = new AbortController();
-      currentGenerationRef.current = abortController;
-      const response = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody), signal: abortController.signal });
-      if (!response.ok) { const errorText = await response.text(); throw new Error(`Generation failed: ${response.status} ${errorText || "(No details)"}`); }
-
-      // let accumulatedContent = ''; // Removed
-      await processStream(
-        response, messageId, false, // isThinking = false
-        (finalContent, receivedChunks) => {
-          // Add validation for empty content
-          if (!finalContent || finalContent.trim() === '') {
-            console.warn("Received empty content from API during regeneration");
-            // Use original content or a fallback message
-            const fallbackContent = messageToRegenerate.content || "I'm sorry, I couldn't generate a response. Please try again.";
-            setGenerationComplete(messageId, fallbackContent, 'regeneration_failed_empty', receivedChunks, messageToRegenerate.content);
-            handleGenerationError(new Error("Received empty response from API"), messageId, 'regeneration');
-          } else {
-            // Normal completion with content
-            setGenerationComplete(messageId, finalContent, 'regeneration_complete', receivedChunks, messageToRegenerate.content);
+        (error) => {
+          handleGenerationError(error, assistantMessage.id);
+          // Save/append even on error if it's a real character (to save the partial message/error state)
+          if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const errorMsg = prev.messages.find(m => m.id === assistantMessage.id);
+                if (errorMsg) appendMessage(errorMsg);
+                return prev;
+             });
           }
-          
-          // Only save/append if it's a real character
-          if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
-        },
-        (error) => { handleGenerationError(error, messageId, 'regeneration'); if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; }); }
+        }
       );
     } catch (err) {
-      if (!state.error) handleGenerationError(err, messageId, 'regeneration');
-      // Only save/append if it's a real character
-      if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
-    } finally {
-      setState(prev => prev.generatingId === messageId ? {...prev, isGenerating: false, generatingId: null} : prev);
-      currentGenerationRef.current = null;
+      handleGenerationError(err, assistantMessage.id);
+       if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const errorMsg = prev.messages.find(m => m.id === assistantMessage.id);
+                if (errorMsg) appendMessage(errorMsg);
+                return prev;
+             });
+        }
     }
-  }, [effectiveCharacterData, isGenericAssistant, state.isGenerating, state.messages, state.currentUser, apiConfig, handleGenerationError, saveChat, appendMessage, prepareAPIConfig, processStream]);
+    // Update dependencies: removed settings.apis, activeApiId
+  }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, generateReasoning, clearError, appendMessage, appendMessageDirect, resetStreamTimeout, stopGeneration, isGenericAssistant, processStream]);
 
-  const generateVariation = useCallback(async (messageToVary: Message) => {
-    // Use effectiveCharacterData for checks
-    if (!effectiveCharacterData || state.isGenerating || !apiConfig || messageToVary.role !== 'assistant') return;
-    const messageId = messageToVary.id;
-    const originalContent = messageToVary.content; // Store original content for setGenerationComplete
-    const messageIndex = state.messages.findIndex(msg => msg.id === messageId);
-    if (messageIndex < 1) { console.error("Cannot generate variation: No preceding message."); return; }
-    let precedingUserMessage: Message | null = null;
-    for (let i = messageIndex - 1; i >= 0; i--) { if (state.messages[i].role === 'user') { precedingUserMessage = state.messages[i]; break; } }
-    if (!precedingUserMessage) { console.error("Cannot generate variation: No preceding user message."); return; }
-    // const promptText = htmlToText(precedingUserMessage.content); // Not used
+  // --- Message Regeneration ---
+  const regenerateMessage = useCallback(async (messageToRegenerate: Message) => {
+    if (state.isGenerating) {
+      console.warn("Regeneration already in progress.");
+      return;
+    }
+    // For regeneration/variation, always use the globally active API for simplicity for now
+    if (!globalApiConfig || !globalApiConfig.enabled) {
+       handleGenerationError(new Error("No active API configuration is enabled for regeneration."), messageToRegenerate.id, 'regeneration_setup');
+       return;
+    }
+    clearError();
+    const preparedApiConfig = prepareAPIConfig(globalApiConfig); // Use global active config
 
-    setState(prev => ({ ...prev, isGenerating: true, generatingId: messageId, error: null, messages: prev.messages.map(msg => msg.id === messageId ? { ...msg, status: 'generating_variation' as Message['status'] } : msg) }));
+    const messageIndex = state.messages.findIndex(msg => msg.id === messageToRegenerate.id);
+    if (messageIndex === -1 || messageIndex === 0) {
+      console.error("Cannot regenerate: Message not found or is the first message.");
+      return;
+    }
+
+    const precedingUserMessage = state.messages[messageIndex - 1];
+    if (precedingUserMessage.role !== 'user') {
+      console.error("Cannot regenerate: Preceding message is not from the user.");
+      return;
+    }
+
+    // Set generating state for the message being regenerated
+    setState(prev => ({
+      ...prev,
+      messages: prev.messages.map(msg => msg.id === messageToRegenerate.id ? { ...msg, status: 'streaming' as Message['status'], content: '' } : msg), // Clear content for regen
+      isGenerating: true, generatingId: messageToRegenerate.id, error: null
+    }));
 
     try {
-      const formattedAPIConfig = prepareAPIConfig(apiConfig);
-      const template = PromptHandler.getTemplate(formattedAPIConfig.templateId);
-      const memory = PromptHandler.createMemoryContext(effectiveCharacterData, template);
-      const stopSequences = PromptHandler.getStopSequences(template, effectiveCharacterData.data?.name || 'Character');
-      // Context includes messages *up to and including* the preceding user message
-      const contextMessages = getContextMessages(state, messageId).slice(0, state.messages.findIndex(msg => msg.id === precedingUserMessage!.id) + 1);
+      // Context includes messages *up to* the preceding user message
+      const contextMessages = getContextMessages(state, messageToRegenerate.id).slice(0, messageIndex -1); // Exclude the message itself and get history before it
 
-      // console.log("Frontend: Preparing to fetch /api/generate for variation..."); // Reduced logging
-      const requestBody = {
-        api_config: formattedAPIConfig,
-        generation_params: {
-          prompt: PromptHandler.formatPromptWithTemplate( PromptHandler.formatChatHistory(contextMessages, effectiveCharacterData.data?.name || 'Character', formattedAPIConfig.templateId), "", effectiveCharacterData.data?.name || 'Character', template ),
-          memory: memory, stop_sequence: stopSequences, character_data: effectiveCharacterData, chat_history: contextMessages, current_message: ""
-        }
+      // --- Reasoning Step (Optional, based on preceding user input) ---
+       let reasoningText: string | null = null;
+       if (state.reasoningSettings.enabled) {
+         // Pass the content of the preceding user message to generateReasoning
+         reasoningText = await generateReasoning(precedingUserMessage.content, contextMessages);
+         if (reasoningText === null && state.error) {
+             console.log("Reasoning failed or was aborted, stopping regeneration.");
+             setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
+             return;
+         }
+         setState(prev => ({ ...prev, generatingId: messageToRegenerate.id })); // Ensure generatingId is correct
+       }
+
+      // --- Prompt Construction & Context Window ---
+      // Filter context before passing
+      const filteredContext = contextMessages.filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      const finalPrompt = PromptHandler.formatPromptWithContextMessages(
+          effectiveCharacterData,
+          precedingUserMessage.content, // Prompt is the preceding user message
+          filteredContext, // History before the preceding user message
+          state.currentUser?.name || 'User', // Pass current user's name
+          preparedApiConfig.templateId
+      );
+
+      const contextWindow = {
+          type: 'regeneration_start', timestamp: new Date().toISOString(),
+          characterName: effectiveCharacterData.data?.name || 'Unknown',
+          messageId: messageToRegenerate.id, promptUsed: finalPrompt,
+          contextMessageCount: filteredContext.length, config: preparedApiConfig,
+          reasoningUsed: reasoningText
       };
-      const contextWindow = { type: 'variation_start', timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data?.name || 'Unknown', messageId: messageId, promptUsed: requestBody.generation_params.prompt, memoryUsed: memory, stopSequencesUsed: stopSequences, contextMessageCount: contextMessages.length, config: formattedAPIConfig };
       setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
 
-      // console.log("Frontend: Preparing to fetch /api/generate with body:", JSON.stringify(requestBody, null, 2)); // Reduced logging
+      // --- API Call ---
+      currentGenerationRef.current = new AbortController();
+      // Filter context before passing
+      const filteredContextForAPI = contextMessages.filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      const response = await PromptHandler.generateChatResponse(
+          effectiveCharacterData,
+          precedingUserMessage.content, // Pass preceding user message content
+          filteredContextForAPI,
+          preparedApiConfig,
+          currentGenerationRef.current.signal
+      );
 
-      const abortController = new AbortController();
-      currentGenerationRef.current = abortController;
-      const response = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody), signal: abortController.signal });
-      if (!response.ok) { const errorText = await response.text(); throw new Error(`Variation generation failed: ${response.status} ${errorText || "(No details)"}`); }
-
-      // let accumulatedContent = ''; // Removed
       await processStream(
-        response, messageId, false, // isThinking = false
+        response, messageToRegenerate.id, false, // isThinking = false
         (finalContent, receivedChunks) => {
-          // Use accumulatedContent (tokens) for assistant
-          setGenerationComplete(messageId, finalContent, 'variation_complete', receivedChunks, originalContent);
-          // Only save/append if it's a real character
-          if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
+          // Pass original content for variation tracking if available
+          const originalContent = messageToRegenerate.variations ? messageToRegenerate.variations[0] : messageToRegenerate.content;
+          setGenerationComplete(messageToRegenerate.id, finalContent, 'regeneration_complete', receivedChunks, originalContent);
+          // Save/append after successful regeneration only if it's a real character
+           if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const finalMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
+                if (finalMsg) appendMessage(finalMsg);
+                return prev;
+             });
+           }
         },
-        (error) => { handleGenerationError(error, messageId, 'variation'); if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; }); }
+        (error) => {
+          handleGenerationError(error, messageToRegenerate.id, 'regeneration');
+           if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
+                if (errorMsg) appendMessage(errorMsg);
+                return prev;
+             });
+           }
+        }
       );
     } catch (err) {
-      if (!state.error) handleGenerationError(err, messageId, 'variation');
-      // Only save/append if it's a real character
-      if (!isGenericAssistant) setState(prev => { saveChat(prev.messages, prev.currentUser); const msg = prev.messages.find(m => m.id === messageId); if (msg) appendMessage(msg); return prev; });
-    } finally {
-      setState(prev => prev.generatingId === messageId ? {...prev, isGenerating: false, generatingId: null} : prev);
-      currentGenerationRef.current = null;
+      handleGenerationError(err, messageToRegenerate.id, 'regeneration');
+       if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
+                if (errorMsg) appendMessage(errorMsg);
+                return prev;
+             });
+        }
     }
-  }, [effectiveCharacterData, isGenericAssistant, state.isGenerating, state.messages, state.currentUser, apiConfig, handleGenerationError, saveChat, appendMessage, prepareAPIConfig, processStream]); // Add dependencies
+    // Update dependencies: use globalApiConfig
+  }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, clearError, appendMessage, stopGeneration, generateReasoning, isGenericAssistant, processStream]); // Added processStream
+
+  // --- Message Variation Generation ---
+  const generateVariation = useCallback(async (messageToVary: Message) => {
+    if (state.isGenerating) {
+      console.warn("Variation generation already in progress.");
+      return;
+    }
+    // Use global active API for variations
+    if (!globalApiConfig || !globalApiConfig.enabled) {
+       handleGenerationError(new Error("No active API configuration is enabled for variation."), messageToVary.id, 'variation_setup');
+       return;
+    }
+    clearError();
+    const preparedApiConfig = prepareAPIConfig(globalApiConfig); // Use global active config
+
+    const messageIndex = state.messages.findIndex(msg => msg.id === messageToVary.id);
+     if (messageIndex === -1 || messageIndex === 0 || messageToVary.role !== 'assistant') {
+       console.error("Cannot generate variation: Message not found, is first message, or not an assistant message.");
+       return;
+     }
+
+    const precedingUserMessage = state.messages[messageIndex - 1];
+     if (precedingUserMessage.role !== 'user') {
+       console.error("Cannot generate variation: Preceding message is not from the user.");
+       return;
+     }
+
+    // Store original content for setGenerationComplete
+    const originalContent = messageToVary.variations ? messageToVary.variations[0] : messageToVary.content;
+
+    // Set generating state for the message being varied
+    setState(prev => ({
+      ...prev,
+      messages: prev.messages.map(msg => msg.id === messageToVary.id ? { ...msg, status: 'streaming' as Message['status'] } : msg), // Don't clear content for variation
+      isGenerating: true, generatingId: messageToVary.id, error: null
+    }));
+
+    try {
+      // Context includes messages *up to* the preceding user message
+      const contextMessages = getContextMessages(state, messageToVary.id).slice(0, messageIndex - 1); // Exclude the message itself
+
+       // --- Reasoning Step (Optional, based on preceding user input) ---
+       let reasoningText: string | null = null;
+       if (state.reasoningSettings.enabled) {
+         reasoningText = await generateReasoning(precedingUserMessage.content, contextMessages);
+          if (reasoningText === null && state.error) {
+             console.log("Reasoning failed or was aborted, stopping variation generation.");
+             setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
+             return;
+         }
+         setState(prev => ({ ...prev, generatingId: messageToVary.id })); // Ensure generatingId is correct
+       }
+
+      // --- Prompt Construction & Context Window ---
+      // Filter context before passing
+      const filteredContext = contextMessages.filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      const finalPrompt = PromptHandler.formatPromptWithContextMessages(
+          effectiveCharacterData,
+          precedingUserMessage.content, // Prompt is the preceding user message
+          filteredContext,
+          state.currentUser?.name || 'User', // Pass current user's name
+          preparedApiConfig.templateId
+      );
+
+       const contextWindow = {
+           type: 'variation_start', timestamp: new Date().toISOString(),
+           characterName: effectiveCharacterData.data?.name || 'Unknown',
+           messageId: messageToVary.id, promptUsed: finalPrompt,
+           contextMessageCount: filteredContext.length, config: preparedApiConfig,
+           reasoningUsed: reasoningText
+       };
+       setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+       localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
+
+      // --- API Call ---
+      currentGenerationRef.current = new AbortController();
+      // Filter context before passing
+      const filteredContextForAPI = contextMessages.filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      const response = await PromptHandler.generateChatResponse(
+          effectiveCharacterData,
+          precedingUserMessage.content, // Pass preceding user message content
+          filteredContextForAPI,
+          preparedApiConfig,
+          currentGenerationRef.current.signal
+      );
+
+      await processStream(
+        response, messageToVary.id, false, // isThinking = false
+        (finalContent, receivedChunks) => {
+          setGenerationComplete(messageToVary.id, finalContent, 'variation_complete', receivedChunks, originalContent);
+          // Save/append after successful variation only if it's a real character
+           if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const finalMsg = prev.messages.find(m => m.id === messageToVary.id);
+                if (finalMsg) appendMessage(finalMsg);
+                return prev;
+             });
+           }
+        },
+        (error) => {
+          handleGenerationError(error, messageToVary.id, 'variation');
+           if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const errorMsg = prev.messages.find(m => m.id === messageToVary.id);
+                if (errorMsg) appendMessage(errorMsg);
+                return prev;
+             });
+           }
+        }
+      );
+    } catch (err) {
+      handleGenerationError(err, messageToVary.id, 'variation');
+       if (!isGenericAssistant) {
+             setState(prev => {
+                saveChat(prev.messages, prev.currentUser);
+                const errorMsg = prev.messages.find(m => m.id === messageToVary.id);
+                if (errorMsg) appendMessage(errorMsg);
+                return prev;
+             });
+        }
+    }
+    // Update dependencies: use globalApiConfig
+  }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, clearError, appendMessage, stopGeneration, generateReasoning, isGenericAssistant, processStream]); // Added processStream
 
 
   // --- Message Management ---
@@ -898,364 +900,446 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
     });
   };
 
-  const stopGeneration = useCallback(() => {
-    if (!state.isGenerating || !currentGenerationRef.current) {
-      if (state.isGenerating) setState(prev => ({...prev, isGenerating: false, generatingId: null})); // Ensure state is reset if ref is missing
-      return;
-    }
-    console.log("Attempting to stop generation...");
-    currentGenerationRef.current.abort();
-    clearStreamTimeout(); // Clear timeout when manually stopping
-  }, [state.isGenerating, clearStreamTimeout]);
+  // stopGeneration moved earlier
 
   const setCurrentUser = (user: UserProfile | null) => {
-    ChatStorage.saveCurrentUser(user); // Correct method name
-    setState(prev => ({ ...prev, currentUser: user, lastContextWindow: { type: 'user_changed', timestamp: new Date().toISOString(), userName: user?.name || 'None', characterName: effectiveCharacterData?.data?.name || 'Unknown' } }));
+    setState(prev => ({ ...prev, currentUser: user }));
+    ChatStorage.saveCurrentUser(user); // Corrected method name
   };
 
-  const loadExistingChat = useCallback(async (chatId: string) => {
-    // Don't load if it's the generic assistant
-    if (isGenericAssistant) {
-      console.log("Skipping chat load for generic assistant.");
-      setState(prev => ({ ...prev, messages: [], isLoading: false, error: null }));
+  const generateNpcIntroduction = useCallback(async (
+    roomContext: string
+    // npcName is already available via effectiveCharacterData.data.name
+    // npcPersonality is available via effectiveCharacterData.data.personality
+    // userName is available via state.currentUser.name
+  ) => {
+    if (state.isGenerating) {
+      console.warn("Generation already in progress. Cannot generate NPC introduction.");
       return;
     }
+    if (!globalApiConfig || !globalApiConfig.enabled) {
+      handleGenerationError(new Error("No active API configuration is enabled for NPC introduction."), null, 'npc_intro_setup');
+      return;
+    }
+    if (!effectiveCharacterData?.data?.name) {
+      handleGenerationError(new Error("NPC character data not available for introduction."), null, 'npc_intro_setup');
+      return;
+    }
+    clearError();
 
-    console.log("Starting chat load with autoSaveEnabled:", autoSaveEnabled.current);
-    
-    // Temporarily disable autosave to prevent race conditions during load
-    const previousAutoSaveState = autoSaveEnabled.current;
-    autoSaveEnabled.current = false;
-    
+    const preparedApiConfig = prepareAPIConfig(globalApiConfig);
+    const assistantMessage = createAssistantMessage(); // Empty message to receive the stream
+
+    // Clear previous messages and set generating state for the new introduction
+    setState(prev => ({
+      ...prev,
+      messages: [], // Start fresh for NPC interaction
+      isGenerating: true,
+      generatingId: assistantMessage.id,
+      error: null,
+    }));
+
+    const npcName = effectiveCharacterData.data.name;
+    const npcPersonality = effectiveCharacterData.data.personality || "a mysterious figure";
+    const currentUserName = state.currentUser?.name || 'adventurer';
+    const currentRoomName = effectiveCharacterData.data.extensions?.world || 'this place'; // Get room from character if possible
+
+    const introInstructionalPrompt = `You are ${npcName}. Your personality is: ${npcPersonality}. You are currently in ${roomContext || currentRoomName}. ${currentUserName} has just appeared or is present. Introduce yourself to ${currentUserName} and react to their presence in a way that fits your personality and the current situation. This is your first interaction in this scene.`;
+
+    try {
+      const finalPromptForNpcIntro = PromptHandler.formatPromptWithContextMessages(
+        effectiveCharacterData,
+        introInstructionalPrompt,
+        [],
+        currentUserName,
+        preparedApiConfig.templateId
+      );
+
+      const contextWindow = {
+        type: 'npc_introduction_start', timestamp: new Date().toISOString(),
+        characterName: npcName,
+        messageId: assistantMessage.id, promptUsed: finalPromptForNpcIntro,
+        contextMessageCount: 0, config: preparedApiConfig,
+      };
+      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+
+      currentGenerationRef.current = new AbortController();
+      const response = await PromptHandler.generateChatResponse(
+        effectiveCharacterData,
+        introInstructionalPrompt,
+        [],
+        preparedApiConfig,
+        currentGenerationRef.current.signal
+      );
+
+      setState(prev => ({ ...prev, messages: [assistantMessage] }));
+
+      await processStream(
+        response, assistantMessage.id, false,
+        (finalContent, receivedChunks) => {
+          setGenerationComplete(assistantMessage.id, finalContent, 'npc_introduction_complete', receivedChunks);
+        },
+        (error) => {
+          handleGenerationError(error, assistantMessage.id, 'npc_introduction');
+        }
+      );
+    } catch (err) {
+      handleGenerationError(err, assistantMessage.id, 'npc_introduction');
+    }
+  }, [
+    state.isGenerating, state.currentUser,
+    globalApiConfig, effectiveCharacterData, handleGenerationError,
+    clearError, prepareAPIConfig, processStream,
+    setGenerationComplete,
+  ]);
+
+  // Define handleNewChat before loadExistingChat which might call it
+  const handleNewChat = useCallback(async () => {
+       if (!effectiveCharacterData?.data?.name) {
+           console.error("Cannot start new chat without character data.");
+           setState(prev => ({ ...prev, error: "Cannot start new chat: Character data missing."}));
+           return;
+       }
+       console.log("Handling new chat request...");
+       setState(prev => ({ ...prev, isLoading: true, error: null, messages: [], generatingId: null, isGenerating: false })); // Clear messages and stop generation
+       stopGeneration(); // Ensure any ongoing generation is stopped
+       currentGenerationRef.current = null; // Clear ref
+
+       try {
+           // Clear persisted context window for a truly new chat
+           localStorage.removeItem(CONTEXT_WINDOW_KEY);
+           setState(prev => ({ ...prev, lastContextWindow: null }));
+
+           // Create a new chat file on the backend
+           const result = await ChatStorage.createNewChat(effectiveCharacterData);
+           if (result?.success && result.chat_id) {
+               console.log(`New chat created with ID: ${result.chat_id}`);
+               // Generate the first message using the new chat ID context
+               const firstMessageContent = effectiveCharacterData.data?.first_mes || "Hello.";
+               const assistantMessage = createAssistantMessage(firstMessageContent, 'complete'); // Create first message as complete
+
+               // Update state with the first message
+               setState(prev => ({
+                   ...prev,
+                   messages: [assistantMessage],
+                   isLoading: false,
+                   lastContextWindow: { type: 'new_chat_created', chatId: result.chat_id, timestamp: Date.now(), characterName: effectiveCharacterData.data?.name },
+               }));
+               // Save this initial state
+               saveChat([assistantMessage], state.currentUser);
+               appendMessageDirect(assistantMessage); // Save the first message immediately
+
+               hasInitializedChat.current = true; // Mark chat as initialized
+               isInitialLoad.current = false; // Mark initial load as complete
+               autoSaveEnabled.current = true; // Enable auto-save
+
+               // Scroll to bottom after a short delay
+               setTimeout(() => {
+                   window.dispatchEvent(new Event('cardshark:scroll-to-bottom'));
+               }, 100);
+
+           } else {
+               throw new Error(result?.message || "Failed to create new chat file on backend.");
+           }
+       } catch (err) {
+           console.error('Error creating new chat:', err);
+           setState(prev => ({ ...prev, isLoading: false, error: err instanceof Error ? err.message : 'Failed to start new chat' }));
+       }
+   }, [effectiveCharacterData, stopGeneration, saveChat, appendMessageDirect, state.currentUser]); // Added dependencies
+
+  const loadExistingChat = useCallback(async (chatId: string) => {
+    if (!effectiveCharacterData?.data?.name) {
+      console.error("Cannot load chat without character data.");
+      return;
+    }
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      // Pass character data first to allow the backend to find the active chat
-      // Only use chatId as an explicit override if it doesn't match the character name
-      const characterName = effectiveCharacterData?.data?.name || '';
-      const shouldUseActiveChat = chatId === characterName;
-      
-      console.log(`Loading chat${shouldUseActiveChat ? " (using active chat)" : ` with ID ${chatId}`} for character: ${characterName}`);
-      
-      // If chatId equals character name, rely on backend active chat lookup
-      // Otherwise use the explicit chatId that was provided
-      const loadedChat = await ChatStorage.loadChat(
-        shouldUseActiveChat ? null : chatId, // Pass null if using active chat
-        effectiveCharacterData  // Always pass character data
-      );
-      
-      // Check if loading was successful and messages exist
-      if (loadedChat && loadedChat.success && Array.isArray(loadedChat.messages)) {
-        console.log(`Successfully loaded chat with ${loadedChat.messages.length} messages`);
-        
-        // Mark chat as initialized BEFORE setting state to prevent race conditions
-        hasInitializedChat.current = true;
-        
-        // Prepare messages with proper status
-        const messagesWithStatus = loadedChat.messages.map((msg: any) => ({ 
-          ...msg, 
-          status: 'complete' as Message['status'] 
+      // Correct parameter order for loadChat
+      const loadedChat = await ChatStorage.loadChat(chatId, effectiveCharacterData);
+      if (loadedChat && loadedChat.success) { // Check for success flag
+        // Ensure messages have status, variations, currentVariation
+        const messagesWithStatus = (loadedChat.messages || []).map((msg: any) => ({ // Handle case where messages might be missing
+          ...msg,
+          status: msg.status || 'complete',
+          variations: msg.variations || [msg.content],
+          currentVariation: msg.currentVariation ?? (msg.variations ? msg.variations.length - 1 : 0)
         }));
-        
-        // Update state with loaded messages
-        setState(prev => ({ 
-          ...prev, 
-          messages: messagesWithStatus, 
-          currentUser: loadedChat.metadata?.lastUser || prev.currentUser, 
-          lastContextWindow: { 
-            type: 'loaded_chat', 
-            timestamp: new Date().toISOString(), 
-            chatId: loadedChat.metadata?.chat_metadata?.chat_id || chatId, 
-            messageCount: messagesWithStatus.length 
-          } 
+
+        setState(prev => ({
+          ...prev,
+          messages: messagesWithStatus,
+          currentUser: loadedChat.currentUser || prev.currentUser, // Load user if available
+          isLoading: false,
+          lastContextWindow: { type: 'chat_loaded', chatId: chatId, timestamp: Date.now(), characterName: effectiveCharacterData.data?.name, messageCount: messagesWithStatus.length, backgroundSettings: loadedChat.backgroundSettings }, // Add background settings here
+          generatingId: null, // Ensure no generation is active
+          isGenerating: false,
         }));
-      } else if (effectiveCharacterData?.data?.first_mes) {
-        // Load first message if chat doesn't exist and character has one
-        console.log("No existing chat found, creating initial message from first_mes");
-        hasInitializedChat.current = true;
-        const firstMessage = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
-        
-        setState(prev => ({ 
-          ...prev, 
-          messages: [firstMessage], 
-          lastContextWindow: { 
-            type: 'initial_message', 
-            timestamp: new Date().toISOString(), 
-            firstMessage: firstMessage.content 
-          } 
-        }));
-        
-        // Now we can safely save the first message since we've marked chat as initialized
+        // Persist the loaded context window info
+        localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify({ type: 'chat_loaded', chatId: chatId, timestamp: Date.now(), characterName: effectiveCharacterData.data?.name, messageCount: messagesWithStatus.length }));
+        autoSaveEnabled.current = true; // Enable auto-save for loaded chats
+        hasInitializedChat.current = true; // Mark chat as initialized
+        isInitialLoad.current = false; // Mark initial load as complete
+        // Scroll to bottom after a short delay to allow rendering
         setTimeout(() => {
-          console.log("Saving initial message after slight delay");
-          saveChat([firstMessage], state.currentUser);
+           window.dispatchEvent(new Event('cardshark:scroll-to-bottom'));
         }, 100);
       } else {
-        // No chat found and no first message
-        console.log("No existing chat or first_mes content found");
-        hasInitializedChat.current = true;
-        setState(prev => ({ 
-          ...prev, 
-          messages: [], 
-          lastContextWindow: { 
-            type: 'no_chat_found', 
-            timestamp: new Date().toISOString(), 
-            chatId: chatId 
-          } 
-        }));
+        // If chat doesn't exist or loading failed, start a new one
+        console.warn(`Chat ${chatId} not found or failed to load, starting new chat. Error: ${loadedChat?.error}`);
+        setState(prev => ({ ...prev, isLoading: false, error: `Chat ${chatId} not found or failed to load.` }));
+        await handleNewChat(); // Call new chat handler (await it)
       }
     } catch (err) {
-      console.error("Error loading chat:", err);
-      setState(prev => ({ ...prev, error: err instanceof Error ? err.message : 'Failed to load chat' }));
-      hasInitializedChat.current = false; // Failed to initialize
-    } finally {
-      setState(prev => ({ ...prev, isLoading: false }));
-      
-      // Wait a moment before re-enabling autosave to ensure state updates are complete
-      setTimeout(() => {
-        console.log("Re-enabling autosave:", previousAutoSaveState && !isGenericAssistant);
-        autoSaveEnabled.current = previousAutoSaveState && !isGenericAssistant;
-      }, 500);
+      console.error('Error loading chat:', err);
+      setState(prev => ({ ...prev, isLoading: false, error: err instanceof Error ? err.message : 'Failed to load chat' }));
+       // Attempt to start a new chat on load failure
+       await handleNewChat(); // Await new chat creation
     }
-  }, [effectiveCharacterData, isGenericAssistant, state.currentUser, saveChat]);
+  }, [effectiveCharacterData, handleNewChat]); // Added handleNewChat dependency
 
-  const updateReasoningSettings = (settings: Partial<ReasoningSettings>) => {
-    try {
-      const newSettings = { ...state.reasoningSettings, ...settings };
-      localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(newSettings));
-      setState(prev => ({ ...prev, reasoningSettings: newSettings, lastContextWindow: { type: 'reasoning_settings_updated', timestamp: new Date().toISOString(), enabled: newSettings.enabled, visible: newSettings.visible, characterName: effectiveCharacterData?.data?.name || 'Unknown' } }));
-    } catch (err) {
-      console.error("Error saving reasoning settings:", err);
-      setState(prev => ({ ...prev, error: "Failed to save reasoning settings" }));
-    }
-  };
-
-   const clearError = useCallback(() => { setState(prev => ({ ...prev, error: null })); }, []);
-
-   const deleteMessage = (messageId: string) => {
+   const updateReasoningSettings = (settingsUpdate: Partial<ReasoningSettings>) => {
      setState(prev => {
-       const newMessages = prev.messages.filter(msg => msg.id !== messageId);
-       // Only save if it's a real character
-       if (!isGenericAssistant) saveChat(newMessages, prev.currentUser);
-       return { ...prev, messages: newMessages, lastContextWindow: { type: 'message_deleted', timestamp: new Date().toISOString(), messageId, remainingMessages: newMessages.length, characterName: effectiveCharacterData?.data?.name || 'Unknown' } };
+       const newSettings = { ...prev.reasoningSettings, ...settingsUpdate };
+       localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(newSettings));
+       return { ...prev, reasoningSettings: newSettings };
      });
    };
 
-   const updateMessage = (messageId: string, newContent: string, isStreamingUpdate?: boolean) => {
+   // clearError defined earlier
+
+   const deleteMessage = (messageId: string) => {
+     setState(prev => {
+       const messageToDelete = prev.messages.find(msg => msg.id === messageId);
+       const newMessages = prev.messages.filter(msg => msg.id !== messageId);
+       // If deleting the message being generated, stop generation
+       if (prev.generatingId === messageId) {
+         stopGeneration();
+       }
+       // Save chat after deletion if auto-save is enabled and it's a real character
+       if (!isGenericAssistant && autoSaveEnabled.current && messageToDelete) {
+         saveChat(newMessages, prev.currentUser); // Save the updated list
+         // NOTE: ChatStorage.deleteMessage does not exist, rely on saveChat overwriting
+       }
+       return { ...prev, messages: newMessages };
+     });
+   };
+
+   const updateMessage = (messageId: string, newContent: string, isStreamingUpdate: boolean = false) => {
      setState(prev => {
        let updatedMessage: Message | null = null;
        const newMessages = prev.messages.map(msg => {
          if (msg.id === messageId) {
-           updatedMessage = { ...msg, content: newContent, status: isStreamingUpdate ? 'streaming' : 'complete' };
+           updatedMessage = { ...msg, content: newContent };
+           // If it's a final update (not streaming), update variations
+           if (!isStreamingUpdate) {
+               const currentVariations = updatedMessage.variations || [updatedMessage.content]; // Start with current content if no variations
+               // Replace the current variation content, or add if index is out of bounds (shouldn't happen ideally)
+               const currentIdx = updatedMessage.currentVariation ?? currentVariations.length -1; // Default to last index
+               if (currentIdx >= 0 && currentIdx < currentVariations.length) {
+                   currentVariations[currentIdx] = newContent;
+                   updatedMessage.variations = [...currentVariations]; // Ensure new array instance
+               } else {
+                   // Fallback: add as new variation if index is weird
+                   updatedMessage.variations = [...currentVariations, newContent];
+                   updatedMessage.currentVariation = updatedMessage.variations.length - 1;
+               }
+           }
            return updatedMessage;
          }
          return msg;
        });
-
-       // Save immediately if not streaming AND it's a real character
-       if (!isStreamingUpdate && !isGenericAssistant && updatedMessage) {
+       // Save/append after update only if it's a real character and not a streaming update
+       if (updatedMessage && !isGenericAssistant && !isStreamingUpdate) {
          saveChat(newMessages, prev.currentUser);
-         appendMessage(updatedMessage); // Update storage
+         appendMessage(updatedMessage); // Use debounced append for final updates
        }
-       return { ...prev, messages: newMessages, lastContextWindow: { type: 'message_edited', timestamp: new Date().toISOString(), messageId, newContent: newContent, characterName: effectiveCharacterData?.data?.name || 'Unknown' } };
+       return { ...prev, messages: newMessages };
      });
    };
 
-   const handleNewChat = useCallback(async () => {
-    // Don't allow new chat if using generic assistant
-    if (isGenericAssistant || !effectiveCharacterData) {
-      console.warn("Cannot start a new chat session without a selected character.");
-      return;
-    }
-    console.log("Starting new chat...");
-    autoSaveEnabled.current = false; // Disable save during clear
-    hasInitializedChat.current = false; // Reset initialization flag
-    setState(prev => ({ ...prev, messages: [], isLoading: true, error: null, lastContextWindow: { type: 'new_chat_start', timestamp: new Date().toISOString(), characterName: effectiveCharacterData?.data?.name || 'Unknown' } }));
-    try {
-      // Use createNewChat instead of deleteChat
-      const creationResult = await ChatStorage.createNewChat(effectiveCharacterData);
-      if (!creationResult || !creationResult.success) {
-        throw new Error(creationResult?.error || "Failed to create new chat session on backend.");
-      }
-      // Load first message if available, otherwise clear
-      if (effectiveCharacterData.data.first_mes) {
-          const firstMessage = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
-          setState(prev => ({ ...prev, messages: [firstMessage], isLoading: false, lastContextWindow: { ...prev.lastContextWindow, type: 'new_chat_complete', firstMessage: firstMessage.content } }));
-          saveChat([firstMessage], state.currentUser); // Save the initial message
-          hasInitializedChat.current = true;
-      } else {
-           setState(prev => ({ ...prev, messages: [], isLoading: false, lastContextWindow: { ...prev.lastContextWindow, type: 'new_chat_complete_empty' } }));
-           saveChat([], state.currentUser); // Save empty chat
-           hasInitializedChat.current = true;
-      }
-      console.log("Chat cleared successfully.");
-    } catch (err) {
-      console.error("Error clearing chat:", err);
-       setState(prev => ({ ...prev, isLoading: false, error: err instanceof Error ? err.message : 'Failed to create new chat', lastContextWindow: { ...prev.lastContextWindow, type: 'new_chat_error', error: err instanceof Error ? err.message : 'Unknown error' } }));
-    } finally {
-      autoSaveEnabled.current = !isGenericAssistant; // Re-enable save only if not generic
-    }
-  }, [effectiveCharacterData, isGenericAssistant, state.currentUser, saveChat]); // Add dependencies
+   // --- Effects ---
+   useEffect(() => { // Load chat on character change or options change
+     const characterId = effectiveCharacterData?.data?.name; // Use name as ID for now
+     const isWorld = options?.isWorldPlay ?? false;
+
+     // Prevent reload if character hasn't changed, unless switching between world/normal chat
+     if (characterId === lastCharacterId.current && !isInitialLoad.current) {
+       // console.log("Character ID hasn't changed, skipping chat load."); // Reduce logging
+       return;
+     }
+
+     console.log(`Character changed to: ${characterId}. Loading chat...`);
+     lastCharacterId.current = characterId || null;
+     isInitialLoad.current = true; // Set flag for initial load sequence
+
+     // Disable auto-save during load/initialization for non-world chats
+     autoSaveEnabled.current = isWorld; // Only enable auto-save immediately for world play
+
+     const loadChat = async () => {
+       console.log(`[useChatMessages] loadChat called. Character ID: ${characterId}, Name: ${effectiveCharacterData?.data?.name}, FirstMes: ${effectiveCharacterData?.data?.first_mes?.substring(0,30)}...`, 'isWorldPlay:', isWorld);
+       if (!characterId) {
+         console.log("[useChatMessages] No character ID, resetting to default assistant state.");
+         setState({ // Reset state for generic assistant
+           messages: [], isLoading: false, isGenerating: false, error: null,
+           currentUser: ChatStorage.getCurrentUser(), // Keep current user
+           lastContextWindow: null, generatingId: null,
+           reasoningSettings: DEFAULT_REASONING_SETTINGS // Reset reasoning
+         });
+         hasInitializedChat.current = false;
+         isInitialLoad.current = false; // Generic assistant doesn't "load"
+         autoSaveEnabled.current = false; // Disable auto-save for generic assistant
+         return;
+       }
+
+       setState(prev => ({ ...prev, isLoading: true, error: null }));
+       try {
+         // Use loadLatestChat instead of getLatestChatId
+         const latestChatData = await ChatStorage.loadLatestChat(effectiveCharacterData);
+         
+         // Enhanced response handling with more detailed logging
+         console.log("loadLatestChat response:", {
+           success: latestChatData?.success,
+           hasChatIdProperty: latestChatData?.hasOwnProperty('chat_id'), // Check for chat_id
+           chatIdValue: latestChatData?.chat_id, // Log the value of chat_id
+           hasMessages: latestChatData?.messages && latestChatData.messages.length > 0,
+           errorType: latestChatData?.error ? typeof latestChatData.error : 'none',
+           isRecoverable: latestChatData?.isRecoverable
+         });
+         
+         // Use latestChatData.chat_id (snake_case) as returned by the backend
+         if (latestChatData && latestChatData.success && latestChatData.chat_id) {
+             // If successful and we got a chat_id, load that specific chat
+             console.log(`Found existing chat with ID: ${latestChatData.chat_id}, loading it...`);
+             await loadExistingChat(latestChatData.chat_id);
+         } else if (latestChatData?.isRecoverable ||
+                   (latestChatData && !latestChatData.success && 
+                   (latestChatData.error?.includes("No chats found") || 
+                    latestChatData.error?.includes("no chat files found") ||
+                    latestChatData.error?.includes("empty success response")))) {
+             // If the error is recoverable (as indicated by the isRecoverable flag or specific error messages)
+             console.log("No existing chats found or recoverable error, starting new chat.");
+             await handleNewChat();
+         } else {
+             // Handle other errors from loadLatestChat or unexpected responses
+             let detail = "Unknown error during chat load.";
+             if (latestChatData && typeof latestChatData.error === 'string' && latestChatData.error.trim() !== '') {
+               detail = latestChatData.error;
+             } else if (latestChatData) {
+               detail = 'Chat data structure was unexpected after loading.';
+             } else {
+               detail = 'No chat data returned from storage.';
+             }
+             console.error("Failed to load latest chat or unexpected response. Detail:", detail, "Full response:", latestChatData);
+             setState(prev => ({ ...prev, isLoading: false, error: `Failed to load chat: ${detail}` }));
+             toast.error("Failed to load chat", {
+               description: `${detail.substring(0, 100)}${detail.length > 100 ? '...' : ''}`,
+               action: {
+                 label: "Try Again",
+                 onClick: () => handleNewChat() // Attempt to start a new chat
+               }
+             });
+           }
+         } catch (err) { // This catch is for truly unexpected errors during the loading process
+           console.error("Critical error during chat loading process:", err);
+           const errorMessage = err instanceof Error ? err.message : "Unknown critical error";
+           setState(prev => ({ ...prev, isLoading: false, error: `Critical chat load error: ${errorMessage}` }));
+           toast.error("Critical chat load error", {
+             description: `${errorMessage.substring(0, 100)}${errorMessage.length > 100 ? '...' : ''}`,
+             action: {
+               label: "Start New Chat",
+               onClick: () => handleNewChat()
+             }
+           });
+         } finally {
+          // Ensure isLoading is false after initial load attempt completes
+          setState(prev => ({ ...prev, isLoading: false }));
+          isInitialLoad.current = false; // Mark initial load attempt as complete
+          // Re-enable auto-save after load/init completes if it's not the generic assistant
+          if (!isGenericAssistant) {
+              autoSaveEnabled.current = true;
+          }
+       }
+     };
+
+     loadChat();
+
+     // Cleanup function to cancel generation if component unmounts or character changes
+     return () => {
+       if (currentGenerationRef.current) {
+         console.log("Character changed/unmounted, aborting ongoing generation.");
+         stopGeneration();
+       }
+       // Clear save timeout on unmount/change
+       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+     };
+   }, [effectiveCharacterData, options?.isWorldPlay, loadExistingChat, handleNewChat, stopGeneration, isGenericAssistant]); // Added isGenericAssistant
 
 
-  // --- Effects ---
-  useEffect(() => { // Load chat on character change or options change
-    const currentCharacterId = effectiveCharacterData?.data?.name || null;
-    const isWorld = options?.isWorldPlay === true; // Check the option
-    const isNewContext = currentCharacterId !== lastCharacterId.current;
+   // Effect to load reasoning settings from storage on mount
+   useEffect(() => {
+     try {
+       const savedSettings = localStorage.getItem(REASONING_SETTINGS_KEY);
+       if (savedSettings) {
+         setState(prev => ({ ...prev, reasoningSettings: { ...DEFAULT_REASONING_SETTINGS, ...JSON.parse(savedSettings) } }));
+       }
+     } catch (err) {
+       console.error("Error loading reasoning settings:", err);
+     }
+   }, []); // Empty dependency array ensures this runs only once on mount
 
-    // --- Handle Generic Assistant ---
-    if (isGenericAssistant) {
-        if (isNewContext) { // Only clear if switching *to* generic
-            setState(prev => ({ ...prev, messages: [], isLoading: false, error: null }));
-            console.log("Switched to generic assistant view, clearing messages.");
-            lastCharacterId.current = DEFAULT_ASSISTANT_CHARACTER.data.name; // Track generic assistant "ID"
-            hasInitializedChat.current = true; // Mark as initialized
-        }
-        autoSaveEnabled.current = false; // Disable autosave
-        return; // Stop further processing
-    }
+   // Effect to save reasoning settings whenever they change
+   useEffect(() => {
+     localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(state.reasoningSettings));
+   }, [state.reasoningSettings]);
 
-    // --- Handle World Play ---
-    if (isWorld) {
-        autoSaveEnabled.current = false; // Disable autosave for worlds
-        if (isNewContext || !hasInitializedChat.current) {
-            console.log(`Initializing World Play context: ${currentCharacterId}`);
-            setState(prev => ({ ...prev, messages: [], isLoading: true, error: null, lastContextWindow: null }));
-            lastCharacterId.current = currentCharacterId;
-            // Initialize with first_mes directly, skip loading history
-            const firstMessageContent = effectiveCharacterData?.data?.first_mes;
-            if (firstMessageContent) {
-                const firstMessage = createAssistantMessage(firstMessageContent, 'complete');
-                setState(prev => ({ ...prev, messages: [firstMessage], isLoading: false }));
-            } else {
-                setState(prev => ({ ...prev, messages: [], isLoading: false }));
-            }
-            hasInitializedChat.current = true; // Mark as initialized
-        }
-        return; // Stop further processing
-    }
+   // Effect to handle forced stop events from outside the hook
+   useEffect(() => { // Handle force stop events
+     const handleForceStop = () => {
+       console.log('Received force stop event in useChatMessages, stopping generation.');
+       if (state.isGenerating) {
+         stopGeneration();
+         // Update state to reflect the stop immediately if needed, though stopGeneration should handle it
+         setState(prev => ({
+             ...prev,
+             isGenerating: false,
+             generatingId: null,
+             // Optionally mark the message as aborted if generatingId is known
+             messages: prev.messages.map(msg => msg.id === prev.generatingId ? {...msg, status: 'aborted' as Message['status']} : msg)
+         }));
+       }
+     };
 
-    // --- Handle Regular Characters (Not Generic Assistant or World Play) ---
-    // Initial state for autosave depends on whether this is the first load after startup
-    if (isInitialLoad.current) {
-        console.log("Initial app load detected, temporarily disabling autosave");
-        autoSaveEnabled.current = false; // Initially disable autosave until load completes
-        isInitialLoad.current = false;  // Reset the initial load flag
-    } else {
-        // For subsequent character changes, enable autosave
-        autoSaveEnabled.current = true;
-    }
+     window.addEventListener('cardshark:force-generation-stop', handleForceStop);
 
-    // --- Logic for actual characters ---
-    const loadChat = async () => {
-      // Use effectiveCharacterData name for loading
-      const characterName = effectiveCharacterData?.data?.name;
-      if (!characterName) {
-        console.warn("Attempted to load chat without a character name.");
-        setState(prev => ({ ...prev, messages: [], isLoading: false, error: null }));
-        return;
-      }
+     return () => {
+       window.removeEventListener('cardshark:force-generation-stop', handleForceStop);
+     };
+   }, [state.isGenerating, stopGeneration]); // Depend on isGenerating and stopGeneration
 
-      console.log(`Loading chat for character: ${characterName} (isNewContext: ${isNewContext}, hasInitialized: ${hasInitializedChat.current})`);
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-      try {
-        await loadExistingChat(characterName);
-        // loadExistingChat now sets hasInitializedChat.current internally
-        
-        // After successful load, re-enable autosave with a delay to ensure chat is loaded first
-        setTimeout(() => {
-          console.log("Re-enabling autosave after successful chat load");
-          autoSaveEnabled.current = true;
-        }, 1000);
-      } catch (err) {
-        // Error handling is now inside loadExistingChat
-        console.error("Error occurred during loadExistingChat call:", err);
-      } finally {
-        setState(prev => ({ ...prev, isLoading: false }));
-      }
-    };
-
-    // Load chat if character ID changes or if it hasn't been initialized yet for this character
-    if (isNewContext || !hasInitializedChat.current) {
-      loadChat(); // This will call loadExistingChat internally
-      lastCharacterId.current = currentCharacterId;
-      // hasInitializedChat.current is set within loadExistingChat now
-    }
-
-    // Cleanup function
-    return () => {
-      // If switching characters, disable autosave to prevent race conditions
-      if (lastCharacterId.current !== currentCharacterId && lastCharacterId.current !== null) {
-        console.log(`Switching from ${lastCharacterId.current} to ${currentCharacterId}, temporarily disabling autosave`);
-        autoSaveEnabled.current = false;
-      }
-    };
-  }, [characterData, options?.isWorldPlay, loadExistingChat, isGenericAssistant, effectiveCharacterData]); // Keep dependencies
-
-
-  // --- Load/Save Reasoning Settings ---
-  useEffect(() => {
-    try {
-      const savedSettings = localStorage.getItem(REASONING_SETTINGS_KEY);
-      if (savedSettings) {
-        setState(prev => ({ ...prev, reasoningSettings: { ...DEFAULT_REASONING_SETTINGS, ...JSON.parse(savedSettings) } }));
-      }
-    } catch (err) { console.error("Error loading reasoning settings:", err); }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(state.reasoningSettings));
-  }, [state.reasoningSettings]);
-
-  // --- Load/Save Context Window ---
-  useEffect(() => {
-    if (state.lastContextWindow) {
-      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(state.lastContextWindow));
-    }
-  }, [state.lastContextWindow]);
-
-  // --- Force Stop Event Listener ---
-  useEffect(() => { // Handle force stop events
-    const handleForceStop = () => {
-      console.log('Received force stop event in useChatMessages');
-      if (currentGenerationRef.current) {
-        currentGenerationRef.current.abort();
-        currentGenerationRef.current = null;
-        // Update state immediately to reflect abortion
-        setState(prev => {
-          if (!prev.isGenerating || !prev.generatingId) return prev;
-          const messageId = prev.generatingId;
-          const updatedMessages = prev.messages.map(msg =>
-            msg.id === messageId ? { ...msg, status: 'aborted' as Message['status'], content: msg.content || "[Aborted]" } : msg
-          ).filter(msg => msg?.role !== 'thinking'); // Remove thinking message on abort
-          return { ...prev, messages: updatedMessages, isGenerating: false, generatingId: null, error: "Generation aborted." };
-        });
-      }
-    };
-    window.addEventListener('cardshark:force-generation-stop', handleForceStop);
-    return () => window.removeEventListener('cardshark:force-generation-stop', handleForceStop);
-  }, []); // Empty dependency array ensures this runs once
 
   // --- Return Values ---
   return {
-    ...state,
-    // Expose functions
+    messages: state.messages,
+    isLoading: state.isLoading,
+    isGenerating: state.isGenerating,
+    error: state.error,
+    currentUser: state.currentUser,
+    lastContextWindow: state.lastContextWindow,
+    generatingId: state.generatingId,
+    reasoningSettings: state.reasoningSettings,
+    activeCharacterData: effectiveCharacterData, // Added this
     generateResponse,
     regenerateMessage,
-    generateVariation,
+    generateVariation, // Expose generateVariation
     cycleVariation,
     stopGeneration,
-    setCurrentUser,
-    loadExistingChat,
-    updateReasoningSettings,
     deleteMessage,
     updateMessage,
-    handleNewChat,
-    clearError, // Expose the memoized clearError
-    // Provide the effective character data being used (could be default)
-    activeCharacterData: effectiveCharacterData
+    setCurrentUser,
+    loadExistingChat,
+    handleNewChat, // Expose handleNewChat
+    updateReasoningSettings,
+    clearError,
+    generateNpcIntroduction // Added this
   };
 }
-// --- Helper Types (if needed elsewhere) ---
-export type { ReasoningSettings };

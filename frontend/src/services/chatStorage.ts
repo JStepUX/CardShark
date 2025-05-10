@@ -352,13 +352,61 @@ export class ChatStorage {
         }),
       });
 
+      // More detailed logging for debugging response issues
+      console.log(`Latest chat response status: ${response.status}`);
+      
       if (!response.ok) {
-        const errorText = await response.text();
+        let errorText = '';
+        let errorJson = null;
+        
+        // Try to parse error as JSON first
+        try {
+          errorJson = await response.json();
+          errorText = errorJson.error || errorJson.message || `HTTP ${response.status}`;
+          // Special handling for Featherless 404 responses that might be valid JSON but status != 200
+          if (errorJson && response.status === 404) {
+            console.log('Received 404 with valid JSON payload, treating as "no chats found"');
+            return { 
+              success: false, 
+              error: "No chats found",
+              isRecoverable: true // Flag to indicate this can be recovered by creating a new chat
+            };
+          }
+        } catch (e) {
+          // If it's not valid JSON, get as text
+          errorText = await response.text();
+        }
+        
         console.error('Failed to load latest chat:', response.status, errorText);
-        return { success: false, error: `Failed to load latest chat: ${response.status}` };
+        return { 
+          success: false, 
+          error: `Failed to load latest chat: ${errorText}`,
+          isRecoverable: response.status === 404 // 404 means no chats, which is recoverable
+        };
       }
 
-      const data = await response.json();
+      let data;
+      // Handle potential malformed JSON responses
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Error parsing JSON response:', jsonError);
+        return { 
+          success: false, 
+          error: `Failed to parse response: ${jsonError instanceof Error ? jsonError.message : 'Invalid JSON'}`,
+          isRecoverable: true // Likely recoverable by creating a new chat
+        };
+      }
+      
+      // Handle empty success responses from Featherless
+      if (data.success === true && !data.chatId && !data.messages) {
+        console.log('API returned success but no chat ID or messages, treating as "no chats found"');
+        return {
+          success: false,
+          error: "No chats found (API returned empty success response)",
+          isRecoverable: true
+        };
+      }
       
       // Log message details for debugging
       if (data.success && data.messages) {
@@ -383,13 +431,17 @@ export class ChatStorage {
           console.warn('Loaded chat contains no messages');
         }
       } else {
-        console.warn('Failed to load chat or no messages found:', data);
+        console.warn('Chat loading response format:', data);
       }
       
       return data;
     } catch (error) {
       console.error('Error loading latest chat:', error);
-      return { success: false, error: `Error: ${error}` };
+      return { 
+        success: false, 
+        error: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        isRecoverable: true // Most network/parsing errors should be recoverable
+      };
     }
   }
 

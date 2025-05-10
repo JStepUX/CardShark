@@ -63,17 +63,25 @@ export function Dialog({
         </div>
         <div
           ref={dialogRef}
-          className={`inline-block w-full ${className} p-6 my-8 text-left align-middle transition-all transform bg-stone-800 shadow-xl rounded-lg`}
+          // Changed to flex layout to allow fixed footer
+          className={`inline-block w-full ${className} my-8 text-left align-middle transition-all transform bg-stone-800 shadow-xl rounded-lg flex flex-col max-h-[calc(100vh-4rem)]`}
         >
+          {/* Header */}
           {title && (
-            <h2 id="dialog-title" className="text-lg font-semibold text-white mb-4">
-              {title}
-            </h2>
+            <div className="px-6 py-4 border-b border-stone-700">
+              <h2 id="dialog-title" className="text-lg font-semibold text-white">
+                {title}
+              </h2>
+            </div>
           )}
-          {children}
+          {/* Scrollable Content Area */}
+          <div className="px-6 py-4 flex-grow overflow-y-auto">
+            {children}
+          </div>
           
+          {/* Footer with Buttons */}
           {(buttons.length > 0 || showCloseButton) && (
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="px-6 py-4 border-t border-stone-700 flex justify-end gap-2">
               {buttons.map((button, index) => (
                 <button
                   key={index}

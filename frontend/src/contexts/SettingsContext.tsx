@@ -1,12 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
-// Rename the imported hook to avoid naming conflicts
-import useSettingsHook from "../hooks/useSettings";
-import { useResilientApi } from "../context/ResilientApiContext";
+import { useResilientApi } from "../context/ResilientApiContext"; // Keep for retryAllConnections
 
 interface SettingsContextType {
   settings: Settings;
-  updateSettings: (updates: Partial<Settings>) => Promise<void>;
+  updateSettings: (updates: Partial<Settings>) => Promise<void>; // Simpler update signature
   isLoading: boolean;
   error: Error | null;
   retry: () => void;
@@ -22,94 +20,115 @@ const defaultContext: SettingsContextType = {
 
 const SettingsContext = createContext<SettingsContextType>(defaultContext);
 
-// Export only one hook name for consistency
 export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { retryAllConnections } = useResilientApi();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  // Use our resilient settings hook (renamed to avoid conflict)
-  const { 
-    settings: fetchedSettings, 
-    loading, 
-    error, 
-    retry: retryFetch, 
-    updateSettings: updateSettingsApi
-  } = useSettingsHook({
-    retryCount: 5,
-    retryDelay: 2000,
-    onSettingsLoaded: (settingsData) => {
-      console.log("Settings loaded:", {
-        character_directory: settingsData.character_directory,
-        models_directory: settingsData.models_directory,
-        model_directory: settingsData.model_directory
-      });
-    },
-    onSettingsError: (err) => {
-      console.error("Failed to load settings after retries:", err);
-    }
-  });
-
-  // Use a more careful merging approach for settings
-  const mergedSettings = React.useMemo(() => {
-    if (!fetchedSettings) return DEFAULT_SETTINGS;
-    
-    // Create a deep merged object
-    const result = { ...DEFAULT_SETTINGS };
-    
-    // Explicitly handle each important top-level property to avoid null/undefined issues
-    Object.keys(fetchedSettings).forEach(key => {
-      // Type-safe approach to dynamic property access
-      if (fetchedSettings[key as keyof typeof fetchedSettings] !== undefined && 
-          fetchedSettings[key as keyof typeof fetchedSettings] !== null) {
-        // Use type assertion to safely assign properties
-        (result as any)[key] = fetchedSettings[key as keyof typeof fetchedSettings];
-      }
-    });
-    
-    return result;
-  }, [fetchedSettings]);
-
-  // Log merged settings for debugging
-  useEffect(() => {
-    if (!loading && fetchedSettings) {
-      console.log("Merged settings:", {
-        character_directory: mergedSettings.character_directory,
-        models_directory: mergedSettings.models_directory, 
-        model_directory: mergedSettings.model_directory
-      });
-    }
-  }, [loading, fetchedSettings, mergedSettings]);
-
-  // Update settings handler with error handling and retries
-  const updateSettings = async (updates: Partial<Settings>) => {
+  const fetchSettings = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    console.log("[SettingsContext] Fetching settings...");
     try {
-      await updateSettingsApi(updates);
-      
-      // Refresh context for components that depend on settings
-      setRefreshKey(prev => prev + 1);
+      const response = await fetch('/api/settings');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch settings: ${response.status} ${response.statusText}`);
+      }
+      const data = await response.json();
+      if (data.success && data.settings) {
+        // Merge fetched settings with defaults to ensure all keys exist
+        // Use deep merge for nested objects like 'apis' and 'syntaxHighlighting'
+        const deepMerge = (target: any, source: any): any => {
+          Object.keys(source).forEach(key => {
+            const targetValue = target[key];
+            const sourceValue = source[key];
 
-      return;
+            if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
+              // Ensure target node exists and is an object
+              if (!targetValue || typeof targetValue !== 'object' || Array.isArray(targetValue)) {
+                target[key] = {};
+              }
+              deepMerge(target[key], sourceValue);
+            } else {
+              // Assign non-object values directly (including null/undefined from source)
+              target[key] = sourceValue;
+            }
+          });
+          return target;
+        };
+
+        // Start with a deep copy of defaults, then merge fetched settings onto it
+        const merged = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), data.settings);
+
+        setSettings(merged);
+        console.log("[SettingsContext] Settings loaded:", {
+          character_directory: merged.character_directory,
+          models_directory: merged.models_directory,
+          model_directory: merged.model_directory // Keep logging legacy field for comparison
+        });
+      } else {
+        throw new Error(data.message || 'Failed to parse settings from response');
+      }
     } catch (err) {
-      console.error("Failed to save settings:", err);
-      throw err;
+      console.error("Error fetching settings:", err);
+      setError(err instanceof Error ? err : new Error('Unknown error fetching settings'));
+      setSettings(DEFAULT_SETTINGS); // Fallback to defaults on error
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Combined retry handler that retries both settings and other API connections
-  const handleRetry = () => {
-    retryFetch();
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
+
+  const updateSettings = useCallback(async (updates: Partial<Settings>) => {
+    console.log("[SettingsContext] Attempting to update settings with:", updates);
+    // Note: No optimistic update here for simplicity, state updates only on success
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates), // Send only the updates
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` }));
+        throw new Error(errorData.message || `Failed to update settings: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      if (result.success && result.settings) {
+         // Update state with the *full* settings object returned by the backend
+         // This ensures consistency if the backend modifies/merges data
+         const merged = { ...DEFAULT_SETTINGS, ...result.settings }; // Re-merge with defaults
+         setSettings(merged);
+         console.log("[SettingsContext] Settings updated successfully. New models_directory:", merged.models_directory);
+      } else {
+        throw new Error(result.message || 'Backend reported failure updating settings');
+      }
+    } catch (err) {
+      console.error("Error updating settings:", err);
+      // Optionally re-fetch settings on error to ensure consistency
+      // fetchSettings();
+      throw err; // Re-throw for components to handle
+    }
+  }, []); // Removed fetchSettings from dependency array to avoid potential loops if fetchSettings itself changes
+
+  const handleRetry = useCallback(() => {
+    fetchSettings();
     retryAllConnections();
-  };
+  }, [fetchSettings, retryAllConnections]);
 
   return (
-    <SettingsContext.Provider 
-      key={`settings-context-${refreshKey}`}
-      value={{ 
-        settings: mergedSettings, 
-        updateSettings, 
-        isLoading: loading,
+    <SettingsContext.Provider
+      value={{
+        settings,
+        updateSettings,
+        isLoading,
         error,
         retry: handleRetry
       }}

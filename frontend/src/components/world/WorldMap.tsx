@@ -6,6 +6,16 @@ export const WorldMap: React.FC = () => {
   const [zoom, setZoom] = useState<number>(100);
   const [currentZLevel, setCurrentZLevel] = useState<number>(0);
   
+  // Move the useEffect before any conditional returns to follow React Hooks rules
+  useEffect(() => {
+    // Only update if worldState exists and we have a current position
+    if (worldState && worldState.current_position) {
+      const currentPos = worldState.current_position.split(',').map(Number);
+      const currentZ = currentPos[2];
+      setCurrentZLevel(currentZ);
+    }
+  }, [worldState]);
+  
   // Handle null worldState
   if (!worldState) {
     return <div className="p-4 bg-stone-800 rounded-lg"><p>No world state available</p></div>;
@@ -14,11 +24,6 @@ export const WorldMap: React.FC = () => {
   // Get current position coordinates
   const currentPos = worldState.current_position.split(',').map(Number);
   const [currentX, currentY, currentZ] = currentPos;
-  
-  // Set the current Z level to match the player's Z position on initial render
-  useEffect(() => {
-    setCurrentZLevel(currentZ);
-  }, [currentZ]);
   
   // Get all locations for the current Z level
   const locationsAtCurrentZ = Object.entries(worldState.locations).filter(([coords]) => {

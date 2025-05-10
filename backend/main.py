@@ -152,7 +152,7 @@ png_handler = PngMetadataHandler(logger)
 debug_handler = PngDebugHandler(logger)
 backyard_handler = BackyardHandler(logger)
 api_handler = ApiHandler(logger)
-chat_handler = ChatHandler(logger)
+chat_handler = ChatHandler(logger, api_handler) # Pass api_handler here
 template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds() # Initialize default backgrounds

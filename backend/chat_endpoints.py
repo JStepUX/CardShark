@@ -2,12 +2,13 @@
 # Implements API endpoints for chat operations
 import traceback
 from datetime import datetime
-from typing import Dict, List, Any, Optional
-
+import json # Added for logging
+from typing import Dict, List, Any, Optional, Generator # Added Generator
+ 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-
+from fastapi.responses import JSONResponse, StreamingResponse # Added StreamingResponse
+from pydantic import BaseModel, Field
+ 
 # Import handler types for type hinting
 from backend.log_manager import LogManager
 from backend.chat_handler import ChatHandler
@@ -72,14 +73,25 @@ async def create_new_chat(
         logger.log_step(f"Creating new chat for character: {character_data.get('name', 'Unknown')}")
         result = chat_handler.create_new_chat(character_data)
         
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "chat_id": result["chat_id"],
-                "messages": []
-            }
-        )
+        if result and result.get("success") and result.get("chat_id"):
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "chat_id": result["chat_id"],
+                    "messages": []
+                }
+            )
+        else:
+            failure_reason = result.get("message") if isinstance(result, dict) else "Chat handler failed to create chat or return valid ID."
+            logger.log_error(f"Chat creation failed in handler: {failure_reason}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": f"Failed to create new chat: {failure_reason}"
+                }
+            )
     except Exception as e:
         logger.log_error(f"Error creating new chat: {str(e)}")
         logger.log_error(traceback.format_exc())
@@ -175,6 +187,25 @@ async def load_latest_chat(
             
             # Add additional information to the response
             result["message_count"] = message_count
+
+            # Sanitize messages to ensure they are serializable
+            sanitized_messages = []
+            if "messages" in result and isinstance(result["messages"], list):
+                for msg in result["messages"]:
+                    if hasattr(msg, 'to_dict'): # Check for a to_dict method
+                        sanitized_messages.append(msg.to_dict())
+                    elif isinstance(msg, dict): # If already a dict, assume it's fine
+                        sanitized_messages.append(msg)
+                    elif hasattr(msg, '__dict__'): # Fallback to __dict__
+                         # Be cautious with __dict__ as it can include private/internal attrs
+                         # A more robust solution would be to define explicit serialization
+                        sanitized_messages.append(msg.__dict__)
+                    else:
+                        # If it's some other non-serializable type, log a warning and skip or represent as string
+                        logger.log_warning(f"Message of type {type(msg)} may not be JSON serializable. Converting to string.")
+                        sanitized_messages.append(str(msg)) # Or skip, or raise error
+            
+            result["messages"] = sanitized_messages
             
             # Return the result
             return JSONResponse(
@@ -214,6 +245,9 @@ async def list_character_chats(
         data = await request.json()
         character_data = data.get("character_data")
         
+        # Detailed log of the received character_data
+        logger.log_info(f"Received character_data in list_character_chats: {json.dumps(character_data)}")
+
         if not character_data:
             return JSONResponse(
                 status_code=400,
@@ -594,4 +628,109 @@ async def autosave_settings(
                 "success": False,
                 "message": f"Failed to configure autosave settings: {str(e)}"
             }
+        )
+# Pydantic model for the flat generation request body from frontend
+class FlatGenerateRequest(BaseModel):
+    # API Config related fields (flattened)
+    id: Optional[str] = None # API Config ID
+    name: Optional[str] = None # API Config Name
+    provider: Optional[str] = None
+    url: Optional[str] = None
+    apiKey: Optional[str] = None
+    model: Optional[str] = None
+    templateId: Optional[str] = None
+    generation_settings: Dict[str, Any] = Field(default_factory=dict)
+    enabled: Optional[bool] = None
+    lastConnectionStatus: Optional[Dict[str, Any]] = None
+    model_info: Optional[Dict[str, Any]] = None
+
+    # Generation Parameter related fields (flattened)
+    prompt: Optional[str] = None
+    stop_sequences: List[str] = Field(default_factory=list) # Frontend sends "stop_sequences"
+
+    # Character Data (expected at top level by original GenerateRequest, now part of flat structure)
+    character_data: Optional[Dict[str, Any]] = None
+
+    # Other potential generation params that might be part of the flat payload
+    # or needed by api_handler.stream_generate
+    memory: Optional[str] = None
+    chat_history: List[Dict[str, Any]] = Field(default_factory=list)
+    current_message: Optional[str] = None
+    # context_window: Optional[Dict[str, Any]] = None # Not in error, api_handler defaults
+
+# Original GenerateRequest model (can be kept for reference or if used elsewhere)
+class GenerateRequest(BaseModel):
+    character_data: Dict
+    api_config: Dict
+    generation_params: Dict
+
+@router.post("/chat/generate")
+def generate_chat_response(
+    flat_request: FlatGenerateRequest, # Use the new flat model
+    chat_handler: ChatHandler = Depends(get_chat_handler),
+    logger: LogManager = Depends(get_logger)
+):
+    """Generate a chat response using the LLM API with streaming."""
+    try:
+        logger.log_step("Received generation request at /api/chat/generate (using FlatGenerateRequest)")
+        logger.log_step(f"Flat request received: {flat_request.model_dump_json(indent=2, exclude_none=True)}")
+
+        # Reconstruct api_config from the flat request
+        api_config_reconstructed = {
+            "id": flat_request.id,
+            "name": flat_request.name,
+            "provider": flat_request.provider,
+            "url": flat_request.url,
+            "apiKey": flat_request.apiKey,
+            "model": flat_request.model,
+            "templateId": flat_request.templateId,
+            "generation_settings": flat_request.generation_settings,
+            "enabled": flat_request.enabled,
+            "lastConnectionStatus": flat_request.lastConnectionStatus,
+            "model_info": flat_request.model_info
+        }
+        logger.log_step(f"Reconstructed api_config: {json.dumps(api_config_reconstructed, indent=2)}")
+
+        # Reconstruct generation_params from the flat request
+        # api_handler.stream_generate expects 'stop_sequence' (singular)
+        generation_params_reconstructed = {
+            "prompt": flat_request.prompt,
+            "stop_sequence": flat_request.stop_sequences, # Pass as is, api_handler has defaults
+            "memory": flat_request.memory,
+            "chat_history": flat_request.chat_history,
+            "current_message": flat_request.current_message,
+            # character_data is passed separately to chat_handler.generate_chat_response_stream
+            # and chat_handler is assumed to merge it into generation_params for api_handler
+        }
+        logger.log_step(f"Reconstructed generation_params: {json.dumps(generation_params_reconstructed, indent=2)}")
+        
+        # Character data is taken directly from the flat request's top-level field
+        char_data_for_handler = flat_request.character_data
+        if char_data_for_handler is None:
+            logger.log_warning("Character data is missing in the flat request.")
+            # Depending on requirements, might raise HTTPException or provide default
+            # For now, pass None and let downstream handlers manage it.
+
+        logger.log_step(f"Character data for handler: {json.dumps(char_data_for_handler, indent=2) if char_data_for_handler else 'None'}")
+
+        # Use the generator from the chat handler with reconstructed data
+        response_generator = chat_handler.generate_chat_response_stream(
+            character_data=char_data_for_handler,
+            api_config=api_config_reconstructed,
+            generation_params=generation_params_reconstructed
+        )
+        
+        # Return a streaming response
+        return StreamingResponse(
+            response_generator,
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.log_error(f"Error in /api/chat/generate endpoint: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        # Note: If headers are already sent by the stream starting, this JSONResponse might not work.
+        # The error handling within the generator itself might be the primary way to signal errors.
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Generation failed: {str(e)}"}
         )

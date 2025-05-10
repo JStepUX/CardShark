@@ -5,6 +5,7 @@ import { WorldMap } from '../components/world/WorldMap';
 import PlayerStatus from '../components/PlayerStatus';
 import UnconnectedLocations from '../components/UnconnectedLocations';
 import EventDisplay from '../components/EventDisplay';
+import ErrorDisplay from '../components/world/ErrorDisplay';
 import { useCharacter } from '../contexts/CharacterContext';
 
 // Error boundary fallback component
@@ -63,12 +64,12 @@ export const WorldView: React.FC<WorldViewProps> = ({ worldName }) => {
       setImageUrl(undefined);
     };
   }, [worldName, setImageUrl]);
-
   return (
     <WorldErrorBoundary>
       <WorldStateProvider worldName={worldName}>
         <div className="grid grid-cols-12 gap-4">
           <div className="col-span-8">
+            <ErrorDisplay />
             <LocationDetail />
             <WorldMap />
           </div>

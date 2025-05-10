@@ -213,7 +213,7 @@ async def get_models_directory():
 async def set_models_directory(directory: str = Body(..., embed=True)):
     """Set the models directory in settings"""
     from backend.main import settings_manager
-    success = settings_manager.update_setting("models_directory", directory)
+    success = settings_manager.update_settings({"models_directory": directory})
     if not success:
         raise HTTPException(status_code=400, detail="Failed to save models directory setting")
     return {"success": True, "directory": directory}

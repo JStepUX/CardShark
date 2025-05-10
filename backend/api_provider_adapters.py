@@ -908,21 +908,24 @@ class FeatherlessAdapter(ApiProviderAdapter):
     """
     
     def get_endpoint_url(self, base_url: str) -> str:
-        """Get the endpoint URL for Featherless"""
+        """Get the endpoint URL for Featherless chat completions"""
         # Ensure URL has protocol
         if not base_url.startswith(('http://', 'https://')):
-            base_url = f'https://{base_url}'
+            base_url = f'https://{base_url}' # Default to https for APIs
+
+        # Normalize base_url by removing trailing slashes
+        normalized_base_url = base_url.rstrip('/')
+
+        # Check if the path for chat completions is already present
+        if normalized_base_url.endswith('/v1/chat/completions'):
+            return normalized_base_url
+        
+        # Check if '/v1' is already present, if so, just append '/chat/completions'
+        if normalized_base_url.endswith('/v1'):
+            return f"{normalized_base_url}/chat/completions"
             
-        # Check if URL already contains the path segment we need to add
-        if '/chat/completions' in base_url:
-            return base_url
-            
-        # Special handling to avoid duplicate /v1 segments
-        if base_url.endswith('/v1'):
-            return f"{base_url}/chat/completions"
-        else:
-            # Strip trailing slash and add the path
-            return base_url.rstrip('/') + '/v1/chat/completions'
+        # Otherwise, append the full '/v1/chat/completions'
+        return f"{normalized_base_url}/v1/chat/completions"
         
     def prepare_headers(self, api_key: Optional[str]) -> Dict[str, str]:
         """Prepare headers for Featherless"""
@@ -951,63 +954,98 @@ class FeatherlessAdapter(ApiProviderAdapter):
             
         return headers
         
-    def prepare_request_data(self, 
-                           prompt: str, 
+    def prepare_request_data(self,
+                           prompt: str,
                            memory: Optional[str],
                            stop_sequence: List[str],
-                           generation_settings: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare the request data for Featherless"""
-        # Extract settings or use defaults
-        max_tokens = generation_settings.get('max_length', 220)
-        temperature = generation_settings.get('temperature', 0.7)
-        top_p = generation_settings.get('top_p', 0.9)
-        presence_penalty = generation_settings.get('presence_penalty', 0)
-        frequency_penalty = generation_settings.get('frequency_penalty', 0)
+                           generation_settings: Dict[str, Any],
+                           **kwargs) -> Dict[str, Any]:
+        """Prepare the request data for Featherless API in the expected format.
         
-        # Enhanced model selection logic with better error handling
-        model = None
-        
-        # First, explicitly check if there's a direct model provided
-        if 'model' in generation_settings and generation_settings['model']:
-            model = generation_settings['model']
-            self.logger.log_step(f"Using explicitly selected model: {model}")
-        
-        # Check for Featherless specific format
-        elif 'featherless_model' in generation_settings and generation_settings['featherless_model']:
-            model = generation_settings['featherless_model']
-            self.logger.log_step(f"Using model from featherless_model setting: {model}")
+        Args:
+            prompt: The prompt to send to the model
+            memory: Optional system message or memory context
+            stop_sequence: List of strings that signal the end of the response
+            generation_settings: Dictionary of generation settings
+            **kwargs: Additional keyword arguments (e.g., stream)
             
-        # Default fallback to a commonly available model
-        if not model:
-            model = 'meta-llama/Meta-Llama-3-8B-Instruct'  # Default model
-            self.logger.log_step(f"No model specified in settings, using default: {model}")
+        Returns:
+            Dictionary containing the formatted request data
+        """
+        self.logger.log_step("FeatherlessAdapter: Preparing request data")
         
-        # Create the message structure
+        # Extract model information first (this is required)
+        model = generation_settings.get('model')
+        if not model and 'generation_settings' in generation_settings:
+            # Try to get model from nested generation_settings
+            model = generation_settings.get('generation_settings', {}).get('model')
+            
+        # If still no model, use a default
+        if not model:
+            model = "anthropic/claude-3-opus-20240229"
+            self.logger.log_warning(f"No model specified for Featherless, using default: {model}")
+
+        # Create messages array in the format expected by Featherless (OpenAI-compatible format)
         messages = []
         
         # Add system message if memory is provided
         if memory and memory.strip():
-            messages.append({"role": "system", "content": memory})
+            messages.append({
+                "role": "system",
+                "content": memory
+            })
+            
+        # Add user message with the prompt
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
         
-        # Add the prompt as a user message
-        messages.append({"role": "user", "content": prompt})
-        
-        # Create the request data
+        # Base request in OpenAI-compatible format
         data = {
             "model": model,
             "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": top_p,
-            "presence_penalty": presence_penalty,
-            "frequency_penalty": frequency_penalty,
-            "stop": stop_sequence,
             "stream": True
         }
         
-        # Log the request details
-        self.logger.log_step(f"Featherless request to model: {model}")
-        self.logger.log_step(f"Request contains {len(messages)} messages")
+        # Add stop sequences if provided
+        if stop_sequence:
+            data["stop"] = stop_sequence
+            
+        # Extract OpenAI-compatible parameters from generation settings
+        # These are the parameters that Featherless API accepts
+        openai_params = [
+            "temperature", 
+            "top_p", 
+            "max_tokens", 
+            "presence_penalty", 
+            "frequency_penalty"
+        ]
+        
+        # Get generation settings from either top level or nested object
+        actual_settings = generation_settings
+        if 'generation_settings' in generation_settings:
+            actual_settings = generation_settings['generation_settings']
+            
+        # Add OpenAI parameters from settings
+        for param in openai_params:
+            # Check for different variations of max_tokens
+            if param == "max_tokens" and param not in actual_settings:
+                # Try alternative field names
+                value = actual_settings.get('max_length', 
+                        actual_settings.get('max_token', 
+                        actual_settings.get('max_completion_tokens', 512)))
+                if value:
+                    data[param] = value
+                continue
+                
+            # For all other parameters
+            if param in actual_settings and actual_settings[param] is not None:
+                data[param] = actual_settings[param]
+                
+        # Log the prepared request
+        self.logger.log_step(f"Featherless request data prepared for model: {model}")
+        self.logger.log_step(f"Request keys: {list(data.keys())}")
         
         return data
         
@@ -1022,19 +1060,19 @@ class FeatherlessAdapter(ApiProviderAdapter):
                 if data_portion.strip() == "[DONE]":
                     return None
                 
-                try:
-                    content = json.loads(data_portion)
-                    
-                    # Extract the delta content from OpenAI-compatible format
-                    if 'choices' in content and len(content['choices']) > 0:
-                        choice = content['choices'][0]
-                        if 'delta' in choice and 'content' in choice['delta']:
-                            return {'content': choice['delta']['content']}
-                    
-                    return None
-                except json.JSONDecodeError:
-                    self.logger.log_error(f"Invalid JSON in Featherless response: {data_portion}")
-                    return None
+                # data_portion is line_text[6:]
+                # We have already handled if data_portion.strip() == "[DONE]"
+                
+                # For any other data, strip it, then wrap and send raw
+                processed_data_portion = data_portion.strip()
+                if not processed_data_portion:
+                    # This case means the data line was 'data: ' or 'data: \n' etc.
+                    self.logger.log_step("FeatherlessAdapter: Data line is effectively empty after stripping (and not [DONE]).")
+                    return {'raw_featherless_payload': ''} # Send empty string to keep stream active
+
+                # If there's actual content after 'data: ' and stripping
+                self.logger.log_step(f"FeatherlessAdapter: Passing through raw data: {processed_data_portion[:200]}...")
+                return {'raw_featherless_payload': processed_data_portion}
             return None
         except Exception as e:
             self.logger.log_error(f"Error parsing Featherless response: {e}")

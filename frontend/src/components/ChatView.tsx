@@ -1,7 +1,9 @@
+// frontend/src/components/ChatView.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, User, Plus, Eye, Wallpaper, MessageSquare } from 'lucide-react';
+import { Send, User, Plus, Eye, Wallpaper, MessageSquare } from 'lucide-react'; // Removed Server icon
 import { useCharacter } from '../contexts/CharacterContext';
-import { useAPIConfig } from '../contexts/APIConfigContext'; // Add this import for API config
+import { useAPIConfig } from '../contexts/APIConfigContext'; // Keep for greeting regen config
+// Removed useSettings import
 import ChatBubble from './ChatBubble';
 import ThoughtBubble from './ThoughtBubble';
 import UserSelect from './UserSelect';
@@ -9,19 +11,19 @@ import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
 import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSettings';
 import MoodBackground from './MoodBackground';
-import MoodIndicator from './MoodIndicator'; // Import the MoodIndicator component
+import MoodIndicator from './MoodIndicator';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
-import { useChatContinuation } from '../hooks/useChatContinuation'; // Import the continuation hook
+import { useChatContinuation } from '../hooks/useChatContinuation';
 import { apiService } from '../services/apiService';
 import { Message, UserProfile } from '../types/messages';
-import { EmotionState } from '../hooks/useEmotionDetection'; // Import EmotionState type
+import { EmotionState } from '../hooks/useEmotionDetection';
 import RichTextEditor from './RichTextEditor';
-import { htmlToText, markdownToHtml } from '../utils/contentUtils';
-import { generateUUID } from '../utils/uuidUtils';
-import { substituteVariables } from '../utils/variableUtils'; // Import substituteVariables
-import ErrorMessage from './ErrorMessage'; // Import the new ErrorMessage component
-import { ChatStorage } from '../services/chatStorage'; // Make sure this is imported
+import { htmlToText } from '../utils/contentUtils';
+import { substituteVariables } from '../utils/variableUtils';
+import ErrorMessage from './ErrorMessage';
+import { ChatStorage } from '../services/chatStorage';
+// Removed APIConfig import as it's not directly used here anymore
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -48,17 +50,16 @@ const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {
 };
 
 // Custom hook for stall detection - for use in ChatBubble component
-// This hook is exported for use in other components
 export const useStallDetection = (
   isGenerating: boolean,
   content: string,
-  onStallDetected: () => void, 
+  onStallDetected: () => void,
   stallTimeout = 8000
 ) => {
   const contentRef = useRef(content);
   const lastUpdateRef = useRef(Date.now());
   const stallCheckRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Update refs when content changes
   useEffect(() => {
     if (content !== contentRef.current) {
@@ -66,7 +67,7 @@ export const useStallDetection = (
       lastUpdateRef.current = Date.now();
     }
   }, [content]);
-  
+
   // Set up stall detection
   useEffect(() => {
     if (isGenerating) {
@@ -76,7 +77,7 @@ export const useStallDetection = (
         if (timeSinceUpdate > stallTimeout) {
           console.warn(`Generation appears stalled (${stallTimeout}ms without updates)`);
           onStallDetected();
-          
+
           // Clear the interval
           if (stallCheckRef.current) {
             clearInterval(stallCheckRef.current);
@@ -91,7 +92,7 @@ export const useStallDetection = (
         stallCheckRef.current = null;
       }
     }
-    
+
     // Cleanup
     return () => {
       if (stallCheckRef.current) {
@@ -106,27 +107,27 @@ export const useStallDetection = (
 function useScrollToBottom() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  
+
   const scrollToBottom = useCallback(() => {
     if (!messagesContainerRef.current || !messagesEndRef.current) return;
-    
+
     // Option 1: Use scrollIntoView with specific options
-    messagesEndRef.current.scrollIntoView({ 
-      behavior: 'smooth', 
+    messagesEndRef.current.scrollIntoView({
+      behavior: 'smooth',
       block: 'end',
       inline: 'nearest'
     });
-    
+
     // Double-check scroll position with a slight delay to account for layout adjustments
     setTimeout(() => {
       const container = messagesContainerRef.current;
       const endElement = messagesEndRef.current;
       if (!container || !endElement) return;
-      
+
       // Check if we're actually at the bottom
       const containerRect = container.getBoundingClientRect();
       const endElementRect = endElement.getBoundingClientRect();
-      
+
       // If we're not close enough to the bottom, force direct scrolling
       const scrollOffset = endElementRect.bottom - containerRect.bottom;
       if (Math.abs(scrollOffset) > 20) {
@@ -142,14 +143,22 @@ function useScrollToBottom() {
   };
 }
 
-// Separate InputArea component
-const InputArea: React.FC<{
+// Separate InputArea component - Reverted props
+interface InputAreaProps {
   onSend: (text: string) => void;
   isGenerating: boolean;
   currentUser: UserProfile | null;
   onUserSelect: () => void;
-  emotion: EmotionState; // Changed from string | null to EmotionState
-}> = ({ onSend, isGenerating, currentUser, onUserSelect, emotion }) => {
+  emotion: EmotionState;
+}
+
+const InputArea: React.FC<InputAreaProps> = ({
+  onSend,
+  isGenerating,
+  currentUser,
+  onUserSelect,
+  emotion,
+}) => {
   const [inputValue, setInputValue] = useState('');
   const [imageError, setImageError] = useState(false);
 
@@ -171,14 +180,15 @@ const InputArea: React.FC<{
   return (
     <div className="flex-none p-4 border-t border-stone-800">
       <div className="flex items-end gap-4">
+        {/* User Image */}
         <div
           onClick={onUserSelect}
-          className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden"
+          className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden flex-shrink-0"
         >
           {currentUser && !imageError ? (
             <img
               src={`/api/user-image/${encodeURIComponent(currentUser.filename)}`}
-              alt={currentUser.name}
+              alt={currentUser.name || 'User'}
               className="w-full h-full object-cover"
               onError={() => {
                 console.error('User image load failed');
@@ -192,21 +202,22 @@ const InputArea: React.FC<{
           )}
         </div>
 
-        <div className="flex-1 h-32 flex flex-col overflow-hidden"> {/* Added flex flex-col and overflow-hidden */}
+        {/* Text Input Area */}
+        <div className="flex-1 h-32 flex flex-col overflow-hidden">
           <RichTextEditor
             content={inputValue}
             onChange={setInputValue}
-            className="bg-stone-950 border border-stone-800 rounded-lg flex-1 overflow-y-auto" /* Added flex-1 and overflow-y-auto */
+            className="bg-stone-950 border border-stone-800 rounded-lg flex-1 overflow-y-auto"
             placeholder="Type your message..."
             onKeyDown={handleKeyPress}
             preserveWhitespace={true}
           />
+          {/* Removed API Selector Dropdown */}
         </div>
 
-        <div className="flex flex-col items-center gap-2">
-          {/* Add mood indicator directly above send button */}
+        {/* Send Button & Mood Indicator */}
+        <div className="flex flex-col items-center gap-2 flex-shrink-0">
           <MoodIndicator emotion={emotion} size={24} showLabel={false} />
-          
           <button
             onClick={() => {
               if (inputValue.trim() && !isGenerating) {
@@ -215,7 +226,7 @@ const InputArea: React.FC<{
               }
             }}
             disabled={!inputValue.trim() || isGenerating}
-            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700 
+            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700
                      transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send size={20} />
@@ -228,22 +239,25 @@ const InputArea: React.FC<{
 
 // Main ChatView component
 const ChatView: React.FC = () => {
-  const { characterData, setCharacterData } = useCharacter(); // Get setCharacterData from context
-  const { apiConfig } = useAPIConfig(); // Get API config for generation
+  const { characterData, setCharacterData } = useCharacter();
+  const { apiConfig } = useAPIConfig(); // Get the globally active config
+
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
   const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
-  const [isRegeneratingGreeting, setIsRegeneratingGreeting] = useState(false); // Add state for greeting regeneration
-  
+  const [isRegeneratingGreeting, setIsRegeneratingGreeting] = useState(false);
+  // Removed selectedApiIdForNextMessage state
+  const [localError, setLocalError] = useState<string | null>(null); // Local error state for UI feedback
+
   // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
   const {
     messages,
     isGenerating,
-    error,
+    error: hookError, // Rename hook error to avoid conflict
     currentUser,
     lastContextWindow,
     generatingId,
@@ -257,11 +271,12 @@ const ChatView: React.FC = () => {
     setCurrentUser,
     loadExistingChat,
     updateReasoningSettings,
-    clearError
+    clearError: clearHookError, // Rename hook clearError
+    handleNewChat // Get handleNewChat from the hook
   } = useChatMessages(characterData);
-  
+
   // Get current chat ID from the last context window
-  const currentChatId = lastContextWindow?.chatId || 
+  const currentChatId = lastContextWindow?.chatId ||
                        (lastContextWindow?.type === 'chat_loaded' ? lastContextWindow.chatId : null);
 
   // Load background settings from localStorage
@@ -279,24 +294,24 @@ const ChatView: React.FC = () => {
   // Save background settings when they change
   useEffect(() => {
     localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));
-    
+
     // Also update background settings in current chat metadata
-    if (characterData && messages.length > 0) {
+    if (characterData && messages.length > 0 && !isGenerating) { // Avoid saving during generation
       try {
         // Pass current background settings when saving the chat
         ChatStorage.saveChat(
-          characterData, 
-          messages, 
-          currentUser, 
-          null, // No need to pass apiInfo here
+          characterData,
+          messages,
+          currentUser,
+          null, // No need to pass apiInfo here, saveChat uses global
           backgroundSettings // Pass current background settings
         );
       } catch (err) {
         console.error('Error saving background settings to chat metadata:', err);
       }
     }
-  }, [backgroundSettings, characterData, messages, currentUser]);
-  
+  }, [backgroundSettings, characterData, messages, currentUser, isGenerating]); // Added isGenerating dependency
+
   // Sync background settings from loaded chat metadata
   useEffect(() => {
     // When lastContextWindow changes and indicates a chat was loaded
@@ -320,15 +335,17 @@ const ChatView: React.FC = () => {
     characterData,
     (updatedMessages) => {
       // This is the saveMessages function passed to useChatContinuation
-      apiService.saveChat(characterData!, updatedMessages, currentUser);
+      // Use ChatStorage directly as apiService.saveChat might not exist or be correct
+      if (characterData) {
+          ChatStorage.saveChat(characterData, updatedMessages, currentUser, null, backgroundSettings);
+      }
     },
     (updatedMessages) => {
-      // This is the updateMessagesState function 
-      // We don't have direct access to setState from useChatMessages, so we need a workaround
-      const messagesToUpdate = updatedMessages.filter((msg, index) => 
+      // This is the updateMessagesState function
+      const messagesToUpdate = updatedMessages.filter((msg, index) =>
         index < messages.length && JSON.stringify(msg) !== JSON.stringify(messages[index])
       );
-      
+
       messagesToUpdate.forEach(msg => {
         // Pass true for isStreamingUpdate to prevent immediate saves during continuation
         updateMessage(msg.id, msg.content, true);
@@ -337,15 +354,9 @@ const ChatView: React.FC = () => {
     // Now we properly set isGenerating state to show the stop button during continuation
     (isGen) => {
       // Update global generating state during continuation
-      if (isGen && !isGenerating) {
-        // We need a way to update the isGenerating state
-        // Simulate clicking stop and re-starting to update UI state
-        console.log('Setting continuation generating state');
-        // Fire a custom event to notify components of generating state
-        window.dispatchEvent(new CustomEvent('cardshark:continuation-generating', {
-          detail: { generating: isGen }
-        }));
-      }
+      // This part seems complex and might need adjustment in useChatMessages hook itself
+      // For now, rely on the hook's internal state management if possible
+      console.log('Continuation generating state changed:', isGen);
     },
     (genId) => {
       // No way to directly update generatingId from useChatMessages
@@ -366,28 +377,23 @@ const ChatView: React.FC = () => {
         stopContinuation();
       }
     };
-    
+
     window.addEventListener('cardshark:force-generation-stop', handleForceStop);
-    
+
     return () => {
       window.removeEventListener('cardshark:force-generation-stop', handleForceStop);
     };
   }, [isGenerating, stopGeneration, stopContinuation]);
 
-  // If there's a continuation error, merge it with the main error
-  const combinedError = error || continuationError;
-  
+  // Combine local error and hook errors for display
+  const combinedError = localError || hookError || continuationError;
+
   // Handle error dismissal from either source
   const handleDismissError = useCallback(() => {
-    if (error) {
-      // Clear error from useChatMessages hook
-      clearError();
-    }
-    if (continuationError) {
-      // Clear error from useChatContinuation hook
-      clearContinuationError();
-    }
-  }, [error, continuationError, clearError, clearContinuationError]);
+    if (localError) setLocalError(null); // Clear local error
+    if (hookError) clearHookError(); // Clear hook error
+    if (continuationError) clearContinuationError(); // Clear continuation error
+  }, [localError, hookError, continuationError, clearHookError, clearContinuationError]);
 
   // Use local state for UI control, synced with hook state
   const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(
@@ -420,41 +426,20 @@ const ChatView: React.FC = () => {
           currentUser?.name,
           characterData?.data?.name
         );
-        
+
         // Set a response on the event to pass back the substituted content
         customEvent.detail.substituteWith = substitutedContent;
       }
     };
-    
+
     window.addEventListener('cardshark:process-first-message', handleFirstMessageCreation);
-    
+
     return () => {
       window.removeEventListener('cardshark:process-first-message', handleFirstMessageCreation);
     };
   }, [currentUser, characterData]);
 
-  // Modified handleNewChat function - simpler approach
-  const handleNewChat = async () => {
-    if (!characterData?.data?.first_mes) return;
-    
-    // Clear persisted context window
-    try {
-      await apiService.clearContextWindow();
-    } catch (err) {
-      console.error('Error clearing context window:', err);
-    }
-    
-    // Create a new chat file on the backend
-    try {
-      const result = await ChatStorage.createNewChat(characterData);
-      if (result?.success) {
-        // Trigger the new chat creation with the special command
-        generateResponse('/new');
-      }
-    } catch (err) {
-      console.error('Error creating new chat:', err);
-    }
-  };
+  // handleNewChat is now provided by useChatMessages hook
 
   const handleLoadChat = (chatId: string) => {
     if (!characterData) return;
@@ -471,11 +456,8 @@ const ChatView: React.FC = () => {
   const handleContinueResponse = (message: Message) => {
     if (message.role === 'assistant') {
       // Make sure we indicate generation is happening
-      // Don't need to simulate anything here since continueResponse will trigger
-      // the appropriate state changes through the callbacks we provided
       if (!isGenerating) {
         console.log('Starting continuation for message:', message.id);
-        // No direct state setters available here from the hook
       }
       continueResponse(message);
     }
@@ -484,10 +466,10 @@ const ChatView: React.FC = () => {
   // Show the correct stop button during continuation
   const getStopHandler = (message: Message): (() => void) | undefined => {
     if (message.role !== 'assistant') return undefined;
-    
+
     // If this message is currently being generated by either method
-    return isGenerating && (generatingId === message.id) 
-      ? stopGeneration 
+    return isGenerating && (generatingId === message.id)
+      ? stopGeneration
       : stopContinuation;
   };
 
@@ -498,347 +480,208 @@ const ChatView: React.FC = () => {
 
   // Function to check if a message is the first assistant message
   const isFirstAssistantMessage = useCallback((messageId: string): boolean => {
-    const firstIndex = getFirstAssistantMessageIndex();
-    if (firstIndex === -1) return false;
-    return messages[firstIndex].id === messageId;
+    const firstAssistantIndex = getFirstAssistantMessageIndex();
+    return firstAssistantIndex !== -1 && messages[firstAssistantIndex].id === messageId;
   }, [messages, getFirstAssistantMessageIndex]);
 
-  // Function to regenerate greeting and update character data
+  // Function to regenerate the first assistant message (greeting)
   const handleRegenerateGreeting = useCallback(async () => {
-    // Don't allow regeneration if already generating or no character data
-    if (isGenerating || isRegeneratingGreeting || !characterData || !apiConfig) {
+    if (!characterData || isGenerating || isRegeneratingGreeting) return;
+
+    const firstAssistantIndex = getFirstAssistantMessageIndex();
+    if (firstAssistantIndex === -1) {
+      console.error("Cannot regenerate greeting: No assistant message found.");
       return;
     }
 
-    // Set generating state
+    const greetingMessage = messages[firstAssistantIndex];
     setIsRegeneratingGreeting(true);
-    
+    handleDismissError(); // Clear previous errors (local and hook)
+
     try {
-      // Clear previous errors
-      if (clearError) clearError();
-      
-      // Generate new greeting using the streaming API
-      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig);
-      
+      // Use ChatStorage to generate a new greeting
+      // Use the globally active API config for greeting regeneration
+      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig); // Use global apiConfig
+
       if (result.success && result.greeting) {
-        // Find the first assistant message
-        const firstIndex = getFirstAssistantMessageIndex();
-        
-        if (firstIndex !== -1) {
-          // Create a new message with the generated greeting
-          const updatedMessage = {
-            ...messages[firstIndex],
-            content: result.greeting,
-            // Reset any variations
-            variations: [],
-            currentVariation: 0,
-          };
-          
-          // Update the message in the chat
-          updateMessage(updatedMessage.id, updatedMessage.content);
-          
-          // Also update the character's first_mes field
+        const newGreeting = result.greeting;
+        // Update the character data in context if setCharacterData is available
+        if (setCharacterData) {
           setCharacterData(prev => {
-            if (!prev) return prev;
+            if (!prev) return null;
             return {
               ...prev,
               data: {
                 ...prev.data,
-                first_mes: result.greeting || prev.data.first_mes || '',
+                first_mes: newGreeting // Update the first_mes in the character data
               }
             };
           });
-          
-          // Show a success toast or notification (optional)
-          console.log("Greeting regenerated and updated in character data");
         }
+        // Update the message content in the chat state
+        updateMessage(greetingMessage.id, newGreeting);
+        // Optionally save the chat state after updating the greeting
+        // saveChat(updatedMessages, currentUser); // Need access to updated messages
       } else {
-        throw new Error(result.message || 'Failed to generate greeting');
+        throw new Error(result.message || "Failed to generate new greeting");
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error regenerating greeting:', errorMessage);
-      // Set error state if available
-      if (typeof clearError === 'function') {
-        // This assumes there's a setError function in the context
-        window.dispatchEvent(new CustomEvent('cardshark:set-error', { 
-          detail: { message: `Failed to regenerate greeting: ${errorMessage}` }
-        }));
-      }
+      console.error("Error regenerating greeting:", err);
+      // Display error to the user using local state
+       setLocalError(err instanceof Error ? err.message : 'Failed to regenerate greeting');
     } finally {
       setIsRegeneratingGreeting(false);
     }
-  }, [characterData, apiConfig, isGenerating, isRegeneratingGreeting, messages, updateMessage, setCharacterData, getFirstAssistantMessageIndex, clearError]);
-  
+  }, [characterData, isGenerating, isRegeneratingGreeting, messages, getFirstAssistantMessageIndex, apiConfig, updateMessage, handleDismissError, setCharacterData]); // Added apiConfig dependency
+
+  // Handle sending a message - Reverted to not pass API ID
   const handleSendMessage = (content: string) => {
-    // First strip any HTML that might already be in the content
-    const plainContent = content.replace(/<[^>]*>/g, '');
-    
-    // Convert markdown image syntax to HTML if needed
-    const htmlContent = markdownToHtml(plainContent);
-    
-    // Create a message with both HTML content and raw text
-    const userMessage = {
-      id: generateUUID(),
-      role: 'user',
-      content: htmlContent,
-      rawContent: htmlToText(htmlContent),
-      timestamp: Date.now()
-    };
-    
-    // Add the message to your state
-    generateResponse(userMessage.content);
+    if (!content.trim() || isGenerating) return;
+    generateResponse(content);
   };
 
-  // Get current emotion for the indicator
-  const { currentEmotion } = useEmotionDetection(messages, characterData?.data?.name);
+  // Emotion detection hook - Corrected destructuring
+  const { currentEmotion: emotion } = useEmotionDetection(messages, characterData?.data?.name);
 
-  // Fix the character ID access
-
-  // Debug: Log messages array before rendering
-  console.log("DEBUG: Chat messages", messages);
+  // Render logic
+  if (!characterData) {
+    return <div className="flex items-center justify-center h-full text-gray-400">Select a character to start chatting.</div>;
+  }
 
   return (
     <div className="h-full relative flex flex-col overflow-hidden">
-      {/* Mood-based Background */}
-      {backgroundSettings.moodEnabled ? (
-        <div className="absolute inset-0 z-0">
+      {/* Background Image/Mood */}
+      <div className="absolute inset-0 z-0">
+        {backgroundSettings.moodEnabled ? (
           <MoodEmotionBackground
             messages={messages}
-            characterName={characterData?.data?.name}
+            characterName={characterData.data.name || 'Character'}
             transparency={backgroundSettings.transparency}
             fadeLevel={backgroundSettings.fadeLevel}
+            backgroundUrl={backgroundSettings.background?.url} // Pass backgroundUrl
           />
-        </div>
-      ) : (
-        /* Static Background Image */
-        backgroundSettings.background?.url && (
+        ) : backgroundSettings.background?.url ? ( // Check for .url
           <div
-            className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+            className="absolute inset-0 bg-cover bg-center transition-opacity duration-500"
             style={{
-              backgroundImage: `url(${backgroundSettings.background.url})`,
-              filter: `blur(${backgroundSettings.fadeLevel / 3}px)`
+              backgroundImage: `url(${backgroundSettings.background.url})`, // Use .url
+              opacity: 1 - (backgroundSettings.transparency / 100), // Correct opacity
+              filter: `blur(${backgroundSettings.fadeLevel / 3}px)`, // Apply blur directly, consistent with MoodBackground
             }}
           />
-        )
-      )}
-      
+        ) : null}
+        {/* Fade Overlay - Conditionally render */}
+        {!backgroundSettings.moodEnabled && backgroundSettings.background?.url && !backgroundSettings.disableAnimation && (
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/80 to-transparent"
+            style={{ bottom: '70%' }} /* Fixed extent for gradient, e.g., bottom 30% */
+          />
+        )}
+      </div>
+
       {/* Header */}
-      <div className="flex-none p-8 pb-4 flex justify-between items-center relative z-10"
-           style={{ 
-             backgroundColor: backgroundSettings.background?.url 
-               ? `rgba(28, 25, 23, ${1 - backgroundSettings.transparency / 100})` 
-               : undefined 
-           }}>
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold">
-            {characterData?.data?.name
-              ? `Chatting with ${characterData.data.name}`
-              : 'Chat'}
-          </h2>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          {/* Reasoning settings toggles */}
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 cursor-pointer">
+      <div className="flex-none p-4 border-b border-stone-800 relative z-10 flex justify-between items-center">
+        <h2 className="text-xl font-semibold">{characterData.data.name}</h2>
+        <div className="flex items-center gap-2">
+          {/* Reasoning Toggle */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={reasoningSettings.enabled}
+              onChange={(e) => {
+                handleReasoningSettingsChange({ ...reasoningSettings, enabled: e.target.checked });
+              }}
+              className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-300">Show Reasoning</span>
+          </label>
+          {reasoningSettings.enabled && (
+            <label className="flex items-center gap-2 cursor-pointer ml-4">
               <input
                 type="checkbox"
-                checked={reasoningSettings.enabled}
+                checked={reasoningSettings.visible}
                 onChange={(e) => {
-                  const updated = { ...reasoningSettings, enabled: e.target.checked };
-                  handleReasoningSettingsChange(updated);
+                  handleReasoningSettingsChange({ ...reasoningSettings, visible: e.target.checked });
                 }}
-                className="form-checkbox h-4 w-4 text-blue-600 rounded"
+                className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
               />
-              <span className="text-sm text-gray-300">Think</span>
+              <span className="text-xs text-gray-300">Visible</span>
             </label>
-            {reasoningSettings.enabled && (
-              <label className="flex items-center gap-2 cursor-pointer ml-4">
-                <input
-                  type="checkbox"
-                  checked={reasoningSettings.visible}
-                  onChange={(e) => {
-                    const updated = { ...reasoningSettings, visible: e.target.checked };
-                    handleReasoningSettingsChange(updated);
-                  }}
-                  className="form-checkbox h-4 w-4 text-blue-600 rounded"
-                />
-                <span className="text-sm text-gray-300">Show Thoughts</span>
-              </label>
-            )}
-          </div>
-
-          {/* Background Settings button */}
-          <button
-            onClick={() => setShowBackgroundSettings(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
-            title="Background Settings"
-          >
-            <Wallpaper size={18} />
-            BG
-          </button>
-          
-          {/* Add Context Window button */}
-          <button
-            onClick={() => setShowContextWindow(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-gray-600 transition-colors"
-            title="View API Context Window"
-          >
+          )}
+          {/* End Reasoning Toggle */}
+          <button onClick={() => setShowContextWindow(true)} className="p-1 text-gray-400 hover:text-white" title="View Context Window">
             <Eye size={18} />
-            Context
           </button>
-
-          {/* Debug button - Add this for temporary troubleshooting }
-          <button
-            onClick={async () => {
-              try {
-                // Log character data to help debug
-                console.log("Character data for API call:", characterData);
-                
-                // Ensure we have character data before proceeding
-                if (!characterData) {
-                  console.error("No character data available for debug call");
-                  return;
-                }
-                
-                // Make a direct API call to check response
-                const response = await fetch('/api/list-character-chats', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    character_data: characterData, // Send the complete character data object
-                    format: 'jsonl'
-                  }),
-                });
-                
-                if (!response.ok) {
-                  const errorText = await response.text();
-                  throw new Error(`API error (${response.status}): ${errorText}`);
-                }
-                
-                const data = await response.json();
-                console.log("API response (list-character-chats):", data);
-              } catch (err) {
-                console.error("Debug API call failed:", err);
-              }
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-orange-700 transition-colors"
-            title="Debug Chat Loading"
-          >
-            Debug
-          </button>*/}
-
-          <button
-            onClick={() => setShowChatSelector(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent text-white rounded-lg hover:bg-purple-700 transition-colors"
-          >
+          <button onClick={() => setShowBackgroundSettings(true)} className="p-1 text-gray-400 hover:text-white" title="Background Settings">
+            <Wallpaper size={18} />
+          </button>
+          <button onClick={() => setShowChatSelector(true)} className="p-1 text-gray-400 hover:text-white" title="Select Chat">
             <MessageSquare size={18} />
-            Load Chat
           </button>
-
-          <button
-            onClick={handleNewChat}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <button onClick={handleNewChat} className="p-1 text-gray-400 hover:text-white" title="New Chat">
             <Plus size={18} />
-            New
           </button>
         </div>
       </div>
 
-      {/* Error display using the new component */}
-      {combinedError && (
-        <div className="relative z-10 px-8 py-2">
-          <ErrorMessage 
-            message={combinedError}
-            severity="error"
-            onDismiss={handleDismissError}
-          />
-        </div>
-      )}
-
-      {/* Messages */}
-      <div
-        ref={messagesContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-8 py-4 scroll-smooth relative z-10"
-        style={{ 
-          backgroundColor: backgroundSettings.background?.url 
-            ? `rgba(28, 25, 23, ${1 - backgroundSettings.transparency / 100})` 
-            : undefined 
-        }}
-      >
-        <div className="flex flex-col space-y-4">
-
-          {messages.map((message) => (
-            <React.Fragment key={message.id}>
-              {message.role === 'thinking' && reasoningSettings.visible ? (
-                <ThoughtBubble
-                  message={message}
-                  isGenerating={isGenerating && message.id === generatingId}
-                  onContentChange={(content) => updateMessage(message.id, content)}
-                  onDelete={() => deleteMessage(message.id)}
-                  characterName={characterData?.data?.name}
-                />
-              ) : null}
-              
-              {message.role !== 'thinking' && (
-                <ChatBubble
-                  message={message}
-                  isGenerating={(isGenerating && message.id === generatingId)}
-                  isFirstMessage={isFirstAssistantMessage(message.id)}
-                  isRegeneratingGreeting={isRegeneratingGreeting && isFirstAssistantMessage(message.id)}
-                  onContentChange={(content) => updateMessage(message.id, content)}
-                  onDelete={() => deleteMessage(message.id)}
-                  onStop={getStopHandler(message)}
-                  onTryAgain={
-                    message.role === 'assistant' 
-                      ? () => regenerateMessage(message) 
-                      : undefined
-                  }
-                  onContinue={
-                    message.role === 'assistant' 
-                      ? () => handleContinueResponse(message) 
-                      : undefined
-                  }
-                  onNextVariation={() => cycleVariation(message.id, 'next')}
-                  onPrevVariation={() => cycleVariation(message.id, 'prev')}
-                  onRegenerateGreeting={
-                    message.role === 'assistant' && isFirstAssistantMessage(message.id)
-                      ? handleRegenerateGreeting
-                      : undefined
-                  }
-                  currentUser={currentUser?.name}
-                  characterName={characterData?.data?.name}
-                />
-              )}
-            </React.Fragment>
-          ))}
-          <div ref={messagesEndRef} className="h-px" />
-        </div>
+      {/* Error Display */}
+      <div className="relative z-10 px-8 py-2">
+        <ErrorMessage
+          message={combinedError}
+          onDismiss={handleDismissError}
+        />
       </div>
-      
-      {/* Input Area */}
-      <div
-        className="relative z-10"
-        style={{ 
-          backgroundColor: backgroundSettings.background?.url 
-            ? `rgba(28, 25, 23, ${1 - backgroundSettings.transparency / 100})` 
-            : undefined 
-        }}
-      >
+
+
+      {/* Messages Area */}
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 relative z-10">
+        {messages.map((message) => (
+          <React.Fragment key={message.id}>
+            {message.role === 'thinking' && reasoningSettings.visible ? (
+              <ThoughtBubble
+                message={message} // Pass the full message object
+                isGenerating={message.status === 'streaming'}
+                // Provide dummy handlers as editing/deleting thoughts isn't implemented here
+                onContentChange={(newContent) => console.log('Thought changed (not implemented):', newContent)}
+                onDelete={() => console.log('Delete thought (not implemented)')}
+                characterName={characterData.data.name}
+              />
+            ) : null}
+            {message.role !== 'thinking' && (
+              <ChatBubble
+                message={message}
+                characterName={characterData.data.name || 'Character'}
+                isGenerating={isGenerating && generatingId === message.id}
+                onTryAgain={() => regenerateMessage(message)} // Use onTryAgain and wrap handler
+                onContinue={() => handleContinueResponse(message)} // Wrap handler
+                onDelete={() => deleteMessage(message.id)} // Wrap handler
+                onContentChange={(newContent) => updateMessage(message.id, newContent)} // Use onContentChange for edits
+                onStop={getStopHandler(message)} // Correct prop name
+                isFirstMessage={isFirstAssistantMessage(message.id)} // Corrected prop name
+                onRegenerateGreeting={handleRegenerateGreeting}
+                isRegeneratingGreeting={isRegeneratingGreeting && isFirstAssistantMessage(message.id)}
+                onNextVariation={() => cycleVariation(message.id, 'next')} // Add variation handlers
+                onPrevVariation={() => cycleVariation(message.id, 'prev')} // Add variation handlers
+              />
+            )}
+          </React.Fragment>
+        ))}
+        <div ref={messagesEndRef} /> {/* Scroll target */}
+      </div>
+
+      {/* Input Area - Reverted */}
+      <div className="relative z-10">
         <InputArea
           onSend={handleSendMessage}
           isGenerating={isGenerating}
           currentUser={currentUser}
           onUserSelect={() => setShowUserSelect(true)}
-          emotion={currentEmotion}
+          emotion={emotion} // Pass the correctly destructured emotion state
+          // Removed API selector props
         />
       </div>
 
-      {/* User Select Modal */}
+      {/* Modals and Dialogs */}
       <UserSelect
         isOpen={showUserSelect}
         onClose={() => setShowUserSelect(false)}
@@ -846,27 +689,19 @@ const ChatView: React.FC = () => {
           setCurrentUser(user);
           setShowUserSelect(false);
         }}
-        currentUser={currentUser?.name}
       />
-
-      {/* Chat Selector Dialog */}
       <ChatSelectorDialog
         isOpen={showChatSelector}
         onClose={() => setShowChatSelector(false)}
-        onSelect={handleLoadChat}
-        characterData={characterData}
+        onSelect={handleLoadChat} // Use onSelect prop for loading
+        characterData={characterData} // Correct prop name
         currentChatId={currentChatId}
       />
-
-      {/* Context Window Modal */}
       <ContextWindowModal
         isOpen={showContextWindow}
         onClose={() => setShowContextWindow(false)}
-        contextData={lastContextWindow}
-        title="API Context Window"
+        contextData={lastContextWindow} // Correct prop name
       />
-
-      {/* Background Settings Dialog */}
       {showBackgroundSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <ChatBackgroundSettings
@@ -880,25 +715,29 @@ const ChatView: React.FC = () => {
   );
 };
 
-// Wrapper component for MoodBackground that connects to emotion detection
-const MoodEmotionBackground: React.FC<{
+// Helper component for Mood Background
+interface MoodEmotionBackgroundProps {
   messages: Message[];
-  characterName?: string;
+  characterName: string;
   transparency: number;
   fadeLevel: number;
-}> = ({ messages, characterName, transparency, fadeLevel }) => {
-  const { currentEmotion } = useEmotionDetection(messages, characterName);
-  
+  backgroundUrl?: string | null; // Add backgroundUrl prop
+}
+
+const MoodEmotionBackground: React.FC<MoodEmotionBackgroundProps> = ({ messages, characterName, transparency, fadeLevel, backgroundUrl }) => {
+  const { currentEmotion: emotion } = useEmotionDetection(messages, characterName); // Correct destructuring
+
   return (
     <MoodBackground
-      emotion={currentEmotion}
-      backgroundUrl={null}
+      emotion={emotion}
+      backgroundUrl={backgroundUrl} // Pass backgroundUrl to MoodBackground
       transparency={transparency}
       fadeLevel={fadeLevel}
     >
-      <div></div> {/* Empty div to satisfy the children prop requirement */}
+      <></> {/* Add empty children */}
     </MoodBackground>
   );
 };
+
 
 export default ChatView;

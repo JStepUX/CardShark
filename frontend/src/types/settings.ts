@@ -71,6 +71,9 @@ export interface Settings {
   
   // API Configurations
   apis: Record<string, APIConfig>;
+  // ID of the currently active API
+  activeApiId?: string;
+  
   // Reasoning settings
   reasoning: ReasoningSettings;
   
@@ -112,6 +115,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // App defaults
   character_directory: '',  // Keep as empty string in defaults
   save_to_character_directory: false,
+  models_directory: '', // Explicitly initialize
+  model_directory: '',  // Explicitly initialize
   show_koboldcpp_launcher: false, // Default to not showing KoboldCPP launcher on startup
   theme: 'dark',
   version: '1.0',

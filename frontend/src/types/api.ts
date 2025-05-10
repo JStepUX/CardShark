@@ -99,44 +99,51 @@ export interface ProviderConfig {
   requiresApiKey: boolean;
   availableModels?: ModelType[];
   defaultModel?: ModelType;
+  defaultName?: string;
 }
 
 export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
   [APIProvider.KOBOLD]: {
     defaultUrl: 'http://localhost:5001',
     templateId: ChatTemplate.MISTRAL,
-    requiresApiKey: false
+    requiresApiKey: false,
+    defaultName: 'Local KoboldCPP'
   },
   [APIProvider.OPENAI]: {
     defaultUrl: 'https://api.openai.com/v1',
     templateId: ChatTemplate.OPENAI,
     requiresApiKey: true,
     availableModels: Object.values(OpenAIModel),
-    defaultModel: OpenAIModel.GPT35_TURBO
+    defaultModel: OpenAIModel.GPT35_TURBO,
+    defaultName: 'OpenAI'
   },
   [APIProvider.CLAUDE]: {
     defaultUrl: 'https://api.anthropic.com/v1/messages',
     templateId: ChatTemplate.CLAUDE,
     requiresApiKey: true,
     availableModels: Object.values(ClaudeModel),
-    defaultModel: ClaudeModel.CLAUDE_3_SONNET
+    defaultModel: ClaudeModel.CLAUDE_3_SONNET,
+    defaultName: 'Anthropic Claude'
   },
   [APIProvider.GEMINI]: {
     defaultUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
     templateId: ChatTemplate.GEMINI,
     requiresApiKey: true,
     availableModels: Object.values(GeminiModel),
-    defaultModel: GeminiModel.GEMINI_PRO
+    defaultModel: GeminiModel.GEMINI_PRO,
+    defaultName: 'Google Gemini'
   },
   [APIProvider.OPENROUTER]: {
     defaultUrl: 'https://openrouter.ai/api/v1',
     templateId: ChatTemplate.OPENAI,
-    requiresApiKey: true
+    requiresApiKey: true,
+    defaultName: 'OpenRouter'
   },
   [APIProvider.FEATHERLESS]: {
     defaultUrl: 'https://api.featherless.ai/v1',
     templateId: ChatTemplate.OPENAI,
-    requiresApiKey: true
+    requiresApiKey: true,
+    defaultName: 'Featherless AI'
   }
 };
 
@@ -171,6 +178,7 @@ export interface ConnectionStatus {
 // API Configuration Schema
 export const APIConfigSchema = z.object({
   id: z.string().optional(),
+  name: z.string().optional(), // Added name field for user-friendly identification
   provider: z.enum(['KoboldCPP', 'OpenAI', 'Claude', 'Gemini', 'OpenRouter', 'Featherless']),
   url: z.string().url().optional(),
   apiKey: z.string().optional(),
@@ -211,13 +219,29 @@ export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 // Function to create an API config with appropriate defaults
 export function createAPIConfig(provider: APIProvider): APIConfig {
   const config = PROVIDER_CONFIGS[provider];
+  
+  // Create a unique ID for the new API configuration
+  const id = `api_${Date.now()}`;
+  
+  // Generate a complete API configuration with all necessary fields
   return {
-    id: `api_${Date.now()}`,
+    id,
+    name: config.defaultName || `${provider} API`,
     provider,
     url: config.defaultUrl,
+    apiKey: '',
     templateId: config.templateId,
     enabled: false,
-    model: config.defaultModel, // May be undefined for some providers
-    generation_settings: { ...DEFAULT_GENERATION_SETTINGS }
+    model: config.defaultModel || '', // Ensure we have at least an empty string
+    generation_settings: { ...DEFAULT_GENERATION_SETTINGS },
+    lastConnectionStatus: {
+      connected: false,
+      timestamp: Date.now()
+    },
+    // Add model_info even if empty to avoid undefined issues in the UI
+    model_info: {
+      id: '',
+      name: 'No model selected'
+    }
   };
 }

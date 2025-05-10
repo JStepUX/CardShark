@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import useApiConnection from './useApiConnection';
 
 interface SettingsData {
@@ -45,6 +45,8 @@ const useSettings = ({
   onSettingsLoaded,
   onSettingsError
 }: UseSettingsOptions = {}) => {
+  // Track if we should skip auto-refresh
+  const [skipNextRefresh, setSkipNextRefresh] = useState(false);
   
   const { 
     data: settings, 
@@ -62,8 +64,14 @@ const useSettings = ({
 
   /**
    * Update settings by sending a PUT request to the server
+   * @param updatedSettings - Partial settings to update
+   * @param options - Additional options
+   * @param options.skipRefresh - Skip automatic refresh after update (useful for batch updates)
    */
-  const updateSettings = useCallback(async (updatedSettings: Partial<SettingsData>) => {
+  const updateSettings = useCallback(async (
+    updatedSettings: Partial<SettingsData>, 
+    options: { skipRefresh?: boolean } = {}
+  ) => {
     try {
       const response = await fetch(settingsEndpoint, {
         method: 'PUT',
@@ -79,8 +87,15 @@ const useSettings = ({
 
       const result = await response.json();
       
-      // Refresh settings from the server to ensure we have the latest
-      fetchData();
+      // Only refresh if not explicitly skipped
+      if (!options.skipRefresh && !skipNextRefresh) {
+        fetchData();
+      }
+      
+      // Reset skip flag after use
+      if (skipNextRefresh) {
+        setSkipNextRefresh(false);
+      }
       
       return { success: true, data: result };
     } catch (err) {
@@ -90,14 +105,22 @@ const useSettings = ({
         error: err instanceof Error ? err : new Error('Unknown error occurred') 
       };
     }
-  }, [settingsEndpoint, fetchData]);
+  }, [settingsEndpoint, fetchData, skipNextRefresh]);
+
+  /**
+   * Utility to skip the next auto-refresh when performing multiple updates
+   */
+  const skipRefresh = useCallback(() => {
+    setSkipNextRefresh(true);
+  }, []);
 
   return {
     settings,
     loading,
     error,
     retry,
-    updateSettings
+    updateSettings,
+    skipRefresh
   };
 };
 

@@ -1,5 +1,5 @@
 // src/components/SettingsTabs.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 type Tab = 'general' | 'api' | 'templates' | 'prompts' | 'highlighting';
 
@@ -20,6 +20,14 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
   onTabChange
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
+
+  // Important: This effect ensures the component respects defaultTab changes
+  // from parent components, while avoiding unnecessary state updates
+  useEffect(() => {
+    if (defaultTab !== activeTab) {
+      setActiveTab(defaultTab);
+    }
+  }, [defaultTab]);
 
   const handleTabClick = (tab: Tab) => {
     setActiveTab(tab);

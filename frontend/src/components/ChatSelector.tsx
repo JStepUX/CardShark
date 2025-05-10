@@ -50,14 +50,30 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       
       if (Array.isArray(chats)) {
         // Transform the API response into our ChatInfo format
-        const chatInfoList: ChatInfo[] = chats.map((chat: any) => ({
-          id: chat.id || chat.chat_id,
-          filename: chat.filename,
-          title: formatChatTitle(chat.create_date || chat.display_date, chat.preview || chat.last_message),
-          lastModified: formatDate(chat.last_modified || chat.create_date || chat.display_date),
-          messageCount: chat.message_count || 0,
-          preview: chat.preview || chat.last_message || 'No messages'
-        }));
+        const charName = characterData?.data?.name;
+        const chatInfoList: ChatInfo[] = chats.map((chat: any) => {
+          const lastUserName = chat.chat_metadata?.lastUser?.name;
+          const rawPreview = chat.preview || chat.last_message || 'No messages';
+          
+          let cleanPreview = rawPreview.replace(/<[^>]*>/g, '');
+          let finalPreview = cleanPreview;
+
+          if (charName) {
+            finalPreview = finalPreview.replace(/\{\{char\}\}/g, charName);
+          }
+          if (lastUserName) {
+            finalPreview = finalPreview.replace(/\{\{user\}\}/g, lastUserName);
+          }
+
+          return {
+            id: chat.id || chat.chat_id,
+            filename: chat.filename,
+            title: formatChatTitle(chat.create_date || chat.display_date, chat.preview || chat.last_message, charName, lastUserName),
+            lastModified: formatDate(chat.last_modified || chat.create_date || chat.display_date),
+            messageCount: chat.message_count || 0,
+            preview: finalPreview
+          };
+        });
         
         // Filter out the current chat if currentChatId is provided
         const filteredChatList = currentChatId 
@@ -231,7 +247,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   };
 
   // Helper to create a readable title from date and content
-  const formatChatTitle = (dateString: string, lastMessage?: string): string => {
+  const formatChatTitle = (dateString: string, lastMessage?: string, characterName?: string, userName?: string): string => {
     try {
       const formattedDate = formatDate(dateString);
       
@@ -239,10 +255,18 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         // Strip any HTML tags for cleaner display
         const cleanMessage = lastMessage.replace(/<[^>]*>/g, '');
         
-        // Use a snippet from the last message as part of the title
-        const messagePreview = cleanMessage.substring(0, 30).trim();
+        let substitutedMessage = cleanMessage;
+        if (characterName) {
+          substitutedMessage = substitutedMessage.replace(/\{\{char\}\}/g, characterName);
+        }
+        if (userName) {
+          substitutedMessage = substitutedMessage.replace(/\{\{user\}\}/g, userName);
+        }
         
-        return `Chat from ${formattedDate}${messagePreview ? ` - "${messagePreview}${messagePreview.length < cleanMessage.length ? '...' : ''}"` : ''}`;
+        // Use a snippet from the last message as part of the title
+        const messagePreview = substitutedMessage.substring(0, 30).trim();
+        
+        return `Chat from ${formattedDate}${messagePreview ? ` - "${messagePreview}${messagePreview.length < substitutedMessage.length ? '...' : ''}"` : ''}`;
       }
       
       return `Chat from ${formattedDate}`;

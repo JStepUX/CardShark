@@ -3,52 +3,40 @@ import { FolderOpen } from 'lucide-react';
 
 interface ModelDirectorySettingsProps {
   directory: string | null;
-  onDirectoryChange: (directory: string) => void;
+  onDirectoryChange: (directory: string) => Promise<void>; // Expect a promise
 }
 
 const ModelDirectorySettings: React.FC<ModelDirectorySettingsProps> = ({
   directory,
   onDirectoryChange
 }) => {
-  // Initialize with the directory prop value or empty string if null
   const [modelsDirectory, setModelsDirectory] = useState<string>(directory || '');
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
-  // Update local state when the directory prop changes
   useEffect(() => {
-    console.log("ModelDirectorySettings received directory:", directory);
-    // Only update if we have a non-null, non-undefined value
-    if (directory !== null && directory !== undefined) {
-      setModelsDirectory(directory);
-    }
+    console.log(`[ModelDirectorySettings] Received prop 'directory':`, directory); // Diagnostic log
+    // Update local state whenever the directory prop changes,
+    // including to an empty string if that's what the prop becomes.
+    // Default to empty string if directory is null/undefined.
+    setModelsDirectory(directory || '');
   }, [directory]);
 
-  const saveModelsDirectory = async () => {
+  const handleSetDirectory = async () => { // Make async
     if (!modelsDirectory.trim()) {
       setErrorMessage('Please enter a directory path');
+      setSuccessMessage(null);
       return;
     }
-
+    
+    setIsLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    
     try {
-      setIsLoading(true);
-      setErrorMessage(null);
-      
-      const response = await fetch('/api/koboldcpp/models-directory', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ directory: modelsDirectory }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save models directory');
-      }
-
-      onDirectoryChange(modelsDirectory);
-      setSuccessMessage('Models directory saved successfully');
+      await onDirectoryChange(modelsDirectory); // Await the async operation
+      setSuccessMessage('Models directory saved successfully.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setErrorMessage(`Error saving directory: ${err instanceof Error ? err.message : String(err)}`);
@@ -73,8 +61,8 @@ const ModelDirectorySettings: React.FC<ModelDirectorySettingsProps> = ({
           className="flex-grow px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
           disabled={isLoading}
         />
-        <button 
-          onClick={saveModelsDirectory} 
+        <button
+          onClick={handleSetDirectory}
           disabled={isLoading || !modelsDirectory.trim()}
           className="px-4 py-2 bg-purple-800 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >

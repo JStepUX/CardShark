@@ -45,7 +45,7 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch('/api/backgrounds');
+      const response = await fetch('/api/backgrounds/');
       if (!response.ok) {
         throw new Error('Failed to load backgrounds');
       }

@@ -131,7 +131,7 @@ const MoodBackground: React.FC<MoodBackgroundProps> = ({
         className="absolute inset-0" 
         style={{
           backgroundColor: `rgba(28, 25, 23, ${1 - transparency / 100})`,
-          backdropFilter: `blur(${fadeLevel / 3}px)`,
+          // backdropFilter: `blur(${fadeLevel / 3}px)`, // Removed backdropFilter from UI overlay
           zIndex: 5 // Ensure this is above the color layer but below content
         }}
       />

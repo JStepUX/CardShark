@@ -7,9 +7,9 @@ export class PromptHandler {
   // Removed unused DEFAULT_PARAMS
 
   // Simple variable replacement function
-  private static replaceVariables(template: string, variables: Record<string, string>): string {
+  public static replaceVariables(template: string, variables: Record<string, string>): string { // Changed to public
     if (!template) return '';
-    
+
     let result = template;
     
     // Replace each variable in the template
@@ -75,15 +75,20 @@ export class PromptHandler {
   }
 
   // Create memory context from character data using template
-  public static createMemoryContext(character: CharacterCard, template: Template | null): string {
-    console.log('Creating memory context with template:', template?.name || 'No template');
-    
+  public static createMemoryContext(character: CharacterCard, template: Template | null, userName?: string): string {
+    console.log('Creating memory context with template:', template?.name || 'No template', 'User:', userName);
+    const currentUser = userName || 'User'; // Fallback for user name
+
     if (!template || !template.memoryFormat) {
       // Default memory format if no template or template has no memoryFormat
+      let scenario = character.data.scenario || '';
+      // Manually replace {{user}} in default scenario for robustness
+      scenario = scenario.replace(/\{\{user\}\}/g, currentUser);
+
       const defaultMemory = `${character.data.system_prompt || ''}
 Persona: ${character.data.description || ''}
 Personality: ${character.data.personality || ''}
-[Scenario: ${character.data.scenario || ''}]
+[Scenario: ${scenario}]
 ${character.data.mes_example || ''}
 ***`;
       console.log('Using default memory format:', defaultMemory);
@@ -97,7 +102,8 @@ ${character.data.mes_example || ''}
         description: character.data.description || '',
         personality: character.data.personality || '',
         scenario: character.data.scenario || '',
-        examples: character.data.mes_example || ''
+        examples: character.data.mes_example || '',
+        user: currentUser // Add user to variables
       };
 
       const formattedMemory = this.replaceVariables(template.memoryFormat, variables);
@@ -289,62 +295,63 @@ ${character.data.mes_example || ''}
   /**
    * Helper method to format prompt with context messages
    */
-  private static formatPromptWithContextMessages(
+  public static formatPromptWithContextMessages( // Changed to public
     character: CharacterCard,
     prompt: string,
-    contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
+    // Accept broader role type as filtering happens before call
+    contextMessages: Array<{ role: 'user' | 'assistant' | 'system' | 'thinking', content: string }>,
+    userName: string, // Added userName
     templateId?: string
   ): string {
     const template = this.getTemplate(templateId);
     const characterName = character.data.name || 'Character';
-    
-    // Create the memory context
-    const memoryContext = this.createMemoryContext(character, template);
-    
+    const currentUser = userName || 'User'; // Fallback if userName is empty
+
+    // Create the memory context - this might also need {{user}}
+    const memoryContext = this.createMemoryContext(character, template, currentUser); // Pass currentUser here
+
     // Format the history from context messages
     let history = '';
     if (contextMessages.length > 0) {
       history = contextMessages
         .map(msg => {
+          const messageVariables = {
+            content: msg.content,
+            char: characterName,
+            user: currentUser
+          };
           if (!template) {
             // Fallback formatting if no template
             if (msg.role === 'assistant') {
-              return `${characterName}: ${msg.content}`;
+              return this.replaceVariables(`{{char}}: {{content}}`, messageVariables);
             } else if (msg.role === 'system') {
-              return `[System: ${msg.content}]`;
-            } else {
-              return `User: ${msg.content}`;
+              return this.replaceVariables(`[System: {{content}}]`, messageVariables);
+            } else { // user role
+              return this.replaceVariables(`{{user}}: {{content}}`, messageVariables);
             }
           }
           
           if (msg.role === 'assistant') {
-            return this.replaceVariables(template.assistantFormat || '{{char}}: {{content}}', { 
-              content: msg.content, 
-              char: characterName 
-            });
+            return this.replaceVariables(template.assistantFormat || '{{char}}: {{content}}', messageVariables);
           } else if (msg.role === 'system' && template.systemFormat) {
-            return this.replaceVariables(template.systemFormat, {
-              content: msg.content
-            });
-          } else {
-            return this.replaceVariables(template.userFormat || 'User: {{content}}', { 
-              content: msg.content 
-            });
+            return this.replaceVariables(template.systemFormat, messageVariables);
+          } else { // user role
+            return this.replaceVariables(template.userFormat || '{{user}}: {{content}}', messageVariables);
           }
         })
         .join('\n');
     }
     
     // Combine everything into a complete prompt
-    const fullPrompt = `${memoryContext}\n\n${history}\n\n${
-      template?.userFormat 
-        ? this.replaceVariables(template.userFormat, { content: prompt })
-        : `User: ${prompt}`
-    }\n\n${
-      template?.assistantFormat 
-        ? this.replaceVariables(template.assistantFormat, { content: '', char: characterName })
-        : `${characterName}:`
-    }`;
+    const currentUserPromptFormatted = template?.userFormat
+      ? this.replaceVariables(template.userFormat, { content: prompt, user: currentUser, char: characterName })
+      : this.replaceVariables(`{{user}}: {{content}}`, { content: prompt, user: currentUser });
+
+    const assistantPrefixFormatted = template?.assistantFormat
+      ? this.replaceVariables(template.assistantFormat, { content: '', char: characterName, user: currentUser })
+      : this.replaceVariables(`{{char}}:`, { char: characterName });
+      
+    const fullPrompt = `${memoryContext}\n\n${history}\n\n${currentUserPromptFormatted}\n\n${assistantPrefixFormatted}`;
     
     return fullPrompt;
   }
@@ -409,6 +416,44 @@ ${character.data.mes_example || ''}
               // Handle OpenRouter-specific token format from our improved adapter
               if (parsed.token !== undefined) {
                 yield parsed.token;
+                continue;
+              }
+              
+              // Handle Featherless adapter specific format
+              if (parsed.raw_featherless_payload !== undefined) {
+                try {
+                  // Try to parse the raw payload from Featherless
+                  const featherlessData = JSON.parse(parsed.raw_featherless_payload);
+                  
+                  // Handle chat completions format
+                  if (featherlessData.choices && featherlessData.choices[0]) {
+                    if (featherlessData.choices[0].message && featherlessData.choices[0].message.content) {
+                      // This is from /v1/chat/completions endpoint
+                      yield featherlessData.choices[0].message.content;
+                      continue;
+                    } else if (featherlessData.choices[0].delta && featherlessData.choices[0].delta.content) {
+                      // This is from streaming version like OpenAI API
+                      yield featherlessData.choices[0].delta.content;
+                      continue;
+                    } else if (featherlessData.choices[0].text) {
+                      // This is from /v1/completions endpoint
+                      yield featherlessData.choices[0].text;
+                      continue;
+                    }
+                  }
+                  
+                  // If no specific format matched but we have content field as fallback
+                  if (featherlessData.content) {
+                    yield featherlessData.content;
+                    continue;
+                  }
+                  
+                  console.log('Unrecognized Featherless response format:', featherlessData);
+                } catch (parseError) {
+                  // If the raw payload isn't valid JSON, just use it directly
+                  console.warn('Could not parse Featherless raw payload:', parseError);
+                  yield parsed.raw_featherless_payload;
+                }
                 continue;
               }
               

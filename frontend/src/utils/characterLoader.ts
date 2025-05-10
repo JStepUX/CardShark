@@ -1,4 +1,5 @@
 import { CharacterData } from '../contexts/CharacterContext';
+import { toast } from 'sonner';
 
 export async function uploadPngFile(file: File): Promise<{ metadata: CharacterData; imageUrl: string }> {
   const formData = new FormData();
@@ -23,9 +24,12 @@ export async function uploadPngFile(file: File): Promise<{ metadata: CharacterDa
 
     // Create a URL for the uploaded image
     const imageUrl = URL.createObjectURL(file);
-
+    const characterName = data.metadata?.data?.name || 'Unknown Character';
+    toast.success(`Character "${characterName}" imported successfully from PNG!`);
     return { metadata: data.metadata, imageUrl };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+    toast.error(`Character import failed: ${errorMessage}`);
     if (error instanceof Error) {
       throw new Error(`Upload failed: ${error.message}`);
     }

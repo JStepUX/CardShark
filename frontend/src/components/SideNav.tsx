@@ -21,6 +21,7 @@ import DropdownMenu from './DropDownMenu';
 import ImagePreview from './ImagePreview';
 import TokenCounter from './TokenCounter';
 import usePrefetchRoute from '../hooks/usePrefetchRoute';
+import ApiSelectDropdown from './api/ApiSelectDropdown'; // Changed this line
 import logo from '../assets/cardshark_justfin.png';
 
 // Route component imports for prefetching
@@ -87,7 +88,7 @@ const SideNav: React.FC<SideNavProps> = ({
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="absolute -right-3 top-6 w-6 h-12 bg-stone-800 rounded-full flex items-center justify-center
-                   hover:bg-stone-700 transition-colors z-10"
+                   hover:bg-stone-700 transition-colors z-30"
       >
         {isCollapsed ? (
           <ChevronRight className="w-4 h-4 text-gray-300" />
@@ -122,6 +123,11 @@ const SideNav: React.FC<SideNavProps> = ({
               >
                 <Link size={20} />
               </button>
+            </div>
+
+            {/* API Selector (Collapsed) */}
+            <div className="flex flex-col items-center space-y-2 w-full">
+              <ApiSelectDropdown />
             </div>
 
             {/* Navigation */}
@@ -173,6 +179,11 @@ const SideNav: React.FC<SideNavProps> = ({
                   <Save size={20} />
                 </button>
               </div>
+            </div>
+
+            {/* API Selector (Expanded) */}
+            <div className="mb-4">
+              <ApiSelectDropdown />
             </div>
 
             {/* Navigation */}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import CharacterPreview from './CharacterPreview';
 import { NewCharacterDialog } from './NewCharacterDialog';
 
@@ -44,14 +45,20 @@ const PngUpload: React.FC = () => {
         setCharacterData(data.metadata);
         if (data.is_new) {
           setStatus('Created new character from image');
+          toast.success(data.is_new ? 'Created new character from image!' : 'Loaded existing character data from image!');
         } else {
           setStatus('Loaded existing character data');
+          toast.success('Loaded existing character data from image!');
         }
       } else {
-        throw new Error(data.message || 'Upload failed');
+        const errorMsg = data.message || 'Upload failed';
+        toast.error(`PNG Upload failed: ${errorMsg}`);
+        throw new Error(errorMsg);
       }
     } catch (error) {
-      setStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setStatus(`Error: ${errorMsg}`);
+      toast.error(`PNG Upload error: ${errorMsg}`);
       console.error('Upload error:', error);
     } finally {
       setIsLoading(false);
@@ -88,7 +95,8 @@ const PngUpload: React.FC = () => {
     };
 
     setCharacterData(emptyCharacter);
-    setStatus('New character created');
+    setStatus('New character template created. Fill in details and save.'); // Updated status
+    toast.success('New character template created. Please fill in the details.');
     setShowNewCharacterDialog(false);
   };
   

@@ -139,18 +139,33 @@ export const MarkdownImage = Extension.create({
   },
 
   // Process content when editor is initialized
-  onBeforeCreate() {
-    const { editor } = this;
-    const { doc, schema } = editor.state;
+  onCreate() {
+    if (!this.editor) {
+      console.error('MarkdownImage: Editor not available in onCreate');
+      return;
+    }
+    if (!this.editor.state) {
+      console.error('MarkdownImage: Editor state not available in onCreate');
+      return;
+    }
+
+    const { doc, schema } = this.editor.state;
+    if (!doc || !schema) {
+      console.error('MarkdownImage: Doc or schema not available in onCreate');
+      return;
+    }
     
-    // Check for markdown image syntax in initial content
     let hasChanges = false;
-    const tr = editor.state.tr;
+    const tr = this.editor.state.tr;
+    if (!tr) {
+      console.error('MarkdownImage: Transaction object not available in onCreate');
+      return;
+    }
     
     doc.descendants((node, pos) => {
-      if (!node.isText) return;
+      if (!node.isText || !node.text) return;
       
-      const text = node.text || '';
+      const text = node.text;
       MARKDOWN_IMAGE_REGEX.lastIndex = 0;
       let match;
       let offset = 0;
@@ -162,7 +177,6 @@ export const MarkdownImage = Extension.create({
         const start = pos + match.index - offset;
         const end = start + fullMatch.length;
         
-        // Delete markdown and insert image
         tr.delete(start, end);
         
         if (schema.nodes.image) {
@@ -171,14 +185,20 @@ export const MarkdownImage = Extension.create({
             alt: alt || '',
             title: alt || ''
           }));
+        } else {
+          console.warn('MarkdownImage: Image node type not available in schema.');
         }
         
-        offset += fullMatch.length - 1;
+        offset += fullMatch.length - (schema.nodes.image ? 1 : 0); // Adjust offset based on whether image was inserted
       }
     });
     
     if (hasChanges) {
-      editor.view.dispatch(tr);
+      if (!this.editor.view) {
+        console.error('MarkdownImage: Editor view not available for dispatch in onCreate');
+        return;
+      }
+      this.editor.view.dispatch(tr);
     }
   }
 });

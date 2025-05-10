@@ -2,11 +2,14 @@
 import ApiErrorBoundary from './components/common/ApiErrorBoundary';
 import ResilientApiProvider from './context/ResilientApiContext';
 import AppRoutes from './components/AppRoutes';
+import { Toaster } from 'sonner'; // Import Toaster
 import './styles/fonts.css';
 
 function App() {
   return (
-    <ApiErrorBoundary
+    <> {/* Wrap with Fragment or a div if preferred */}
+      <Toaster position="top-right" richColors closeButton /> {/* Add Toaster component */}
+      <ApiErrorBoundary
       fallback={(error, resetError) => (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
           <div className="max-w-md p-6 bg-white rounded-lg shadow-lg">
@@ -33,6 +36,7 @@ function App() {
         <AppRoutes />
       </ResilientApiProvider>
     </ApiErrorBoundary>
+    </>
   );
 }
 

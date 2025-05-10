@@ -155,6 +155,7 @@ interface UseChatMessagesReturn extends SimplifiedChatState {
   handleNewChat: () => Promise<void>;
   clearError: () => void;
   activeCharacterData: CharacterData;
+  generateNpcIntroduction: (roomContext: string) => Promise<void>; // Added this
 }
 
 // --- Main WorldCardsPlayView component ---
@@ -192,7 +193,8 @@ const WorldCardsPlayView: React.FC = () => {
     updateMessage,
     setCurrentUser,
     clearError: clearChatError,
-    activeCharacterData
+    activeCharacterData,
+    generateNpcIntroduction // Added this
   }: UseChatMessagesReturn = useChatMessages(characterData, { isWorldPlay: true });
 
   // Load world chat data
@@ -292,14 +294,13 @@ const WorldCardsPlayView: React.FC = () => {
         setCurrentRoom(currentLoc);
         setCurrentRoomName(currentLoc.name || 'Unnamed Room');
 
-        // Get world context description
-        const worldContextDescription = currentLoc.description || 
-          `You are in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`;
+        // Get world context description (for AI system prompt/memory)
+        const worldSystemDescription = currentLoc.description ||
+          `This location is part of the world of ${formatWorldName(worldData.name) || 'Unknown'}.`;
         
-        // Use introduction field if available, fall back to description
-        const worldContextFirstMes = currentLoc.introduction || 
-          currentLoc.description || 
-          `Welcome to ${formatWorldName(worldData.name) || 'this world'}!`;
+        // Use introduction field for the user-facing first message
+        const worldUserIntroduction = currentLoc.introduction ||
+          `You find yourself in ${currentLoc.name || 'an interesting place'}.`; // More generic fallback if introduction is missing
 
         // Process world items using the service
         const characterBookEntries = worldDataService.processWorldItems(worldData);
@@ -307,10 +308,10 @@ const WorldCardsPlayView: React.FC = () => {
         // Create CharacterCard for Context (using world info and current location)
         const characterCardForContext: CharacterCard = {
           name: worldData.name || "World Narrator",
-          description: worldContextDescription,
-          personality: "",
-          scenario: `Exploring the world of ${formatWorldName(worldData.name) || 'Unknown'}`,
-          first_mes: worldContextFirstMes,
+          description: worldSystemDescription, // This is for the AI's understanding of the place
+          personality: "", // World narrator is neutral
+          scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`,
+          first_mes: worldUserIntroduction, // This is the user-facing initial message
           mes_example: "",
           creatorcomment: "",
           avatar: "none",
@@ -323,10 +324,10 @@ const WorldCardsPlayView: React.FC = () => {
           create_date: "",
           data: {
             name: worldData.name || "World Narrator",
-            description: worldContextDescription,
-            personality: "",
-            scenario: `Exploring the world of ${formatWorldName(worldData.name) || 'Unknown'}`,
-            first_mes: worldContextFirstMes,
+            description: worldSystemDescription, // For AI
+            personality: "", // World narrator is neutral
+            scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`,
+            first_mes: worldUserIntroduction, // For User
             mes_example: "",
             creator_notes: "",
             system_prompt: `You are the narrator describing the world of ${formatWorldName(worldData.name) || 'Unknown'}.`,
@@ -559,19 +560,9 @@ const WorldCardsPlayView: React.FC = () => {
       const metadata = data.success && data.metadata ? data.metadata : data;
       
       if (metadata) {
-        // Create a modified version of the metadata that skips first_mes
-        // This prevents the character's default greeting from being used in world context
-        const modifiedMetadata = {
-          ...metadata,
-          first_mes: "", // Empty the first_mes to prevent it from being used
-          data: {
-            ...metadata.data,
-            first_mes: "" // Also empty it in the data property
-          }
-        };
-        
-        // Set the modified character as the active character
-        setCharacterData(modifiedMetadata);
+        // Set the original NPC character data.
+        // The generateNpcIntroduction function will handle the dynamic intro.
+        setCharacterData(metadata);
         
         // Create image URL for the character
         const blob = await imageResponse.blob();
@@ -583,16 +574,15 @@ const WorldCardsPlayView: React.FC = () => {
         // Close the NPC dialog
         setIsNpcDialogOpen(false);
         
-        // Setup character interaction in world context
-        const characterName = modifiedMetadata.data?.name || npc.name;
-        // Clean up username by removing .png extension
-        const userName = currentUser?.name ? currentUser.name.replace(/\.png$/i, '') : 'the user';
-        const roomName = currentRoom?.name || currentRoomName;
-        const roomContext = currentRoom?.description || `You are in ${roomName}.`;
+        // Prepare context for the NPC introduction
+        const roomName = currentRoom?.name || currentRoomName || "this mysterious place";
+        const roomDescription = currentRoom?.description || `You are in ${roomName}.`;
+        const fullRoomContext = `${roomName}: ${roomDescription}`;
         
-        // Generate a context-appropriate introduction directly instead of showing the system message
-        // The message will be sent as a hidden system message to the LLM but won't be displayed
-        generateResponse(`__system__: Narrator, you now inhabit the role of ${characterName}, please respond to the presence of ${userName} while remaining in the context of ${roomName}. ${roomContext}`);
+        // Call the new function to generate a dynamic NPC introduction
+        // npcName, npcPersonality, and userName will be sourced from context within useChatMessages
+        generateNpcIntroduction(fullRoomContext);
+        
       } else {
         throw new Error("Failed to get valid character metadata");
       }
@@ -600,7 +590,7 @@ const WorldCardsPlayView: React.FC = () => {
       console.error("Error loading NPC character:", error);
       window.alert(`Failed to load NPC: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [generateResponse, setCharacterData, setImageUrl, currentRoom, currentRoomName, currentUser?.name]);
+  }, [setCharacterData, setImageUrl, currentRoom, currentRoomName, currentUser?.name, generateNpcIntroduction]);
 
   // --- Helper Functions ---
   const getStopHandler = (message: Message): (() => void) | undefined => {

@@ -1,203 +1,114 @@
-import React, { createContext, useState, useContext, useCallback } from 'react';
-import { APIConfig } from '../types/api';
-import { DEFAULT_SETTINGS } from '../types/settings';
-import useApiConnection from '../hooks/useApiConnection';
-import { useResilientApi } from '../context/ResilientApiContext';
-import ResilientApiService from '../services/ResilientApiService';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import { APIConfig, APIProvider } from '../types/api';
+import { useSettings } from './SettingsContext';
 
-interface APIConfigContextProps {
+interface APIConfigContextType {
   apiConfig: APIConfig | null;
-  setAPIConfig: (config: APIConfig | null) => void;
+  allAPIConfigs: Record<string, APIConfig>;
+  activeApiId: string | null;
+  setAPIConfig: (config: APIConfig) => void;
+  setActiveApiId: (id: string) => void;
   isLoading: boolean;
-  error: Error | null;
-  retry: () => void;
 }
 
-interface SettingsResponse {
-  success?: boolean;
-  settings?: {
-    apis?: Record<string, APIConfig>;
-  };
-  apis?: Record<string, APIConfig>;
-}
+// Export the context so it can be imported directly in other files
+export const APIConfigContext = createContext<APIConfigContextType | undefined>(undefined);
 
-const defaultContextValue: APIConfigContextProps = {
-  apiConfig: null,
-  setAPIConfig: () => {},
-  isLoading: false,
-  error: null,
-  retry: () => {}
+export const useAPIConfig = (): APIConfigContextType => {
+  const context = useContext(APIConfigContext);
+  if (!context) {
+    throw new Error('useAPIConfig must be used within an APIConfigProvider');
+  }
+  return context;
 };
 
-const APIConfigContext = createContext<APIConfigContextProps>(defaultContextValue);
+interface APIConfigProviderProps {
+  children: ReactNode;
+}
 
 /**
- * Provider component for API configuration
- * Manages loading, updating and providing API configuration throughout the application
+ * Converts a legacy API config to the new format
  */
-export const APIConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Get access to the resilient API context
-  const { retryAllConnections } = useResilientApi();
+const convertLegacyApi = (legacyApi: any): APIConfig => {
+  return {
+    provider: APIProvider.KOBOLD, // Default to KOBOLD as fallback
+    enabled: legacyApi.enabled,
+    url: legacyApi.url,
+    apiKey: legacyApi.apiKey || undefined, // Convert null to undefined
+    templateId: legacyApi.templateId,
+    lastConnectionStatus: legacyApi.lastConnectionStatus,
+    model_info: legacyApi.model_info,
+    name: 'Legacy API'
+  };
+};
+
+export const APIConfigProvider: React.FC<APIConfigProviderProps> = ({ children }) => {
+  const [apiConfig, setAPIConfig] = useState<APIConfig | null>(null);
+  const [activeApiId, setActiveApiId] = useState<string | null>(null);
+  const { settings, isLoading } = useSettings();
   
-  // Initialize with default API config
-  const [apiConfig, setAPIConfig] = useState<APIConfig | null>(() => {
-    try {
-      // Get default API from settings
-      const defaultApiId = Object.keys(DEFAULT_SETTINGS.apis)[0];
-      
-      if (defaultApiId) {
-        // Create a deep copy of the config to avoid modifying the original
-        const config = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.apis[defaultApiId]));
-        
-        // Ensure the API is enabled by default for better user experience
-        config.enabled = true;
-        
-        // Also make sure templateId is set
-        if (!config.templateId) {
-          config.templateId = 'mistral';
-        }
-        
-        console.log("Initialized API config with:", {
-          ...config,
-          apiKey: config.apiKey ? '[REDACTED]' : undefined
-        });
-        
-        return config;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error("Error initializing API config:", error);
-      return null;
-    }
-  });
+  // Get all available API configs, memoized to prevent unnecessary re-renders
+  const allAPIConfigs = useMemo(() => {
+    return (settings && settings.apis) || {};
+  }, [settings?.apis]);
 
-  // Use our resilient API connection hook to load settings
-  const { 
-    loading, 
-    error, 
-    retry: retryFetch
-  } = useApiConnection<SettingsResponse>({
-    endpoint: "/api/settings",
-    retryCount: 5,
-    retryDelay: 2000,
-    onSuccess: (data) => {
-      if (data?.success && data?.settings?.apis) {
-        // Get the first API from the loaded settings
-        const apiId = Object.keys(data.settings.apis)[0];
-        
-        if (apiId) {
-          const loadedConfig = data.settings.apis[apiId];
-          
-          // Always ensure enabled is true for better user experience
-          loadedConfig.enabled = true;
-          
-          // Ensure templateId exists
-          // FIXED: Removed references to non-existent 'template' property
-          if (!loadedConfig.templateId) {
-            loadedConfig.templateId = 'mistral';
+  // Load the api configuration from settings
+  useEffect(() => {
+    if (isLoading || !settings) return;
+    
+    try {
+      console.log("Loading API configuration from settings");
+      
+      let foundActiveConfig: APIConfig | null = null;
+      let foundActiveId: string | null = null;
+      
+      // First approach: Use the activeApiId from settings if it exists and is enabled
+      if (settings.activeApiId && settings.apis?.[settings.activeApiId]?.enabled) {
+        foundActiveConfig = settings.apis[settings.activeApiId];
+        foundActiveId = settings.activeApiId;
+        console.log(`Using active API from settings: ${settings.activeApiId}`);
+      } 
+      // Second approach: Find the first enabled API
+      else if (settings.apis && Object.keys(settings.apis).length > 0) {
+        for (const [id, api] of Object.entries(settings.apis)) {
+          if (api.enabled) {
+            foundActiveConfig = api;
+            foundActiveId = id;
+            console.log(`No active API specified, using first enabled API: ${id}`);
+            break;
           }
-          
-          console.log("Loaded API config from settings:", {
-            ...loadedConfig,
-            apiKey: loadedConfig.apiKey ? '[REDACTED]' : undefined
-          });
-          
-          setAPIConfig(loadedConfig);
         }
       }
-    },
-    onError: (err) => {
-      console.error("Failed to load API settings after retries:", err);
-    }
-  });
-
-  /**
-   * Save API config changes to the backend
-   * @param config - The API configuration to save
-   */
-  const saveApiConfig = useCallback(async (config: APIConfig) => {
-    try {
-      // First we need to get the current settings
-      const settingsResponse = await ResilientApiService.get<SettingsResponse>('/api/settings', undefined, {
-        retryCount: 3,
-        retryDelay: 1000
-      });
+      // Third approach: Fall back to legacy 'api' config
+      else if (settings.api?.enabled) {
+        foundActiveConfig = convertLegacyApi(settings.api);
+        foundActiveId = 'legacy';
+        console.log("Using legacy API configuration");
+      }
       
-      // Then update the API config in the settings
-      if (settingsResponse?.settings?.apis) {
-        const apiId = Object.keys(settingsResponse.settings.apis)[0];
-        if (apiId) {
-          const updatedSettings = {
-            ...settingsResponse,
-            settings: {
-              ...settingsResponse.settings,
-              apis: {
-                ...settingsResponse.settings.apis,
-                [apiId]: config
-              }
-            }
-          };
-          
-          // Save the updated settings
-          await ResilientApiService.put<SettingsResponse, SettingsResponse>('/api/settings', updatedSettings, undefined, {
-            retryCount: 3,
-            retryDelay: 1000
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Failed to save API configuration:", err);
+      // Set the active API
+      setAPIConfig(foundActiveConfig);
+      setActiveApiId(foundActiveId);
+    } catch (error) {
+      console.error("Error loading API configuration:", error);
+      // Reset to a safe state on error
+      setAPIConfig(null);
+      setActiveApiId(null);
     }
-  }, []);
-
-  /**
-   * Enhanced setAPIConfig that also saves to backend
-   * @param config - The API configuration to set and save
-   */
-  const handleSetAPIConfig = useCallback((config: APIConfig | null) => {
-    setAPIConfig(config);
-    if (config) {
-      saveApiConfig(config).catch(console.error);
-    }
-  }, [saveApiConfig]);
-
-  /**
-   * Combined retry handler for both local fetching and global API connections
-   */
-  const handleRetry = useCallback(() => {
-    retryFetch();
-    retryAllConnections();
-  }, [retryFetch, retryAllConnections]);
-
-  // Memoize context value to prevent unnecessary re-renders
-  const contextValue = React.useMemo(() => ({
-    apiConfig, 
-    setAPIConfig: handleSetAPIConfig,
-    isLoading: loading,
-    error,
-    retry: handleRetry
-  }), [apiConfig, handleSetAPIConfig, loading, error, handleRetry]);
+  }, [settings, isLoading]);
 
   return (
-    <APIConfigContext.Provider value={contextValue}>
+    <APIConfigContext.Provider 
+      value={{ 
+        apiConfig, 
+        allAPIConfigs, 
+        activeApiId, 
+        setAPIConfig, 
+        setActiveApiId,
+        isLoading 
+      }}
+    >
       {children}
     </APIConfigContext.Provider>
   );
 };
-
-/**
- * Custom hook for accessing API configuration context
- * @returns API configuration context
- */
-export const useAPIConfig = (): APIConfigContextProps => {
-  const context = useContext(APIConfigContext);
-  
-  if (!context) {
-    throw new Error('useAPIConfig must be used within an APIConfigProvider');
-  }
-  
-  return context;
-};
-
-export { APIConfigContext };
