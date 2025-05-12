@@ -247,6 +247,7 @@ backend_datas = [
     ('backend/worldcards/*', 'backend/worldcards'),
     ('backend/models/*', 'backend/models'),
     ('backend/utils/*', 'backend/utils'),
+    ('backend/default_room.png', 'backend')          # Add default room image
 ]
 
 # Create empty KoboldCPP directory structure but don't include existing files
@@ -304,6 +305,7 @@ hidden_imports = [
     'backend.settings_manager',
     'backend.template_handler',
     'backend.test_module',
+    'backend.test_restructure', # Added missing test module
     'backend.world_state_manager',
     
     # All endpoint files
@@ -322,12 +324,20 @@ hidden_imports = [
     'backend.handlers.world_card_chat_handler',
     'backend.handlers.world_state_handler',
     'backend.handlers.background_api',
-    
+    'backend.handlers.world_chat_handler', # Added missing chat handler
+
     # Models, Utils, and WorldCards subdirectories
     'backend.models',
+    'backend.models.character_data',      # Ensure specific model is included
+    'backend.models.world_state',         # Ensure specific model is included
     'backend.utils',
+    'backend.utils.location_extractor',   # Ensure specific util is included
+    'backend.utils.user_dirs',            # Ensure specific util is included
+    'backend.utils.worldcard_location_utils', # Ensure specific util is included
     'backend.worldcards',
-    
+    'backend.worldcards.errors',          # Ensure specific worldcard module is included
+    'backend.worldcards.storage',         # Ensure specific worldcard module is included
+
     # Important dependencies
     'email_validator',
     'typing_extensions',

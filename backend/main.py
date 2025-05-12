@@ -332,12 +332,32 @@ if getattr(sys, 'frozen', False):
             if assets_dir_path.exists():
                 logger.log_step(f"Serving asset from assets subdirectory: {assets_dir_path}")
                 return FileResponse(assets_dir_path)
-            
             logger.log_warning(f"Asset not found: {file_path}, tried paths: {asset_path}, {direct_asset_path}, {assets_dir_path}")
             raise HTTPException(status_code=404, detail="Asset not found")
+
+        @app.get("/cardshark.ico")
+        async def serve_favicon():
+            favicon_path = static_dir / "cardshark.ico"
+            if favicon_path.exists():
+                logger.log_step(f"Serving cardshark.ico explicitly: {favicon_path}")
+                return FileResponse(favicon_path, media_type="image/vnd.microsoft.icon")
+            else:
+                logger.log_warning(f"cardshark.ico not found at {favicon_path}")
+                raise HTTPException(status_code=404, detail="Favicon not found")
+
+        @app.get("/pngPlaceholder.png")
+        async def serve_placeholder_png():
+            placeholder_path = static_dir / "pngPlaceholder.png"
+            if placeholder_path.exists():
+                logger.log_step(f"Serving pngPlaceholder.png explicitly: {placeholder_path}")
+                return FileResponse(placeholder_path, media_type="image/png")
+            else:
+                logger.log_warning(f"pngPlaceholder.png not found at {placeholder_path}")
+                raise HTTPException(status_code=404, detail="pngPlaceholder.png not found")
         
         # Mount static files for all other assets
         app.mount("/", CrossDriveStaticFiles(directory=static_dir, html=True), name="frontend")
+        
         
         # Log directory contents for debugging
         try:

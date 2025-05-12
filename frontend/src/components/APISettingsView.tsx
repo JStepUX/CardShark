@@ -1,5 +1,5 @@
 // src/components/APISettingsView.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Save } from 'lucide-react';
 import { toast } from 'sonner'; // Import toast
 import DirectoryPicker from './DirectoryPicker';
@@ -9,6 +9,7 @@ import {
   APIConfig,
   createAPIConfig
 } from '../types/api';
+import { useScrollToBottom } from '../hooks/useScrollToBottom';
 import { Settings, SyntaxHighlightSettings, DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS } from '../types/settings'; // Import Settings type
 import { SettingsTabs, SettingsTab } from './SettingsTabs';
 import TemplateManager from './TemplateManager';
@@ -27,10 +28,13 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
   const { setAPIConfig, activeApiId, setActiveApiId } = useAPIConfig();
   const { settings, updateSettings, isLoading } = useSettings();
   const [newApiProviderType, setNewApiProviderType] = useState<APIProvider>(APIProvider.KOBOLD); // State for selected provider type
+  const lastAddedApiIdRef = useRef<string | null>(null);
+  
+  // Set up scrolling functionality
+  const { containerRef, endRef, scrollToBottom } = useScrollToBottom();
 
   // Local state for managing API configurations displayed in the UI
   const [localApis, setLocalApis] = useState<Record<string, APIConfig>>(settings.apis || {});
-
   // Sync local state when global settings change (e.g., initial load or external update)
   useEffect(() => {
     if (settings?.apis && JSON.stringify(settings.apis) !== JSON.stringify(localApis)) {
@@ -39,7 +43,36 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
     }
     // Intentionally only depending on settings.apis to avoid loops if localApis is in dependency array
   }, [settings?.apis]);
+    // Add listener for the global scroll-to-bottom event and API-specific event
+  useEffect(() => {
+    const handleScrollEvent = () => {
+      // Only respond if we're on the API tab
+      if (activeTab === 'api') {
+        setTimeout(() => scrollToBottom(), 100);
+      }
+    };
+    
+    // Listen for both general and API-specific scroll events
+    window.addEventListener('cardshark:scroll-to-bottom', handleScrollEvent);
+    window.addEventListener('cardshark:scroll-to-api-card', handleScrollEvent);
+    
+    return () => {
+      window.removeEventListener('cardshark:scroll-to-bottom', handleScrollEvent);
+      window.removeEventListener('cardshark:scroll-to-api-card', handleScrollEvent);
+    };
+  }, [activeTab, scrollToBottom]);
 
+  // Scroll when switching to the API tab, especially useful after adding a new API
+  useEffect(() => {
+    if (activeTab === 'api' && lastAddedApiIdRef.current) {
+      // Scroll to bottom when switching to API tab after adding a card
+      setTimeout(() => {
+        scrollToBottom();
+        // Clear the ref after scrolling
+        lastAddedApiIdRef.current = null;
+      }, 150);
+    }
+  }, [activeTab, scrollToBottom]);
 
   // Use the primary field, default to empty string
   const modelsDirectory = settings.models_directory || '';
@@ -102,7 +135,6 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
       });
   };
 
-
   const handleAddAPI = () => {
     // 1. Create the new API configuration using the selected newApiProviderType
     const newConfig = createAPIConfig(newApiProviderType);
@@ -120,12 +152,22 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
       [configId]: newConfig
     }));
 
+    // Save the ID of the newly added API card to scroll to it
+    lastAddedApiIdRef.current = configId;
+
     // 3. Switch to the API tab
     setActiveTab('api');
     console.log(`Added new API card locally with ID: ${configId}. User needs to configure and save.`);
     // DO NOT save to backend here. APICard's "Save" button will handle it.
+    
+    // 4. Scroll to the bottom after a slight delay to ensure the component has rendered and tab has switched
+    setTimeout(() => {
+      // Check if we're still on the API tab
+      if (activeTab === 'api') {
+        scrollToBottom();
+      }
+    }, 300); // Slightly longer delay to ensure tab switch completes
   };
-
 
   const handleRemoveAPI = (id: string) => {
     const apiToRemove = localApis[id]; // Get a reference before modifying localApis
@@ -364,9 +406,8 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                 Only enabled APIs can be set as active.
               </p>
             </div>
-            
-            {/* API Cards */}
-            <div className="space-y-4">
+              {/* API Cards */}
+            <div ref={containerRef} className="space-y-4">
               {/* Render cards based on localApis state */}
               {Object.entries(localApis || {}).map(([id, api]: [string, APIConfig]) => ( // Added type assertion for api
                 <div key={id} className="bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4">
@@ -391,6 +432,9 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                   (KoboldCPP at localhost:5001 works out of the box, no config necessary.)
                 </div>
               )}
+              
+              {/* Invisible element at the end for scrolling */}
+              <div ref={endRef} />
             </div>
           </div>
         </SettingsTab>

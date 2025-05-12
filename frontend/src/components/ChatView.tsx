@@ -15,14 +15,13 @@ import MoodIndicator from './MoodIndicator';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
 import { useChatContinuation } from '../hooks/useChatContinuation';
-import { apiService } from '../services/apiService';
 import { Message, UserProfile } from '../types/messages';
 import { EmotionState } from '../hooks/useEmotionDetection';
 import RichTextEditor from './RichTextEditor';
-import { htmlToText } from '../utils/contentUtils';
 import { substituteVariables } from '../utils/variableUtils';
 import ErrorMessage from './ErrorMessage';
 import { ChatStorage } from '../services/chatStorage';
+import { useScrollToBottom } from '../hooks/useScrollToBottom';
 // Removed APIConfig import as it's not directly used here anymore
 
 // Define the ReasoningSettings interface
@@ -103,45 +102,8 @@ export const useStallDetection = (
   }, [isGenerating, stallTimeout, onStallDetected]);
 };
 
-// Separate hook for scroll management
-function useScrollToBottom() {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = useCallback(() => {
-    if (!messagesContainerRef.current || !messagesEndRef.current) return;
-
-    // Option 1: Use scrollIntoView with specific options
-    messagesEndRef.current.scrollIntoView({
-      behavior: 'smooth',
-      block: 'end',
-      inline: 'nearest'
-    });
-
-    // Double-check scroll position with a slight delay to account for layout adjustments
-    setTimeout(() => {
-      const container = messagesContainerRef.current;
-      const endElement = messagesEndRef.current;
-      if (!container || !endElement) return;
-
-      // Check if we're actually at the bottom
-      const containerRect = container.getBoundingClientRect();
-      const endElementRect = endElement.getBoundingClientRect();
-
-      // If we're not close enough to the bottom, force direct scrolling
-      const scrollOffset = endElementRect.bottom - containerRect.bottom;
-      if (Math.abs(scrollOffset) > 20) {
-        container.scrollTop = container.scrollHeight;
-      }
-    }, 100);
-  }, []);
-
-  return {
-    messagesEndRef,
-    messagesContainerRef,
-    scrollToBottom
-  };
-}
+// Import the external useScrollToBottom hook instead of defining it here
+// This has been moved to its own hook file for reusability
 
 // Separate InputArea component - Reverted props
 interface InputAreaProps {
@@ -250,9 +212,8 @@ const ChatView: React.FC = () => {
   const [isRegeneratingGreeting, setIsRegeneratingGreeting] = useState(false);
   // Removed selectedApiIdForNextMessage state
   const [localError, setLocalError] = useState<string | null>(null); // Local error state for UI feedback
-
-  // Use the custom scroll hook
-  const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
+  // Use the custom scroll hook with our shared implementation
+  const { endRef: messagesEndRef, containerRef: messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
   const {
     messages,
@@ -384,6 +345,19 @@ const ChatView: React.FC = () => {
       window.removeEventListener('cardshark:force-generation-stop', handleForceStop);
     };
   }, [isGenerating, stopGeneration, stopContinuation]);
+
+  // Add listener for the global scroll-to-bottom event
+  useEffect(() => {
+    const handleScrollEvent = () => {
+      scrollToBottom();
+    };
+    
+    window.addEventListener('cardshark:scroll-to-bottom', handleScrollEvent);
+    
+    return () => {
+      window.removeEventListener('cardshark:scroll-to-bottom', handleScrollEvent);
+    };
+  }, [scrollToBottom]);
 
   // Combine local error and hook errors for display
   const combinedError = localError || hookError || continuationError;

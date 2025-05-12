@@ -10,6 +10,7 @@ import { ChatStorage } from '../services/chatStorage';
 import { toast } from 'sonner'; // Import toast
 import { generateUUID } from '../utils/generateUUID'; // Ensure this is imported
 import { CharacterCard } from '../types/schema'; // Import CharacterCard type
+import { substituteVariables } from '../utils/variableUtils'; // Import for variable substitution
 
 // --- Interfaces ---
 interface ReasoningSettings {
@@ -1016,7 +1017,15 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
                console.log(`New chat created with ID: ${result.chat_id}`);
                // Generate the first message using the new chat ID context
                const firstMessageContent = effectiveCharacterData.data?.first_mes || "Hello.";
-               const assistantMessage = createAssistantMessage(firstMessageContent, 'complete'); // Create first message as complete
+               
+               // Substitute variables in the first message
+               const substitutedContent = substituteVariables(
+                   firstMessageContent,
+                   state.currentUser?.name,
+                   effectiveCharacterData.data?.name
+               );
+               
+               const assistantMessage = createAssistantMessage(substitutedContent, 'complete'); // Create first message as complete
 
                // Update state with the first message
                setState(prev => ({
@@ -1215,9 +1224,18 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
                    (latestChatData && !latestChatData.success && 
                    (latestChatData.error?.includes("No chats found") || 
                     latestChatData.error?.includes("no chat files found") ||
-                    latestChatData.error?.includes("empty success response")))) {
-             // If the error is recoverable (as indicated by the isRecoverable flag or specific error messages)
-             console.log("No existing chats found or recoverable error, starting new chat.");
+                    latestChatData.error?.includes("empty success response") ||
+                    latestChatData.error?.includes("Failed to load chat")))) {
+             
+             // Check if this is a first-time character with first_mes available
+             if (effectiveCharacterData?.data?.first_mes && latestChatData?.first_mes_available) {
+               console.log("First-time character with first_mes detected. Creating new chat with greeting.");
+             } else {
+               console.log("No existing chats found or recoverable error, starting new chat.");
+             }
+             
+             // In either case, create a new chat which will use first_mes if available
+             // handleNewChat will properly substitute variables in first_mes
              await handleNewChat();
          } else {
              // Handle other errors from loadLatestChat or unexpected responses
@@ -1229,7 +1247,19 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
              } else {
                detail = 'No chat data returned from storage.';
              }
+             // For first-time character with no chats, provide clearer message
+             if (effectiveCharacterData?.data?.first_mes && !latestChatData?.success) {
+               console.log("Character has first_mes but chat loading failed, falling back to creating new chat");
+               // handleNewChat will properly substitute variables in first_mes
+               await handleNewChat();
+               return;
+             }
+             
              console.error("Failed to load latest chat or unexpected response. Detail:", detail, "Full response:", latestChatData);
+             // Log if there's a first message available for better debugging
+             if (effectiveCharacterData?.data?.first_mes) {
+               console.log("Note: Character has first_mes which could be used as a fallback");
+             }
              setState(prev => ({ ...prev, isLoading: false, error: `Failed to load chat: ${detail}` }));
              toast.error("Failed to load chat", {
                description: `${detail.substring(0, 100)}${detail.length > 100 ? '...' : ''}`,
@@ -1242,6 +1272,14 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
          } catch (err) { // This catch is for truly unexpected errors during the loading process
            console.error("Critical error during chat loading process:", err);
            const errorMessage = err instanceof Error ? err.message : "Unknown critical error";
+           
+           // If this is a new character with first_mes, we can still recover
+           if (effectiveCharacterData?.data?.first_mes) {
+             console.log("Character has first_mes available despite critical error, attempting to create new chat");
+             await handleNewChat();
+             return;
+           }
+           
            setState(prev => ({ ...prev, isLoading: false, error: `Critical chat load error: ${errorMessage}` }));
            toast.error("Critical chat load error", {
              description: `${errorMessage.substring(0, 100)}${errorMessage.length > 100 ? '...' : ''}`,

@@ -7,8 +7,7 @@ import {
   APIProvider,
   APIConfig,
   PROVIDER_CONFIGS,
-  createAPIConfig,
-  ModelInfo // Keep ModelInfo if used for model_info display
+  createAPIConfig
 } from '../types/api';
 import { Template } from '../types/templateTypes';
 import { templateService } from '../services/templateService';

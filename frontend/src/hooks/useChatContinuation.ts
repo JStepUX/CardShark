@@ -15,7 +15,8 @@ export function useChatContinuation(
   setGeneratingId: (id: string | null) => void,
   setContextWindow: (contextWindow: any) => void
 ) {
-  const { apiConfig } = useContext(APIConfigContext);
+  const apiConfigContext = useContext(APIConfigContext);
+  const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
   const currentGenerationRef = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
 

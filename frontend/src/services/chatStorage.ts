@@ -355,33 +355,33 @@ export class ChatStorage {
       // More detailed logging for debugging response issues
       console.log(`Latest chat response status: ${response.status}`);
       
+      if (response.status === 404) {
+        console.log('Received 404 from /api/load-latest-chat, treating as "no chats found"');
+        return {
+          success: false,
+          error: "No chats found",
+          isRecoverable: true,
+          // Add first_mes status information to improve error handling
+          first_mes_available: character?.data?.first_mes ? true : false
+        };
+      }
+
       if (!response.ok) {
         let errorText = '';
-        let errorJson = null;
-        
-        // Try to parse error as JSON first
         try {
-          errorJson = await response.json();
+          // Try to parse a JSON error response body
+          const errorJson = await response.json();
           errorText = errorJson.error || errorJson.message || `HTTP ${response.status}`;
-          // Special handling for Featherless 404 responses that might be valid JSON but status != 200
-          if (errorJson && response.status === 404) {
-            console.log('Received 404 with valid JSON payload, treating as "no chats found"');
-            return { 
-              success: false, 
-              error: "No chats found",
-              isRecoverable: true // Flag to indicate this can be recovered by creating a new chat
-            };
-          }
         } catch (e) {
-          // If it's not valid JSON, get as text
-          errorText = await response.text();
+          // If JSON parsing fails, get the error as plain text
+          errorText = await response.text() || `HTTP ${response.status}`;
         }
-        
         console.error('Failed to load latest chat:', response.status, errorText);
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: `Failed to load latest chat: ${errorText}`,
-          isRecoverable: response.status === 404 // 404 means no chats, which is recoverable
+          // isRecoverable could be true for other server errors too, but 404 is definite.
+          isRecoverable: false
         };
       }
 
@@ -394,7 +394,9 @@ export class ChatStorage {
         return { 
           success: false, 
           error: `Failed to parse response: ${jsonError instanceof Error ? jsonError.message : 'Invalid JSON'}`,
-          isRecoverable: true // Likely recoverable by creating a new chat
+          isRecoverable: true, // Likely recoverable by creating a new chat
+          // Add first_mes status information to improve error handling
+          first_mes_available: character?.data?.first_mes ? true : false
         };
       }
       
@@ -404,7 +406,9 @@ export class ChatStorage {
         return {
           success: false,
           error: "No chats found (API returned empty success response)",
-          isRecoverable: true
+          isRecoverable: true,
+          // Add first_mes status information to improve error handling
+          first_mes_available: character?.data?.first_mes ? true : false
         };
       }
       

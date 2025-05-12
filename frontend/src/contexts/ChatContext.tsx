@@ -65,7 +65,8 @@ export const ChatProvider: React.FC<{
   }> = ({ children }) => {
     // Get character data from the CharacterContext
     const { characterData } = useCharacter();
-    const { apiConfig } = useContext(APIConfigContext);
+    const apiConfigContext = useContext(APIConfigContext);
+    const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
     
     // Initialize state
     const [messages, setMessages] = useState<Message[]>([]);
@@ -144,38 +145,23 @@ export const ChatProvider: React.FC<{
         
         const response = await ChatStorage.loadLatestChat(characterData);
         
-        if (response.success && response.messages) {
-          if (Array.isArray(response.messages.messages) && response.messages.messages.length > 0) {
-            setMessages(response.messages.messages);
-            if (response.messages.metadata?.chat_metadata?.lastUser) {
-              setCurrentUser(response.messages.metadata.chat_metadata.lastUser);
-            }
-            setLastContextWindow({
-              type: 'loaded_chat',
-              timestamp: new Date().toISOString(),
-              characterName: characterData?.data?.name,
-              chatId: response.messages.metadata?.chat_metadata?.chat_id || 'unknown',
-              messageCount: response.messages.messages.length
-            });
-          } else if (characterData?.data?.first_mes) {
-            // Substitute variables in first_mes
-            const characterName = characterData.data.name || 'Character';
-            const userName = currentUser?.name || 'User';
-            const substitutedContent = characterData.data.first_mes
-              .replace(/\{\{char\}\}/g, characterName)
-              .replace(/\{\{user\}\}/g, userName);
-            const firstMessage = MessageUtils.createAssistantMessage(substitutedContent);
-            setMessages([firstMessage]);
-            setLastContextWindow({
-              type: 'initial_message',
-              timestamp: new Date().toISOString(),
-              characterName: characterData.data.name,
-              firstMessage: characterData.data.first_mes
-            });
-            saveChat([firstMessage]);
+        // Case 1: Successfully loaded chat with messages
+        if (response.success && response.messages && Array.isArray(response.messages) && response.messages.length > 0) {
+          setMessages(response.messages);
+          if (response.metadata?.chat_metadata?.lastUser) {
+            setCurrentUser(response.metadata.chat_metadata.lastUser);
           }
-        } else if (characterData?.data?.first_mes) {
-          // Substitute variables in first_mes (fallback)
+          setLastContextWindow({
+            type: 'loaded_chat',
+            timestamp: new Date().toISOString(),
+            characterName: characterData?.data?.name,
+            chatId: response.metadata?.chat_metadata?.chat_id || response.chatId || 'unknown',
+            messageCount: response.messages.length
+          });
+          setError(null);
+        // Case 2: No chat found (recoverable error) AND first_mes is available
+        } else if (response.isRecoverable && characterData?.data?.first_mes) {
+          console.log('No existing chat found (recoverable), initializing with first_mes. Original response error:', response.error);
           const characterName = characterData.data.name || 'Character';
           const userName = currentUser?.name || 'User';
           const substitutedContent = characterData.data.first_mes
@@ -184,24 +170,38 @@ export const ChatProvider: React.FC<{
           const firstMessage = MessageUtils.createAssistantMessage(substitutedContent);
           setMessages([firstMessage]);
           setLastContextWindow({
-            type: 'initial_message_fallback',
+            type: 'initial_message_used_after_recoverable_load_fail',
             timestamp: new Date().toISOString(),
             characterName: characterData.data.name,
             firstMessage: characterData.data.first_mes,
-            error: 'Failed to load existing chat'
+            originalLoadError: response.error
           });
           saveChat([firstMessage]);
+          setError(null);
+        // Case 3: Any other load failure (not success, not recoverable with first_mes) OR recoverable but no first_mes
+        } else {
+          console.error('Failed to load chat. Response:', response, 'Character has first_mes:', !!characterData?.data?.first_mes);
+          setError(response.error || 'Failed to load chat and no initial message available.');
+          setMessages([]);
+          setLastContextWindow({
+            type: 'load_failed_or_no_fallback',
+            timestamp: new Date().toISOString(),
+            characterName: characterData?.data?.name,
+            error: response.error || 'Failed to load chat and no initial message available.'
+          });
         }
         
         lastCharacterId.current = currentCharId;
       } catch (err) {
-        console.error('Chat loading error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load chat');
+        // This catch block handles unexpected errors during the process
+        console.error('Unexpected error during chat loading process:', err);
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred while loading chat.');
+        setMessages([]); // Ensure messages are empty on unexpected error
         setLastContextWindow({
-          type: 'load_error',
+          type: 'unexpected_load_error',
           timestamp: new Date().toISOString(),
           characterName: characterData?.data?.name,
-          error: err instanceof Error ? err.message : 'Failed to load chat'
+          error: err instanceof Error ? err.message : 'An unexpected error occurred.'
         });
       } finally {
         setIsLoading(false);
@@ -807,8 +807,7 @@ export const ChatProvider: React.FC<{
       }));
 
       // Save messages
-      updateAndSaveMessages(finalMessages); // Now finalMessages is defined
-      appendMessage({...assistantMessage, content});
+      updateAndSaveMessages(finalMessages); // updateAndSaveMessages calls setMessages internally
 
     } catch (err) {
       handleGenerationError(err, assistantMessage.id);
