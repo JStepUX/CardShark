@@ -485,6 +485,29 @@ async def save_character_card(
         try:
             metadata = json.loads(metadata_json)
             logger.info("Successfully parsed metadata JSON.")
+
+            # Handle character_uuid
+            existing_uuid = metadata.get("character_uuid")
+            is_valid_existing_uuid = False
+            if existing_uuid:
+                try:
+                    # Ensure it's a string for UUID constructor and check version 4
+                    uuid.UUID(str(existing_uuid), version=4)
+                    is_valid_existing_uuid = True
+                    logger.info(f"Found valid existing character_uuid: {existing_uuid}")
+                except ValueError:
+                    logger.warning(f"Invalid existing character_uuid found: '{existing_uuid}'. A new one will be generated.")
+            
+            if is_valid_existing_uuid:
+                final_uuid = str(existing_uuid) # Ensure it's a string
+            else:
+                final_uuid = str(uuid.uuid4())
+                if existing_uuid: # Log if we are replacing an invalid one
+                    logger.info(f"Replacing invalid character_uuid '{existing_uuid}' with new one: {final_uuid}")
+                else: # Log if we are generating a new one because none existed
+                    logger.info(f"Generated new character_uuid: {final_uuid}")
+            
+            metadata["character_uuid"] = final_uuid
             
             # Extract character name from metadata
             character_name = None
@@ -802,6 +825,28 @@ async def import_from_backyard(
 
         logger.info(f"Extracted metadata: {metadata.get('name', 'N/A')}")
 
+        # Handle character_uuid for imported card
+        existing_uuid = metadata.get("character_uuid")
+        is_valid_existing_uuid = False
+        if existing_uuid:
+            try:
+                uuid.UUID(str(existing_uuid), version=4)
+                is_valid_existing_uuid = True
+                logger.info(f"Found valid existing character_uuid in imported card: {existing_uuid}")
+            except ValueError:
+                logger.warning(f"Invalid existing character_uuid in imported card: '{existing_uuid}'. A new one will be generated.")
+        
+        if is_valid_existing_uuid:
+            final_uuid = str(existing_uuid)
+        else:
+            final_uuid = str(uuid.uuid4())
+            if existing_uuid:
+                logger.info(f"Replacing invalid character_uuid '{existing_uuid}' in imported card with new one: {final_uuid}")
+            else:
+                logger.info(f"Generated new character_uuid for imported card: {final_uuid}")
+        
+        metadata["character_uuid"] = final_uuid
+
         # Determine filename and save path
         character_name = metadata.get('name', f'backyard_import_{uuid.uuid4().hex[:8]}')
         sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name)[:100]
@@ -840,8 +885,12 @@ async def import_from_backyard(
             # Ensure the save directory exists
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             
+            # Re-write metadata to include the character_uuid
+            final_image_bytes_to_save = png_handler.write_metadata(image_bytes, metadata)
+            logger.info(f"Embedded character_uuid into image bytes for imported card.")
+
             with open(save_path, "wb") as f:
-                f.write(image_bytes)
+                f.write(final_image_bytes_to_save)
             logger.info(f"Successfully saved imported character card to {save_path}")
         except IOError as e:
             logger.error(f"Failed to save imported character card file to disk: {e}", exc_info=True)

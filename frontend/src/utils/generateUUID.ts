@@ -3,19 +3,27 @@
 /**
  * Generate a UUID v4
  * Uses crypto.randomUUID if available, or falls back to a simple implementation
+ * Includes timestamp prefix to ensure uniqueness across calls
  */
 export function generateUUID(): string {
+    // Generate base UUID
+    let uuid: string;
+    
     // Use built-in crypto.randomUUID() if available (modern browsers)
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
+      uuid = crypto.randomUUID();
+    } else {
+      // Fallback implementation for older browsers
+      uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
     }
     
-    // Fallback implementation for older browsers
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
+    // Add timestamp prefix to ensure uniqueness even on rapid successive calls
+    const timestamp = Date.now().toString(36);
+    return `${timestamp}-${uuid}`;
   }
   
   /**

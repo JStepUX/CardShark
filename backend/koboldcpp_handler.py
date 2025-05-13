@@ -44,6 +44,7 @@ class ModelDirectoryRequest(BaseModel):
 class LaunchModelRequest(BaseModel):
     model_path: str
     config: Optional[ModelConfig] = None
+    models_directory: Optional[str] = None  # Added to match the connect endpoint
 
 @router.get("/status")
 async def get_status():
@@ -252,6 +253,15 @@ async def stop_koboldcpp():
     except Exception as e:
         logger.error(f"Error stopping KoboldCPP: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to stop KoboldCPP: {str(e)}")
+
+@router.post("/disconnect")
+async def disconnect_koboldcpp():
+    """
+    Disconnect from KoboldCPP (alias for stop endpoint for frontend compatibility)
+    """
+    # Simply call the existing stop_koboldcpp function
+    return await stop_koboldcpp()
+
 # --- External Model Listing Endpoints ---
 import traceback
 from backend.api_provider_adapters import OpenRouterAdapter # Assuming FeatherlessAdapter might not exist yet
@@ -359,6 +369,44 @@ async def cleanup_mei_directories():
     except Exception as e:
         logger.error(f"Error cleaning up orphaned _MEI directories: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to clean up orphaned _MEI directories: {str(e)}")
+
+@router.post("/connect")
+async def connect_koboldcpp(request_data: dict = Body(...)):
+    """
+    Connect to KoboldCPP with a specific model (alias for launch-model for frontend compatibility)
+    """
+    try:
+        # Extract necessary information from the request body
+        model_path = request_data.get("model_path")
+        models_directory = request_data.get("models_directory")
+        
+        if not model_path:
+            raise HTTPException(status_code=400, detail="model_path is required")
+        
+        # Use a minimal config for the model launch
+        config = {
+            'port': 5001,  # Ensure we're using the correct port
+            'skiplauncher': True,
+            'nobrowser': True
+        }
+        
+        # Update models directory if provided
+        if models_directory:
+            from backend.main import settings_manager
+            settings_manager.update_setting("models_directory", models_directory)
+            logger.info(f"Updated models directory to: {models_directory}")
+        
+        # Launch the model using the existing launch_with_model method
+        result = manager.launch_with_model(model_path, config)
+        if result.get('status') == 'error':
+            raise HTTPException(status_code=500, detail=result.get('message', 'Unknown error'))
+            
+        return {"success": True, "message": "KoboldCPP starting...", "port": 5001}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error connecting to KoboldCPP: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect to KoboldCPP: {str(e)}")
 
 import os
 import sys

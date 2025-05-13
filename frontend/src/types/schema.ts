@@ -90,6 +90,7 @@ export interface CharacterData {
     },
     group_only_greetings: string[];
     character_book: CharacterBook;
+    character_uuid?: string; // Added for canonical character identification
 }
 
 // Complete Character Card Interface (V2 Spec)
@@ -108,35 +109,7 @@ export interface CharacterCard {
     tags: string[];
     spec: string;
     spec_version: string;
-    data: {
-        name: string;
-        description: string;
-        personality: string;
-        scenario: string;
-        first_mes: string;
-        mes_example: string;
-        creator_notes: string;
-        system_prompt: string;
-        post_history_instructions: string;
-        tags: string[];
-        imported_images?: string[];
-        creator: string;
-        character_version: string;
-        alternate_greetings: string[];
-        extensions: {
-            talkativeness: string;
-            fav: boolean;
-            world: string;
-            depth_prompt: {
-                prompt: string;
-                depth: number;
-                role: string;
-            };
-        };
-        group_only_greetings: string[];
-        character_book: CharacterBook;
-        spec: string;
-    };
+    data: CharacterData; // Use the CharacterData interface here
     create_date: string;
 }
 
@@ -197,7 +170,8 @@ export function createEmptyCharacterCard(): CharacterCard {
         tags: [],
         spec: "chara_card_v2",
         spec_version: "2.0",
-        data: {
+        data: { // Initialize CharacterData fields
+            spec: "",
             name: "",
             description: "",
             personality: "",
@@ -225,8 +199,8 @@ export function createEmptyCharacterCard(): CharacterCard {
             character_book: {
                 entries: [],
                 name: "Fresh"
-            },
-            spec: ""
+            }
+            // character_uuid is optional and will be undefined by default
         },
         create_date: ""
     };

@@ -100,19 +100,26 @@ export class ChatStorage {
    * Extracts a character ID from various possible locations in a character object
    */
   static getCharacterId(character: CharacterCard): string {
-    // If we have a character ID already, use it
-    if ((character as any).character_id) {
+    // 1. Prioritize the new character_uuid from the nested data object
+    if (character.data?.character_uuid && typeof character.data.character_uuid === 'string' && character.data.character_uuid.trim() !== '') {
+      return character.data.character_uuid;
+    }
+
+    // 2. Fallback to the older character_id if it exists (less specific location)
+    // This was the previous primary check.
+    if ((character as any).character_id && typeof (character as any).character_id === 'string' && (character as any).character_id.trim() !== '') {
       return (character as any).character_id;
     }
     
-    // Otherwise, construct an ID from the character name
-    if (character.data?.name) {
+    // 3. Fallback to constructing an ID from the character name
+    if (character.data?.name && typeof character.data.name === 'string' && character.data.name.trim() !== '') {
       // Use 8 characters of a hash as a simple unique identifier
       const hash = this.simpleHash(character.data.name);
       return `${character.data.name}-${hash}`;
     }
     
-    // Fallback
+    // 4. Final fallback if no usable identifier can be found
+    console.warn('Could not determine a valid character ID for:', character);
     return 'unknown-character';
   }
 

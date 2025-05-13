@@ -156,12 +156,12 @@ This document outlines the key user flows and interactions within the CardShark 
 
 ## Implementation Notes
 
-### Combined Save Functionality
-We currently have separate "Save Character" and "Save World" buttons, but it makes more sense to use a unified save button in the sidebar since a World and a Character are not likely to be simultaneously selected. This suggests incorporating World Cards into our existing views with a toggle between "Character" and "World" modes.
+### Combined Save Functionality (Potential UI Enhancement)
+Consideration for future UI development: We currently have separate "Save Character" and "Save World" buttons. A unified save button in the sidebar could be explored, potentially with a toggle in views to switch context between "Character" and "World" modes, as a World and a Character are not likely to be simultaneously selected for saving.
 
 ### Chat Message Processing
 Chat substitutes {{char}} for {{characterdata.name}} and {{user}} for {{currentUserSelected}}. Messages are processed through the current API configuration with appropriate template formatting.
 
-### Character/World Integration
-A potential enhancement would be storing a boolean in the PNG metadata to indicate whether a card is a Character or World, allowing the system to load the appropriate view (Character Info or World Builder) based on this flag.
+### Character/World Data Management
+Character data, including a canonical `character_uuid`, is embedded in PNG metadata (see `backend_character_uuid_implementation_plan.md`). World data is managed via `world_state.json` files and a dedicated directory structure (see `plan_WorldCards2.md` and `world_persistence_strategy.md`). Worlds can be optionally based on character cards, leveraging their lore for initial content.
 
