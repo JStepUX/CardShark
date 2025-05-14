@@ -386,18 +386,16 @@ const ChatView: React.FC = () => {
     setReasoningSettings(settings);
     updateReasoningSettings(settings);
   };
-
   // Listen for custom event from useChatMessages when first message is being created
   useEffect(() => {
     const handleFirstMessageCreation = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      if (customEvent.detail && customEvent.detail.messageContent) {
+      const customEvent = event as CustomEvent;      if (customEvent.detail && customEvent.detail.messageContent) {
         // Get the raw message content before any processing
         const rawContent = customEvent.detail.messageContent;
         // Return the substituted content to be used instead
         const substitutedContent = substituteVariables(
           rawContent,
-          currentUser?.name,
+          currentUser, // Pass the entire currentUser object instead of just the name property
           characterData?.data?.name
         );
 
@@ -620,11 +618,11 @@ const ChatView: React.FC = () => {
                 onDelete={() => console.log('Delete thought (not implemented)')}
                 characterName={characterData.data.name}
               />
-            ) : null}
-            {message.role !== 'thinking' && (
+            ) : null}            {message.role !== 'thinking' && (
               <ChatBubble
                 message={message}
                 characterName={characterData.data.name || 'Character'}
+                currentUser={currentUser || undefined} // Convert null to undefined for type compatibility
                 isGenerating={isGenerating && generatingId === message.id}
                 onTryAgain={() => regenerateMessage(message)} // Use onTryAgain and wrap handler
                 onContinue={() => handleContinueResponse(message)} // Wrap handler

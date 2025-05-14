@@ -55,16 +55,12 @@ export function Dialog({
       aria-labelledby={title ? 'dialog-title' : undefined}
     >
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="min-h-screen px-4 text-center">
-        <div className="fixed inset-0" aria-hidden="true">
-          <div className="inline-block h-screen align-middle" aria-hidden="true">
-            &#8203;
-          </div>
-        </div>
+      <div className="min-h-screen px-4 flex items-center justify-center">
+        {/* The flex container now handles centering */}
         <div
           ref={dialogRef}
           // Changed to flex layout to allow fixed footer
-          className={`inline-block w-full ${className} my-8 text-left align-middle transition-all transform bg-stone-800 shadow-xl rounded-lg flex flex-col max-h-[calc(100vh-4rem)]`}
+          className={`${className} my-8 text-left transition-all transform bg-stone-800 shadow-xl rounded-lg flex flex-col max-h-[calc(100vh-4rem)]`}
         >
           {/* Header */}
           {title && (

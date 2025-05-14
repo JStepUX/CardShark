@@ -501,7 +501,7 @@ export const APICard: React.FC<APICardProps> = ({
         onClose={() => setIsConfigDialogOpen(false)}
         title={`Advanced Settings: ${editableApi.name || 'Unnamed API'}`}
         showCloseButton={true}
-        className="max-w-2xl"
+        className="max-w-3xl"
         buttons={[
           {
             label: 'Done',

@@ -48,6 +48,7 @@ export interface Settings {
   models_directory?: string;  // Directory for AI model files
   model_directory?: string;   // Legacy field for backward compatibility
   show_koboldcpp_launcher?: boolean; // Whether to show KoboldCPP launcher on startup
+  remove_incomplete_sentences?: boolean; // Whether to remove incomplete sentences from chat responses
   theme: 'dark' | 'light';
   version: string;
   
@@ -118,6 +119,7 @@ export const DEFAULT_SETTINGS: Settings = {
   models_directory: '', // Explicitly initialize
   model_directory: '',  // Explicitly initialize
   show_koboldcpp_launcher: false, // Default to not showing KoboldCPP launcher on startup
+  remove_incomplete_sentences: false, // Default to not removing incomplete sentences
   theme: 'dark',
   version: '1.0',
   

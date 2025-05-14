@@ -1,29 +1,41 @@
 // utils/generateUUID.ts
 
+let lastTimestampGenerated = 0;
+let generationCounter = 0;
+
 /**
  * Generate a UUID v4
  * Uses crypto.randomUUID if available, or falls back to a simple implementation
- * Includes timestamp prefix to ensure uniqueness across calls
+ * Includes timestamp and a counter prefix to ensure uniqueness across rapid successive calls within the same millisecond.
  */
 export function generateUUID(): string {
+    const now = Date.now();
+    if (now === lastTimestampGenerated) {
+        generationCounter++;
+    } else {
+        lastTimestampGenerated = now;
+        generationCounter = 0;
+    }
+
+    const timestampPart = now.toString(36);
+    const counterPart = generationCounter.toString(36);
+    
     // Generate base UUID
-    let uuid: string;
+    let uuidPart: string;
     
     // Use built-in crypto.randomUUID() if available (modern browsers)
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      uuid = crypto.randomUUID();
+      uuidPart = crypto.randomUUID();
     } else {
       // Fallback implementation for older browsers
-      uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      uuidPart = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         const r = Math.random() * 16 | 0;
         const v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
       });
     }
     
-    // Add timestamp prefix to ensure uniqueness even on rapid successive calls
-    const timestamp = Date.now().toString(36);
-    return `${timestamp}-${uuid}`;
+    return `${timestampPart}-${counterPart}-${uuidPart}`;
   }
   
   /**

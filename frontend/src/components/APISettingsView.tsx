@@ -342,6 +342,26 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                 directory={modelsDirectory} // Pass the direct value
                 onDirectoryChange={handleModelDirectoryChange}
               />
+            </div>            {/* Chat Response Settings */}
+            <div className="mb-8">
+              <h3 className="text-md font-medium mb-4">Chat Response Settings</h3>
+              <div className="mt-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.remove_incomplete_sentences || false}
+                    onChange={(e) => updateSettings({ remove_incomplete_sentences: e.target.checked })}
+                    className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-300">
+                    Remove unfinished sentences from chat responses
+                  </span>
+                </label>
+                <p className="mt-2 text-xs text-gray-400">
+                  When enabled, sentences that don't end with proper punctuation (., ?, !, etc.) will be removed from the end of
+                  generated messages. This can make responses appear more natural by eliminating cut-off thoughts.
+                </p>
+              </div>
             </div>
 
             {/* KoboldCPP Settings */}

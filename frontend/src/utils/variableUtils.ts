@@ -2,13 +2,13 @@
  * Substitutes special variables in text content
  * 
  * @param text Text containing variables like {{user}} and {{char}}
- * @param userName User name to replace {{user}} with
+ * @param userName User name or UserProfile object to replace {{user}} with
  * @param characterName Character name to replace {{char}} with
  * @returns Text with variables substituted
  */
 export const substituteVariables = (
   text: string,
-  userName?: string | null,
+  userName?: any | null,
   characterName?: string | null
 ): string => {
   if (!text) return text;
@@ -16,7 +16,13 @@ export const substituteVariables = (
   let processedText = text;
   
   if (userName) {
-    processedText = processedText.replace(/\{\{user\}\}/gi, userName);
+    // Handle userName as either string or UserProfile object
+    const userNameStr = typeof userName === 'object' && userName !== null && userName.name
+      ? userName.name 
+      : typeof userName === 'string' 
+        ? userName 
+        : 'User';
+    processedText = processedText.replace(/\{\{user\}\}/gi, userNameStr);
   }
   
   if (characterName) {

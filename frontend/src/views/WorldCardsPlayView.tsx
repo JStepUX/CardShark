@@ -686,7 +686,7 @@ const WorldCardsPlayView: React.FC = () => {
                       // onContinue prop is optional and not used here
                       onNextVariation={() => cycleVariation(message.id, 'next')} // Split cycleVariation
                       onPrevVariation={() => cycleVariation(message.id, 'prev')} // Split cycleVariation
-                      currentUser={currentUser?.name} // Pass name string
+                      currentUser={currentUser || undefined} // Convert null to undefined for type compatibility
                       characterName={activeCharacterData?.data?.name} // Pass name string
                     />
                   )}
