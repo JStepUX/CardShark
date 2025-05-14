@@ -494,19 +494,25 @@ export const APICard: React.FC<APICardProps> = ({
           Last tested: {new Date(editableApi.lastConnectionStatus.timestamp).toLocaleString()}
           {editableApi.lastConnectionStatus.error && <span className="text-red-400 ml-2">(Error: {editableApi.lastConnectionStatus.error})</span>}
         </div>
-      )}
-
-      <Dialog
+      )}      <Dialog
         isOpen={isConfigDialogOpen}
         onClose={() => setIsConfigDialogOpen(false)}
         title={`Advanced Settings: ${editableApi.name || 'Unnamed API'}`}
-        showCloseButton={true}
+        showCloseButton={false}
         className="max-w-3xl"
         buttons={[
           {
-            label: 'Done',
+            label: 'Cancel',
             onClick: () => setIsConfigDialogOpen(false),
+          },
+          {
+            label: 'Save',
+            onClick: () => {
+              handleSave(); // Save changes when clicking Save
+              setIsConfigDialogOpen(false); // Close dialog after saving
+            },
             variant: 'primary',
+            disabled: !hasChanges || isLoading,
           },
         ]}
       >

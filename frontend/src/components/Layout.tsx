@@ -8,6 +8,7 @@ import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
 import ComparisonPanel from "./ComparisonPanel";
 import SideNav from "./SideNav";
+import { BottomBanner } from "./BottomBanner";
 
 const Layout: React.FC = () => {
   // File handling refs
@@ -353,6 +354,8 @@ const Layout: React.FC = () => {
 
   return (
     <div className="h-screen w-screen flex bg-stone-950 text-gray-100 overflow-hidden">
+      {/* Add Bottom Banner at the top level */}
+      <BottomBanner />
       <input
         ref={fileInputRef}
         type="file"
@@ -372,10 +375,10 @@ const Layout: React.FC = () => {
         onImageChange={handleImageChange}
       />
       
-      {/* Main Content Area */}
-      <div className={`flex flex-1 ${isCompareMode ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900`}>
+      {/* Main Content Area - added pb-8 to account for bottom banner */}
+      <div className={`flex flex-1 ${isCompareMode ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900 pb-8`}>
         {/* Main content column */}
-        <div className={`flex flex-col ${isCompareMode ? 'w-1/2' : 'flex-1'}`}>
+        <div className={`flex flex-col ${isCompareMode ? 'w-1/2' : 'flex-1'} mb-8`}>
           {error && (
             <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
           )}

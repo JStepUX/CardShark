@@ -123,12 +123,26 @@ class ChatHandler:
         except Exception as e:
             self.logger.log_error(f"Error verifying file {file_path}: {str(e)}")
             return False
-
+            
     def _get_character_uuid(self, character_data: Dict) -> str:
         """Get or generate a UUID for a character."""
         self.logger.log_info(f"_get_character_uuid received character_data: {json.dumps(character_data)}")
         
-        # Check top-level 'uuid' first
+        # Basic validation - ensure we have a proper character data structure
+        if not isinstance(character_data, dict):
+            self.logger.log_error(f"Invalid character_data type: {type(character_data)}, expected dict")
+            return f"unknown-{int(time.time())}"
+        
+        if not character_data.get('data', {}).get('name'):
+            self.logger.log_warning(f"Character data missing name field: {json.dumps(character_data)[:200]}...")
+        
+        # Check for character_uuid in the standard location first (new canonical location)
+        character_uuid = character_data.get('character_uuid')
+        if character_uuid:
+            self.logger.log_step(f"Using canonical character UUID (from 'character_uuid' field): {character_uuid}")
+            return character_uuid
+            
+        # Check top-level 'uuid' 
         top_level_uuid = character_data.get('uuid')
         if top_level_uuid:
             self.logger.log_step(f"Using existing character UUID (from top-level 'uuid' field): {top_level_uuid}")
@@ -154,10 +168,50 @@ class ChatHandler:
             return cached_id
             
         generated_char_id = self._generate_character_id(character_data)
-        # self._character_ids[name] = generated_char_id # Caching should happen based on the final ID source.
-        self.logger.log_step(f"_get_character_uuid: Generated new ID for name '{name}': {generated_char_id}")
+        if name:  # Only cache if we have a valid name
+            self._character_ids[name] = generated_char_id  # Cache the generated ID            self.logger.log_step(f"Caching generated ID '{generated_char_id}' for character '{name}'")
+            self.logger.log_step(f"_get_character_uuid: Generated new ID for name '{name}': {generated_char_id}")
         return generated_char_id
-
+        
+    def _verify_character_consistency(self, character_data: Dict) -> Dict:
+        """
+        Verify the character data consistency and attempt to fix issues.
+        This helps prevent UUID inconsistencies when character data doesn't match identity.
+        """
+        if not isinstance(character_data, dict):
+            self.logger.log_error(f"Invalid character data type: {type(character_data)}")
+            return character_data
+            
+        # Check if character has a name
+        if not character_data.get('data', {}).get('name'):
+            self.logger.log_warning("Character data missing name - this may cause identification issues")
+            
+        # Ensure character has consistent IDs
+        chat_id = character_data.get('chat_id')
+        uuid_val = character_data.get('uuid')
+        char_id = character_data.get('char_id')
+        character_uuid = character_data.get('character_uuid')
+        nested_uuid = character_data.get('data', {}).get('extensions', {}).get('uuid')
+        
+        # If we have multiple ID types, check for consistency
+        id_values = [id_val for id_val in [chat_id, uuid_val, char_id, character_uuid, nested_uuid] if id_val]
+        
+        if len(id_values) > 1 and len(set(id_values)) > 1:
+            self.logger.log_warning(f"Character has inconsistent ID values: {id_values}")
+            # Use the first valid ID as canonical and propagate it
+            canonical_id = id_values[0]
+            self.logger.log_step(f"Using '{canonical_id}' as the canonical character ID")
+            
+            # Propagate canonical ID to all standard locations
+            character_data['character_uuid'] = canonical_id
+            if 'data' not in character_data:
+                character_data['data'] = {}
+            if 'extensions' not in character_data['data']:
+                character_data['data']['extensions'] = {}
+            character_data['data']['extensions']['uuid'] = canonical_id
+            
+        return character_data
+            
     def _generate_character_id(self, character_data: Dict) -> str:
         """Generate a unique, persistent ID for a character."""
         # Ensure json is imported if not already
@@ -166,6 +220,9 @@ class ChatHandler:
         import time # Add this if not present
         self.logger.log_info(f"_generate_character_id received character_data: {json.dumps(character_data)}")
         try:
+            # Verify consistency before generating ID
+            character_data = self._verify_character_consistency(character_data)
+            
             data = character_data.get('data', {})
             name = data.get('name', '')
             desc = data.get('description', '')
@@ -482,12 +539,30 @@ class ChatHandler:
             self.logger.log_error(f"Error appending message: {str(e)}")
             self.logger.log_error(traceback.format_exc())
             return False
-
+            
     def save_chat_state(self, character_data: Dict, messages: List[Dict], lastUser: Optional[Dict] = None, api_info: Optional[Dict] = None, metadata: Optional[Dict] = None) -> bool:
         """Save complete chat state to a file with API information and additional metadata."""
         try:
-            char_id_val = self._get_character_uuid(character_data) # Renamed
+            # Perform consistency check on character data before proceeding
             char_name = character_data.get('data', {}).get('name', 'unknown')
+            
+            # Check for character name/data mismatch
+            expected_name = None
+            if metadata and metadata.get('chat_metadata') and metadata['chat_metadata'].get('character_name'):
+                expected_name = metadata['chat_metadata'].get('character_name')
+            elif messages and len(messages) > 0 and messages[0].get('name'):
+                expected_name = messages[0].get('name')
+                
+            if expected_name and char_name != expected_name:
+                self.logger.log_warning(f"MISMATCH DETECTED: Character name in data '{char_name}' doesn't match expected name '{expected_name}'")
+                self.logger.log_warning(f"This could indicate character data inconsistency - using expected name '{expected_name}'")
+                # Force the name in character_data to match
+                if 'data' not in character_data:
+                    character_data['data'] = {}
+                character_data['data']['name'] = expected_name
+                char_name = expected_name
+                                
+            char_id_val = self._get_character_uuid(character_data)
             
             chat_id = None
             current_chat_metadata = None
@@ -496,7 +571,7 @@ class ChatHandler:
             if metadata and metadata.get('chat_metadata') and metadata['chat_metadata'].get('chat_id'):
                 chat_id = metadata['chat_metadata']['chat_id']
                 current_chat_metadata = metadata['chat_metadata']
-            elif messages and "chat_metadata" in messages[0]: 
+            elif messages and len(messages) > 0 and "chat_metadata" in messages[0]: 
                  current_chat_metadata = messages[0].get("chat_metadata", {})
                  chat_id = current_chat_metadata.get("chat_id")
                  messages_to_save = messages[1:] 

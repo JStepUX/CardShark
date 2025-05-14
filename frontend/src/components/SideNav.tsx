@@ -21,7 +21,6 @@ import DropdownMenu from './DropDownMenu';
 import ImagePreview from './ImagePreview';
 import TokenCounter from './TokenCounter';
 import usePrefetchRoute from '../hooks/usePrefetchRoute';
-import ApiSelectDropdown from './api/ApiSelectDropdown'; // Changed this line
 import logo from '../assets/cardshark_justfin.png';
 
 // Route component imports for prefetching
@@ -125,13 +124,8 @@ const SideNav: React.FC<SideNavProps> = ({
               </button>
             </div>
 
-            {/* API Selector (Collapsed) */}
-            <div className="flex flex-col items-center space-y-2 w-full">
-              <ApiSelectDropdown />
-            </div>
-
             {/* Navigation */}
-            <nav className="flex flex-col items-center space-y-2 w-10">
+            <nav className="flex flex-col items-center space-y-2 w-10 mt-6">
               {/* Enhanced NavLinkHelper with prefetching */}
               <NavLinkHelper isCollapsed={isCollapsed} to="/gallery" label="Character Folder" Icon={NAV_ICONS.gallery} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/info" label="Basic Info & Greetings" Icon={NAV_ICONS.info} />
@@ -179,11 +173,6 @@ const SideNav: React.FC<SideNavProps> = ({
                   <Save size={20} />
                 </button>
               </div>
-            </div>
-
-            {/* API Selector (Expanded) */}
-            <div className="mb-4">
-              <ApiSelectDropdown />
             </div>
 
             {/* Navigation */}

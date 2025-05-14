@@ -302,8 +302,31 @@ async def save_chat(
                 }
             )
             
+        # Validate character data consistency between chat and actual character data
+        char_name = character_data.get('data', {}).get('name', 'Unknown')
+        
+        # Check for potential mismatch in character data
+        expected_name = None
+        if metadata and metadata.get('chat_metadata') and metadata['chat_metadata'].get('character_name'):
+            expected_name = metadata['chat_metadata'].get('character_name')
+        elif messages and len(messages) > 0:
+            # Try to extract name from first message or chat metadata
+            if 'name' in messages[0]:
+                expected_name = messages[0].get('name')
+            elif messages[0].get('chat_metadata', {}).get('character_name'):
+                expected_name = messages[0].get('chat_metadata', {}).get('character_name')
+        
+        if expected_name and char_name != expected_name:
+            logger.log_warning(f"CHAT CONSISTENCY ISSUE: Character name in data '{char_name}' doesn't match expected name '{expected_name}'")
+            logger.log_warning(f"This could indicate character data inconsistency - the name has been corrected")
+            # Update the character data to match the expected name
+            if 'data' not in character_data:
+                character_data['data'] = {}
+            character_data['data']['name'] = expected_name
+            char_name = expected_name
+            
         # Log the number of messages being saved for debugging
-        logger.log_step(f"Saving chat for character: {character_data.get('data', {}).get('name', 'Unknown')}")
+        logger.log_step(f"Saving chat for character: {char_name}")
         logger.log_step(f"Saving {len(messages)} messages")
         
         # Make sure we're passing all messages to the save function
