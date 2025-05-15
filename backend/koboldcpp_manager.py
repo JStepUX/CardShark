@@ -14,9 +14,11 @@ import psutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable
 import threading
+import multiprocessing
 import logging
 import platform
 import re
+import traceback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -379,6 +381,10 @@ class KoboldCPPManager:
             
             # Add model if specified
             if model:
+                # Verify model file exists before attempting to launch
+                if not os.path.isfile(model):
+                    logger.error(f"Model file does not exist: {model}")
+                    return {'status': 'error', 'message': f"Model file not found: {model}"}
                 command += ["--model", model]
             
             # Add any additional parameters
@@ -387,59 +393,53 @@ class KoboldCPPManager:
             
             logger.info(f"Launching KoboldCPP with command: {' '.join(command)}")
             logger.info(f"Working directory: {kobold_dir}")
-            
-            # Platform-specific launch configuration
-            if platform.system() == 'Windows':
-                # On Windows, use subprocess.Popen with CREATE_NEW_CONSOLE flag to show the console
-                # but don't capture output which can cause the process to hang
-                self.process = subprocess.Popen(
-                    command, 
-                    creationflags=subprocess.CREATE_NEW_CONSOLE,
-                    cwd=kobold_dir,  # Set working directory to KoboldCPP directory
-                    shell=False,  # Don't use shell for security reasons
-                    stderr=None,  # Don't capture stderr to avoid blocking
-                    stdout=None   # Don't capture stdout to avoid blocking
-                )
-            else:
-                # On Unix-like systems
-                self.process = subprocess.Popen(
-                    command, 
-                    start_new_session=True,
-                    cwd=kobold_dir,  # Set working directory to KoboldCPP directory
-                    shell=False,  # Don't use shell for security reasons
-                    stderr=None,  # Don't capture stderr
-                    stdout=None   # Don't capture stdout
-                )
+              # Platform-specific launch configuration
+            try:
+                if platform.system() == 'Windows':
+                    # On Windows, use subprocess.Popen with CREATE_NEW_CONSOLE flag to show the console
+                    # but don't capture output which can cause the process to hang
+                    self.process = subprocess.Popen(
+                        command, 
+                        creationflags=subprocess.CREATE_NEW_CONSOLE,
+                        cwd=kobold_dir,  # Set working directory to KoboldCPP directory
+                        shell=False,  # Don't use shell for security reasons
+                        stderr=subprocess.PIPE,  # Capture stderr for diagnostics
+                        stdout=subprocess.PIPE,  # Capture stdout for diagnostics
+                        env=os.environ.copy()  # Use current environment variables
+                    )
+                else:
+                    # For non-Windows platforms (Linux, MacOS)
+                    self.process = subprocess.Popen(
+                        command,
+                        cwd=kobold_dir,  # Set working directory to KoboldCPP directory
+                        shell=False,
+                        stderr=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        env=os.environ.copy()  # Use current environment variables
+                    )
                 
-            # Short wait to let the process start
-            time.sleep(2)
-            
-            # Check if process is still running after the wait
-            if self.process.poll() is not None:
-                logger.error("KoboldCPP process failed to start or exited too quickly")
-                return {
-                    'status': 'error', 
-                    'message': "KoboldCPP process failed to start or exited too quickly"
-                }
-            
-            # Wait a bit longer to see if the API becomes available
-            max_attempts = 10
-            for attempt in range(max_attempts):
-                try:
-                    response = requests.get("http://localhost:5001/api/v1/model", timeout=2)
-                    if response.status_code == 200:
-                        logger.info(f"KoboldCPP API is responding after {attempt + 1} attempts")
-                        break
-                except:
-                    logger.info(f"Waiting for KoboldCPP API to become available (attempt {attempt + 1}/{max_attempts})")
-                    time.sleep(3)  # Wait 3 seconds between attempts
+                # Check if process started correctly and is still running
+                time.sleep(1)
+                if self.process.poll() is None:
+                    # Process is still running after 1 second
+                    logger.info(f"KoboldCPP process started with PID: {self.process.pid}")
+                    return {'status': 'success', 'message': 'KoboldCPP started successfully'}
+                else:
+                    # Process exited immediately
+                    try:
+                        stderr = self.process.stderr.read().decode('utf-8', errors='replace')
+                        stdout = self.process.stdout.read().decode('utf-8', errors='replace')
+                        logger.error(f"KoboldCPP process exited immediately with code: {self.process.returncode}")
+                        logger.error(f"STDOUT: {stdout}")
+                        logger.error(f"STDERR: {stderr}")
+                        return {'status': 'error', 'message': f"KoboldCPP process exited immediately. Stderr: {stderr.splitlines()[0] if stderr else 'No error output'}"}
+                    except Exception as err:
+                        return {'status': 'error', 'message': f"KoboldCPP process exited immediately with code {self.process.returncode}. Could not capture output: {str(err)}"}
                 
-            logger.info("KoboldCPP launched successfully")
-            return {
-                'status': 'launched', 
-                'message': 'KoboldCPP launched successfully',
-                'pid': self.process.pid
-            }
+                    
+            except Exception as e:
+                logger.error(f"Failed to launch KoboldCPP: {str(e)}")
+                return {'status': 'error', 'message': f"Failed to launch KoboldCPP: {str(e)}"}
             
         except Exception as e:
             logger.error(f"Error launching KoboldCPP: {str(e)}")
@@ -472,10 +472,35 @@ class KoboldCPPManager:
             'exe_path': self.exe_path,
             'is_running': False,
         }
-    
     def get_status(self) -> Dict[str, Any]:
         """Get the current status of KoboldCPP"""
         status = self.check_and_launch()
+        
+        # If KoboldCPP is reported as running, verify that the API is actually responding
+        if status.get('is_running', False):
+            try:
+                # Create a handler to use its ping_server method
+                from backend.koboldcpp_handler import KoboldCPPHandler
+                handler = KoboldCPPHandler()
+                ping_result = handler.ping_server()
+                
+                # Update status with actual API availability
+                status['api_responding'] = ping_result.get('is_responding', False)
+                
+                # If API is not responding, update status
+                if not ping_result.get('is_responding', False):
+                    status['message'] = 'KoboldCPP is running but API is not responding'
+                    status['error'] = ping_result.get('error')
+                    # Don't set is_running to False, as the process is actually running
+                
+                # Add version info if available
+                if ping_result.get('version'):
+                    status['version'] = ping_result.get('version')
+            except Exception as e:
+                logger.warning(f"Error checking KoboldCPP API: {str(e)}")
+                status['api_responding'] = False
+                status['error'] = f"Failed to check API: {str(e)}"
+        
         return status
     
     def scan_models_directory(self, models_dir: str) -> List[Dict[str, Any]]:

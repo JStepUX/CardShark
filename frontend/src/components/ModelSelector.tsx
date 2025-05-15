@@ -371,18 +371,31 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const handleConnectKobold = async () => {
     if (selectedModel && modelsDirectory) {
        setIsLoading(true);
-       setError(null);
-      try {
+       setError(null);      try {
          console.log(`Requesting backend to connect KoboldCPP with model: ${selectedModel}`);
-         const response = await fetch('/api/koboldcpp/connect', { // Placeholder endpoint
+         console.log(`Models directory: ${modelsDirectory}`);
+         
+         const response = await fetch('/api/koboldcpp/connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ model_path: selectedModel, models_directory: modelsDirectory })
          });
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
+          
+         if (!response.ok) {
+            console.error(`Failed to connect KoboldCPP. Status: ${response.status}`);
+            let errorMessage = `HTTP error! status: ${response.status}`;
+            
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.detail || errorData.error?.message || errorMessage;
+              console.error("Error details:", errorData);
+            } catch (parseError) {
+              console.error("Failed to parse error response:", parseError);
+            }
+            
+            throw new Error(`Failed to connect KoboldCPP: ${errorMessage}`);
          }
+          
           const result = await response.json();
          if (!result.success) {
             throw new Error(result.error || 'Backend failed to start KoboldCPP');
@@ -405,18 +418,29 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   const handleDisconnectKobold = async () => {
      setIsLoading(true);
-     setError(null);
-     try {
+     setError(null);     try {
         console.log("Requesting backend to disconnect KoboldCPP");
-        const response = await fetch('/api/koboldcpp/disconnect', { method: 'POST' }); // Placeholder endpoint
-         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
-         }
-         const result = await response.json();
-         if (!result.success) {
-            throw new Error(result.error || 'Backend failed to stop KoboldCPP');
-         }
+        const response = await fetch('/api/koboldcpp/disconnect', { method: 'POST' });
+         
+        if (!response.ok) {
+           console.error(`Failed to disconnect KoboldCPP. Status: ${response.status}`);
+           let errorMessage = `HTTP error! status: ${response.status}`;
+           
+           try {
+             const errorData = await response.json();
+             errorMessage = errorData.detail || errorData.error?.message || errorMessage;
+             console.error("Error details:", errorData);
+           } catch (parseError) {
+             console.error("Failed to parse error response:", parseError);
+           }
+           
+           throw new Error(`Failed to disconnect KoboldCPP: ${errorMessage}`);
+        }
+         
+        const result = await response.json();
+        if (!result.success) {
+           throw new Error(result.message || 'Backend failed to stop KoboldCPP');
+        }
         toast.info("KoboldCPP server stopping...");
         setTimeout(refreshKoboldStatus, 3000); // Refresh status after delay
      } catch (error) {

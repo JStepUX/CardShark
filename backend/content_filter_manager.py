@@ -1,5 +1,6 @@
 # backend/content_filter_manager.py
 # Description: Manages content filtering rules for the application
+from importlib.resources import Package
 import json
 import os
 import traceback
@@ -243,12 +244,7 @@ class ContentFilterManager:
             self.logger.log_error(f"Cannot delete unknown package: {package_id}")
             return False
             
-        # Don't allow deleting builtin packages
-        package = self.available_packages[package_id]
-        if package.get('is_builtin', False):
-            self.logger.log_error(f"Cannot delete builtin package: {package_id}")
-            return False
-            
+        # Allow deleting any package - don't block even builtin packages
         try:
             # Remove from active packages first
             if package_id in self.active_package_ids:
@@ -256,7 +252,7 @@ class ContentFilterManager:
                 self._save_active_packages()
             
             # Delete the file
-            file_path = Path(package['path'])
+            file_path = Path(Package['path'])
             if file_path.exists():
                 file_path.unlink()
                 
@@ -343,20 +339,6 @@ class ContentFilterManager:
                         "mode": "case-insensitive",
                         "enabled": True,
                         "strategy": "auto"
-                    }
-                ]
-            },
-            "safety_filter": {
-                "name": "Safety Filter",
-                "description": "Filters content unsafe for younger audiences",
-                "version": "1.0",
-                "rules": [
-                    {
-                        "original": "nsfw",
-                        "substitutions": [""],
-                        "mode": "case-insensitive",
-                        "enabled": True,
-                        "strategy": "api-ban"
                     }
                 ]
             },

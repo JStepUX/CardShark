@@ -2,6 +2,7 @@
 # Description: API handler for interacting with LLM API endpoints
 import traceback
 import requests # type: ignore
+import httpx # Add httpx import
 import json
 import re
 from typing import Dict, Optional, Tuple, Generator
@@ -297,7 +298,8 @@ class ApiHandler:
             # --- End payload construction ---
             self.logger.log_step(f"Making non-streaming request to {endpoint}")
             
-            response = requests.post(endpoint, headers=headers, json=data, timeout=30)
+            async with httpx.AsyncClient() as client:
+                response = await client.post(endpoint, headers=headers, json=data, timeout=30)
             
             if response.status_code != 200:
                 raise ValueError(f"API returned error {response.status_code}: {response.text}")
@@ -398,13 +400,13 @@ class ApiHandler:
             context_window = generation_params.get('context_window')
             
             # Handle lore matching if character data is available
-            if character_data and 'data' in character_data and 'character_book' in character_data['data']:
+            if character_data and character_data.get('data') and character_data.get('data', {}).get('character_book'):
                 try:
                     from backend.lore_handler import LoreHandler
                     lore_handler = LoreHandler(self.logger)
                     
                     # Get lore entries
-                    lore_entries = character_data['data']['character_book'].get('entries', [])
+                    lore_entries = character_data.get('data', {}).get('character_book', {}).get('entries', [])
                     
                     if lore_entries:
                         self.logger.log_step(f"Found {len(lore_entries)} lore entries")
@@ -533,7 +535,6 @@ class ApiHandler:
                         self.logger.log_step(f"Yielding chunk {chunk_count} from adapter generator...")
                     yield chunk
                     has_yielded_content = True
-                    
             self.logger.log_step(f"Finished iterating adapter generator. Total chunks yielded: {chunk_count}")
             # No explicit return needed here as yielding handles the generator response
             
@@ -541,6 +542,31 @@ class ApiHandler:
             error_msg = str(ve)
             self.logger.log_error(error_msg)
             yield f"data: {json.dumps({'error': {'type': 'ValueError', 'message': error_msg}})}\n\n".encode('utf-8')
+        except requests.exceptions.RequestException as e:
+            # Special handling for connection errors
+            error_msg = f"Connection error: {str(e)}"
+            self.logger.log_error(error_msg)
+            
+            # Add provider info to help frontend identify API that failed
+            error_data = {
+                'error': {
+                    'type': 'ConnectionError',
+                    'message': error_msg,
+                    'provider': provider
+                }
+            }
+            yield f"data: {json.dumps(error_data)}\n\n".encode('utf-8')
+            
+            # Add provider info to help frontend identify API that failed
+            error_data = {
+                'error': {
+                    'type': 'ConnectionError',
+                    'message': error_msg,
+                    'provider': provider
+                }
+            }
+            yield f"data: {json.dumps(error_data)}\n\n".encode('utf-8')
+            
         except Exception as e:
             error_msg = f"Stream generation failed: {str(e)}"
             self.logger.log_error(error_msg)

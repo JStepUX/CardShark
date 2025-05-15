@@ -441,14 +441,21 @@ class KoboldCppAdapter(ApiProviderAdapter):
                         except Exception as e:
                             self.logger.log_error(f"Error processing line: {e}")
                             continue
-                    
-                    # Send completion message
+                      # Send completion message
                     yield b"data: [DONE]\n\n"
                     
             except requests.exceptions.RequestException as e:
                 self.logger.log_error(f"KoboldCPP request failed: {str(e)}")
                 error_msg = f"Failed to connect to KoboldCPP: {str(e)}"
-                yield f"data: {json.dumps({'error': {'message': error_msg}})}\n\n".encode('utf-8')
+                # Add connection failure indicator to help frontend update API status
+                error_data = {
+                    'error': {
+                        'message': error_msg,
+                        'type': 'connection_failure',
+                        'provider': 'KoboldCPP'
+                    }
+                }
+                yield f"data: {json.dumps(error_data)}\n\n".encode('utf-8')
                 
         except Exception as e:
             error_msg = f"KoboldCPP stream generation failed: {str(e)}"

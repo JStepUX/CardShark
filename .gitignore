@@ -46,6 +46,7 @@ worldInfo.md
 v2.json
 legacy/
 settings.json
+active_filters.json
 users/
 __tests__/
 context/
@@ -60,3 +61,4 @@ crawlsite.py
 
 # windsurf rules
 .windsurfrules
+content_filters/active_filters.json

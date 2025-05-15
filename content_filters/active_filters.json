@@ -1,3 +1,5 @@
 {
-  "active_packages": ["profanity_filter"]
+  "active_packages": [
+    "profanity_filter"
+  ]
 }

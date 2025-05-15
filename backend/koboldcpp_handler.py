@@ -22,6 +22,145 @@ from backend.koboldcpp_manager import manager
 # Configure logging
 logger = logging.getLogger("KoboldCPP Handler")
 
+# Default port for KoboldCPP
+DEFAULT_KCPP_PORT = 5001
+
+class KoboldCPPHandler:
+    def __init__(self, koboldcpp_dir: str = None):
+        """Initialize the KoboldCPP handler with optional custom directory."""
+        if koboldcpp_dir:
+            self.koboldcpp_dir = Path(koboldcpp_dir)
+        else:
+            # Default to the KoboldCPP directory in the parent directory
+            self.koboldcpp_dir = Path(os.path.join(os.path.dirname(os.path.dirname(__file__)), "KoboldCPP"))
+        
+        # Use the module-level logger
+        logger.info(f"KoboldCPP directory set to: {self.koboldcpp_dir}")
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get the current status of KoboldCPP installation and process."""
+        exe_name = "koboldcpp.exe" if platform.system() == "Windows" else "koboldcpp"
+        exe_path = self.koboldcpp_dir / exe_name
+        
+        status = {
+            "status": "unknown",
+            "is_running": False,
+            "exe_path": str(exe_path) if exe_path.exists() else None,
+            "version": None,
+            "error": None,
+            "api_responding": False # Initialize api_responding
+        }
+        
+        # Check if executable exists
+        if not exe_path.exists():
+            status["status"] = "missing"
+            return status
+        
+        # Executable exists
+        status["status"] = "present"
+        
+        # Try to check if the process is running
+        try:
+            # Use netstat to check if the port is in use (platform dependent)
+            if platform.system() == "Windows":
+                # Command to check port on Windows
+                netstat_output = subprocess.check_output(
+                    ["netstat", "-ano", "-p", "TCP"], 
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW # Hide console window
+                )
+                # Look for the KoboldCPP default port
+                for line in netstat_output.splitlines():
+                    if f":{DEFAULT_KCPP_PORT}" in line and "LISTENING" in line:
+                        status["is_running"] = True
+                        break
+            else:
+                # For Linux/Mac
+                try:
+                    # Try lsof first (more reliable)
+                    lsof_output = subprocess.check_output(
+                        ["lsof", "-i", f"TCP:{DEFAULT_KCPP_PORT}", "-sTCP:LISTEN", "-P", "-n"],
+                        text=True
+                    )
+                    status["is_running"] = bool(lsof_output.strip())
+                except (subprocess.SubprocessError, FileNotFoundError):
+                    # Fallback to netstat if lsof fails or is not available
+                    try:
+                        netstat_output = subprocess.check_output(
+                            ["netstat", "-tulnp"],
+                            text=True
+                        )
+                        status["is_running"] = f":{DEFAULT_KCPP_PORT}" in netstat_output
+                    except (subprocess.SubprocessError, FileNotFoundError):
+                        logger.warning("Could not check if KoboldCPP is running - netstat and lsof commands failed")
+        except Exception as e:
+            logger.error(f"Error checking if KoboldCPP is running: {str(e)}")
+            status["error"] = f"Error checking process status: {str(e)}"
+        
+        # If we think it's running, try to get version from the API
+        if status["is_running"]:
+            ping_data = self.ping_server(DEFAULT_KCPP_PORT)
+            status["api_responding"] = ping_data["is_responding"]
+            status["version"] = ping_data.get("version")
+            if not ping_data["is_responding"]:
+                status["error"] = ping_data.get("error", "API not responding")
+                # Keep is_running as True if process check passed, but API is down
+        
+        return status
+    
+    def ping_server(self, port: int = DEFAULT_KCPP_PORT) -> Dict[str, Any]:
+        """Check if the KoboldCPP server is responsive at the given port."""
+        result = {
+            "port": port,
+            "is_responding": False,
+            "version": None,
+            "error": None
+            # "last_checked": time.time() # time is not imported here, consider adding if needed
+        }
+        try:
+            # Use the /api/v1/model endpoint as it's standard for KoboldCPP
+            response = requests.get(f"http://localhost:{port}/api/v1/model", timeout=1) # Short timeout
+            
+            if response.status_code == 200:
+                result["is_responding"] = True
+                try:
+                    data = response.json()
+                    # Extract version if available in the response
+                    if isinstance(data.get("result"), dict) and "version" in data["result"]:
+                        result["version"] = data["result"]["version"]
+                    elif isinstance(data.get("result"), str): # Sometimes version is just a string in "result"
+                        result["version"] = data.get("result")
+                    else:
+                         # Attempt to get version from a known Kobold Lite format if applicable
+                        if "version" in data: # Check root level for version
+                           result["version"] = data.get("version")
+                except json.JSONDecodeError:
+                    result["error"] = "API responded but with non-JSON content"
+                    result["is_responding"] = False # Non-JSON means not truly responsive for API purposes
+            else:
+                result["error"] = f"API responded with status code {response.status_code}"
+                
+        except requests.exceptions.Timeout:
+            result["error"] = "Connection timed out"
+        except requests.exceptions.ConnectionError:
+            result["error"] = "Connection refused or failed"
+        except Exception as e:
+            result["error"] = f"An unexpected error occurred: {str(e)}"
+            
+        return result
+
+    def launch(self, model_path: Optional[str] = None) -> Dict[str, Any]:
+        """Placeholder for actual launch logic"""
+        # This method would typically involve subprocess.Popen to start KoboldCPP
+        # For now, it's a placeholder.
+        logger.info(f"Attempting to launch KoboldCPP with model: {model_path}")
+        return {"status": "not_implemented", "message": "Launch functionality is not fully implemented in this handler."}
+
+    def download_koboldcpp(self) -> Dict[str, Any]:
+        """Placeholder for download logic"""
+        # This method would download the KoboldCPP executable
+        logger.info("Attempting to download KoboldCPP")
+        return {"status": "not_implemented", "message": "Download functionality is not fully implemented in this handler."}
 # Create FastAPI router
 router = APIRouter(prefix="/api/koboldcpp", tags=["koboldcpp"])
 
@@ -340,17 +479,29 @@ async def get_featherless_models(request: Request):
             content={"success": False, "error": f"Failed to fetch models: {str(e)}"}
         )
 
-@router.post("/ping-server")
-async def ping_koboldcpp_server(port: int = None):
+@router.api_route("/ping-server", methods=["GET", "POST"])
+async def ping_koboldcpp_server(port: int = None, request: Request = None):
     """Check if KoboldCPP server is responsive"""
     try:
         # Use default port if not specified
-        if (port is None):
-            port = DEFAULT_KCPP_PORT
+        if port is None:
+            # If this is a POST request, try to get port from request body
+            if request and request.method == "POST":
+                try:
+                    data = await request.json()
+                    port = data.get("port", DEFAULT_KCPP_PORT)
+                except:
+                    port = DEFAULT_KCPP_PORT
+            else:
+                port = DEFAULT_KCPP_PORT
         
         # Create handler instance just for this check
         handler = KoboldCPPHandler()
         result = handler.ping_server(port)
+        
+        # Add a field to indicate whether this API is available for use
+        result["available_for_use"] = result["is_responding"]
+        
         return result
     except Exception as e:
         logger.error(f"Error pinging KoboldCPP server: {str(e)}")
@@ -380,6 +531,9 @@ async def connect_koboldcpp(request_data: dict = Body(...)):
         model_path = request_data.get("model_path")
         models_directory = request_data.get("models_directory")
         
+        logger.info(f"Received connect request with model_path: {model_path}")
+        logger.info(f"Models directory: {models_directory}")
+        
         if not model_path:
             raise HTTPException(status_code=400, detail="model_path is required")
         
@@ -389,14 +543,31 @@ async def connect_koboldcpp(request_data: dict = Body(...)):
             'skiplauncher': True,
             'nobrowser': True
         }
-        
-        # Update models directory if provided
+          # Update models directory if provided
         if models_directory:
             from backend.main import settings_manager
-            settings_manager.update_setting("models_directory", models_directory)
+            settings_manager.update_settings({"models_directory": models_directory})
             logger.info(f"Updated models directory to: {models_directory}")
-        
+        # Ensure we have a full absolute path to the model
+        # If model_path is not already absolute, combine with models_directory
+        if not os.path.isabs(model_path) and models_directory:
+            full_model_path = os.path.join(models_directory, model_path)
+            logger.info(f"Converted relative path to absolute: {model_path} -> {full_model_path}")
+            model_path = full_model_path
+            
+        # Verify the model file exists
+        if not os.path.isfile(model_path):
+            error_msg = f"Model file not found: {model_path}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=404, detail=error_msg)
+        else:
+            logger.info(f"Model file exists at path: {model_path}")
+            
+        # Log KoboldCPP executable path
+        logger.info(f"Using KoboldCPP executable: {manager.exe_path}")
+            
         # Launch the model using the existing launch_with_model method
+        logger.info(f"Launching model with config: {config}")
         result = manager.launch_with_model(model_path, config)
         if result.get('status') == 'error':
             raise HTTPException(status_code=500, detail=result.get('message', 'Unknown error'))
@@ -407,151 +578,3 @@ async def connect_koboldcpp(request_data: dict = Body(...)):
     except Exception as e:
         logger.error(f"Error connecting to KoboldCPP: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to connect to KoboldCPP: {str(e)}")
-
-import os
-import sys
-import json
-import requests
-import logging
-import subprocess
-import platform
-from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List, Union
-
-# Setup logging
-logger = logging.getLogger(__name__)
-
-# Default port for KoboldCPP
-DEFAULT_KCPP_PORT = 5001
-
-class KoboldCPPHandler:
-    def __init__(self, koboldcpp_dir: str = None):
-        """Initialize the KoboldCPP handler with optional custom directory."""
-        if koboldcpp_dir:
-            self.koboldcpp_dir = Path(koboldcpp_dir)
-        else:
-            # Default to the KoboldCPP directory in the parent directory
-            self.koboldcpp_dir = Path(os.path.join(os.path.dirname(os.path.dirname(__file__)), "KoboldCPP"))
-        
-        logger.info(f"KoboldCPP directory set to: {self.koboldcpp_dir}")
-    
-    def get_status(self) -> Dict[str, Any]:
-        """Get the current status of KoboldCPP installation and process."""
-        exe_name = "koboldcpp.exe" if platform.system() == "Windows" else "koboldcpp"
-        exe_path = self.koboldcpp_dir / exe_name
-        
-        status = {
-            "status": "unknown",
-            "is_running": False,
-            "exe_path": str(exe_path) if exe_path.exists() else None,
-            "version": None,
-            "error": None
-        }
-        
-        # Check if executable exists
-        if not exe_path.exists():
-            status["status"] = "missing"
-            return status
-        
-        # Executable exists
-        status["status"] = "present"
-        
-        # Try to check if the process is running
-        try:
-            # Use netstat to check if the port is in use (platform dependent)
-            if platform.system() == "Windows":
-                # Command to check port on Windows
-                netstat_output = subprocess.check_output(
-                    ["netstat", "-ano", "-p", "TCP"], 
-                    text=True
-                )
-                # Look for the KoboldCPP default port
-                for line in netstat_output.splitlines():
-                    if f":{DEFAULT_KCPP_PORT}" in line and "LISTENING" in line:
-                        status["is_running"] = True
-                        break
-            else:
-                # For Linux/Mac
-                try:
-                    netstat_output = subprocess.check_output(
-                        ["lsof", "-i", f":{DEFAULT_KCPP_PORT}", "-n"], 
-                        text=True
-                    )
-                    status["is_running"] = len(netstat_output.strip()) > 0
-                except (subprocess.SubprocessError, FileNotFoundError):
-                    # Try netstat as a fallback
-                    try:
-                        netstat_output = subprocess.check_output(
-                            ["netstat", "-tuln"], 
-                            text=True
-                        )
-                        status["is_running"] = f":{DEFAULT_KCPP_PORT}" in netstat_output
-                    except (subprocess.SubprocessError, FileNotFoundError):
-                        logger.warning("Could not check if KoboldCPP is running - netstat and lsof commands failed")
-        except Exception as e:
-            logger.error(f"Error checking if KoboldCPP is running: {str(e)}")
-            status["error"] = f"Error checking process status: {str(e)}"
-        
-        # If we think it's running, try to get version from the API
-        if status["is_running"]:
-            try:
-                # Set a short timeout to quickly fail if the server isn't responding
-                response = requests.get(f"http://localhost:{DEFAULT_KCPP_PORT}/api/v1/model", timeout=2)
-                if response.status_ok:
-                    data = response.json()
-                    if "result" in data:
-                        status["version"] = data["result"]
-            except Exception as e:
-                logger.warning(f"KoboldCPP appears to be running but API is not responding: {str(e)}")
-                # Don't change is_running status, since the process could be starting up
-        
-        return status
-    
-    def ping_server(self, port: int = DEFAULT_KCPP_PORT) -> Dict[str, Any]:
-        """Check if the KoboldCPP server is responsive at the given port."""
-        result = {
-            "is_responding": False,
-            "port": port,
-            "error": None
-        }
-        
-        try:
-            # Use a very short timeout to quickly detect if server is not responding
-            response = requests.get(f"http://localhost:{port}/api/v1/model", timeout=1)
-            result["is_responding"] = response.status_code == 200
-            
-            if not result["is_responding"]:
-                result["error"] = f"Server responded with status code: {response.status_code}"
-        except requests.exceptions.ConnectionError as e:
-            result["error"] = "Connection refused: The server is not accepting connections"
-        except requests.exceptions.Timeout:
-            result["error"] = "Connection timed out: The server took too long to respond"
-        except Exception as e:
-            result["error"] = f"Error connecting to KoboldCPP server: {str(e)}"
-        
-        return result
-
-    # Other methods (launch, download, etc.) would go here
-
-    def launch(self, model_path: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Launch KoboldCPP with the specified model.
-        
-        Args:
-            model_path: Path to the model file to load
-            
-        Returns:
-            Dictionary with status of launch attempt
-        """
-        # Implementation would be here
-        pass
-
-    def download_koboldcpp(self) -> Dict[str, Any]:
-        """
-        Download the latest release of KoboldCPP.
-        
-        Returns:
-            Dictionary with download status
-        """
-        # Implementation would be here
-        pass
