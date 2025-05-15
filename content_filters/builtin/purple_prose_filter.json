@@ -1,0 +1,63 @@
+{
+  "name": "Purple Prose Filter",
+  "description": "Reduces overly flowery language",
+  "version": "1.0",
+  "rules": [
+    {
+      "original": "orbs",
+      "substitutions": ["eyes"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    },
+    {
+      "original": "pools of",
+      "substitutions": [""],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    },
+    {
+      "original": "alabaster",
+      "substitutions": ["pale"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    },
+    {
+      "original": "whilst",
+      "substitutions": ["while"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    },
+    {
+      "original": "cerulean",
+      "substitutions": ["blue"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    },
+    {
+      "original": "azure",
+      "substitutions": ["blue"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    },
+    {
+      "original": "crimson",
+      "substitutions": ["red"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    },
+    {
+      "original": "vermilion",
+      "substitutions": ["red"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "client-replace"
+    }
+  ]
+}

@@ -61,12 +61,18 @@ export function transformKoboldPayload(payload: any) {
     memory = memoryParts.join('\n\n');
   }
   
+  // Process banned tokens for content filtering if any exist in the payload
+  const bannedTokens = generation_params.banned_tokens || [];
+  
   // Create a KoboldCPP-compatible payload
   return {
     // Core parameters
     prompt,
     memory,
     stop_sequence: generation_params.stop_sequence || [],
+    
+    // Include banned tokens for content filtering
+    banned_tokens: bannedTokens,
     
     // Include other generation settings
     ...otherSettings,

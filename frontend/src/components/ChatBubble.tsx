@@ -67,6 +67,21 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       generationStartTime.current = null;
     }
   }, [isGenerating]);
+  
+  // Process incomplete sentences when generation completes
+  useEffect(() => {
+    if (!isGenerating && previousContent.current !== message.content) {
+      // Only apply incomplete sentence removal when configured in settings
+      // and only for assistant messages being generated
+      if (message.role === 'assistant' && settings.remove_incomplete_sentences && message.content) {
+        const processedContent = removeIncompleteSentences(message.content);
+        if (processedContent !== message.content) {
+          onContentChange(processedContent);
+        }
+      }
+      previousContent.current = message.content;
+    }
+  }, [isGenerating, message.content, message.role, onContentChange, settings.remove_incomplete_sentences]);
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {

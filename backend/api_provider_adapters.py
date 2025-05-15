@@ -201,10 +201,9 @@ class KoboldCppAdapter(ApiProviderAdapter):
         # Ensure URL has protocol
         if not base_url.startswith(('http://', 'https://')):
             base_url = f'http://{base_url}'
-            
-        # Log the original URL for debugging
+              # Log the original URL for debugging
         self.logger.log_step(f"KoboldCPP adapter received base URL: {base_url}")
-            
+        
         # First check if the URL already has a known endpoint pattern
         if '/api/extra/generate/stream' in base_url or '/api/generate' in base_url:
             self.logger.log_step(f"Using existing endpoint in URL: {base_url}")
@@ -224,12 +223,12 @@ class KoboldCppAdapter(ApiProviderAdapter):
         if api_key:
             headers['Authorization'] = f'Bearer {api_key}'
         return headers
-    
-    def prepare_request_data(self, 
-                           prompt: str, 
-                           memory: Optional[str],
-                           stop_sequence: List[str],
-                           generation_settings: Dict[str, Any]) -> Dict[str, Any]:
+        
+    def prepare_request_data(self,
+                             prompt: str,
+                             memory: Optional[str],
+                             stop_sequence: List[str],
+                             generation_settings: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare the request data for KoboldCPP"""
         # Extract KoboldCPP-specific settings or use defaults
         max_tokens = generation_settings.get('max_length', 220)
@@ -238,6 +237,9 @@ class KoboldCppAdapter(ApiProviderAdapter):
         top_k = generation_settings.get('top_k', 40)
         typical_p = generation_settings.get('typical_p', 1.0)
         repetition_penalty = generation_settings.get('repetition_penalty', 1.1)
+        
+        # Extract word filtering settings if available
+        banned_tokens = generation_settings.get('banned_tokens', [])
         
         # Log the preparation
         self.logger.log_step(f"Preparing KoboldCPP request data with max_tokens={max_tokens}")
@@ -260,6 +262,11 @@ class KoboldCppAdapter(ApiProviderAdapter):
             "rep_pen": repetition_penalty,
             "stopping_strings": stop_sequence
         }
+        
+        # Add banned tokens if present
+        if banned_tokens:
+            data["banned_tokens"] = banned_tokens
+            self.logger.log_step(f"Adding {len(banned_tokens)} banned tokens to KoboldCPP request")
         
         return data
         
@@ -460,8 +467,7 @@ class OpenAIAdapter(ApiProviderAdapter):
             base_url = f'https://{base_url}'
             
         # Ensure the endpoint is correct
-        if not base_url.endswith('/chat/completions'):
-            return base_url.rstrip('/') + '/v1/chat/completions'
+        if not base_url.endswith('/chat/completions'):        return base_url.rstrip('/') + '/v1/chat/completions'
         return base_url
         
     def prepare_headers(self, api_key: Optional[str]) -> Dict[str, str]:
@@ -473,19 +479,22 @@ class OpenAIAdapter(ApiProviderAdapter):
         if api_key:
             headers['Authorization'] = f'Bearer {api_key}'
         return headers
-        
-    def prepare_request_data(self, 
+    def prepare_request_data(self,
                            prompt: str, 
                            memory: Optional[str],
                            stop_sequence: List[str],
                            generation_settings: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare the request data for OpenAI"""
+        
         # Extract OpenAI-specific settings or use defaults
         max_tokens = generation_settings.get('max_length', 220)
         temperature = generation_settings.get('temperature', 0.7)
         top_p = generation_settings.get('top_p', 0.9)
         presence_penalty = generation_settings.get('presence_penalty', 0)
         model = generation_settings.get('model', 'gpt-3.5-turbo')
+        
+        # Extract logit_bias settings if available
+        logit_bias = generation_settings.get('logit_bias', {})
         
         # Create the OpenAI request format
         data = {
@@ -498,6 +507,11 @@ class OpenAIAdapter(ApiProviderAdapter):
             "stop": stop_sequence,
             "stream": True
         }
+        
+        # Add logit_bias if present
+        if logit_bias:
+            data["logit_bias"] = logit_bias
+            self.logger.log_step(f"Adding logit_bias with {len(logit_bias)} token biases to OpenAI request")
         
         # Add the prompt as a user message
         data["messages"].append({"role": "user", "content": prompt})

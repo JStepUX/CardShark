@@ -91,6 +91,7 @@ from backend.api_handler import ApiHandler
 from backend.chat_handler import ChatHandler
 from backend.template_handler import TemplateHandler
 from backend.background_handler import BackgroundHandler
+from backend.content_filter_manager import ContentFilterManager
 from backend.lore_handler import LoreHandler
 
 # API endpoint modules
@@ -147,6 +148,7 @@ app.add_middleware(
 # Initialize core handlers
 settings_manager = SettingsManager(logger)
 settings_manager._load_settings()
+content_filter_manager = ContentFilterManager(logger)
 validator = CharacterValidator(logger)
 png_handler = PngMetadataHandler(logger)
 debug_handler = PngDebugHandler(logger)
@@ -187,6 +189,10 @@ app.include_router(template_router)  # Include the new template router
 app.include_router(lore_router)  # Include the lore router
 # app.include_router(world_chat_router) # Removed, functionality merged into world_router
 app.include_router(background_router)
+
+# Import content filter router
+from backend.content_filter_endpoints import router as content_filter_router
+app.include_router(content_filter_router)
 
 # ---------- Direct routes that haven't been modularized yet ----------
 

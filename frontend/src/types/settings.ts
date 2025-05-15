@@ -1,5 +1,6 @@
 // types/settings.ts
 import { APIConfig, APIProvider, createAPIConfig } from './api';
+import { WordSwapRule } from '../utils/contentProcessing';
 
 export interface ReasoningSettings {
   enabled: boolean;
@@ -80,6 +81,9 @@ export interface Settings {
   
   // Syntax highlighting settings
   syntaxHighlighting?: SyntaxHighlightSettings;
+  
+  // Content filtering
+  wordSwapRules?: WordSwapRule[];
 }
 
 export const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {

@@ -247,7 +247,9 @@ backend_datas = [
     ('backend/worldcards/*', 'backend/worldcards'),
     ('backend/models/*', 'backend/models'),
     ('backend/utils/*', 'backend/utils'),
-    ('backend/default_room.png', 'backend')          # Add default room image
+    ('backend/default_room.png', 'backend'),         # Add default room image
+    ('content_filters/*.json', 'content_filters'),   # Add content filters JSON files
+    ('content_filters/builtin/*.json', 'content_filters/builtin')  # Add builtin filter packages
 ]
 
 # Create empty KoboldCPP directory structure but don't include existing files
@@ -282,8 +284,7 @@ hidden_imports = [
     'uvicorn.protocols.websockets.auto',
     'uvicorn.supervisors',
     'uvicorn.supervisors.multiprocess',
-    
-    # Backend modules - only include ones that exist
+      # Backend modules - only include ones that exist
     'backend',
     'backend.api_handler',
     'backend.api_provider_adapters',
@@ -292,6 +293,8 @@ hidden_imports = [
     'backend.batch_converter',
     'backend.character_validator',
     'backend.chat_handler',
+    'backend.content_filter_manager',  # Add content filter manager
+    'backend.content_filter_endpoints', # Add content filter endpoints
     'backend.errors',
     'backend.koboldcpp_manager',
     'backend.koboldcpp_handler',
@@ -307,11 +310,11 @@ hidden_imports = [
     'backend.test_module',
     'backend.test_restructure', # Added missing test module
     'backend.world_state_manager',
-    
-    # All endpoint files
+      # All endpoint files
     'backend.background_endpoints',
     'backend.character_endpoints',
     'backend.chat_endpoints',
+    'backend.content_filter_endpoints',  # Add content filter endpoints
     'backend.lore_endpoints',
     'backend.settings_endpoints',
     'backend.template_endpoints',
@@ -410,9 +413,17 @@ def build_executable():
         main_py = BACKEND_DIR / 'main.py'
         frontend_dist = FRONTEND_DIR / 'dist'
         spec_file = BASE_DIR / 'CardShark.spec'
+        content_filters_dir = BASE_DIR / 'content_filters'
+        
         # Log the contents of the backend directory
         backend_files = list(BACKEND_DIR.glob('*.py'))
         log(f"Backend directory contents: {[f.name for f in backend_files]}", "DEBUG")
+        
+        # Check for content filter files
+        content_filter_files = list(content_filters_dir.glob('*.json'))
+        content_filter_builtin_files = list((content_filters_dir / 'builtin').glob('*.json'))
+        log(f"Content filters: {[f.name for f in content_filter_files]}", "DEBUG")
+        log(f"Content filters (builtin): {[f.name for f in content_filter_builtin_files]}", "DEBUG")
         
         if not main_py.exists():
             log(f"Error: main.py not found at {main_py}", "ERROR")
@@ -451,11 +462,17 @@ def build_executable():
         internal_dir = BASE_DIR / 'dist' / '_internal'
         if internal_dir.exists():
             log("Warning: _internal directory was created unexpectedly", "WARNING")
-        
-        # Create empty KoboldCPP directory in the dist folder
+          # Create empty KoboldCPP directory in the dist folder
         dist_koboldcpp_dir = BASE_DIR / 'dist' / 'KoboldCPP'
         dist_koboldcpp_dir.mkdir(exist_ok=True)
         log(f"Created empty KoboldCPP directory in dist folder: {dist_koboldcpp_dir}", "DEBUG")
+        
+        # Create content_filters directory structure in the dist folder
+        dist_content_filters_dir = BASE_DIR / 'dist' / 'content_filters'
+        dist_content_filters_builtin_dir = dist_content_filters_dir / 'builtin'
+        dist_content_filters_dir.mkdir(exist_ok=True)
+        dist_content_filters_builtin_dir.mkdir(exist_ok=True)
+        log(f"Created content_filters directories in dist folder", "DEBUG")
             
         log(f"Executable successfully created at {exe_path}")
         return True
@@ -505,8 +522,21 @@ def validate_paths():
         'frontend': FRONTEND_DIR,
         'frontend_dist': FRONTEND_DIR / 'dist',
         'templates': BACKEND_DIR / 'templates',
+        'content_filters': BASE_DIR / 'content_filters',
         'spec': BASE_DIR / 'CardShark.spec'
     }
+    
+    # Create content_filters directory and builtin subdirectory if they don't exist
+    content_filters_dir = BASE_DIR / 'content_filters'
+    content_filters_builtin_dir = content_filters_dir / 'builtin'
+    
+    if not content_filters_dir.exists():
+        content_filters_dir.mkdir(exist_ok=True)
+        log(f"Created missing content_filters directory at {content_filters_dir}", "INFO")
+    
+    if not content_filters_builtin_dir.exists():
+        content_filters_builtin_dir.mkdir(exist_ok=True)
+        log(f"Created missing content_filters/builtin directory at {content_filters_builtin_dir}", "INFO")
     
     for name, path in paths.items():
         if not path.exists():

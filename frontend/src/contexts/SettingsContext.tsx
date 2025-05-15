@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
 import { useResilientApi } from "../context/ResilientApiContext"; // Keep for retryAllConnections
+import { ContentFilterClient } from "../services/contentFilterClient";
+// Removed unused import: WordSwapRule
 
 interface SettingsContextType {
   settings: Settings;
@@ -80,10 +82,30 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsLoading(false);
     }
   }, []);
+  // Fetch content filters separately from main settings
+  const fetchContentFilters = useCallback(async () => {
+    console.log("[SettingsContext] Fetching content filters...");
+    try {
+      const rules = await ContentFilterClient.getContentFilters();
+      
+      // Update settings with the content filters
+      setSettings(prev => ({
+        ...prev,
+        wordSwapRules: rules
+      }));
+      console.log("[SettingsContext] Content filters loaded:", rules.length);
+    } catch (err) {
+      console.error("Error fetching content filters:", err);
+      // We don't set the error state here to avoid blocking the entire settings context
+      // just because content filters failed to load
+    }
+  }, []);
 
   useEffect(() => {
     fetchSettings();
-  }, [fetchSettings]);
+    // Also fetch content filters separately
+    fetchContentFilters();
+  }, [fetchSettings, fetchContentFilters]);
 
   const updateSettings = useCallback(async (updates: Partial<Settings>) => {
     console.log("[SettingsContext] Attempting to update settings with:", updates);

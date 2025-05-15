@@ -7,6 +7,7 @@ import { APIConfigContext } from '../contexts/APIConfigContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
+import { useContentFilter } from '../hooks/useContentFilter';
 
 // Define ReasoningSettings interface
 interface ReasoningSettings {
@@ -286,7 +287,9 @@ export const ChatProvider: React.FC<{
     }
   }, [characterData]);
   
-  // Prepare API config with default values if needed
+  // Get content filtering capabilities
+  const { getRequestParameters, filterText, shouldUseClientFiltering } = useContentFilter();
+  
   const prepareAPIConfig = useCallback((config?: APIConfig | null): APIConfig => {
     if (config) {
       const fullConfig = JSON.parse(JSON.stringify(config));
@@ -309,7 +312,14 @@ export const ChatProvider: React.FC<{
         };
       }
       
-      return fullConfig;
+      // Add content filtering parameters to the API config
+      const contentFilterParams = getRequestParameters();
+      
+      // Merge content filter parameters into the config
+      return {
+        ...fullConfig,
+        ...contentFilterParams
+      };
     }
     
     console.warn('No API config provided, using defaults');
@@ -332,9 +342,10 @@ export const ChatProvider: React.FC<{
         rep_pen_range: 360,
         rep_pen_slope: 0.7,
         sampler_order: [6, 0, 1, 3, 4, 2, 5]
-      }
+      },
+      ...getRequestParameters() // Add content filtering parameters to default config
     };
-  }, []);
+  }, [getRequestParameters]);
   
   // Generate reasoning response
   const generateReasoningResponse = useCallback(async (prompt: string) => {
@@ -395,11 +406,17 @@ export const ChatProvider: React.FC<{
         // Add signal if using AbortController
         currentGenerationRef.current?.signal
       );
-      
-      // Process streaming response
+        // Process streaming response
       let thinkingContent = '';
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        thinkingContent += chunk;
+        // Add the chunk to the thinking content
+        const rawThinkingContent = thinkingContent + chunk;
+        
+        // Apply client-side filtering if needed
+        thinkingContent = shouldUseClientFiltering 
+          ? filterText(rawThinkingContent) 
+          : rawThinkingContent;
+        
         setMessages((prev: Message[]) => {
           const updatedMessages = prev.map(msg => 
             msg.id === thinkingId ? {...msg, content: thinkingContent} : msg
@@ -422,7 +439,7 @@ export const ChatProvider: React.FC<{
       setError(err instanceof Error ? err.message : 'Failed to generate thinking');
       return null;
     }
-  }, [characterData, messages, reasoningSettings, currentUser, apiConfig, prepareAPIConfig]);
+  }, [characterData, messages, reasoningSettings, currentUser, apiConfig, prepareAPIConfig, filterText, shouldUseClientFiltering]);
   
   // Update message content
   const updateMessage = useCallback((messageId: string, content: string) => {
@@ -728,9 +745,7 @@ export const ChatProvider: React.FC<{
       if (!response.ok) {
         // Throw error using response status and text
         throw new Error(`API Error: ${response.status} ${await response.text()}`);
-      }
-
-      // Process streaming response using the async generator
+      }      // Process streaming response using the async generator
       let content = '';
       let buffer = '';
       let isFirstChunk = true;
@@ -745,7 +760,15 @@ export const ChatProvider: React.FC<{
             processedBuffer = processedBuffer.replace(/^\s+/, '');
             isFirstChunk = false;
           }
-          const newContent = content + processedBuffer;
+          
+          // Get raw content before filtering
+          const rawContent = content + processedBuffer;
+          
+          // Apply client-side filtering if needed
+          const newContent = shouldUseClientFiltering 
+            ? filterText(rawContent) 
+            : rawContent;
+            
           buffer = '';
           
           // Update message with new content - Fix TypeScript error by ensuring all returned messages are of type Message
@@ -773,8 +796,7 @@ export const ChatProvider: React.FC<{
         }
         buffer += chunk || '';
       }
-      
-      // Final update
+        // Final update
       if (buffer.length > 0) {
         let processedBuffer = buffer; // Also handle final buffer properly
         
@@ -784,7 +806,13 @@ export const ChatProvider: React.FC<{
           isFirstChunk = false;
         }
         
-        content += processedBuffer;
+        // Get raw content before filtering
+        const rawContent = content + processedBuffer;
+        
+        // Apply client-side filtering if needed
+        content = shouldUseClientFiltering 
+          ? filterText(rawContent) 
+          : rawContent;
       }
 
       // Define finalMessages here before using it
@@ -820,8 +848,7 @@ export const ChatProvider: React.FC<{
         bufferTimer = null;
       }
       console.log('Generation complete');
-    }
-  }, [  // Corrected dependency array
+    }  }, [  // Corrected dependency array
     appendMessage,
     characterData,
     generateReasoningResponse,
@@ -831,7 +858,9 @@ export const ChatProvider: React.FC<{
     reasoningSettings.enabled,
     apiConfig,
     updateAndSaveMessages,
-    messages
+    messages,
+    filterText,
+    shouldUseClientFiltering
   ]);
   
   // Regenerate message
@@ -925,14 +954,18 @@ export const ChatProvider: React.FC<{
       // Stream response using the async generator
       let newContent = '';
       let buffer = '';
-      let bufferTimer: NodeJS.Timeout | null = null;
-
-      // Iterate over the streamResponse async generator
+      let bufferTimer: NodeJS.Timeout | null = null;      // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
-              const content = newContent + buffer;
+              const rawContent = newContent + buffer;
+              
+              // Apply client-side filtering if needed
+              const content = shouldUseClientFiltering 
+                ? filterText(rawContent) 
+                : rawContent;
+                
               buffer = '';
               setMessages((prev: Message[]) => {
                 const updatedMessages = [...prev];
@@ -959,11 +992,14 @@ export const ChatProvider: React.FC<{
       if (bufferTimer) {
         clearInterval(bufferTimer);
         bufferTimer = null;
-      }
-
-      // Add any remaining buffered content
+      }      // Add any remaining buffered content
       if (buffer.length > 0) {
-        newContent += buffer;
+        const rawContent = newContent + buffer;
+        
+        // Apply client-side filtering if needed
+        newContent = shouldUseClientFiltering 
+          ? filterText(rawContent) 
+          : rawContent;
       }
       
       // Now that streaming is complete, handle variations correctly - only once at the end
@@ -1041,7 +1077,7 @@ export const ChatProvider: React.FC<{
       setGeneratingId(null);
     }
     // Corrected Dependency Array:
-  }, [characterData, isGenerating, apiConfig, messages, prepareAPIConfig, updateAndSaveMessages, appendMessage]);
+  }, [characterData, isGenerating, apiConfig, messages, prepareAPIConfig, updateAndSaveMessages, appendMessage, filterText, shouldUseClientFiltering]);
   
   // Complete continueResponse function for ChatContext.tsx
   const continueResponse = useCallback(async (message: Message) => {
@@ -1126,13 +1162,18 @@ export const ChatProvider: React.FC<{
       let currentContent = message.content; // Start with existing content
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
-      
-      // Iterate over the streamResponse async generator
+        // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
-              const updatedContent = currentContent + buffer;
+              const rawUpdatedContent = currentContent + buffer;
+              
+              // Apply client-side filtering if needed
+              const updatedContent = shouldUseClientFiltering 
+                ? filterText(rawUpdatedContent) 
+                : rawUpdatedContent;
+                
               buffer = '';
               setMessages((prev: Message[]) => {
                 const updatedMessages = [...prev];
@@ -1160,11 +1201,14 @@ export const ChatProvider: React.FC<{
       if (bufferTimer) {
         clearInterval(bufferTimer);
         bufferTimer = null;
-      }
-  
-      // Add any remaining buffered content
+      }      // Add any remaining buffered content
       if (buffer.length > 0) {
-        currentContent += buffer;
+        const rawContent = currentContent + buffer;
+        
+        // Apply client-side filtering if needed
+        currentContent = shouldUseClientFiltering 
+          ? filterText(rawContent) 
+          : rawContent;
       }
       
       // Now that streaming is complete, handle variations correctly - only once at the end
@@ -1241,15 +1285,16 @@ export const ChatProvider: React.FC<{
       currentGenerationRef.current = null;
       setIsGenerating(false);
       setGeneratingId(null);
-    }
-  }, [
+    }  }, [
     characterData,
     isGenerating,
     apiConfig,
     messages,
     prepareAPIConfig,
     saveChat,
-    appendMessage
+    appendMessage,
+    filterText,
+    shouldUseClientFiltering
   ]);
   
   // Stop generation

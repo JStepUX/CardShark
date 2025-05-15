@@ -18,15 +18,31 @@ import { useAPIConfig } from '../contexts/APIConfigContext';
 import { useSettings } from '../contexts/SettingsContext';
 import PromptSettings from './PromptSettings';
 import HighlightingSettings from './HighlightingSettings';
+import { ContentFilteringTab } from './ContentFilteringTab';
+import { WordSwapRule } from '../utils/contentProcessing';
 // import KoboldCPPManager from './KoboldCPPManager'; // Removed
 import ModelDirectorySettings from './settings/ModelDirectorySettings';
 
 interface APISettingsViewProps {}
 
 export const APISettingsView: React.FC<APISettingsViewProps> = () => {
-  const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts' | 'highlighting'>('general');
-  const { setAPIConfig, activeApiId, setActiveApiId } = useAPIConfig();
-  const { settings, updateSettings, isLoading } = useSettings();
+  const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts' | 'highlighting' | 'filtering'>('general');
+  const { setAPIConfig, activeApiId, setActiveApiId } = useAPIConfig();  const { settings, updateSettings, isLoading } = useSettings();
+  const [wordSwapRules, setWordSwapRules] = useState<WordSwapRule[]>(settings.wordSwapRules || []);
+  
+  // Update local wordSwapRules when settings are loaded or changed
+  useEffect(() => {
+    if (settings?.wordSwapRules) {
+      setWordSwapRules(settings.wordSwapRules);
+    }
+  }, [settings?.wordSwapRules]);
+  
+  // Handle updates to word swap rules
+  // This function will be passed to ContentFilteringTab
+  // but the actual API call is now handled by ContentFilterClient
+  const handleUpdateWordSwapRules = (rules: WordSwapRule[]) => {
+    setWordSwapRules(rules); // Update local state
+  };
   const [newApiProviderType, setNewApiProviderType] = useState<APIProvider>(APIProvider.KOBOLD); // State for selected provider type
   const lastAddedApiIdRef = useRef<string | null>(null);
   
@@ -342,27 +358,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                 directory={modelsDirectory} // Pass the direct value
                 onDirectoryChange={handleModelDirectoryChange}
               />
-            </div>            {/* Chat Response Settings */}
-            <div className="mb-8">
-              <h3 className="text-md font-medium mb-4">Chat Response Settings</h3>
-              <div className="mt-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.remove_incomplete_sentences || false}
-                    onChange={(e) => updateSettings({ remove_incomplete_sentences: e.target.checked })}
-                    className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-300">
-                    Remove unfinished sentences from chat responses
-                  </span>
-                </label>
-                <p className="mt-2 text-xs text-gray-400">
-                  When enabled, sentences that don't end with proper punctuation (., ?, !, etc.) will be removed from the end of
-                  generated messages. This can make responses appear more natural by eliminating cut-off thoughts.
-                </p>
-              </div>
-            </div>
+            </div>            {/* Content filtering settings have been moved to the Content Filter tab */}
 
             {/* KoboldCPP Settings */}
             <div className="mb-8">
@@ -468,9 +464,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
           <div className="h-full overflow-y-auto">
             <PromptSettings />
           </div>
-        </SettingsTab>
-
-        <SettingsTab id="highlighting">
+        </SettingsTab>        <SettingsTab id="highlighting">
           <div className="h-full overflow-y-auto">
             <div className="sticky top-0 z-10 bg-zinc-950 p-4 border-b border-zinc-800 flex justify-between items-center">
               <h2 className="text-lg font-semibold">Syntax Highlighting Settings</h2>
@@ -487,6 +481,28 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
               settings={settings.syntaxHighlighting || DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS}
               onUpdate={handleHighlightingUpdate}
             />
+          </div>
+        </SettingsTab>
+        
+        <SettingsTab id="filtering">
+          <div className="h-full overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-zinc-950 p-4 border-b border-zinc-800 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Chat Settings</h2>
+              <button
+                onClick={() => {/* Auto-saves when changed */}}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={true}
+              >
+                <Save size={18} />
+                Auto-saved
+              </button>
+            </div>
+            <div className="p-4">              <ContentFilteringTab                wordSwapRules={wordSwapRules} 
+                onUpdateRules={handleUpdateWordSwapRules}
+                removeIncompleteSentences={settings.remove_incomplete_sentences || false}
+                onUpdateRemoveIncompleteSentences={(value) => updateSettings({ remove_incomplete_sentences: value })}
+              />
+            </div>
           </div>
         </SettingsTab>
       </SettingsTabs>

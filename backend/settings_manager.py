@@ -84,7 +84,9 @@ class SettingsManager:
                     "textColor": "#ec4899",
                     "backgroundColor": "rgba(236, 72, 153, 0.1)"
                 }
-            }
+            },
+            # Default word substitution rules for content filtering
+            "wordSwapRules": []
         }
         
         try:

@@ -1,0 +1,42 @@
+{
+  "name": "Basic Profanity Filter",
+  "description": "Filters common profanity terms",
+  "version": "1.0",
+  "rules": [
+    {
+      "original": "fuck",
+      "substitutions": ["f***", "darn"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "auto"
+    },
+    {
+      "original": "shit",
+      "substitutions": ["s***", "shoot"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "auto"
+    },
+    {
+      "original": "damn",
+      "substitutions": ["darn"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "auto"
+    },
+    {
+      "original": "ass",
+      "substitutions": ["butt"],
+      "mode": "word-boundary",
+      "enabled": true,
+      "strategy": "auto"
+    },
+    {
+      "original": "bitch",
+      "substitutions": ["jerk"],
+      "mode": "case-insensitive",
+      "enabled": true,
+      "strategy": "auto"
+    }
+  ]
+}
