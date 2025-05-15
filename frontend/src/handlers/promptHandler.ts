@@ -252,6 +252,7 @@ ${character.data.mes_example || ''}
     characterCard: CharacterCard,
     prompt: string,
     contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
+    userName: string, // Added userName parameter
     apiConfig?: any,
     signal?: AbortSignal
   ): Promise<Response> {
@@ -262,9 +263,10 @@ ${character.data.mes_example || ''}
       
       // Format the prompt with the provided context messages
       const formattedPrompt = this.formatPromptWithContextMessages(
-        characterCard, 
-        prompt, 
-        contextMessages, 
+        characterCard,
+        prompt,
+        contextMessages,
+        userName, // Pass userName here
         templateId
       );
       

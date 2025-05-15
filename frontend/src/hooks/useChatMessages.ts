@@ -42,6 +42,15 @@ const REASONING_SETTINGS_KEY = 'cardshark_reasoning_settings';
 const CONTEXT_WINDOW_KEY = 'cardshark_context_window';
 const DEBOUNCE_DELAY = 1000; // 1 second debounce delay for message updates
 
+// --- Content Sanitization Utility ---
+const sanitizeMessageContent = (html: string): string => {
+  if (!html) return '';
+  // Remove class="preserve-whitespace" or class='preserve-whitespace' from <p> tags
+  // Handles different quote styles and potential extra spaces around the class attribute.
+  return html.replace(/<p\s+class=(['"])preserve-whitespace\1[^>]*>/g, '<p>')
+             .replace(/<p\s+class="preserve-whitespace"[^>]*>/g, '<p>'); // Failsafe for slightly different formats
+};
+
 // --- Debounce Utility ---
 const debounce = <T extends (...args: any[]) => any>(
   func: T,
@@ -266,16 +275,18 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
       const finalMessages = prev.messages.map(msg => {
         if (msg.id === messageId) {
           if (msg.role === 'thinking') return null; // Remove thinking message
-          const currentVariations = msg.variations || (originalContentForVariation ? [originalContentForVariation] : [msg.content]);
-          const variations = [...currentVariations, finalContent];
+          const sanitizedFinalContent = sanitizeMessageContent(finalContent);
+          const currentVariations = msg.variations?.map(sanitizeMessageContent) ||
+                                    (originalContentForVariation ? [sanitizeMessageContent(originalContentForVariation)] : (msg.content ? [sanitizeMessageContent(msg.content)] : []));
+          const variations = [...currentVariations, sanitizedFinalContent];
           const uniqueVariations = Array.from(new Set(variations));
           const newVariationIndex = uniqueVariations.length - 1;
-          return { ...msg, content: finalContent, variations: uniqueVariations, currentVariation: newVariationIndex, status: 'complete' as Message['status'] };
+          return { ...msg, content: sanitizedFinalContent, variations: uniqueVariations, currentVariation: newVariationIndex, status: 'complete' as Message['status'] };
         }
         return msg;
       }).filter(msg => msg !== null) as Message[];
 
-      const finalContextWindow = { ...prev.lastContextWindow, type: contextWindowType, finalResponse: finalContent, completionTime: new Date().toISOString(), totalChunks: receivedChunks };
+      const finalContextWindow = { ...prev.lastContextWindow, type: contextWindowType, finalResponse: sanitizeMessageContent(finalContent), completionTime: new Date().toISOString(), totalChunks: receivedChunks };
       clearStreamTimeout(); // Clear timeout on successful completion
       return { ...prev, messages: finalMessages, isGenerating: false, generatingId: null, lastContextWindow: finalContextWindow };
     });
@@ -348,7 +359,15 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
   const saveChat = useCallback((messageList: Message[], user: UserProfile | null) => {
     // Only save if it's a real character and autoSave is enabled
     if (isGenericAssistant || !effectiveCharacterData.data?.name || !autoSaveEnabled.current) return;
-    const messagesToSave = messageList.filter(msg => msg.role !== 'thinking');
+    
+    const sanitizedMessagesToSave = messageList
+      .filter(msg => msg.role !== 'thinking')
+      .map(msg => ({
+        ...msg,
+        content: sanitizeMessageContent(msg.content),
+        variations: msg.variations?.map(sanitizeMessageContent)
+      }));
+
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       try {
@@ -357,8 +376,8 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
           // Use the globally active config for saving metadata for now
           const apiInfo = globalApiConfig ? { provider: globalApiConfig.provider, model: globalApiConfig.model, url: globalApiConfig.url, template: globalApiConfig.templateId, enabled: globalApiConfig.enabled } : null;
           // Pass null for backgroundSettings, let backend handle it if needed or load from file
-          await ChatStorage.saveChat(effectiveCharacterData, messagesToSave, user, apiInfo, null);
-          // console.debug(`Saved ${messagesToSave.length} messages`); // Reduced logging
+          await ChatStorage.saveChat(effectiveCharacterData, sanitizedMessagesToSave, user, apiInfo, null);
+          // console.debug(`Saved ${sanitizedMessagesToSave.length} messages`); // Reduced logging
         }
       } catch (err) { console.error('Error saving chat:', err); }
       finally { saveTimeoutRef.current = null; }
@@ -469,6 +488,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
           effectiveCharacterData,
           reasoningPrompt, // Pass the fully constructed reasoning prompt
           [], // Pass empty contextMessages as history is already in the prompt
+          state.currentUser?.name || 'User', // Pass current user's name
           reasoningApiConfig,
           currentGenerationRef.current.signal
       );
@@ -574,6 +594,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
           effectiveCharacterData,
           userInput, // Pass the raw user input again, backend/handler reconstructs prompt
           filteredContextForAPI, // Pass filtered context
+          state.currentUser?.name || 'User', // Pass current user's name
           preparedApiConfig, // Pass the chosen, prepared config
           currentGenerationRef.current.signal
       );
@@ -700,6 +721,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
           effectiveCharacterData,
           precedingUserMessage.content, // Pass preceding user message content
           filteredContextForAPI,
+          state.currentUser?.name || 'User', // Pass current user's name
           preparedApiConfig,
           currentGenerationRef.current.signal
       );
@@ -827,6 +849,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
           effectiveCharacterData,
           precedingUserMessage.content, // Pass preceding user message content
           filteredContextForAPI,
+          state.currentUser?.name || 'User', // Pass current user's name
           preparedApiConfig,
           currentGenerationRef.current.signal
       );
@@ -969,6 +992,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
         effectiveCharacterData,
         introInstructionalPrompt,
         [],
+        state.currentUser?.name || 'User', // Pass current user's name
         preparedApiConfig,
         currentGenerationRef.current.signal
       );
@@ -1134,33 +1158,60 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
    };
 
    const updateMessage = (messageId: string, newContent: string, isStreamingUpdate: boolean = false) => {
+     const sanitizedNewContent = sanitizeMessageContent(newContent);
      setState(prev => {
-       let updatedMessage: Message | null = null;
+       let messageUpdated = false; // Renamed from updatedMessage for clarity with the boolean flag
+       let finalUpdatedMessage: Message | null = null; // To store the fully updated message object
+
        const newMessages = prev.messages.map(msg => {
          if (msg.id === messageId) {
-           updatedMessage = { ...msg, content: newContent };
+           messageUpdated = true;
+           // Start with the sanitized new content
+           let tempUpdatedMessage = { ...msg, content: sanitizedNewContent };
+
            // If it's a final update (not streaming), update variations
            if (!isStreamingUpdate) {
-               const currentVariations = updatedMessage.variations || [updatedMessage.content]; // Start with current content if no variations
-               // Replace the current variation content, or add if index is out of bounds (shouldn't happen ideally)
-               const currentIdx = updatedMessage.currentVariation ?? currentVariations.length -1; // Default to last index
-               if (currentIdx >= 0 && currentIdx < currentVariations.length) {
-                   currentVariations[currentIdx] = newContent;
-                   updatedMessage.variations = [...currentVariations]; // Ensure new array instance
-               } else {
-                   // Fallback: add as new variation if index is weird
-                   updatedMessage.variations = [...currentVariations, newContent];
-                   updatedMessage.currentVariation = updatedMessage.variations.length - 1;
-               }
+             const currentVariations = tempUpdatedMessage.variations?.map(sanitizeMessageContent) ||
+                                       (tempUpdatedMessage.content ? [sanitizeMessageContent(tempUpdatedMessage.content)] : []);
+             
+             // Check if the sanitized new content is already the last variation
+             // This avoids adding duplicates if the content hasn't effectively changed after sanitization
+             // or if it's a re-save of the same content.
+             let newVariationsArray;
+             if (currentVariations.length > 0 && currentVariations[currentVariations.length - 1] === sanitizedNewContent) {
+                newVariationsArray = [...currentVariations]; // Keep as is
+             } else {
+                newVariationsArray = [...currentVariations, sanitizedNewContent];
+             }
+             
+             const uniqueVariations = Array.from(new Set(newVariationsArray));
+             const newVariationIndex = uniqueVariations.length - 1;
+
+             tempUpdatedMessage = {
+               ...tempUpdatedMessage,
+               variations: uniqueVariations,
+               currentVariation: newVariationIndex,
+               status: 'complete' as Message['status'] // Mark as complete since it's an edit
+             };
            }
-           return updatedMessage;
+           finalUpdatedMessage = tempUpdatedMessage; // Store the fully processed message
+           return tempUpdatedMessage;
          }
          return msg;
        });
+
        // Save/append after update only if it's a real character and not a streaming update
-       if (updatedMessage && !isGenericAssistant && !isStreamingUpdate) {
-         saveChat(newMessages, prev.currentUser);
-         appendMessage(updatedMessage); // Use debounced append for final updates
+       if (messageUpdated && !isGenericAssistant && !isStreamingUpdate) {
+         // If messageUpdated is true, finalUpdatedMessage was set.
+         // We can also find the updated message from newMessages array.
+         const messageToAppend = newMessages.find(m => m.id === messageId);
+
+         if (messageToAppend) {
+           // Pass the newMessages array to saveChat as it contains all messages
+           saveChat(newMessages, prev.currentUser);
+           // Pass the specific messageToAppend, ensuring its content is sanitized
+           appendMessage({ ...messageToAppend, content: sanitizeMessageContent(messageToAppend.content) });
+         }
        }
        return { ...prev, messages: newMessages };
      });

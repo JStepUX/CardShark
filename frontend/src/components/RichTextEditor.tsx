@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import Paragraph from '@tiptap/extension-paragraph';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
@@ -43,12 +44,10 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        paragraph: {
-          HTMLAttributes: {
-            class: preserveWhitespace ? 'preserve-whitespace' : '',
-          },
-        },
         // Disable built-in markdown parsing features
+        // and remove paragraph from starter kit to configure it separately
+        paragraph: false,
+        hardBreak: {}, // Ensure HardBreak is active with default options
         bold: false,
         italic: false,
         code: false,
@@ -56,6 +55,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         bulletList: false,
         orderedList: false,
         blockquote: false,
+      }),
+      Paragraph.configure({
+        HTMLAttributes: {
+          class: preserveWhitespace ? 'preserve-whitespace' : '',
+        }
       }),
       Image.configure({
         inline: true,
@@ -75,6 +79,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     content: initialContent,
     editable: !readOnly,
     autofocus,
+    parseOptions: {
+      preserveWhitespace: preserveWhitespace ? 'full' : undefined, // Use undefined for default behavior when false
+    },
     onUpdate: ({ editor }: { editor: Editor }) => {
       // Save cursor position before content update
       cursorPosRef.current = editor.state.selection;
