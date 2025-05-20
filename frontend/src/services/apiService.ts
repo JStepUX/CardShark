@@ -1,6 +1,13 @@
 // services/apiService.ts
 import { APIConfig } from '@/types';
 import { getApiBaseUrl } from '../utils/apiConfig';
+import { CharacterData } from '../types/character';
+
+interface LoreImageResponse {
+  success: boolean;
+  message?: string;
+  data?: any;
+}
 
 /**
  * A service class for handling all API calls with proper development/production URL handling
@@ -206,6 +213,57 @@ class ApiService {
   async fetchFeatherlessModels(url: string, apiKey?: string) {
     console.log(`ApiService: Fetching Featherless models from URL: ${url}`);
     return this.post('/api/featherless/models', { url, apiKey });
+  }
+
+    // --- Lore Image Endpoints ---
+  async uploadLoreImage(characterUuid: string, loreEntryId: string, imageFile: File, characterFallbackId?: string): Promise<LoreImageResponse> {
+    const formData = new FormData();
+    formData.append('character_uuid', characterUuid);
+    formData.append('lore_entry_id', loreEntryId);
+    formData.append('image_file', imageFile);
+    if (characterFallbackId) {
+      formData.append('character_fallback_id', characterFallbackId);
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/lore/images/upload`, {
+      method: 'POST',
+      body: formData,
+      // 'Content-Type' header is set automatically by browser for FormData
+    });
+    return this.handleResponse(response);
+  }
+
+  async importLoreImageFromUrl(characterUuid: string, loreEntryId: string, imageUrl: string, characterFallbackId?: string): Promise<LoreImageResponse> {
+    const formData = new FormData();
+    formData.append('character_uuid', characterUuid);
+    formData.append('lore_entry_id', loreEntryId);
+    formData.append('image_url', imageUrl);
+    if (characterFallbackId) {
+      formData.append('character_fallback_id', characterFallbackId);
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/lore/images/from-url`, {
+      method: 'POST',
+      body: formData,
+    });
+    return this.handleResponse(response);
+  }
+
+  async deleteLoreImage(characterUuid: string, imageUuidOrFilename: string): Promise<LoreImageResponse> {
+    const params = new URLSearchParams({
+      character_uuid: characterUuid,
+      image_uuid: imageUuidOrFilename,
+    });
+    return this.delete(`/api/lore/images/delete?${params.toString()}`);
+  }
+
+  // --- Lore Trigger Extraction ---
+  async extractLoreTriggers(characterData: any, textContent: string): Promise<any> {
+    // This matches the backend /api/lore/extract endpoint structure
+    return this.post('/api/lore/extract', {
+      character_data: characterData,
+      text: textContent,
+    });
   }
 }
 

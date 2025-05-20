@@ -22,6 +22,7 @@ import { substituteVariables } from '../utils/variableUtils';
 import ErrorMessage from './ErrorMessage';
 import { ChatStorage } from '../services/chatStorage';
 import { useScrollToBottom } from '../hooks/useScrollToBottom';
+import { useChat } from '../contexts/ChatContext'; // Import useChat
 // Removed APIConfig import as it's not directly used here anymore
 
 // Define the ReasoningSettings interface
@@ -235,6 +236,8 @@ const ChatView: React.FC = () => {
     clearError: clearHookError, // Rename hook clearError
     handleNewChat // Get handleNewChat from the hook
   } = useChatMessages(characterData);
+  // Get lore image preview state from ChatContext
+  const { } = useChat(); // Connect to ChatContext without destructuring unused variables
 
   // Get current chat ID from the last context window
   const currentChatId = lastContextWindow?.chatId ||

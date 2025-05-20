@@ -1,966 +1,606 @@
 import logging
-import requests
-
-# Initialize logger
-# logger = logging.getLogger(__name__) # Use FastAPI dependency injection instead
-# backend/character_endpoints.py
-# Endpoints for character management
-
 import os
 import json
-import uuid
-import glob
-import time
+
 import urllib.parse
-import logging
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File, Form, Query, Request # Add Form
-from fastapi.responses import JSONResponse, FileResponse # Added FileResponse
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File, Form, Query, Request
+from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-import re # Add re for filename sanitization
+import re
+from sqlalchemy.orm import Session
 
-# Import handler types for type hinting
+# Import core services and dependencies
 from backend.log_manager import LogManager
 from backend.png_metadata_handler import PngMetadataHandler
-from backend.backyard_handler import BackyardHandler # Import BackyardHandler
-from backend.settings_manager import SettingsManager # Add SettingsManager import
+from backend.backyard_handler import BackyardHandler # For Backyard import endpoint
+from backend.settings_manager import SettingsManager
+from backend.dependencies import get_character_service_dependency # Import from new dependencies file
+from backend.services.character_service import CharacterService
 
-# Dependency provider functions (defined locally, import from main inside)
+# Use sql_models.py instead of models.py to avoid conflicts with models package
+from backend.sql_models import Character as CharacterDBModel
+
+# Dependency provider functions (for handlers not directly part of CharacterService scope if needed elsewhere)
 def get_logger() -> LogManager:
-    from backend.main import logger # Import locally
+    from backend.main import logger
     if logger is None: raise HTTPException(status_code=500, detail="Logger not initialized")
     return logger
 
 def get_png_handler() -> PngMetadataHandler:
-    from backend.main import png_handler # Import locally
+    from backend.main import png_handler
     if png_handler is None: raise HTTPException(status_code=500, detail="PNG handler not initialized")
     return png_handler
 
 def get_backyard_handler() -> BackyardHandler:
-    from backend.main import backyard_handler # Import locally
+    from backend.main import backyard_handler
     if backyard_handler is None: raise HTTPException(status_code=500, detail="Backyard handler not initialized")
     return backyard_handler
 
-def get_settings_manager() -> SettingsManager:
-    from backend.main import settings_manager  # Import locally
+def get_settings_manager() -> SettingsManager: # Still needed for save_card path logic
+    from backend.main import settings_manager
     if settings_manager is None: raise HTTPException(status_code=500, detail="Settings manager not initialized")
     return settings_manager
 
-# Create router
+
 router = APIRouter(
-    prefix="/api", # Use common /api prefix
+    prefix="/api",
     tags=["characters"],
     responses={404: {"description": "Not found"}},
 )
 
-# Set up logger (using dependency injection now)
-# logger = logging.getLogger("character_endpoints")
-
-# Models
-class CharacterModel(BaseModel):
-    id: Optional[str] = None
+# --- Pydantic Models for API Responses ---
+class CharacterAPIBase(BaseModel):
+    character_uuid: str
     name: str
     description: Optional[str] = None
     personality: Optional[str] = None
-    backstory: Optional[str] = None
-    avatar_url: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    user_id: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    scenario: Optional[str] = None
+    first_mes: Optional[str] = None
+    mes_example: Optional[str] = None
+    creator_comment: Optional[str] = None
+    png_file_path: str
+    tags: Optional[List[str]] = Field(default_factory=list)
+    spec_version: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    db_metadata_last_synced_at: datetime
+    extensions_json: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    original_character_id: Optional[str] = None
 
-class CharacterResponse(BaseModel):
+    class Config:
+        from_attributes = True # Changed from orm_mode for Pydantic V2
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None,
+        }
+
+class CharacterDetailResponse(BaseModel):
+    success: bool = True
+    character: CharacterAPIBase
+
+class CharacterListResponse(BaseModel):
+    success: bool = True
+    characters: List[CharacterAPIBase]
+    total: int # Add total for pagination
+
+class SimpleSuccessResponse(BaseModel):
     success: bool
     message: Optional[str] = None
-    character: Optional[CharacterModel] = None
-    characters: Optional[List[CharacterModel]] = None
 
-# Characters directory (Consider making this configurable via settings)
-CHARACTERS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "characters")
-os.makedirs(CHARACTERS_DIR, exist_ok=True)
+class ExtractedMetadataResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = "Metadata extracted successfully."
+    metadata: Dict[str, Any]
 
-# Helper functions
-def normalize_path(path: str, logger: LogManager) -> str:
-    """Normalize path for cross-platform compatibility"""
-    # Replace URL encoded characters
-    path = urllib.parse.unquote(path)
+class ExtractedLoreResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = "Lore extracted successfully."
+    lore_book: Optional[Dict[str, Any]] = None # Based on CharacterCardV2 spec for character_book
 
-    # Special handling for Windows paths from URL parameters
-    if os.name == 'nt':
-        # Handle URL-encoded drive letters (C%3A/ to C:/)
-        if '%3A' in path:
-            path = path.replace('%3A', ':')
-
-        # Fix forward slashes to backslashes for Windows
-        path = path.replace('/', '\\')
-
-        # Ensure drive letter is properly formatted
-        if len(path) > 1 and path[1] == ':':
-            # Make sure drive letter is uppercase for consistency
-            path = path[0].upper() + path[1:]
-
-    # Use normpath to handle any .. or . in the path
-    normalized = os.path.normpath(path)
-
-    # Use normcase for consistent case handling, especially on Windows
-    normalized = os.path.normcase(normalized)
-
-    logger.log_step(f"Normalized path: '{path}' to '{normalized}'")
+# --- Helper Functions ---
+def normalize_path(path_str: str, logger: LogManager) -> str:
+    """Normalize path for cross-platform compatibility and security."""
+    decoded_path = urllib.parse.unquote(path_str)
+    # Basic security: prevent '..' to escape expected directories.
+    # More robust checks should happen if paths are used for direct file system access outside controlled roots.
+    if ".." in decoded_path:
+        logger.warning(f"Potential path traversal attempt in '{decoded_path}'")
+        raise HTTPException(status_code=400, detail="Invalid path components.")
+    
+    # Normalize path separators and case for consistency
+    normalized = os.path.normpath(decoded_path)
+    # Forcing to use forward slashes for internal consistency if needed, but os.path.normpath handles OS specifics.
+    # normalized = normalized.replace('\\', '/') 
+    logger.log_step(f"Normalized path: '{path_str}' to '{normalized}'")
     return normalized
 
-def get_character_path(character_id: str) -> str:
-    """Get the file path for a character (JSON based - likely deprecated)"""
-    return os.path.join(CHARACTERS_DIR, f"{character_id}.json")
-
-def load_character(character_id: str, logger: LogManager) -> Optional[Dict[str, Any]]:
-    """Load a character from disk (JSON based - likely deprecated)"""
-    character_path = get_character_path(character_id)
-    if not os.path.exists(character_path):
-        return None
-
+def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIBase:
+    """Helper function to convert a DB model to an API model with proper handling of JSON fields."""
+    api_char = CharacterAPIBase.model_validate(db_char)
     try:
-        with open(character_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading character {character_id}: {e}")
-        return None
+        # Check if tags is already a dict/list or if it needs to be parsed from JSON string
+        if db_char.tags:
+            if isinstance(db_char.tags, str):
+                api_char.tags = json.loads(db_char.tags)
+            else:
+                # If it's already a list/dict, use it directly
+                api_char.tags = db_char.tags
+        else:
+            api_char.tags = []
+            
+        # Similar check for extensions_json
+        if db_char.extensions_json:
+            if isinstance(db_char.extensions_json, str):
+                api_char.extensions_json = json.loads(db_char.extensions_json)
+            else:
+                # If it's already a dict, use it directly
+                api_char.extensions_json = db_char.extensions_json
+        else:
+            api_char.extensions_json = {}
+    except json.JSONDecodeError:
+        # Log the error but continue with empty defaults
+        logger.warning(f"JSON parsing error for character {db_char.character_uuid}: tags or extensions_json is not valid JSON")
+        api_char.tags = []
+        api_char.extensions_json = {}
+    return api_char
 
-def save_character(character_data: Dict[str, Any], logger: LogManager) -> bool:
-    """Save a character to disk (JSON based - likely deprecated)"""
-    if not character_data.get('id'):
-        character_data['id'] = str(uuid.uuid4())
+# --- Character Endpoints ---
 
-    # Update timestamps
-    now = datetime.now().isoformat()
-    if not character_data.get('created_at'):
-        character_data['created_at'] = now
-    character_data['updated_at'] = now
-
-    character_path = get_character_path(character_data['id'])
-    try:
-        with open(character_path, 'w', encoding='utf-8') as f:
-            json.dump(character_data, f, indent=2)
-        return True
-    except Exception as e:
-        logger.error(f"Error saving character: {e}")
-        return False
-
-def get_all_characters(logger: LogManager) -> List[Dict[str, Any]]:
-    """Get all characters (JSON based - likely deprecated)"""
-    characters = []
-    if not os.path.exists(CHARACTERS_DIR):
-        return characters
-
-    for filename in os.listdir(CHARACTERS_DIR):
-        if filename.endswith('.json'):
-            try:
-                character_path = os.path.join(CHARACTERS_DIR, filename)
-                with open(character_path, 'r', encoding='utf-8') as f:
-                    character = json.load(f)
-                    characters.append(character)
-            except Exception as e:
-                logger.error(f"Error loading character from {filename}: {e}")
-
-    return characters
-
-# Add function to scan directory for character files
-def scan_directory_for_characters(directory_path: str, logger: LogManager) -> Dict[str, Any]:
-    """Scan a directory for character PNG files, handling case-insensitivity robustly."""
-    # Normalize the path for better cross-platform compatibility
-    directory = normalize_path(directory_path, logger) # Pass logger
-    logger.log_info(f"Scanning directory for characters: {directory}")
-
-    if not directory or not os.path.exists(directory):
-        logger.warning(f"Directory not found: {directory}")
-        return {
-            "success": False,
-            "exists": False,
-            "directory": directory,
-            "message": f"Directory not found: {directory}"
-        }
-
-    try:
-        # Use a single case-insensitive pattern to find all PNG files
-        pattern = os.path.join(directory, "*.[pP][nN][gG]")  # Case-insensitive match
-        logger.log_info(f"Searching with pattern: {pattern}")
-        
-        # Add exception handling for glob operation
-        try:
-            found_files = glob.glob(pattern)
-            logger.log_info(f"Found {len(found_files)} PNG files")
-        except Exception as glob_err:
-            logger.error(f"Error during glob search: {str(glob_err)}", exc_info=True)
-            return {
-                "success": False,
-                "exists": True,
-                "directory": directory,
-                "message": f"Error during file search: {str(glob_err)}",
-                "files": []
-            }
-
-        # Use a dictionary with normalized paths as keys to ensure uniqueness
-        unique_files = {}
-        for file_path in found_files:
-            try:
-                norm_path = os.path.normcase(os.path.abspath(file_path))
-                if norm_path not in unique_files:
-                    unique_files[norm_path] = file_path
-            except Exception as norm_err:
-                # Log but continue processing other files
-                logger.error(f"Error normalizing path {file_path}: {str(norm_err)}")
-                continue
-
-        logger.log_info(f"After deduplication: {len(unique_files)} unique files")
-
-        # Format file information
-        files_data = []
-        for file_path in unique_files.values():
-            try:
-                stat = os.stat(file_path)
-                name = os.path.basename(file_path)
-                # Remove extension (case-insensitive)
-                if name.lower().endswith('.png'):
-                    name = name[:-4]
-
-                files_data.append({
-                    "name": name,
-                    "path": file_path,  # Return the original path casing
-                    "size": stat.st_size,
-                    "modified": int(stat.st_mtime * 1000)  # Convert to milliseconds
-                })
-            except FileNotFoundError:
-                logger.warning(f"File not found during processing: {file_path}")
-                continue
-            except PermissionError:
-                logger.warning(f"Permission denied accessing file: {file_path}")
-                continue
-            except Exception as e:
-                logger.error(f"Error processing file info for {file_path}: {e}")
-                continue
-
-        # Sort files by name (case-insensitive)
-        try:
-            files_data.sort(key=lambda x: x["name"].lower())
-        except Exception as sort_err:
-            logger.error(f"Error sorting file data: {str(sort_err)}")
-            # Continue without sorting if there's an error
-
-        logger.log_info(f"Successfully processed {len(files_data)} unique character files in {directory}")
-
-        return {
-            "success": True,
-            "exists": True,
-            "directory": directory,
-            "files": files_data
-        }
-    except Exception as e:
-        logger.error(f"Error scanning directory {directory}: {str(e)}", exc_info=True)
-        return {
-            "success": False,
-            "exists": True, 
-            "directory": directory,
-            "message": f"Error scanning directory: {str(e)}",
-            "files": []  # Always return empty files array on error
-        }
-
-# Endpoints
-@router.get("/characters", summary="Get characters from a directory") # Corrected path
-async def get_characters_in_directory(
-    request: Request,
-    directory: str = Query(None),
+@router.get("/characters", summary="List characters from database or directory")
+async def list_characters(
+    directory: Optional[str] = Query(None, description="Get characters from a specific directory instead of DB"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    char_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
-):
-    """Get characters from a directory or the default characters directory"""
-    logger.log_info(f"Received GET request for characters with directory: {directory}")
-    logger.log_info(f"Full URL: {request.url}")
-
-    target_directory = ""
+):    # If a directory is provided, we'll use the legacy directory-scanning behavior
     if directory:
-        # Decode URL-encoded path if directory is provided
+        logger.info(f"GET /api/characters with directory={directory}")
         try:
-            decoded_directory = urllib.parse.unquote(directory)
-            logger.log_info(f"Decoded directory path: {decoded_directory}")
-            target_directory = decoded_directory
-        except Exception as e:
-            logger.log_error(f"Error decoding directory path '{directory}': {e}")
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": f"Invalid directory path provided: {directory}"}
-            )
-    else:
-        # Use the default CHARACTERS_DIR if no directory is provided
-        logger.log_info(f"No directory provided, using default: {CHARACTERS_DIR}")
-        target_directory = CHARACTERS_DIR
-
-    # Always use the scan_directory_for_characters function
-    result = scan_directory_for_characters(target_directory, logger) # Pass logger
-
-    if result["success"]:
-        return JSONResponse(status_code=200, content=result)
-    else:
-        # Return 404 if directory doesn't exist, 500 for other errors
-        status_code = 404 if not result.get("exists", True) else 500
-        logger.warning(f"Scan failed for directory '{target_directory}'. Status: {status_code}, Message: {result.get('message')}")
-        return JSONResponse(status_code=status_code, content=result)
-
-# --- JSON Character Endpoints (Likely Deprecated) ---
-# These seem to manage JSON files, not PNG cards. Keeping for now but mark as potentially deprecated.
-
-@router.get("/characters/{character_id}", response_model=CharacterResponse, tags=["characters_json"])
-async def get_character(character_id: str, logger: LogManager = Depends(get_logger)):
-    """Get a specific character by ID (JSON based - likely deprecated)"""
-    character = load_character(character_id, logger) # Pass logger
-    if not character:
-        raise HTTPException(status_code=404, detail="Character not found")
-
-    return CharacterResponse(success=True, character=character)
-
-@router.post("/characters", response_model=CharacterResponse, tags=["characters_json"])
-async def create_character(character: CharacterModel, logger: LogManager = Depends(get_logger)):
-    """Create a new character (JSON based - likely deprecated)"""
-    character_dict = character.dict(exclude_unset=True)
-
-    # Generate new ID
-    character_dict['id'] = str(uuid.uuid4())
-
-    if save_character(character_dict, logger): # Pass logger
-        return CharacterResponse(
-            success=True,
-            message="Character created successfully",
-            character=character_dict
-        )
-    else:
-        raise HTTPException(status_code=500, detail="Failed to save character")
-
-@router.put("/characters/{character_id}", response_model=CharacterResponse, tags=["characters_json"])
-async def update_character(character_id: str, character: CharacterModel, logger: LogManager = Depends(get_logger)):
-    """Update a character (JSON based - likely deprecated)"""
-    existing_character = load_character(character_id, logger) # Pass logger
-    if not existing_character:
-        raise HTTPException(status_code=404, detail="Character not found")
-
-    # Update fields
-    character_dict = character.dict(exclude_unset=True)
-    character_dict['id'] = character_id  # Ensure ID remains the same
-
-    # Preserve created_at from existing character
-    if 'created_at' in existing_character:
-        character_dict['created_at'] = existing_character['created_at']
-
-    if save_character(character_dict, logger): # Pass logger
-        return CharacterResponse(
-            success=True,
-            message="Character updated successfully",
-            character=character_dict
-        )
-    else:
-        raise HTTPException(status_code=500, detail="Failed to update character")
-
-@router.delete("/characters/{character_id}", response_model=CharacterResponse, tags=["characters_json"])
-async def delete_character(character_id: str, logger: LogManager = Depends(get_logger)):
-    """Delete a character (JSON based - likely deprecated)"""
-    character_path = get_character_path(character_id)
-    if not os.path.exists(character_path):
-        raise HTTPException(status_code=404, detail="Character not found")
-
-    try:
-        os.remove(character_path)
-        return CharacterResponse(success=True, message="Character deleted successfully")
-    except Exception as e:
-        logger.error(f"Error deleting character {character_id}: {e}") # Log error
-        raise HTTPException(status_code=500, detail=f"Failed to delete character: {str(e)}")
-
-# --- PNG Character Card Endpoints ---
-
-@router.delete("/character/{path:path}") # Keep path relative to /api
-async def delete_character_by_path(path: str, logger: LogManager = Depends(get_logger)):
-    """Delete a character PNG file by path"""
-    normalized_path = normalize_path(path, logger) # Pass logger
-    logger.info(f"Request to delete character at path: {normalized_path}")
-
-    try:
-        # Add more robust path validation if needed (e.g., ensure it's within allowed dirs)
-        if os.path.exists(normalized_path) and os.path.isfile(normalized_path) and normalized_path.lower().endswith('.png'):
-            # Use send2trash if available
-            try:
-                import send2trash
-                send2trash.send2trash(normalized_path)
-                logger.info(f"Successfully sent character file to trash: {normalized_path}")
-            except ImportError:
-                logger.warning("send2trash not found, deleting directly.")
-                os.remove(normalized_path)
-                logger.info(f"Successfully deleted character file: {normalized_path}")
-            except Exception as trash_error:
-                 logger.error(f"Error sending character file to trash: {trash_error}. Deleting directly.")
-                 os.remove(normalized_path)
-                 logger.info(f"Successfully deleted character file after trash error: {normalized_path}")
-
-            return {"success": True, "message": "Character deleted successfully"}
-        else:
-            logger.warning(f"Character file not found or not a PNG: {normalized_path}")
-            raise HTTPException(status_code=404, detail="Character file not found or not a PNG")
-    except HTTPException as http_exc:
-        raise http_exc
-    except Exception as e:
-        logger.error(f"Failed to delete character: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete character: {str(e)}")
-
-# Character avatar handling (JSON based - likely deprecated)
-@router.post("/characters/{character_id}/avatar", response_model=CharacterResponse, tags=["characters_json"])
-async def upload_avatar(
-    character_id: str,
-    file: UploadFile = File(...),
-    logger: LogManager = Depends(get_logger)
-):
-    """Upload an avatar for a character (JSON based - likely deprecated)"""
-    character = load_character(character_id, logger) # Pass logger
-    if not character:
-        raise HTTPException(status_code=404, detail="Character not found")
-
-    # Create avatars directory if it doesn't exist
-    avatars_dir = Path("uploads") / "avatars" # Use Path object
-    avatars_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save the uploaded file
-    file_extension = os.path.splitext(file.filename)[1] if file.filename else ".png"
-    # Basic sanitization for extension
-    safe_extension = re.sub(r'[^\w.]+', '', file_extension)
-    if not safe_extension or not safe_extension.startswith('.'): safe_extension = ".png"
-
-    avatar_filename = f"{character_id}{safe_extension}"
-    avatar_path = avatars_dir / avatar_filename
-
-    try:
-        contents = await file.read()
-        with open(avatar_path, "wb") as f:
-            f.write(contents)
-
-        # Update character with avatar URL
-        # Ensure URL path matches how files are served (e.g., via StaticFiles in main.py)
-        avatar_url = f"/uploads/avatars/{avatar_filename}"
-        character["avatar_url"] = avatar_url
-        save_character(character, logger) # Pass logger
-
-        return CharacterResponse(
-            success=True,
-            message="Avatar uploaded successfully",
-            character=character
-        )
-    except Exception as e:
-        logger.error(f"Error uploading avatar for {character_id}: {e}") # Log error
-        raise HTTPException(status_code=500, detail=f"Failed to upload avatar: {str(e)}")
-
-@router.post("/characters/save-card", summary="Save character card PNG with metadata")
-async def save_character_card(
-    file: UploadFile = File(...),
-    metadata_json: str = Form(...),
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
-    settings_manager: SettingsManager = Depends(get_settings_manager),
-    logger: LogManager = Depends(get_logger)
-):
-    """
-    Receives a PNG image file and a JSON string of character metadata.
-    Embeds the metadata into the PNG using PngMetadataHandler
-    and saves it to the appropriate character directory based on settings.
-    """
-    try:
-        # 1. Read image data
-        image_bytes = await file.read()
-        logger.info(f"Received image file: {file.filename}, size: {len(image_bytes)} bytes")
-        
-        # 1.1 Validate image data - check for minimum size and PNG signature
-        if len(image_bytes) < 100:  # Minimum size check - a valid PNG is at least this big
-            logger.warning(f"Image file too small ({len(image_bytes)} bytes). Not a valid PNG.")
-            raise HTTPException(status_code=400, detail=f"Invalid image file: too small to be a valid PNG")
+            from pathlib import Path
+            # Create a Path object from the provided directory
+            directory_path = Path(directory)
             
-        # Check PNG signature (first 8 bytes)
-        png_signature = b'\x89PNG\r\n\x1a\n'
-        if not image_bytes.startswith(png_signature):
-            logger.warning("Image file does not have PNG signature")
-            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG image")
-
-        # 2. Parse metadata JSON
-        try:
-            metadata = json.loads(metadata_json)
-            logger.info("Successfully parsed metadata JSON.")
-
-            # Handle character_uuid
-            existing_uuid = metadata.get("character_uuid")
-            is_valid_existing_uuid = False
-            if existing_uuid:
+            # Try to make it absolute for better error reporting
+            try:
+                directory_path = directory_path.resolve()
+            except Exception:
+                # If resolve fails, use the original path
+                pass
+            
+            # Check if directory exists
+            if not directory_path.exists() or not directory_path.is_dir():
+                logger.warning(f"Directory not found: {directory_path}")
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False, 
+                        "exists": False,
+                        "message": f"Directory not found: {directory}",
+                        "directory": str(directory)
+                    }
+                )
+              # Scan for PNG files in the directory
+            files = []
+            png_files = list(directory_path.glob("*.png"))
+            logger.info(f"Found {len(png_files)} PNG files in directory {directory}")
+            
+            for file_path in png_files:
                 try:
-                    # Ensure it's a string for UUID constructor and check version 4
-                    uuid.UUID(str(existing_uuid), version=4)
-                    is_valid_existing_uuid = True
-                    logger.info(f"Found valid existing character_uuid: {existing_uuid}")
-                except ValueError:
-                    logger.warning(f"Invalid existing character_uuid found: '{existing_uuid}'. A new one will be generated.")
-            
-            if is_valid_existing_uuid:
-                final_uuid = str(existing_uuid) # Ensure it's a string
-            else:
-                final_uuid = str(uuid.uuid4())
-                if existing_uuid: # Log if we are replacing an invalid one
-                    logger.info(f"Replacing invalid character_uuid '{existing_uuid}' with new one: {final_uuid}")
-                else: # Log if we are generating a new one because none existed
-                    logger.info(f"Generated new character_uuid: {final_uuid}")
-            
-            metadata["character_uuid"] = final_uuid
-            
-            # Extract character name from metadata
-            character_name = None
-            
-            # Try to get name directly from top-level metadata
-            if 'name' in metadata:
-                character_name = metadata['name']
-                logger.info(f"Found character name in top-level metadata: {character_name}")
-            # Try to get name from data structure if it exists
-            elif 'data' in metadata and isinstance(metadata['data'], dict) and 'name' in metadata['data']:
-                character_name = metadata['data']['name']
-                logger.info(f"Found character name in metadata.data: {character_name}")
-            
-            # If no name found, log warning but continue with UUID fallback
-            if not character_name:
-                logger.warning("Metadata is missing the 'name' field, will use UUID for filename.")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse metadata JSON: {e}")
-            raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {e}")
+                    name = file_path.stem
+                    # Store the path in a platform-independent format
+                    # When opening as a file, the Path object will handle platform specifics
+                    files.append({
+                        "name": name,
+                        "path": str(file_path)
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing file {file_path}: {e}")
+                    
+            logger.info(f"Successfully processed {len(files)} characters in directory {directory}")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True, 
+                    "exists": True,
+                    "directory": str(directory),
+                    "files": files
+                }
+            )
         except Exception as e:
-            logger.error(f"Unexpected error parsing metadata: {e}")
-            raise HTTPException(status_code=400, detail=f"Error processing metadata: {e}")
-
-        # 3. Embed metadata into PNG
-        try:
-            output_bytes = png_handler.write_metadata(image_bytes, metadata)
-            logger.info("Successfully embedded metadata into PNG.")
-        except Exception as e:
-            logger.error(f"Failed to write metadata to PNG: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to process PNG metadata: {e}")
-
-        # 4. Determine filename using character name
-        # Use character name (from either location) or fall back to UUID if not found
-        if not character_name:
-            character_name = f'character_{uuid.uuid4()}'
-            
-        # Sanitize filename: remove invalid characters, limit length
-        sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name)
-        sanitized_name = sanitized_name[:100]  # Limit length
-        
-        # Get save directory based on settings
-        save_to_user_dir = settings_manager.get_setting('save_to_character_directory')
-        user_character_dir = settings_manager.get_setting('character_directory')
-        
-        # Determine where to save the file
-        save_directory = CHARACTERS_DIR  # Default to app's characters directory
-        
-        if save_to_user_dir and user_character_dir:
-            # Use user-selected directory if setting is enabled and directory is set
-            if os.path.isdir(user_character_dir):
-                save_directory = user_character_dir
-                logger.info(f"Using character directory from settings: {save_directory}")
-            else:
-                logger.warning(f"Character directory from settings doesn't exist: {user_character_dir}, using default")
-        
-        # Handle filename conflicts properly to avoid overwriting
-        base_filename = f"{sanitized_name}.png"
-        save_path = os.path.join(save_directory, base_filename)
-        
-        # Check if file exists and generate a unique name if needed
-        counter = 1
-        while os.path.exists(save_path):
-            new_filename = f"{sanitized_name} ({counter}).png"
-            save_path = os.path.join(save_directory, new_filename)
-            counter += 1
-            logger.info(f"File exists, trying alternative name: {new_filename}")
-        
-        logger.info(f"Final save path: {save_path}")
-
-        # 5. Save the new PNG file
-        try:
-            # Ensure the save directory exists
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            
-            with open(save_path, "wb") as f:
-                f.write(output_bytes)
-            logger.info(f"Successfully saved character card to {save_path}")
-        except IOError as e:
-            logger.error(f"Failed to save character card file to disk: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to save character file: {e}")
-
-        # 6. Return success response
-        return JSONResponse(
-            content={
-                "success": True,
-                "message": "Character card saved successfully.",
-                "filename": os.path.basename(save_path),
-                "path": save_path # Return the server-side path for reference
-            }
+            logger.error(f"Error scanning directory {directory}: {e}")
+            return JSONResponse(
+                status_code=200,  # Return 200 but with error details in content
+                content={
+                    "success": False,
+                    "exists": False,
+                    "message": f"Error scanning directory: {str(e)}",
+                    "directory": directory
+                }
+            )
+    
+    # If no directory is provided, we'll use the DB characters
+    logger.info(f"GET /api/characters - skip: {skip}, limit: {limit}")
+    from fastapi.concurrency import run_in_threadpool
+    try:
+        db_characters = await run_in_threadpool(
+            char_service.get_all_characters, skip=skip, limit=limit
+        )
+        total_characters = await run_in_threadpool(
+            char_service.count_all_characters
         )
 
-    except HTTPException:
-        # Re-raise HTTPExceptions directly
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in save_character_card: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+        characters_api_list = []
+        for db_char in db_characters:
+            # Assuming to_api_model is defined and accessible
+            # If to_api_model can raise an error, it's correctly in the try block
+            api_char = to_api_model(db_char, logger)
+            characters_api_list.append(api_char)
+        
+        return CharacterListResponse(characters=characters_api_list, total=total_characters)
 
-@router.post("/characters/extract-metadata", summary="Upload a character PNG and extract metadata") # Corrected path
-async def extract_metadata_from_upload(
+    except Exception as e:
+        logger.error(f"Error fetching or processing characters: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while fetching or processing characters.")
+
+@router.get("/character/{character_uuid}", response_model=CharacterDetailResponse, summary="Get a specific character by UUID")
+async def get_character_by_uuid_endpoint(
+    character_uuid: str,
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"GET /api/character/{character_uuid}")
+    db_char = char_service.get_character_by_uuid(character_uuid)
+    if not db_char:
+        raise HTTPException(status_code=404, detail="Character not found")
+    
+    api_char = to_api_model(db_char, logger)
+        
+    return CharacterDetailResponse(character=api_char)
+
+@router.post("/characters/save-card", response_model=CharacterDetailResponse, summary="Save/Update character card (PNG+DB)")
+async def save_character_card_endpoint(
     file: UploadFile = File(...),
-    png_handler: PngMetadataHandler = Depends(get_png_handler), # Inject dependency
+    metadata_json: str = Form(...), # Full character card spec as JSON string
+    char_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
 ):
-    """
-    Accepts a PNG file upload, reads its metadata using PngMetadataHandler,
-    and returns the extracted metadata. Does not save the file.
-    """
+    logger.info(f"POST /api/characters/save-card for file: {file.filename}")
     try:
-        # Read file content into memory
         image_bytes = await file.read()
-        logger.info(f"Received file for metadata extraction: {file.filename}, size: {len(image_bytes)} bytes")
-        
-        # Validate image data
-        if len(image_bytes) < 100:  # Minimum size check
-            logger.warning(f"Image file too small ({len(image_bytes)} bytes). Not a valid PNG.")
-            raise HTTPException(status_code=400, detail=f"Invalid image file: too small to be a valid PNG")
-            
-        # Check PNG signature
-        png_signature = b'\x89PNG\r\n\x1a\n'
-        if not image_bytes.startswith(png_signature):
-            logger.warning("Image file does not have PNG signature")
-            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG image")
+        if not image_bytes: # Ensure file is not empty
+             raise HTTPException(status_code=400, detail="Uploaded image file is empty.")
+        if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'): # PNG signature
+            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG.")
 
-        # Extract metadata using the handler
-        metadata = png_handler.read_metadata(image_bytes)
-        logger.info(f"Successfully extracted metadata from uploaded file.")
+        try:            raw_metadata = json.loads(metadata_json)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {e}")
 
-        # Return success response with metadata
-        return JSONResponse(
-            content={
-                "success": True,
-                "message": "Metadata extracted successfully.",
-                "metadata": metadata
-            }
+        saved_db_character = char_service.save_uploaded_character_card(
+            raw_character_card_data=raw_metadata,
+            image_bytes=image_bytes,
+            original_filename=file.filename or "character.png"
         )
 
-    except HTTPException:
-        # Re-raise HTTPExceptions directly
-        raise
-    except Exception as e:
-        logger.error(f"Error extracting metadata from upload: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to extract metadata: {e}")
+        if not saved_db_character:
+            raise HTTPException(status_code=500, detail="Failed to save character card.")
 
+        api_char_response = to_api_model(saved_db_character, logger)
 
-@router.get("/characters/metadata/{path:path}", summary="Extract metadata from a character file") # Corrected path
-async def get_character_metadata(
-    path: str,
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
-    logger: LogManager = Depends(get_logger)
-):
-    """Extract and return metadata from a character PNG file."""
-    # URL decode the path and normalize for the platform
-    normalized_path = normalize_path(path, logger) # Pass logger
-
-    if not os.path.exists(normalized_path):
-        logger.error(f"Character file not found: {normalized_path}")
-        raise HTTPException(status_code=404, detail="Character file not found")
-
-    if not os.path.isfile(normalized_path) or not normalized_path.lower().endswith('.png'):
-         logger.error(f"Path is not a valid PNG file: {normalized_path}")
-         raise HTTPException(status_code=400, detail="Invalid file path or type")
-
-    try:
-        content = Path(normalized_path).read_bytes()
-        metadata = png_handler.read_metadata(content)
-        logger.info(f"Successfully extracted metadata from {normalized_path}")
-        return JSONResponse(status_code=200, content=metadata)
-    except Exception as e:
-        logger.error(f"Error reading metadata from {normalized_path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to read metadata: {str(e)}")
-
-
-@router.get("/characters/image/{path:path}", summary="Serve a character image file") # Corrected path
-async def get_character_image(
-    path: str,
-    logger: LogManager = Depends(get_logger)
-):
-    """Serve a character image file by path."""
-    # URL decode the path and normalize for the platform
-    normalized_path = normalize_path(path, logger) # Pass logger
-
-    # Modified security check: Skip path containment check if the paths are on different drives
-    try:
-        # Get absolute paths
-        abs_path = os.path.abspath(normalized_path)
-        allowed_base = os.path.abspath(CHARACTERS_DIR)
-        
-        # Only perform the commonpath check if the drives match
-        if os.path.splitdrive(abs_path)[0] == os.path.splitdrive(allowed_base)[0]:
-            if not abs_path.startswith(allowed_base):
-                logger.log_warning(f"Attempt to access character image outside allowed directory: {normalized_path}")
-                logger.log_warning(f"Path {abs_path} is not within {allowed_base}")
-                raise HTTPException(status_code=403, detail="Access denied")
-        else:
-            # For cross-drive requests, log but allow the access
-            logger.log_warning(f"Cross-drive access detected: {abs_path} is on a different drive than {allowed_base}")
-            # Additional security checks could be implemented here if needed
-    except ValueError as e:
-        # Handle potential errors from commonpath comparison
-        logger.log_warning(f"Path comparison error: {str(e)}")
-        # Allow the request to proceed
-
-    if not os.path.exists(normalized_path):
-        logger.log_error(f"Character image file not found: {normalized_path}")
-        raise HTTPException(status_code=404, detail="Character image not found")
-
-    if not os.path.isfile(normalized_path) or not normalized_path.lower().endswith('.png'):
-         logger.log_error(f"Path is not a valid PNG file: {normalized_path}")
-         raise HTTPException(status_code=400, detail="Invalid file path or type")
-
-    try:
-        logger.log_info(f"Serving character image: {normalized_path}")
-        return FileResponse(normalized_path, media_type="image/png")
-    except Exception as e:
-        logger.log_error(f"Error serving character image {normalized_path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to serve image: {str(e)}")
-
-
-@router.get("/character-image/{path:path}", summary="Serve a character image file directly")
-async def serve_character_image(
-    path: str,
-    logger: LogManager = Depends(get_logger)
-):
-    """Serve a character image file by path. Uses direct file access to handle cross-drive file serving."""
-    try:
-        # URL decode the path and normalize for the platform
-        normalized_path = normalize_path(path, logger)
-        
-        logger.log_info(f"Direct serving character image: {normalized_path}")
-        
-        if not os.path.exists(normalized_path):
-            logger.log_error(f"Character image file not found: {normalized_path}")
-            raise HTTPException(status_code=404, detail="Character image not found")
-
-        if not os.path.isfile(normalized_path) or not normalized_path.lower().endswith('.png'):
-            logger.log_error(f"Path is not a valid PNG file: {normalized_path}")
-            raise HTTPException(status_code=400, detail="Invalid file path or type")
-
-        # Use FileResponse directly to serve the file
-        return FileResponse(normalized_path, media_type="image/png")
-        
-    except Exception as e:
-        logger.log_error(f"Error serving character image {path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to serve image: {str(e)}")
-
-
-@router.get("/character-metadata/{path:path}", summary="Extract metadata from a character file directly")
-async def get_character_metadata_direct(
-    path: str,
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
-    logger: LogManager = Depends(get_logger)
-):
-    """Direct version of metadata extraction that properly handles cross-drive paths."""
-    try:
-        # URL decode the path and normalize for the platform
-        normalized_path = normalize_path(path, logger)
-        
-        logger.log_info(f"Direct extraction of metadata from: {normalized_path}")
-        
-        if not os.path.exists(normalized_path):
-            logger.log_error(f"Character file not found: {normalized_path}")
-            raise HTTPException(status_code=404, detail="Character file not found")
-
-        if not os.path.isfile(normalized_path) or not normalized_path.lower().endswith('.png'):
-            logger.log_error(f"Path is not a valid PNG file: {normalized_path}")
-            raise HTTPException(status_code=400, detail="Invalid file path or type")
-
-        # Read the file and extract metadata
-        content = Path(normalized_path).read_bytes()
-        metadata = png_handler.read_metadata(content)
-        
-        # Success response
-        return JSONResponse(status_code=200, content=metadata)
-        
-    except Exception as e:
-        logger.log_error(f"Error reading metadata from {path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to read metadata: {str(e)}")
-
-
-# --- Backyard Import ---
-# Consider moving this to a separate 'import' module if complexity grows
-
-class BackyardImportRequest(BaseModel):
-    url: str
-
-@router.post("/characters/import-backyard", summary="Import character from Backyard.ai URL") # Corrected path
-async def import_from_backyard(
-    request: BackyardImportRequest,
-    backyard_handler: BackyardHandler = Depends(lambda: get_backyard_handler()),
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
-    settings_manager: SettingsManager = Depends(get_settings_manager),
-    logger: LogManager = Depends(get_logger)
-):
-    """
-    Downloads a character card from a Backyard.ai URL, extracts metadata,
-    and saves it to the characters directory.
-    """
-    try:
-        backyard_url = request.url
-        logger.info(f"Received Backyard import request for URL: {backyard_url}")
-
-        # Use BackyardHandler to download the image
-        # Assuming download_character returns image_bytes or raises an error
-        image_bytes = backyard_handler.download_character(backyard_url)
-        logger.info(f"Successfully downloaded image from Backyard URL.")
-
-        # Extract metadata
-        metadata = png_handler.read_metadata(image_bytes)
-        if not metadata:
-            logger.warning("No metadata found in downloaded Backyard character card.")
-            # Decide how to handle - maybe save with default name? Or return error?
-            # For now, let's try to save with a generic name.
-            metadata = {"name": f"backyard_import_{uuid.uuid4().hex[:8]}"}
-
-        logger.info(f"Extracted metadata: {metadata.get('name', 'N/A')}")
-
-        # Handle character_uuid for imported card
-        existing_uuid = metadata.get("character_uuid")
-        is_valid_existing_uuid = False
-        if existing_uuid:
-            try:
-                uuid.UUID(str(existing_uuid), version=4)
-                is_valid_existing_uuid = True
-                logger.info(f"Found valid existing character_uuid in imported card: {existing_uuid}")
-            except ValueError:
-                logger.warning(f"Invalid existing character_uuid in imported card: '{existing_uuid}'. A new one will be generated.")
-        
-        if is_valid_existing_uuid:
-            final_uuid = str(existing_uuid)
-        else:
-            final_uuid = str(uuid.uuid4())
-            if existing_uuid:
-                logger.info(f"Replacing invalid character_uuid '{existing_uuid}' in imported card with new one: {final_uuid}")
-            else:
-                logger.info(f"Generated new character_uuid for imported card: {final_uuid}")
-        
-        metadata["character_uuid"] = final_uuid
-
-        # Determine filename and save path
-        character_name = metadata.get('name', f'backyard_import_{uuid.uuid4().hex[:8]}')
-        sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name)[:100]
-        
-        # Get save directory based on settings
-        save_to_user_dir = settings_manager.get_setting('save_to_character_directory')
-        user_character_dir = settings_manager.get_setting('character_directory')
-        
-        # Determine where to save the file
-        save_directory = CHARACTERS_DIR  # Default to app's characters directory
-        
-        if save_to_user_dir and user_character_dir:
-            # Use user-selected directory if setting is enabled and directory is set
-            if os.path.isdir(user_character_dir):
-                save_directory = user_character_dir
-                logger.info(f"Using character directory from settings: {save_directory}")
-            else:
-                logger.warning(f"Character directory from settings doesn't exist: {user_character_dir}, using default")
-        
-        # Handle filename conflicts properly to avoid overwriting
-        base_filename = f"{sanitized_name}.png"
-        save_path = os.path.join(save_directory, base_filename)
-        
-        # Check if file exists and generate a unique name if needed
-        counter = 1
-        while os.path.exists(save_path):
-            new_filename = f"{sanitized_name} ({counter}).png"
-            save_path = os.path.join(save_directory, new_filename)
-            counter += 1
-            logger.info(f"File exists, trying alternative name: {new_filename}")
-        
-        logger.info(f"Final save path for imported character: {save_path}")
-
-        # Save the downloaded PNG file (with its original metadata)
-        try:
-            # Ensure the save directory exists
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            
-            # Re-write metadata to include the character_uuid
-            final_image_bytes_to_save = png_handler.write_metadata(image_bytes, metadata)
-            logger.info(f"Embedded character_uuid into image bytes for imported card.")
-
-            with open(save_path, "wb") as f:
-                f.write(final_image_bytes_to_save)
-            logger.info(f"Successfully saved imported character card to {save_path}")
-        except IOError as e:
-            logger.error(f"Failed to save imported character card file to disk: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to save imported character file: {e}")
-
-        # Return success response
-        return JSONResponse(
-            content={
-                "success": True,
-                "message": "Character imported successfully from Backyard.ai.",
-                "filename": os.path.basename(save_path),
-                "path": save_path,
-                "metadata": metadata # Return extracted metadata
-            }
-        )
-
+        return CharacterDetailResponse(character=api_char_response)
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
-        logger.error(f"Error importing from Backyard URL {request.url}: {e}", exc_info=True)
+        logger.error(f"Error in save_character_card endpoint: {e}", error=e)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+@router.delete("/character/{character_uuid}", response_model=SimpleSuccessResponse, summary="Delete a character by UUID")
+async def delete_character_by_uuid_endpoint(
+    character_uuid: str,
+    delete_png: bool = Query(False, description="Whether to also delete the character's PNG file from disk."),
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"DELETE /api/character/{character_uuid} with delete_png: {delete_png}")
+    success = char_service.delete_character(character_uuid, delete_png_file=delete_png)
+    if not success:
+        # Check if it was not found vs other error, service method could return more info or raise
+        db_char_check = char_service.get_character_by_uuid(character_uuid) # Check if it was a not found case
+        if not db_char_check:
+            raise HTTPException(status_code=404, detail="Character not found.")
+        raise HTTPException(status_code=500, detail="Failed to delete character.")
+    return SimpleSuccessResponse(success=True, message="Character deleted successfully.")
+
+@router.get("/character-image/{character_uuid}", summary="Serve a character's PNG image by UUID")
+async def get_character_image_by_uuid(
+    character_uuid: str,
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"Request for image for character UUID: {character_uuid}")
+    
+    # Remove .png extension if present in the UUID parameter
+    if character_uuid.endswith('.png'):
+        character_uuid = character_uuid[:-4]  # Remove .png extension
+        logger.info(f"Removed .png extension from UUID parameter, using: {character_uuid}")
+    
+    db_char = char_service.get_character_by_uuid(character_uuid)
+    if not db_char or not db_char.png_file_path:
+        raise HTTPException(status_code=404, detail="Character or character image path not found.")
+    
+    file_path = Path(db_char.png_file_path)
+    if not file_path.is_file():
+        logger.error(f"Character image file not found at path from DB: {file_path} for UUID {character_uuid}")
+        raise HTTPException(status_code=404, detail="Character image file not found on disk.")
+    
+    return FileResponse(file_path, media_type="image/png")
+
+@router.get("/character-image/{path:path}", summary="Serve a character's PNG image by file path")
+async def get_character_image_by_path(
+    path: str,
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"Request for image for character path: {path}")
+    
+    try:
+        # Handle Windows paths correctly - replace forward slashes with backslashes if on Windows
+        fixed_path = path.replace('/', os.sep) if os.name == 'nt' else path
+        
+        # Try to be more robust with path resolution
+        try:
+            # First try with the path as is
+            file_path = Path(fixed_path)
+            
+            # If the path is not absolute or doesn't exist, try to make it relative to the application root
+            if not file_path.is_absolute() or not file_path.exists():
+                # Try to find the application root directory
+                app_root = Path(__file__).parent.parent.parent
+                file_path = app_root / fixed_path
+                
+                # If that doesn't work, try a last fallback to characters directory
+                if not file_path.exists():
+                    characters_dir = app_root / "characters"
+                    file_path = characters_dir / Path(fixed_path).name
+        except Exception:
+            # Fall back to basic path if all resolution attempts fail
+            file_path = Path(fixed_path)
+
+        # Check if the file exists
+        if not file_path.is_file():
+            logger.error(f"Character image file not found at path: {file_path}")
+            raise HTTPException(status_code=404, detail=f"Character image file not found on disk at {file_path}")
+        
+        return FileResponse(file_path, media_type="image/png")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving character image by path {path}: {str(e)}")
+        raise HTTPException(status_code=404, detail=f"Error serving character image: {str(e)}")
+
+@router.post("/characters/scan-sync", response_model=SimpleSuccessResponse, summary="Manually trigger character directory synchronization")
+async def trigger_scan_character_directory_endpoint(
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info("POST /api/characters/scan-sync - Manual character directory synchronization triggered.")
+    try:
+        char_service.sync_character_directories() # This is synchronous within the request
+        return SimpleSuccessResponse(success=True, message="Character directory synchronization complete.")
+    except Exception as e:
+        logger.error(f"Error during manual character directory scan: {e}", error=e)
+        raise HTTPException(status_code=500, detail=f"Failed to synchronize character directories: {str(e)}")
+
+# --- Utility Endpoints (Primarily for uploaded files, not interacting with DB characters directly) ---
+
+@router.get("/character-metadata/{path:path}", summary="Get character metadata by file path")
+async def get_character_metadata_by_path(
+    path: str,
+    png_handler: PngMetadataHandler = Depends(get_png_handler),
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"Request for metadata for character path: {path}")
+    
+    try:
+        # Handle Windows paths correctly - replace forward slashes with backslashes if on Windows
+        fixed_path = path.replace('/', os.sep) if os.name == 'nt' else path
+        
+        # Try to be more robust with path resolution
+        try:
+            # First try with the path as is
+            file_path = Path(fixed_path)
+            
+            # If the path is not absolute or doesn't exist, try to make it relative to the application root
+            if not file_path.is_absolute() or not file_path.exists():
+                # Try to find the application root directory
+                app_root = Path(__file__).parent.parent.parent
+                file_path = app_root / fixed_path
+                
+                # If that doesn't work, try a last fallback to characters directory
+                if not file_path.exists():
+                    characters_dir = app_root / "characters"
+                    file_path = characters_dir / Path(fixed_path).name
+        except Exception:
+            # Fall back to basic path if all resolution attempts fail
+            file_path = Path(fixed_path)
+        
+        # Check if the file exists
+        if not file_path.is_file():
+            logger.error(f"Character file not found at path: {file_path}")
+            raise HTTPException(status_code=404, detail=f"Character file not found on disk at {file_path}")
+        
+        # Read metadata directly from the file
+        try:
+            # Convert Path object to string before passing to read_metadata
+            abs_file_path = str(file_path.resolve())
+            metadata = png_handler.read_metadata(abs_file_path)
+            if not metadata:
+                raise HTTPException(status_code=400, detail="Could not extract metadata from PNG.")
+            
+            # Check if character exists in the database - if not, add it to ensure UUID
+            # First check if we have a character_uuid in the metadata
+            data_section = metadata.get("data", {})
+            character_uuid = data_section.get("character_uuid")
+            
+            db_char = None
+            if character_uuid:
+                # Check for character by UUID first
+                db_char = char_service.get_character_by_uuid(character_uuid)
+            
+            if not db_char:
+                # Also check by path in case it was imported without UUID
+                db_char = char_service.get_character_by_path(abs_file_path)
+            
+            # If still not found, we need to save it to generate a UUID
+            if not db_char:
+                logger.info(f"Character not found in database. Adding {file_path} to ensure UUID assignment.")
+                try:
+                    # Use the service's upload method to properly save the character
+                    # We need to read the file again as bytes for the upload method
+                    with open(abs_file_path, "rb") as img_file:
+                        image_bytes = img_file.read()
+                    
+                    # Save to database with existing metadata and image bytes
+                    db_char = char_service.save_uploaded_character_card(
+                        raw_character_card_data=metadata,
+                        image_bytes=image_bytes,
+                        original_filename=file_path.name
+                    )
+                    
+                    if db_char and db_char.character_uuid:
+                        # Update our metadata copy with the new UUID
+                        if "data" not in metadata:
+                            metadata["data"] = {}
+                        metadata["data"]["character_uuid"] = db_char.character_uuid
+                        
+                        logger.info(f"Successfully added character to database with UUID: {db_char.character_uuid}")
+                    else:
+                        logger.warning(f"Failed to add character to database: {abs_file_path}")
+                except Exception as save_error:
+                    logger.error(f"Error saving character to database: {save_error}")
+                    # Continue with the metadata we have, even without UUID
+            elif character_uuid != db_char.character_uuid:
+                # UUID in metadata doesn't match database, update metadata
+                if "data" not in metadata:
+                    metadata["data"] = {}
+                metadata["data"]["character_uuid"] = db_char.character_uuid
+                logger.info(f"Updated metadata with correct UUID from database: {db_char.character_uuid}")
+            
+            # Return the metadata, now with UUID if it was added to DB
+            return JSONResponse(
+                content=metadata
+            )
+        except Exception as read_error:
+            logger.error(f"Error reading metadata: {read_error}")
+            raise HTTPException(status_code=500, detail=f"Error reading metadata: {str(read_error)}")
+            
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.error(f"Error serving character metadata by path {path}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting character metadata: {str(e)}")
+
+@router.post("/characters/extract-metadata", response_model=ExtractedMetadataResponse, summary="Upload PNG and extract metadata")
+async def extract_metadata_from_upload_endpoint(
+    file: UploadFile = File(...),
+    png_handler: PngMetadataHandler = Depends(get_png_handler),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"POST /api/characters/extract-metadata for file: {file.filename}")
+    try:
+        image_bytes = await file.read()
+        if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+            raise HTTPException(status_code=400, detail="Invalid file: not a PNG.")
+        
+        metadata = png_handler.read_metadata(image_bytes) # This is the raw card spec
+        return ExtractedMetadataResponse(metadata=metadata or {})
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.error(f"Error extracting metadata from upload: {e}", error=e)
+        raise HTTPException(status_code=500, detail=f"Failed to extract metadata: {str(e)}")
+
+@router.post("/characters/extract-lore", response_model=ExtractedLoreResponse, summary="Upload PNG and extract lore book")
+async def extract_lore_from_upload_endpoint(
+    file: UploadFile = File(...),
+    png_handler: PngMetadataHandler = Depends(get_png_handler),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"POST /api/characters/extract-lore for file: {file.filename}")
+    try:
+        image_bytes = await file.read()
+        if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+            raise HTTPException(status_code=400, detail="Invalid file: not a PNG.")
+
+        metadata = png_handler.read_metadata(image_bytes)
+        lore_book_data = None
+        if metadata and isinstance(metadata.get("data"), dict):
+            lore_book_data = metadata["data"].get("character_book")
+        
+        if lore_book_data:
+            return ExtractedLoreResponse(lore_book=lore_book_data)
+        else:
+            return ExtractedLoreResponse(success=True, message="No lore book found in character data.", lore_book=None)
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.error(f"Error extracting lore from upload: {e}", error=e)
+        raise HTTPException(status_code=500, detail=f"Failed to extract lore: {str(e)}")
+
+@router.post("/characters/import-backyard", response_model=CharacterDetailResponse, summary="Import character from Backyard.ai URL")
+async def import_from_backyard_endpoint(
+    request: Request, # For full URL if needed, or pass URL as body/query. Also needed for dependency.
+    backyard_url_param: str = Query(..., alias="backyardUrl", description="The Backyard.ai character URL"),
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    backyard_handler: BackyardHandler = Depends(get_backyard_handler), # Keep for download
+    png_handler: PngMetadataHandler = Depends(get_png_handler), # Keep for initial parse
+    logger: LogManager = Depends(get_logger)
+):
+    logger.info(f"POST /api/characters/import-backyard for URL: {backyard_url_param}")
+    try:
+        image_bytes = await backyard_handler.download_character_bytes(backyard_url_param) # Modified to async
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Failed to download character from Backyard URL.")
+        
+        if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+             raise HTTPException(status_code=400, detail="Downloaded file is not a valid PNG.")
+
+        raw_metadata = png_handler.read_metadata(image_bytes)
+        if not raw_metadata:
+            raw_metadata = {} # Ensure it's a dict for the service
+            logger.warning("No metadata found in downloaded Backyard card, will save with minimal data.")
+          # Use the save_uploaded_character_card service method
+        # It handles UUID generation, path determination, metadata embedding, DB save, PNG save
+        original_filename = Path(urllib.parse.urlparse(backyard_url_param).path).name or "imported_backyard_char.png"
+
+        saved_db_character = char_service.save_uploaded_character_card(
+            raw_character_card_data=raw_metadata,
+            image_bytes=image_bytes,
+            original_filename=original_filename
+        )
+
+        if not saved_db_character:
+            raise HTTPException(status_code=500, detail="Failed to save imported Backyard character.")
+
+        api_char_response = to_api_model(saved_db_character, logger)
+            
+        return CharacterDetailResponse(character=api_char_response)
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.error(f"Error importing from Backyard: {e}", error=e)
         raise HTTPException(status_code=500, detail=f"Failed to import from Backyard: {str(e)}")
 
+# Deprecated/Old Endpoints to be removed or fully refactored:
+# - /characters/{character_id}/avatar (avatar handling is part of save_card now)
+# - The old path-based /character/{path:path} delete (replaced by UUID delete)
+# - The old path-based /characters/metadata/{path:path} (replaced by UUID metadata get)
+# - The old path-based /characters/image/{path:path} (replaced by UUID image get)
 
-@router.post("/characters/extract-lore", summary="Extract lore items from an uploaded character PNG") # Corrected path
-async def extract_lore_from_upload(
-    file: UploadFile = File(...),
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
-    logger: LogManager = Depends(get_logger)
-):
-    """
-    Accepts a character PNG file upload, extracts metadata, specifically looking
-    for lorebook entries, and returns them.
-    """
-    try:
-        image_bytes = await file.read()
-        logger.info(f"Received file for lore extraction: {file.filename}, size: {len(image_bytes)} bytes")
-        
-        # Validate image data
-        if len(image_bytes) < 100:  # Minimum size check
-            logger.warning(f"Image file too small ({len(image_bytes)} bytes). Not a valid PNG.")
-            raise HTTPException(status_code=400, detail=f"Invalid image file: too small to be a valid PNG")
-            
-        # Check PNG signature
-        png_signature = b'\x89PNG\r\n\x1a\n'
-        if not image_bytes.startswith(png_signature):
-            logger.warning("Image file does not have PNG signature")
-            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG image")
-
-        metadata = png_handler.read_metadata(image_bytes)
-        logger.info(f"Extracted metadata for lore check.")
-
-        # Extract lorebook data (adjust key based on actual metadata structure)
-        lore_data = metadata.get("lorebook", {}).get("entries", []) # Example path
-        if not lore_data and "world_info" in metadata: # Check alternative keys
-             lore_data = metadata.get("world_info") # TavernAI format?
-
-        # Further processing might be needed depending on lore format
-
-        logger.info(f"Found {len(lore_data)} potential lore entries.")
-
-        return JSONResponse(
-            content={
-                "success": True,
-                "message": "Lore extracted successfully.",
-                "lore": lore_data # Return the extracted lore entries
-            }
-        )
-
-    except HTTPException as http_exc:
-        raise http_exc
-    except Exception as e:
-        logger.error(f"Error extracting lore from upload: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to extract lore: {str(e)}")
+# The scan_directory_for_characters function is kept as a utility but not directly exposed as an endpoint
+# for listing characters anymore, as /api/characters now serves from DB.
+# The /api/characters/scan-directory endpoint triggers the service sync.

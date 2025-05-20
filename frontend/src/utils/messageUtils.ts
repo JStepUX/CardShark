@@ -13,29 +13,33 @@ export const MessageUtils = {
    * Create a debounced save function for efficient message saving
    */
   createDebouncedSave: (
-    saveFunction: (messages: Message[]) => void,
+    // Allow saveFunction to be async and return a Promise
+    saveFunction: (messages: Message[]) => Promise<any>,
     delay: number = 1000
   ) => {
-    const pendingSaves = new Map<string, NodeJS.Timeout>();
+    let timer: NodeJS.Timeout | null = null;
     
-    return (messageId: string, messages: Message[]) => {
-      console.debug(`Debounced save requested for message ${messageId}`);
+    return (messages: Message[]) => {
+      console.debug(`Debounced save requested for chat`);
       
-      // Clear any existing timer for this message
-      if (pendingSaves.has(messageId)) {
-        clearTimeout(pendingSaves.get(messageId)!);
-        console.debug(`Cleared existing timer for message ${messageId}`);
+      // Clear any existing timer
+      if (timer) {
+        clearTimeout(timer);
+        console.debug(`Cleared existing chat save timer`);
       }
       
       // Create a new timer
-      const timer = setTimeout(() => {
-        console.debug(`Executing debounced save for message ${messageId}`);
-        saveFunction(messages);
-        pendingSaves.delete(messageId);
+      timer = setTimeout(async () => {
+        console.debug(`Executing debounced save for chat`);
+        try {
+          await saveFunction(messages);
+        } catch (error) {
+          console.error("Error during debounced save:", error);
+          // Optionally, handle or propagate the error
+        } finally {
+          timer = null; // Clear the timer reference after execution
+        }
       }, delay);
-      
-      // Store the timer reference
-      pendingSaves.set(messageId, timer);
     };
   },
   

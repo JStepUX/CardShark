@@ -105,12 +105,12 @@ export function useChatContinuation(
       
       const abortController = new AbortController();
       currentGenerationRef.current = abortController;
-
       const response = await PromptHandler.generateChatResponse(
         characterData,
         message.content,
         contextMessages,
-        formattedAPIConfig,
+        'User', // Using default user name as currentUser is not available in this hook
+        formattedAPIConfig, 
         abortController.signal
       );
 

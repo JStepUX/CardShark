@@ -8,3 +8,5 @@ send2Trash>=1.8.3           # Native delete functionality
 psutil>=5.9.0               # Process management for KoboldCPP
 sse-starlette>=1.6.5        # Server-sent events for streaming progress
 requests>=2.31.0            # HTTP requests
+aiofiles>=0.8.0             # Asynchronous file operations
+SQLAlchemy>=1.4               # ORM for database interaction (SQLite)

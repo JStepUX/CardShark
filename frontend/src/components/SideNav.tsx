@@ -15,6 +15,7 @@ import {
   Globe
 } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
+import { useChat } from '../contexts/ChatContext'; // Import useChat
 // Remove View import if no longer needed elsewhere
 // import { View } from '../types/navigation';
 import DropdownMenu from './DropDownMenu';
@@ -76,10 +77,20 @@ const SideNav: React.FC<SideNavProps> = ({
   backendStatus,
   onImageChange
 }) => {
-  const { characterData, imageUrl } = useCharacter();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+const { characterData, imageUrl: characterImageUrl } = useCharacter(); // Rename to avoid conflict
+const {
+  availablePreviewImages,
+  currentPreviewImageIndex,
+  navigateToPreviewImage
+} = useChat();
+const [isCollapsed, setIsCollapsed] = useState(false);
 
-  return (
+// Determine the image URL to display based on context, prioritizing lore images if available
+const displayImageUrl = availablePreviewImages && availablePreviewImages.length > 0
+  ? availablePreviewImages[currentPreviewImageIndex]?.src
+  : characterImageUrl; // Fallback to default character image if no lore images are active
+
+return (
     <div className={`relative bg-stone-950 shrink-0 flex flex-col border-r border-stone-800 transition-all duration-300 
       ${isCollapsed ? 'w-20' : 'w-96'}`}
     >
@@ -190,9 +201,13 @@ const SideNav: React.FC<SideNavProps> = ({
             <div className="mt-auto">
               <div className="flex flex-col h-[64vh]">
                 <div className="flex-1 min-h-0">
-                  <ImagePreview 
-                    imageUrl={imageUrl} 
+                  <ImagePreview
+                    imageUrl={displayImageUrl} // Use the new displayImageUrl
                     onImageChange={onImageChange}
+                    // Pass new props for navigation if ImagePreview is enhanced
+                    availableImages={availablePreviewImages}
+                    currentIndex={currentPreviewImageIndex}
+                    onNavigate={navigateToPreviewImage}
                   />
                 </div>
                 <TokenCounter characterData={characterData} />

@@ -40,6 +40,7 @@ const AppRoutes: React.FC = () => (
         <TemplateProvider>
           <CharacterProvider>
             <HighlightStylesUpdater />
+            <ChatProvider>
             <Routes>
               <Route path="/" element={<Layout />}>
                 {/* Default view redirects to gallery */}
@@ -76,11 +77,9 @@ const AppRoutes: React.FC = () => (
                 {/* Chat route with chat-specific providers */}
                 <Route path="chat" element={
                   <LazyRoute routeName="Chat">
-                    <ChatProvider>
                       <KoboldCPPProvider pollInterval={120000}>
                         <ChatView />
                       </KoboldCPPProvider>
-                    </ChatProvider>
                   </LazyRoute>
                 } />
                 
@@ -108,11 +107,9 @@ const AppRoutes: React.FC = () => (
                   {/* World Cards Play route with chat providers */}
                   <Route path=":worldId/play" element={
                     <LazyRoute routeName="World Play">
-                      <ChatProvider>
                         <KoboldCPPProvider pollInterval={120000}>
                           <WorldCardsPlayView />
                         </KoboldCPPProvider>
-                      </ChatProvider>
                     </LazyRoute>
                   } />
                 </Route>
@@ -121,6 +118,7 @@ const AppRoutes: React.FC = () => (
                 <Route path="*" element={<Navigate to="/gallery" replace />} />
               </Route>
             </Routes>
+            </ChatProvider>
           </CharacterProvider>
         </TemplateProvider>
       </APIConfigProvider>

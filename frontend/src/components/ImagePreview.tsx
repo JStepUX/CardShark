@@ -1,20 +1,34 @@
 import { useEffect, useState, useRef } from 'react';
-import { Upload, Crop } from 'lucide-react';
+import { Upload, Crop, ChevronLeft, ChevronRight } from 'lucide-react'; // Added Chevrons
 import ImageCropperModal from './ImageCropperModal';
+import { AvailablePreviewImage } from '../handlers/loreHandler'; // Import type
 
 interface ImagePreviewProps {
-  imageUrl?: string;
+  imageUrl?: string; // Fallback if availableImages is not provided
   placeholderUrl?: string;
   onImageChange?: (newImageData: string | File) => void;
+  availableImages?: AvailablePreviewImage[];
+  currentIndex?: number;
+  onNavigate?: (newIndex: number) => void;
 }
 
-const ImagePreview: React.FC<ImagePreviewProps> = ({ 
-    imageUrl = '', 
-    placeholderUrl = './pngPlaceholder.png',  // Relative to dist folder
-    onImageChange
+const ImagePreview: React.FC<ImagePreviewProps> = ({
+    imageUrl, // Keep for fallback
+    placeholderUrl = './pngPlaceholder.png',
+    onImageChange,
+    availableImages,
+    currentIndex,
+    onNavigate
 }) => {
   const [imageError, setImageError] = useState(false);
-  const [currentImage, setCurrentImage] = useState(imageUrl || placeholderUrl);
+  
+  // Determine the source for the current image
+  const currentImageSrc =
+    availableImages && typeof currentIndex === 'number' && availableImages[currentIndex]
+    ? availableImages[currentIndex].src
+    : imageUrl || placeholderUrl;
+
+  const [currentImage, setCurrentImage] = useState(currentImageSrc);
   const [isHovering, setIsHovering] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [tempImageUrl, setTempImageUrl] = useState<string | null>(null);
@@ -22,20 +36,55 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setCurrentImage(imageUrl || placeholderUrl);
-    setImageError(false);
-  }, [imageUrl, placeholderUrl]);
+    const newSrc =
+      availableImages && typeof currentIndex === 'number' && availableImages[currentIndex]
+      ? availableImages[currentIndex].src
+      : imageUrl || placeholderUrl;
+    setCurrentImage(newSrc);
+    setImageError(false); // Reset error when image source changes
+  }, [imageUrl, placeholderUrl, availableImages, currentIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Prevent navigation if a modal (like cropper) is active
+      // or if an input/textarea/contentEditable element has focus, to avoid interfering with typing.
+      if (showCropper ||
+          (document.activeElement &&
+            (document.activeElement.tagName === 'INPUT' ||
+             document.activeElement.tagName === 'TEXTAREA' ||
+             (document.activeElement as HTMLElement).isContentEditable))) {
+        return;
+      }
+
+      if (!availableImages || availableImages.length <= 1 || typeof currentIndex !== 'number' || !onNavigate) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault(); // Prevent browser back navigation or other defaults
+        onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault(); // Prevent default scroll or other actions
+        onNavigate((currentIndex + 1) % availableImages.length);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [availableImages, currentIndex, onNavigate, showCropper]); // Added showCropper to dependencies
 
   const handleImageError = () => {
     setImageError(true);
     setCurrentImage(placeholderUrl);
   };
 
-  const handleMouseEnter = () => {
-    if (imageUrl) {
-      setIsHovering(true);
-    }
-  };
+const handleMouseEnter = () => {
+  if (onImageChange) {            // show overlay whenever image is user-modifiable
+    setIsHovering(true);
+  }
+};
 
   const handleMouseLeave = () => {
     setIsHovering(false);
@@ -55,6 +104,10 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     setSelectedFile(file);
 
     // Create a URL for the selected file
+    // Clean-up any earlier blob URL to prevent leaks
+    if (tempImageUrl) {
+      URL.revokeObjectURL(tempImageUrl);
+    }
     const objectUrl = URL.createObjectURL(file);
     setTempImageUrl(objectUrl);
     setShowCropper(true);
@@ -65,7 +118,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     }
   };
 
-  const handleCropSave = (croppedImageData: string) => {
+  const handleCropSave = async (croppedImageData: string) => {
     // Update the current image preview
     setCurrentImage(croppedImageData);
     
@@ -73,16 +126,20 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     // back to a File object to maintain the original file type
     if (selectedFile) {
       // Convert base64 to blob
-      const base64Data = croppedImageData.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteArrays = [];
-      
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteArrays.push(byteCharacters.charCodeAt(i));
+      let blob: Blob;
+      try {
+        blob = await fetch(croppedImageData).then(r => r.blob());
+      } catch (error) {
+        console.error('Error fetching blob from data URL:', error);
+        // Clean up temporary URL and close cropper on error
+        if (tempImageUrl) {
+          URL.revokeObjectURL(tempImageUrl);
+          setTempImageUrl(null);
+        }
+        setShowCropper(false);
+        setSelectedFile(null); // Also reset selected file
+        return; // Exit if blob creation failed
       }
-      
-      const byteArray = new Uint8Array(byteArrays);
-      const blob = new Blob([byteArray], { type: selectedFile.type });
       
       // Create a new File object
       const newFile = new File([blob], selectedFile.name, { 
@@ -120,14 +177,58 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
       >
         <div className="relative w-full h-full flex items-center justify-center">
           <img
+            id="image-preview-content"
             src={currentImage}
             alt={imageError ? "Placeholder" : "Character"}
             onError={handleImageError}
             className="max-w-full max-h-full object-contain"
           />
+
+          {/* Navigation Controls */}
+          {availableImages && availableImages.length > 1 && onNavigate && typeof currentIndex === 'number' && (
+            <>
+              <button
+                onClick={() => onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowLeft') {
+                    onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length);
+                  }
+                }}
+                className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
+                aria-label="Previous Image"
+                role="button"
+                aria-controls="image-preview-content"
+              >
+                <ChevronLeft size={24} />
+              </button>
+              <button
+                onClick={() => onNavigate((currentIndex + 1) % availableImages.length)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowRight') {
+                    onNavigate((currentIndex + 1) % availableImages.length);
+                  }
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
+                aria-label="Next Image"
+                role="button"
+                aria-controls="image-preview-content"
+              >
+                <ChevronRight size={24} />
+              </button>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
+                {currentIndex + 1} / {availableImages.length}
+              </div>
+            </>
+          )}
           
-          {/* Hover overlay with controls */}
-          {isHovering && (
+          {/* Hover overlay with controls - Conditionally show based on image type or if onImageChange is provided */}
+          {isHovering
+  && onImageChange
+  && (
+       !availableImages
+       || (typeof currentIndex === 'number'
+           && availableImages[currentIndex]?.type === 'character')
+     ) && (
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 transition-opacity">
               <div className="flex flex-col gap-3">
                 <button
@@ -138,10 +239,10 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
                   <span>Replace Image</span>
                 </button>
                 
-                {imageUrl && (
+                {currentImageSrc !== placeholderUrl && ( // Only show adjust if not placeholder
                   <button
                     onClick={() => {
-                      setTempImageUrl(currentImage);
+                      setTempImageUrl(currentImage); // Use currentImage which reflects the displayed one
                       setShowCropper(true);
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-stone-700 hover:bg-stone-600 text-white rounded-lg transition-colors"

@@ -30,6 +30,8 @@ export interface LoreEntryInterface {
     enabled: boolean;       // Entry is disabled if true
     position: string; // Where to insert in the prompt
     use_regex: boolean;
+    has_image: boolean;
+    image_uuid: string;
     extensions: {
         position: number;
         exclude_recursion: boolean;
@@ -127,6 +129,8 @@ export function createEmptyLoreEntry(index: number): LoreEntryInterface {
         enabled: true,
         position: "1",
         use_regex: true,
+        has_image: false,
+        image_uuid: "",
         extensions: {
             position: 1,
             exclude_recursion: false,
@@ -232,9 +236,11 @@ export const LoreEntrySchema = z.object({
   enabled: z.boolean().default(true),
   position: z.string(),
   use_regex: z.boolean().default(false),
+  has_image: z.boolean().default(false),
+  image_uuid: z.string().default(""),
   extensions: z.object({
-    position: z.number(),
-    exclude_recursion: z.boolean().default(false),
+      position: z.number(),
+      exclude_recursion: z.boolean().default(false),
     display_index: z.number(),
     probability: z.number().min(0).max(100).optional(),
     useProbability: z.boolean().default(false),

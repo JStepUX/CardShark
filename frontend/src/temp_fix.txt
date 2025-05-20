@@ -1,0 +1,8 @@
+      const response = await PromptHandler.generateChatResponse(
+        characterData,
+        message.content, // Pass original message content for context
+        contextMessages,
+        currentUser?.name || 'User', // Add userName parameter
+        formattedAPIConfig,
+        abortController.signal
+      );

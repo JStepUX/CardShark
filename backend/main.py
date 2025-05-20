@@ -3,7 +3,6 @@ import re
 # backend/main.py
 # Main application file for CardShark
 import argparse
-import os
 import sys
 import urllib.parse
 import glob
@@ -93,6 +92,7 @@ from backend.template_handler import TemplateHandler
 from backend.background_handler import BackgroundHandler
 from backend.content_filter_manager import ContentFilterManager
 from backend.lore_handler import LoreHandler
+import backend.sql_models # Use sql_models.py instead of models.py to avoid package conflicts
 
 # API endpoint modules
 from backend.chat_endpoints import router as chat_router
@@ -100,11 +100,13 @@ from backend.chat_endpoints import router as chat_router
 from backend.background_endpoints import router as background_router
 from backend.room_card_endpoint import router as room_card_router
 from backend.character_endpoints import router as character_router
+from backend.dependencies import get_character_service_dependency # Import from new dependencies file
 from backend.user_endpoints import router as user_router
 from backend.settings_endpoints import router as settings_router
 from backend.world_endpoints import router as world_router
 from backend.template_endpoints import router as template_router  # Import the new template router
 from backend.lore_endpoints import router as lore_router  # Import the lore router
+# from backend.character_inventory_endpoints import router as character_inventory_router # REMOVED - functionality integrated into CharacterService
 # from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
 
 # Import koboldcpp handler & manager
@@ -125,6 +127,36 @@ DEBUG = os.environ.get("DEBUG", "").lower() in ("true", "1", "t")
 logger = LogManager()
 app = FastAPI(debug=DEBUG)
 
+# Store logger on app.state for access in dependencies
+app.state.logger = logger
+
+# Initialize Database
+from backend.database import init_db, SessionLocal, get_db # Import SessionLocal and get_db
+
+@app.on_event("startup")
+async def startup():
+    try:
+        init_db()
+        logger.log_info("Database tables initialised")
+
+        # Synchronize character directories
+        with SessionLocal() as db:
+            CharacterService(
+                db_session=db,
+                png_handler=png_handler,
+                settings_manager=settings_manager,
+                logger=logger,
+            ).sync_character_directories()
+        logger.log_info("Initial character directory synchronization complete.")
+    except Exception as exc:
+        logger.log_error(f"DB init or character sync failed: {exc}\n{traceback.format_exc()}")
+        raise
+
+from backend.services.character_service import CharacterService # Import CharacterService
+from sqlalchemy.orm import Session # For type hinting in dependency
+from fastapi import Depends # For dependency injection
+
+# Original database initialization block removed; moved to startup event.
 # Create a dedicated router for health check
 health_router = APIRouter(prefix="/api", tags=["health"])
 
@@ -158,8 +190,13 @@ chat_handler = ChatHandler(logger, api_handler) # Pass api_handler here
 template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds() # Initialize default backgrounds
-lore_handler = LoreHandler(logger, default_position=0)
+# lore_handler = LoreHandler(logger, default_position=0) # LoreHandler is now dependency injected in its router
 world_state_handler = WorldStateHandler(logger, settings_manager)
+
+# Store handlers on app.state for access in dependencies
+app.state.png_handler = png_handler
+app.state.settings_manager = settings_manager
+# app.state.logger is already set above
 
 # Initialize the world card chat handler with explicit worlds directory
 worlds_dir = Path("worlds")
@@ -187,8 +224,12 @@ app.include_router(settings_router)
 app.include_router(world_router)
 app.include_router(template_router)  # Include the new template router
 app.include_router(lore_router)  # Include the lore router
+# app.include_router(character_inventory_router) # REMOVED
 # app.include_router(world_chat_router) # Removed, functionality merged into world_router
 app.include_router(background_router)
+
+# ---------- FastAPI Dependency for Services ----------
+# get_character_service_dependency is now imported from backend.dependencies
 
 # Import content filter router
 from backend.content_filter_endpoints import router as content_filter_router

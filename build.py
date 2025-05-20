@@ -245,11 +245,13 @@ backend_datas = [
     ('backend/*.py', 'backend'),
     ('backend/handlers/*.py', 'backend/handlers'),
     ('backend/worldcards/*', 'backend/worldcards'),
-    ('backend/models/*', 'backend/models'),
-    ('backend/utils/*', 'backend/utils'),
+    ('backend/models/*', 'backend/models'),    ('backend/utils/*', 'backend/utils'),
+    ('backend/services/*.py', 'backend/services'),  # Add services directory for character_service
     ('backend/default_room.png', 'backend'),         # Add default room image
     ('content_filters/*.json', 'content_filters'),   # Add content filters JSON files
-    ('content_filters/builtin/*.json', 'content_filters/builtin')  # Add builtin filter packages
+    ('content_filters/builtin/*.json', 'content_filters/builtin'),  # Add builtin filter packages
+    ('uploads', 'uploads'),  # Add uploads directory
+    ('cardshark.sqlite', '.')  # Add SQLite database file
 ]
 
 # Create empty KoboldCPP directory structure but don't include existing files

@@ -70,7 +70,9 @@ class LoreHandler:
                         'position': self._convert_position(entry.get('position', self.default_position)),
                         'insertion_order': entry.get('insertion_order', 0),
                         'case_sensitive': entry.get('case_sensitive', False),
-                        'name': entry.get('name', '')
+                        'name': entry.get('name', ''),
+                        'has_image': entry.get('has_image', False), # Add has_image
+                        'image_uuid': entry.get('image_uuid', '') # Add image_uuid
                     }
                     
                     # Only add entries with content and at least one key

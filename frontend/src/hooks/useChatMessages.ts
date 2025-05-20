@@ -9,8 +9,10 @@ import { APIConfig } from '../types/api';
 import { ChatStorage } from '../services/chatStorage';
 import { toast } from 'sonner'; // Import toast
 import { generateUUID } from '../utils/generateUUID'; // Ensure this is imported
-import { CharacterCard } from '../types/schema'; // Import CharacterCard type
+import { CharacterCard, LoreEntry } from '../types/schema'; // Import CharacterCard and LoreEntry types
 import { substituteVariables } from '../utils/variableUtils'; // Import for variable substitution
+import { useChat } from '../contexts/ChatContext'; // Import useChat
+import { apiService } from '../services/apiService'; // Import apiService
 
 // --- Interfaces ---
 interface ReasoningSettings {
@@ -146,6 +148,7 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
 
   // Get API and Settings contexts
   const { apiConfig: globalApiConfig } = useAPIConfig(); // Get the globally active config
+  const { trackLoreImages } = useChat(); // Get trackLoreImages from ChatContext
 
   // Toast for character load
   useEffect(() => {
@@ -288,6 +291,23 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
 
       const finalContextWindow = { ...prev.lastContextWindow, type: contextWindowType, finalResponse: sanitizeMessageContent(finalContent), completionTime: new Date().toISOString(), totalChunks: receivedChunks };
       clearStreamTimeout(); // Clear timeout on successful completion
+      
+      // After generation is complete, check for lore triggers
+      if (effectiveCharacterData?.data?.character_uuid && finalContent) {
+        apiService.extractLoreTriggers(effectiveCharacterData, finalContent)
+          .then((response: { success: boolean; matched_entries: LoreEntry[] }) => {
+            if (response && response.success && response.matched_entries && response.matched_entries.length > 0) {
+              if (effectiveCharacterData.data.character_uuid) { // Ensure UUID is still valid
+                 trackLoreImages(response.matched_entries, effectiveCharacterData.data.character_uuid);
+              }
+            }
+          })
+          .catch((err: Error) => {
+            console.error("Error extracting lore triggers:", err);
+            // Optionally set an error state or toast notification
+          });
+      }
+      
       return { ...prev, messages: finalMessages, isGenerating: false, generatingId: null, lastContextWindow: finalContextWindow };
     });
   };
@@ -732,6 +752,22 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
           // Pass original content for variation tracking if available
           const originalContent = messageToRegenerate.variations ? messageToRegenerate.variations[0] : messageToRegenerate.content;
           setGenerationComplete(messageToRegenerate.id, finalContent, 'regeneration_complete', receivedChunks, originalContent);
+          
+          // Lore trigger extraction for regenerated message
+          if (effectiveCharacterData?.data?.character_uuid && finalContent) {
+            apiService.extractLoreTriggers(effectiveCharacterData, finalContent)
+              .then((response: { success: boolean; matched_entries: LoreEntry[] }) => {
+                if (response && response.success && response.matched_entries && response.matched_entries.length > 0) {
+                  if (effectiveCharacterData.data.character_uuid) { // Ensure UUID is still valid
+                     trackLoreImages(response.matched_entries, effectiveCharacterData.data.character_uuid);
+                  }
+                }
+              })
+              .catch((err: Error) => {
+                console.error("Error extracting lore triggers after regeneration:", err);
+              });
+          }
+
           // Save/append after successful regeneration only if it's a real character
            if (!isGenericAssistant) {
              setState(prev => {
@@ -858,6 +894,22 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
         response, messageToVary.id, false, // isThinking = false
         (finalContent, receivedChunks) => {
           setGenerationComplete(messageToVary.id, finalContent, 'variation_complete', receivedChunks, originalContent);
+
+          // Lore trigger extraction for varied message
+          if (effectiveCharacterData?.data?.character_uuid && finalContent) {
+            apiService.extractLoreTriggers(effectiveCharacterData, finalContent)
+              .then((response: { success: boolean; matched_entries: LoreEntry[] }) => {
+                if (response && response.success && response.matched_entries && response.matched_entries.length > 0) {
+                  if (effectiveCharacterData.data.character_uuid) { // Ensure UUID is still valid
+                     trackLoreImages(response.matched_entries, effectiveCharacterData.data.character_uuid);
+                  }
+                }
+              })
+              .catch((err: Error) => {
+                console.error("Error extracting lore triggers after variation:", err);
+              });
+          }
+
           // Save/append after successful variation only if it's a real character
            if (!isGenericAssistant) {
              setState(prev => {
@@ -1161,7 +1213,6 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
      const sanitizedNewContent = sanitizeMessageContent(newContent);
      setState(prev => {
        let messageUpdated = false; // Renamed from updatedMessage for clarity with the boolean flag
-       let finalUpdatedMessage: Message | null = null; // To store the fully updated message object
 
        const newMessages = prev.messages.map(msg => {
          if (msg.id === messageId) {
@@ -1194,7 +1245,6 @@ export function useChatMessages(characterData: CharacterData | null, options?: {
                status: 'complete' as Message['status'] // Mark as complete since it's an edit
              };
            }
-           finalUpdatedMessage = tempUpdatedMessage; // Store the fully processed message
            return tempUpdatedMessage;
          }
          return msg;

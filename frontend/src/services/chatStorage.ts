@@ -275,11 +275,15 @@ export class ChatStorage {
    * Saves a chat session
    */
   static async saveChat(
-    character: CharacterCard, 
-    messages: Message[], 
+    character: CharacterCard,
+    messages: Message[],
     currentUser: UserProfile | null,
     apiInfo: any = null,
-    backgroundSettings: any = null  // Added parameter for background settings
+    backgroundSettings: any = null,  // Existing parameter
+    lorePersistenceData?: { // New optional parameter for lore data
+      triggeredLoreImages: any[]; // Use specific type if available, e.g., TriggeredLoreImage[]
+      currentDisplayedImage?: { type: 'character' | 'lore'; entryId?: string; imageUuid?: string };
+    }
   ): Promise<any> {
     if (!character) {
       console.error('Cannot save chat: No character provided');
@@ -312,7 +316,10 @@ export class ChatStorage {
           lastUser: currentUser, // Corrected key name
           api_info: apiInfo,
           metadata: {
-            backgroundSettings: backgroundSettings,  // Add background settings to metadata
+            backgroundSettings: backgroundSettings,
+            // Add lore persistence data to metadata
+            triggeredLoreImages: lorePersistenceData?.triggeredLoreImages,
+            currentDisplayedImage: lorePersistenceData?.currentDisplayedImage,
           }
         }),
       });

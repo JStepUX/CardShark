@@ -8,6 +8,15 @@ import { PromptHandler } from '../handlers/promptHandler';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
 import { useContentFilter } from '../hooks/useContentFilter';
+import {
+  TriggeredLoreImage,
+  AvailablePreviewImage,
+  processLoreEntriesForImageTracking, // Import the function
+  getAvailableImagesForPreview,     // Import the function
+  resetTriggeredImages as resetGlobalTriggeredImages, // Keeping for now, will be removed if loreHandler is made pure
+  getGlobalTriggeredLoreImages // Keeping for now
+} from '../handlers/loreHandler';
+import { LoreEntry } from '../types/schema'; // Ensure LoreEntry is imported
 
 // Define ReasoningSettings interface
 interface ReasoningSettings {
@@ -34,6 +43,9 @@ interface ChatContextType {
   lastContextWindow: any;
   generatingId: string | null;
   reasoningSettings: ReasoningSettings;
+  triggeredLoreImages: TriggeredLoreImage[];
+  availablePreviewImages: AvailablePreviewImage[];
+  currentPreviewImageIndex: number;
 
   // Message Management
   updateMessage: (messageId: string, content: string) => void;
@@ -52,6 +64,9 @@ interface ChatContextType {
   loadExistingChat: (chatId: string) => Promise<void>;
   createNewChat: () => Promise<void>;
   updateReasoningSettings: (settings: ReasoningSettings) => void;
+  navigateToPreviewImage: (index: number) => void;
+  trackLoreImages: (matchedEntries: LoreEntry[], characterUuid: string) => void; // Added characterUuid
+  resetTriggeredLoreImagesState: () => void; // Renamed for clarity within context
   
   // Error Management
   clearError: () => void;
@@ -71,6 +86,11 @@ export const ChatProvider: React.FC<{
     
     // Initialize state
     const [messages, setMessages] = useState<Message[]>([]);
+    const messagesRef = useRef<Message[]>(messages);
+
+    useEffect(() => {
+      messagesRef.current = messages;
+    }, [messages]);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -88,6 +108,9 @@ export const ChatProvider: React.FC<{
       }
       return DEFAULT_REASONING_SETTINGS;
     });
+    const [triggeredLoreImages, setTriggeredLoreImages] = useState<TriggeredLoreImage[]>([]);
+    const [availablePreviewImages, setAvailablePreviewImages] = useState<AvailablePreviewImage[]>([]);
+    const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState<number>(0);
 
   // Refs for managing generation and debounced saves
   const currentGenerationRef = useRef<AbortController | null>(null);
@@ -118,6 +141,20 @@ export const ChatProvider: React.FC<{
         .catch(err => console.error('Error saving context window:', err));
     }
   }, [lastContextWindow]);
+
+  // Reset Triggered Lore Images State
+  const resetTriggeredLoreImagesState = useCallback(() => {
+    resetGlobalTriggeredImages();
+    setTriggeredLoreImages([]);
+    
+    const charImgPath = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
+      ? `/api/character-image/${characterData.data.character_uuid}.png`
+      : '';
+      
+    const defaultAvailableImages = getAvailableImagesForPreview(charImgPath);
+    setAvailablePreviewImages(defaultAvailableImages);
+    setCurrentPreviewImageIndex(0);
+  }, [characterData, getAvailableImagesForPreview]);
   
   // Load chat when character changes
   useEffect(() => {
@@ -131,6 +168,7 @@ export const ChatProvider: React.FC<{
     }
     
     console.log('Character changed, loading chat for:', characterData.data.name);
+    resetTriggeredLoreImagesState(); // Reset lore images when character changes
     loadChatForCharacter();
     
     // Function to load character's chat
@@ -152,6 +190,37 @@ export const ChatProvider: React.FC<{
           if (response.metadata?.chat_metadata?.lastUser) {
             setCurrentUser(response.metadata.chat_metadata.lastUser);
           }
+          
+          // Restore Lore Image Data
+          let loadedTriggeredLoreImages: TriggeredLoreImage[] = [];
+          if (response.metadata?.chat_metadata?.triggeredLoreImages) {
+            loadedTriggeredLoreImages = response.metadata.chat_metadata.triggeredLoreImages;
+            setTriggeredLoreImages(loadedTriggeredLoreImages); 
+          }
+          
+          const charImgPath = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
+            ? `/api/character-image/${characterData.data.character_uuid}.png`
+            : '';
+          const newAvailableImages = getAvailableImagesForPreview(charImgPath); 
+          setAvailablePreviewImages(newAvailableImages);
+ 
+          if (response.metadata?.chat_metadata?.currentDisplayedImage && newAvailableImages.length > 0) {
+            const savedDisplay = response.metadata.chat_metadata.currentDisplayedImage;
+            const foundIndex = newAvailableImages.findIndex(img =>
+              img.type === savedDisplay.type &&
+              (img.type === 'character' || (img.entryId === savedDisplay.entryId && img.imageUuid === savedDisplay.imageUuid))
+            );
+            if (foundIndex !== -1) {
+              setCurrentPreviewImageIndex(foundIndex);
+            } else {
+              setCurrentPreviewImageIndex(0); // Default to character image
+            }
+          } else if (newAvailableImages.length > 0) {
+            setCurrentPreviewImageIndex(0); // Default to character image
+          } else {
+            setCurrentPreviewImageIndex(0); // No images
+          }
+
           setLastContextWindow({
             type: 'loaded_chat',
             timestamp: new Date().toISOString(),
@@ -177,8 +246,18 @@ export const ChatProvider: React.FC<{
             firstMessage: characterData.data.first_mes,
             originalLoadError: response.error
           });
-          saveChat([firstMessage]);
+          saveChat([firstMessage]); 
           setError(null);
+          // Ensure preview images are reset/set to default for a new chat from first_mes
+          const charImgPath = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
+            ? `/api/character-image/${characterData.data.character_uuid}.png`
+            : '';
+          const defaultAvailable = charImgPath ? [{ type: 'character' as 'character', src: charImgPath }] : [];
+          setAvailablePreviewImages(defaultAvailable);
+          setCurrentPreviewImageIndex(0);
+          setTriggeredLoreImages([]);
+
+
         // Case 3: Any other load failure (not success, not recoverable with first_mes) OR recoverable but no first_mes
         } else {
           console.error('Failed to load chat. Response:', response, 'Character has first_mes:', !!characterData?.data?.first_mes);
@@ -208,18 +287,9 @@ export const ChatProvider: React.FC<{
         setIsLoading(false);
       }
     }
-  }, [characterData]);
+  }, [characterData, resetTriggeredLoreImagesState, getAvailableImagesForPreview]);
   
-  // Create debounced save function
-  const debouncedSave = MessageUtils.createDebouncedSave(
-    (messages: Message[]) => {
-      saveChat(messages);
-    },
-    500 // Add the debounce delay parameter
-  );
-  
-  // Save chat function
-        
+  // Save chat function - defined before debouncedSave
   const saveChat = useCallback(async (messageList: Message[]) => {
     if (!characterData?.data?.name || !autoSaveEnabled.current) {
       console.debug('Save aborted: no character data name or autoSave disabled');
@@ -229,10 +299,8 @@ export const ChatProvider: React.FC<{
     try {
       console.debug(`Executing save for ${messageList.length} messages`);
       
-      // Clone the message list to avoid any state mutation issues
       const messagesToSave = JSON.parse(JSON.stringify(messageList));
       
-      // Create consistent API info
       const apiInfo = apiConfig ? {
         provider: apiConfig.provider,
         model: apiConfig.model || 'unknown',
@@ -240,15 +308,34 @@ export const ChatProvider: React.FC<{
         templateId: apiConfig.templateId || 'unknown',
         enabled: apiConfig.enabled
       } : null;
+
+      let currentDisplayedImage: { type: 'character' | 'lore'; entryId?: string; imageUuid?: string } | undefined = undefined;
+      if (availablePreviewImages && availablePreviewImages.length > 0 && currentPreviewImageIndex < availablePreviewImages.length) {
+        const currentImage = availablePreviewImages[currentPreviewImageIndex];
+        currentDisplayedImage = {
+          type: currentImage.type,
+          ...(currentImage.type === 'lore' && { // Conditionally add properties for 'lore' type
+            entryId: currentImage.entryId,
+            imageUuid: currentImage.imageUuid,
+          }),
+        };
+      }
+ 
+      const lorePersistenceData = {
+        triggeredLoreImages: triggeredLoreImages, 
+        currentDisplayedImage: currentDisplayedImage,
+      };
       
       console.debug('Saving with API info:', apiInfo ? apiConfig?.provider : 'none');
+      console.debug('Saving with Lore Persistence Data:', lorePersistenceData);
       
-      // Make a single saveChat call with proper debug info
       const result = await ChatStorage.saveChat(
-        characterData, 
-        messagesToSave, 
-        currentUser, 
-        apiInfo
+        characterData,
+        messagesToSave,
+        currentUser,
+        apiInfo,
+        null, 
+        lorePersistenceData 
       );
       
       console.debug('Save result:', result?.success ? 'success' : 'failed');
@@ -257,8 +344,20 @@ export const ChatProvider: React.FC<{
       console.error('Error saving chat:', err);
       return false;
     }
-  }, [characterData, currentUser, apiConfig]);
+  }, [characterData, currentUser, apiConfig, availablePreviewImages, currentPreviewImageIndex, triggeredLoreImages]);
 
+  // Create debounced save function
+  const debouncedSave = MessageUtils.createDebouncedSave(
+    (messages: Message[]): Promise<boolean> => { // Callback returns Promise<boolean>
+      return saveChat(messages) // saveChat itself returns Promise<boolean>
+        .catch(error => {
+          console.error("Error in debounced saveChat execution:", error);
+          throw error; // Re-throw the error to be caught by the debouncer if it handles rejections
+        });
+    },
+    500 // Add the debounce delay parameter
+  );
+  
   // Append a message to the chat
   const appendMessage = useCallback(async (message: Message) => {
     if (!characterData?.data?.name) {
@@ -269,14 +368,12 @@ export const ChatProvider: React.FC<{
     try {
       console.debug(`Appending message ${message.id} (${message.role}) to chat`);
       
-      // Ensure message has required fields
       const messageToAppend = {
         ...message,
         id: message.id || crypto.randomUUID(),
         timestamp: message.timestamp || Date.now()
       };
       
-      // Make API call
       const result = await ChatStorage.appendMessage(characterData, messageToAppend);
       
       console.debug(`Append result for ${messageToAppend.id}:`, result?.success ? 'success' : 'failed');
@@ -312,10 +409,8 @@ export const ChatProvider: React.FC<{
         };
       }
       
-      // Add content filtering parameters to the API config
       const contentFilterParams = getRequestParameters();
       
-      // Merge content filter parameters into the config
       return {
         ...fullConfig,
         ...contentFilterParams
@@ -343,7 +438,7 @@ export const ChatProvider: React.FC<{
         rep_pen_slope: 0.7,
         sampler_order: [6, 0, 1, 3, 4, 2, 5]
       },
-      ...getRequestParameters() // Add content filtering parameters to default config
+      ...getRequestParameters() 
     };
   }, [getRequestParameters]);
   
@@ -351,27 +446,23 @@ export const ChatProvider: React.FC<{
   const generateReasoningResponse = useCallback(async (prompt: string) => {
     if (!reasoningSettings.enabled || !characterData) return null;
     
-    // Create thinking message
     const thinkingId = crypto.randomUUID();
     const thinkingMessage: Message = {
       id: thinkingId,
-      role: 'thinking' as 'system', // Cast to acceptable role type
+      role: 'thinking' as 'system', 
       content: '',
       timestamp: Date.now()
     };
     
-    // Add thinking message to state
     setMessages((prev: Message[]) => [...prev, thinkingMessage]);
     setIsGenerating(true);
     setGeneratingId(thinkingId);
     
     try {
-      // Guard against undefined characterData
       if (!characterData) {
         throw new Error('No character data available for generating a response');
       }
     
-      // Prepare reasoning prompt with proper null checks
       const reasoningInstructions = reasoningSettings?.instructions || DEFAULT_REASONING_SETTINGS.instructions || '';
       const characterName = characterData.data?.name || 'Character';
       const userName = currentUser?.name || 'User';
@@ -380,11 +471,9 @@ export const ChatProvider: React.FC<{
         .replace(/\{\{char\}\}/g, characterName)
         .replace(/\{\{user\}\}/g, userName);
       
-      // Fixed: Proper type handling when mapping message roles
-      const contextMessages = messages
+      const contextMessages = messagesRef.current 
         .filter(msg => msg.role !== 'thinking')
         .map(({ role, content }) => {
-          // Explicitly construct a valid role
           let validRole: 'user' | 'assistant' | 'system' = 'system';
           if (role === 'user') {
             validRole = 'user';
@@ -394,25 +483,20 @@ export const ChatProvider: React.FC<{
           return { role: validRole, content };
         });
       
-      // Generate thinking content
       const thinkingPrompt = `${reasoningPrompt}\n\nUser's message: ${prompt}`;
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
-      
-      const response = await PromptHandler.generateChatResponse(
+        const response = await PromptHandler.generateChatResponse(
         characterData,
         thinkingPrompt,
         contextMessages,
+        currentUser?.name || 'User', 
         formattedAPIConfig,
-        // Add signal if using AbortController
         currentGenerationRef.current?.signal
       );
-        // Process streaming response
       let thinkingContent = '';
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        // Add the chunk to the thinking content
         const rawThinkingContent = thinkingContent + chunk;
         
-        // Apply client-side filtering if needed
         thinkingContent = shouldUseClientFiltering 
           ? filterText(rawThinkingContent) 
           : rawThinkingContent;
@@ -425,7 +509,6 @@ export const ChatProvider: React.FC<{
         });
       }
       
-      // Update final thinking message
       setMessages((prev: Message[]) => {
         const updatedMessages = prev.map(msg => 
           msg.id === thinkingId ? {...msg, content: thinkingContent} : msg
@@ -439,7 +522,7 @@ export const ChatProvider: React.FC<{
       setError(err instanceof Error ? err.message : 'Failed to generate thinking');
       return null;
     }
-  }, [characterData, messages, reasoningSettings, currentUser, apiConfig, prepareAPIConfig, filterText, shouldUseClientFiltering]);
+  }, [characterData, reasoningSettings, currentUser, apiConfig, prepareAPIConfig, filterText, shouldUseClientFiltering, messagesRef]);
   
   // Update message content
   const updateMessage = useCallback((messageId: string, content: string) => {
@@ -471,11 +554,11 @@ export const ChatProvider: React.FC<{
   
       if (isCompletedEdit) {
         console.log(`Completed edit detected for message ${messageId}, saving now`);
-        saveChat(newMessages); //Direct save is OK.
+        saveChat(newMessages); 
         appendMessage({ ...newMessages[msgIndex], timestamp: Date.now() });
       } else {
         console.log(`Potential ongoing edit for message ${messageId}, using debounced save`);
-        debouncedSave(messageId, newMessages); // Pass messageId and newMessages
+        debouncedSave(newMessages); 
       }
   
       setLastContextWindow(updatedContextWindow);
@@ -484,13 +567,11 @@ export const ChatProvider: React.FC<{
   }, [characterData, appendMessage, debouncedSave, saveChat]);
   
   // Delete a message
-        
   const deleteMessage = useCallback((messageId: string) => {
     setMessages((prev: Message[]) => {
       const newMessages = prev.filter(msg => msg.id !== messageId);
   
-      // Debounced save, passing messageId and the NEW messages array
-     debouncedSave(messageId, newMessages); // Use debouncedSave here
+     debouncedSave(newMessages); 
   
       setLastContextWindow({
         type: 'message_deleted',
@@ -502,10 +583,8 @@ export const ChatProvider: React.FC<{
   
       return newMessages;
     });
-  }, [characterData, debouncedSave]); //  debouncedSave in the dependency arra
-
-    
-  
+  }, [characterData, debouncedSave]);
+ 
   // Add a new message
   const addMessage = useCallback((message: Message) => {
     const finalMessage = !message.id ? { ...message, id: crypto.randomUUID() } : message;
@@ -522,8 +601,7 @@ export const ChatProvider: React.FC<{
         characterName: characterData?.data?.name || 'Unknown'
       });
   
-      // Debounced save after adding a message
-      debouncedSave(finalMessage.id, newMessages); // Use debouncedSave here
+      debouncedSave(newMessages); 
   
       return newMessages;
     });
@@ -536,7 +614,7 @@ export const ChatProvider: React.FC<{
   // Handle generation errors
   const handleGenerationError = useCallback((err: any, messageId: string) => {
     console.error('Error during generation:', err);
-    let updatedMessages: Message[] = []; // Initialize here
+    let updatedMessages: Message[] = []; 
 
     if (err instanceof DOMException && err.name === 'AbortError') {
       console.log('Generation was aborted by user - keeping current content');
@@ -553,7 +631,7 @@ export const ChatProvider: React.FC<{
 
         console.log(`Preserving current content: ${currentContent.substring(0, 50)}...`);
 
-        updatedMessages = [...prev]; // Assign to the outer-scope variable
+        updatedMessages = [...prev]; 
         updatedMessages[messageIndex] = {
           ...currentMessage,
           content: currentContent,
@@ -572,10 +650,10 @@ export const ChatProvider: React.FC<{
         return updatedMessages;
       });
 
-      saveChat(updatedMessages); // Pass updatedMessages
+      saveChat(updatedMessages); 
     } else {
       setMessages((prev: Message[]) => {
-        updatedMessages = prev.map(msg => // Assign to the outer-scope variable
+        updatedMessages = prev.map(msg => 
           msg.id === messageId ? { ...msg, content: "Generation Failed", aborted: true } : msg
         );
         return updatedMessages;
@@ -589,12 +667,12 @@ export const ChatProvider: React.FC<{
         error: err instanceof Error ? err.message : 'Unknown error during generation'
       });
 
-      saveChat(updatedMessages); // Pass updatedMessages
+      saveChat(updatedMessages); 
     }
 
     setIsGenerating(false);
     setGeneratingId(null);
-  }, [saveChat]); // saveChat needs to be in the dependency array
+  }, [saveChat]);
   
   // Create new chat function
   const createNewChat = useCallback(async () => {
@@ -603,10 +681,8 @@ export const ChatProvider: React.FC<{
     console.log('Creating new chat');
     
     try {
-      // Clear context window
       await ChatStorage.clearContextWindow();
       
-      // Clear messages
       setMessages([]);
       setLastContextWindow({
         type: 'new_chat',
@@ -615,7 +691,6 @@ export const ChatProvider: React.FC<{
       });
       
       if (characterData?.data.first_mes) {
-        // Substitute variables in first_mes
         const characterName = characterData.data.name || 'Character';
         const userName = currentUser?.name || 'User';
         const substitutedContent = characterData.data.first_mes
@@ -652,55 +727,47 @@ export const ChatProvider: React.FC<{
   }, [createNewChat]);
   
   const updateAndSaveMessages = useCallback((newMessages: Message[]) => {
-    // First update state
     setMessages(newMessages);
     
-    // Then schedule a save (not immediate, to avoid race conditions)
     setTimeout(() => {
       if (characterData) {
         saveChat(newMessages);
       }
-    }, 50); // Short delay to ensure state is updated first
+    }, 50); 
   }, [characterData, saveChat]);
-
+ 
   // Generate response with support for /new command
   const generateResponse = useCallback(async (prompt: string) => {
     if (!characterData || isGenerating) return;
 
     console.log('Starting generation for prompt:', prompt);
 
-    // Special command for new chat
     if (prompt === '/new' && createNewChatRef.current) {
       createNewChatRef.current();
       return;
     }
 
-    // Create user and assistant messages
     const userMessage = MessageUtils.createUserMessage(prompt);
     const assistantMessage = MessageUtils.createAssistantMessage();
 
-    // Update state with new messages (No need for debouncedSave here, we'll save at the end)
     setMessages((prev: Message[]) => [...prev, userMessage, assistantMessage]);
     setIsGenerating(true);
     setGeneratingId(assistantMessage.id);
 
     await appendMessage(userMessage);
 
-    // Stream generation
     let bufferTimer: NodeJS.Timeout | null = null;
 
     const abortController = new AbortController();
     currentGenerationRef.current = abortController;
 
     try {
-      // Check if reasoning is enabled and generate reasoning first
       let reasoningContent = null;
       if (reasoningSettings.enabled) {
         reasoningContent = await generateReasoningResponse(prompt);
       }
 
-      // Format context for API with proper typing
-      const contextMessages = messages
+      const contextMessages = messagesRef.current 
         .filter(msg => msg.role !== 'thinking')
         .map(({ role, content }) => {
           let validRole: 'user' | 'assistant' | 'system' = 'system';
@@ -712,7 +779,6 @@ export const ChatProvider: React.FC<{
           return { role: validRole, content };
         });
 
-      // If we have reasoning content, include it as system role
       if (reasoningContent) {
         contextMessages.push({
           role: 'system',
@@ -722,7 +788,6 @@ export const ChatProvider: React.FC<{
 
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
 
-      // Update context window
       setLastContextWindow({
         type: 'generation_starting',
         timestamp: new Date().toISOString(),
@@ -732,27 +797,25 @@ export const ChatProvider: React.FC<{
         reasoningEnabled: reasoningSettings.enabled,
         hasReasoningContent: !!reasoningContent
       });
-
-      // Start generation request
+ 
       const response = await PromptHandler.generateChatResponse(
         characterData,
         prompt,
         contextMessages,
-        formattedAPIConfig,
+        currentUser?.name || 'User', 
+        formattedAPIConfig, 
         abortController.signal
       );
-
+ 
       if (!response.ok) {
-        // Throw error using response status and text
         throw new Error(`API Error: ${response.status} ${await response.text()}`);
-      }      // Process streaming response using the async generator
+      }      
       let content = '';
       let buffer = '';
       let isFirstChunk = true;
 
       bufferTimer = setInterval(() => {
         if (buffer.length > 0) {
-          // Debug buffer contents to track streaming
           console.log(`Processing buffer of length ${buffer.length}, first ${Math.min(20, buffer.length)} chars: "${buffer.substring(0, 20)}..."`);
           
           let processedBuffer = buffer;
@@ -761,23 +824,20 @@ export const ChatProvider: React.FC<{
             isFirstChunk = false;
           }
           
-          // Get raw content before filtering
           const rawContent = content + processedBuffer;
           
-          // Apply client-side filtering if needed
           const newContent = shouldUseClientFiltering 
             ? filterText(rawContent) 
             : rawContent;
             
           buffer = '';
           
-          // Update message with new content - Fix TypeScript error by ensuring all returned messages are of type Message
-          setMessages((prev: Message[]) => {
-            const updatedMessages = prev.map(msg =>
-              msg.id === assistantMessage.id ? { 
-                ...msg, 
+          setMessages((prevMessages: Message[]) => {
+            const updatedMessages = prevMessages.map((msg: Message) =>
+              msg.id === assistantMessage.id ? {
+                ...msg,
                 content: newContent,
-                status: 'streaming' as const // Use const assertion for literal type
+                status: 'streaming' as const 
               } : msg
             );
             return updatedMessages;
@@ -786,9 +846,7 @@ export const ChatProvider: React.FC<{
         }
       }, 50);
       
-      // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        // Debug chunks received
         if (chunk) {
           console.log(`Response chunk received: "${chunk.substring(0, 20)}...", length: ${chunk.length}`);
         } else {
@@ -796,27 +854,22 @@ export const ChatProvider: React.FC<{
         }
         buffer += chunk || '';
       }
-        // Final update
       if (buffer.length > 0) {
-        let processedBuffer = buffer; // Also handle final buffer properly
+        let processedBuffer = buffer; 
         
-        // Apply the same whitespace trimming logic for the final buffer if it's the first chunk
         if (isFirstChunk && content === '') {
           processedBuffer = processedBuffer.replace(/^\s+/, '');
           isFirstChunk = false;
         }
         
-        // Get raw content before filtering
         const rawContent = content + processedBuffer;
         
-        // Apply client-side filtering if needed
         content = shouldUseClientFiltering 
           ? filterText(rawContent) 
           : rawContent;
       }
 
-      // Define finalMessages here before using it
-      const finalMessages = messages.map(msg =>
+      const finalMessages = messagesRef.current.map((msg: Message) =>
         msg.id === assistantMessage.id ? {
           ...msg,
           content,
@@ -825,7 +878,6 @@ export const ChatProvider: React.FC<{
         } : msg
       );
 
-      // Finalize message
       setIsGenerating(false);
       setGeneratingId(null);
       setLastContextWindow((currentWindow: any) => ({
@@ -834,32 +886,33 @@ export const ChatProvider: React.FC<{
         completionTime: new Date().toISOString()
       }));
 
-      // Save messages
-      updateAndSaveMessages(finalMessages); // updateAndSaveMessages calls setMessages internally
+      updateAndSaveMessages(finalMessages); 
 
     } catch (err) {
       handleGenerationError(err, assistantMessage.id);
     } finally {
       currentGenerationRef.current = null;
 
-      // Ensure buffer timer is cleared
       if (bufferTimer) {
         clearInterval(bufferTimer);
         bufferTimer = null;
       }
       console.log('Generation complete');
-    }  }, [  // Corrected dependency array
-    appendMessage,
-    characterData,
-    generateReasoningResponse,
-    handleGenerationError,
-    isGenerating,
-    prepareAPIConfig,
-    reasoningSettings.enabled,
-    apiConfig,
-    updateAndSaveMessages,
-    messages,
-    filterText,
+    } 
+  }, [ 
+    characterData, 
+    currentUser, 
+    apiConfig, 
+    reasoningSettings, 
+    isGenerating, 
+    messagesRef, 
+    appendMessage, 
+    generateReasoningResponse, 
+    handleGenerationError, 
+    prepareAPIConfig, 
+    saveChat, 
+    updateAndSaveMessages, 
+    filterText, 
     shouldUseClientFiltering
   ]);
   
@@ -881,7 +934,7 @@ export const ChatProvider: React.FC<{
       return;
     }
 
-    const targetIndex = messages.findIndex(msg => msg.id === message.id);
+    const targetIndex = messagesRef.current.findIndex((msg: Message) => msg.id === message.id);
     if (targetIndex === -1) {
       console.error(`Message with ID ${message.id} not found`);
       return;
@@ -892,11 +945,11 @@ export const ChatProvider: React.FC<{
     console.log(`Regenerating message at index ${targetIndex}`);
 
     try {
-      // Get context messages up to the target message
-      const contextMessages = messages
+      const contextMessages = messagesRef.current 
         .slice(0, targetIndex)
-        .filter(msg => msg.role !== 'thinking')
-        .map(({ role, content }) => {
+        .filter((msg: Message) => msg.role !== 'thinking')
+        .map((msg: Message) => {
+          const { role, content } = msg;
           let validRole: 'user' | 'assistant' | 'system' = 'system';
           if (role === 'user') {
             validRole = 'user';
@@ -906,19 +959,17 @@ export const ChatProvider: React.FC<{
           return { role: validRole, content };
         });
 
-      // Find the most recent user prompt
       let promptText = "Provide a fresh response that builds on the existing story without repeating previous details verbatim. ##!important:avoid acting,speaking, or thinking for {{user}}!##";
       let promptSource = "default";
 
       for (let i = targetIndex - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') {
-          promptText = messages[i].content;
+        if (messagesRef.current[i].role === 'user') { 
+          promptText = messagesRef.current[i].content; 
           promptSource = `message_${i}`;
           break;
         }
       }
 
-      // Update context window
       setLastContextWindow({
         type: 'regeneration',
         timestamp: new Date().toISOString(),
@@ -932,49 +983,44 @@ export const ChatProvider: React.FC<{
         config: apiConfig
       });
 
-      // Generate new content
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
       const abortController = new AbortController();
       currentGenerationRef.current = abortController;
       
-      // Call generateChatResponse which returns a Response object
       const response = await PromptHandler.generateChatResponse(
         characterData,
         promptText,
         contextMessages,
+        currentUser?.name || 'User', 
         formattedAPIConfig,
         abortController.signal
       );
 
       if (!response.ok) {
-        // Throw error using response status and text
         throw new Error(`Generation failed - check API settings: ${response.status} ${await response.text()}`);
       }
 
-      // Stream response using the async generator
       let newContent = '';
       let buffer = '';
-      let bufferTimer: NodeJS.Timeout | null = null;      // Iterate over the streamResponse async generator
+      let bufferTimer: NodeJS.Timeout | null = null;      
       for await (const chunk of PromptHandler.streamResponse(response)) {
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
               const rawContent = newContent + buffer;
               
-              // Apply client-side filtering if needed
               const content = shouldUseClientFiltering 
                 ? filterText(rawContent) 
                 : rawContent;
                 
               buffer = '';
-              setMessages((prev: Message[]) => {
-                const updatedMessages = [...prev];
-                // Ensure targetIndex is valid before updating
+              setMessages((prevMessages: Message[]) => {
+                const updatedMessages = [...prevMessages];
                 if (targetIndex >= 0 && targetIndex < updatedMessages.length) {
                    updatedMessages[targetIndex] = {
                      ...updatedMessages[targetIndex],
                      content,
-                     status: 'streaming' as const // Add status with type assertion
+                     status: 'streaming' as const 
                    };
                 }
                 return updatedMessages;
@@ -983,57 +1029,45 @@ export const ChatProvider: React.FC<{
             }
           }, 50);
         }
-        // Debug chunks in regeneration too
         console.log(`Regeneration chunk received: "${chunk?.substring(0, 20)}...", length: ${chunk.length}`);
         buffer += chunk || '';
       }
 
-      // Clean up buffer timer
       if (bufferTimer) {
         clearInterval(bufferTimer);
         bufferTimer = null;
-      }      // Add any remaining buffered content
+      }      
       if (buffer.length > 0) {
         const rawContent = newContent + buffer;
         
-        // Apply client-side filtering if needed
         newContent = shouldUseClientFiltering 
           ? filterText(rawContent) 
           : rawContent;
       }
       
-      // Now that streaming is complete, handle variations correctly - only once at the end
+      const originalMessage = messagesRef.current.find((msg: Message) => msg.id === message.id); 
       
-      // Keep a local copy of the current message state to compare
-      const originalMessage = messages.find(msg => msg.id === message.id);
-      
-      // Check if we actually have new content to add as a variation
       if (originalMessage && newContent !== originalMessage.content) {
         console.log("Creating final message with continuation content");
         
-        // Get existing variations, or initialize if none
         const variations = [...(originalMessage.variations || [originalMessage.content])];
         
-        // Only add as a new variation if it's different
         if (!variations.includes(newContent)) {
           variations.push(newContent);
         }
         
-        // Create the final message with the new content and updated variations
         const finalMessage = {
           ...originalMessage,
           content: newContent,
           variations,
           currentVariation: variations.length - 1,
-          timestamp: Date.now() // Update timestamp
+          timestamp: Date.now() 
         };
         
-        // Update messages state once with the final result
-        setMessages(prevMessages => 
-          prevMessages.map(msg => msg.id === message.id ? finalMessage : msg)
+        setMessages((prevMessages: Message[]) =>
+          prevMessages.map((msg: Message) => msg.id === message.id ? finalMessage : msg)
         );
         
-        // Update context window info
         setLastContextWindow({
           type: 'continuation_complete',
           timestamp: new Date().toISOString(),
@@ -1044,17 +1078,13 @@ export const ChatProvider: React.FC<{
           variationsCount: variations.length
         });
         
-        // Save ONCE at the end instead of for each chunk
         try {
-          // Make a single append call
           await appendMessage(finalMessage);
           
-          // Get the current state of messages after our state update
-          const currentMessages = messages.map(msg => 
+          const currentMessages = messagesRef.current.map((msg: Message) =>
             msg.id === message.id ? finalMessage : msg
           );
           
-          // Make a single save call
           await saveChat(currentMessages);
           
           console.log('Successfully saved continued message');
@@ -1075,9 +1105,20 @@ export const ChatProvider: React.FC<{
       currentGenerationRef.current = null;
       setIsGenerating(false);
       setGeneratingId(null);
-    }
-    // Corrected Dependency Array:
-  }, [characterData, isGenerating, apiConfig, messages, prepareAPIConfig, updateAndSaveMessages, appendMessage, filterText, shouldUseClientFiltering]);
+    } 
+  }, [ 
+    characterData, 
+    currentUser, 
+    apiConfig, 
+    isGenerating, 
+    messagesRef, 
+    appendMessage, 
+    handleGenerationError, 
+    prepareAPIConfig, 
+    saveChat, 
+    filterText, 
+    shouldUseClientFiltering
+  ]);
   
   // Complete continueResponse function for ChatContext.tsx
   const continueResponse = useCallback(async (message: Message) => {
@@ -1092,7 +1133,7 @@ export const ChatProvider: React.FC<{
       return;
     }
   
-    const targetIndex = messages.findIndex(msg => msg.id === message.id);
+    const targetIndex = messagesRef.current.findIndex((msg: Message) => msg.id === message.id);
     if (targetIndex === -1) {
       console.error(`Message with ID ${message.id} not found`);
       return;
@@ -1102,16 +1143,15 @@ export const ChatProvider: React.FC<{
     setGeneratingId(message.id);
     console.log(`Continuing message at index ${targetIndex}`);
   
-    // Set up abort controller for cancellation
     const abortController = new AbortController();
     currentGenerationRef.current = abortController;
   
     try {
-      // Get context messages up to and including the target message
-      const contextMessages = messages
+      const contextMessages = messagesRef.current 
         .slice(0, targetIndex + 1)
-        .filter(msg => msg.role !== 'thinking')
-        .map(({ role, content }) => {
+        .filter((msg: Message) => msg.role !== 'thinking')
+        .map((msg: Message) => {
+          const { role, content } = msg;
           let validRole: 'user' | 'assistant' | 'system' = 'system';
           if (role === 'user') {
             validRole = 'user';
@@ -1121,7 +1161,6 @@ export const ChatProvider: React.FC<{
           return { role: validRole, content };
         });
   
-      // Update context window
       setLastContextWindow({
         type: 'continuation',
         timestamp: new Date().toISOString(),
@@ -1132,52 +1171,45 @@ export const ChatProvider: React.FC<{
         originalContent: message.content
       });
   
-      // The continuation prompt should be minimal and use system role
       const continuationPrompt: { role: 'user' | 'assistant' | 'system', content: string } = {
         role: 'system',
         content: "Continue from exactly where you left off without repeating anything. Do not summarize or restart."
       };
   
-      // Add our continuation instruction to the context
       contextMessages.push(continuationPrompt);
   
-      // Generate new content
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
       
-      // Call generateChatResponse which returns a Response object
       const response = await PromptHandler.generateChatResponse(
         characterData,
-        message.content, // Pass original message content for context
+        message.content, 
         contextMessages,
+        currentUser?.name || 'User', 
         formattedAPIConfig,
         abortController.signal
       );
   
       if (!response.ok) {
-        // Throw error using response status and text
         throw new Error(`Continuation failed - check API settings: ${response.status} ${await response.text()}`);
       }
   
-      // Stream response using the async generator
-      let currentContent = message.content; // Start with existing content
+      let currentContent = message.content; 
       let buffer = '';
       let bufferTimer: NodeJS.Timeout | null = null;
-        // Iterate over the streamResponse async generator
       for await (const chunk of PromptHandler.streamResponse(response)) {
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {
             if (buffer.length > 0) {
               const rawUpdatedContent = currentContent + buffer;
               
-              // Apply client-side filtering if needed
               const updatedContent = shouldUseClientFiltering 
                 ? filterText(rawUpdatedContent) 
                 : rawUpdatedContent;
                 
               buffer = '';
-              setMessages((prev: Message[]) => {
-                const updatedMessages = [...prev];
-                const msgIndex = prev.findIndex(msg => msg.id === message.id);
+              setMessages((prevMessages: Message[]) => {
+                const updatedMessages = [...prevMessages];
+                const msgIndex = prevMessages.findIndex((msg: Message) => msg.id === message.id);
                 if (msgIndex >= 0 && msgIndex < updatedMessages.length) {
                   updatedMessages[msgIndex] = {
                     ...updatedMessages[msgIndex],
@@ -1192,57 +1224,45 @@ export const ChatProvider: React.FC<{
           }, 50);
         }
         
-        // Debug chunks in continuation too
         console.log(`Continuation chunk received: "${chunk?.substring(0, 20)}...", length: ${chunk.length}`);
         buffer += chunk || '';
       }
   
-      // Clean up buffer timer
       if (bufferTimer) {
         clearInterval(bufferTimer);
         bufferTimer = null;
-      }      // Add any remaining buffered content
+      }      
       if (buffer.length > 0) {
         const rawContent = currentContent + buffer;
         
-        // Apply client-side filtering if needed
         currentContent = shouldUseClientFiltering 
           ? filterText(rawContent) 
           : rawContent;
       }
       
-      // Now that streaming is complete, handle variations correctly - only once at the end
+      const originalMessage = messagesRef.current.find((msg: Message) => msg.id === message.id); 
       
-      // Keep a local copy of the current message state to compare
-      const originalMessage = messages.find(msg => msg.id === message.id);
-      
-      // Check if we actually have new content to add as a variation
       if (originalMessage && currentContent !== originalMessage.content) {
         console.log("Creating final message with continuation content");
         
-        // Get existing variations, or initialize if none
         const variations = [...(originalMessage.variations || [originalMessage.content])];
         
-        // Only add as a new variation if it's different
         if (!variations.includes(currentContent)) {
           variations.push(currentContent);
         }
         
-        // Create the final message with the new content and updated variations
         const finalMessage = {
           ...originalMessage,
           content: currentContent,
           variations,
           currentVariation: variations.length - 1,
-          timestamp: Date.now() // Update timestamp
+          timestamp: Date.now() 
         };
         
-        // Update messages state once with the final result
-        setMessages(prevMessages => 
-          prevMessages.map(msg => msg.id === message.id ? finalMessage : msg)
+        setMessages((prevMessages: Message[]) =>
+          prevMessages.map((msg: Message) => msg.id === message.id ? finalMessage : msg)
         );
         
-        // Update context window info
         setLastContextWindow({
           type: 'continuation_complete',
           timestamp: new Date().toISOString(),
@@ -1253,17 +1273,13 @@ export const ChatProvider: React.FC<{
           variationsCount: variations.length
         });
         
-        // Save ONCE at the end instead of for each chunk
         try {
-          // Make a single append call
           await appendMessage(finalMessage);
           
-          // Get the current state of messages after our state update
-          const currentMessages = messages.map(msg => 
+          const currentMessages = messagesRef.current.map((msg: Message) =>
             msg.id === message.id ? finalMessage : msg
           );
           
-          // Make a single save call
           await saveChat(currentMessages);
           
           console.log('Successfully saved continued message');
@@ -1285,15 +1301,18 @@ export const ChatProvider: React.FC<{
       currentGenerationRef.current = null;
       setIsGenerating(false);
       setGeneratingId(null);
-    }  }, [
-    characterData,
-    isGenerating,
-    apiConfig,
-    messages,
-    prepareAPIConfig,
-    saveChat,
-    appendMessage,
-    filterText,
+    } 
+  }, [ 
+    characterData, 
+    currentUser, 
+    apiConfig, 
+    isGenerating, 
+    messagesRef, 
+    appendMessage, 
+    handleGenerationError, 
+    prepareAPIConfig, 
+    saveChat, 
+    filterText, 
     shouldUseClientFiltering
   ]);
   
@@ -1308,12 +1327,11 @@ export const ChatProvider: React.FC<{
         stopTime: new Date().toISOString()
       }));
       
-      setIsGenerating(false); // Immediately update UI state
+      setIsGenerating(false); 
       setGeneratingId(null);
       
-      // Abort the controller which will trigger the AbortError
       currentGenerationRef.current.abort();
-      currentGenerationRef.current = null; // Clear it immediately
+      currentGenerationRef.current = null; 
     } else {
       console.warn('No active generation to stop');
     }
@@ -1321,15 +1339,15 @@ export const ChatProvider: React.FC<{
   
   // Cycle through message variations
   const cycleVariation = useCallback((messageId: string, direction: 'next' | 'prev') => {
-    setMessages((prev: Message[]) => {
-      const updatedMessages = prev.map(msg => {
+    setMessages((prevMessages: Message[]) => {
+      const updatedMessages = prevMessages.map((msg: Message) => {
         if (msg.id === messageId && msg.variations?.length) {
           return MessageUtils.cycleVariation(msg, direction);
         }
         return msg;
       });
 
-      const targetMessage = prev.find(msg => msg.id === messageId);
+      const targetMessage = prevMessages.find((msg: Message) => msg.id === messageId);
       setLastContextWindow({
         type: 'cycle_variation',
         timestamp: new Date().toISOString(),
@@ -1339,11 +1357,12 @@ export const ChatProvider: React.FC<{
         totalVariations: targetMessage?.variations?.length || 0,
         previousIndex: targetMessage?.currentVariation || 0
       });
+      
+      debouncedSave(updatedMessages);
 
-      saveChat(updatedMessages); // THIS IS THE FIX - Pass updatedMessages
       return updatedMessages;
     });
-  }, [characterData, saveChat]);
+  }, [characterData, debouncedSave, MessageUtils.cycleVariation]);
   
   // Set current user
   const setCurrentUserHandler = useCallback((user: UserProfile | null) => {
@@ -1356,8 +1375,8 @@ export const ChatProvider: React.FC<{
       characterName: characterData?.data?.name || 'Unknown'
     });
     
-    saveChat(messages);
-  }, [characterData, saveChat]);
+    saveChat(messagesRef.current); 
+  }, [characterData, saveChat, messagesRef]);
   
   // Load existing chat
   const loadExistingChat = useCallback(async (chatId: string) => {
@@ -1380,6 +1399,37 @@ export const ChatProvider: React.FC<{
         const userFromChat = data.messages.metadata?.chat_metadata?.lastUser;
         setMessages(data.messages.messages || []);
         setCurrentUser(userFromChat || currentUser);
+
+        let loadedTriggeredLoreImages: TriggeredLoreImage[] = [];
+        if (data.messages.metadata?.chat_metadata?.triggeredLoreImages) {
+          loadedTriggeredLoreImages = data.messages.metadata.chat_metadata.triggeredLoreImages;
+          setTriggeredLoreImages(loadedTriggeredLoreImages);
+        }
+
+        const charImgPath = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
+          ? `/api/character-image/${characterData.data.character_uuid}.png`
+          : '';
+        
+        const newAvailableImages = getAvailableImagesForPreview(charImgPath);
+        setAvailablePreviewImages(newAvailableImages);
+
+        if (data.messages.metadata?.chat_metadata?.currentDisplayedImage && newAvailableImages.length > 0) {
+          const savedDisplay = data.messages.metadata.chat_metadata.currentDisplayedImage;
+          const foundIndex = newAvailableImages.findIndex(img =>
+            img.type === savedDisplay.type &&
+            (img.type === 'character' || (img.entryId === savedDisplay.entryId && img.imageUuid === savedDisplay.imageUuid))
+          );
+          if (foundIndex !== -1) {
+            setCurrentPreviewImageIndex(foundIndex);
+          } else {
+            setCurrentPreviewImageIndex(0); 
+          }
+        } else if (newAvailableImages.length > 0) {
+          setCurrentPreviewImageIndex(0); 
+        } else {
+          setCurrentPreviewImageIndex(0); 
+        }
+
         setLastContextWindow({
           type: 'chat_loaded',
           timestamp: new Date().toISOString(),
@@ -1405,15 +1455,13 @@ export const ChatProvider: React.FC<{
     } finally {
       setIsLoading(false);
     }
-  }, [characterData, currentUser]);
+  }, [characterData, currentUser, getAvailableImagesForPreview, resetTriggeredLoreImagesState]);
   
   // Update reasoning settings
   const updateReasoningSettings = useCallback((settings: ReasoningSettings) => {
     try {
-      // Save to localStorage
       localStorage.setItem('cardshark_reasoning_settings', JSON.stringify(settings));
       
-      // Update state
       setReasoningSettings(settings);
       setLastContextWindow({
         type: 'reasoning_settings_updated',
@@ -1429,7 +1477,71 @@ export const ChatProvider: React.FC<{
       setError('Failed to update reasoning settings');
     }
   }, [characterData]);
-  
+ 
+  // Lore Image Preview Navigation
+  const navigateToPreviewImage = useCallback((index: number) => {
+    if (index >= 0 && index < availablePreviewImages.length) {
+      setCurrentPreviewImageIndex(index);
+    } else {
+      console.warn(`navigateToPreviewImage: Index ${index} is out of bounds for ${availablePreviewImages.length} images.`);
+      if (availablePreviewImages.length > 0) {
+        setCurrentPreviewImageIndex(0);
+      }
+    }
+  }, [availablePreviewImages]);
+ 
+  // Track Lore Images
+  const trackLoreImages = useCallback((matchedEntries: LoreEntry[], characterUuidFromHook: string) => {
+    const currentCharacterUuid = characterData?.data?.character_uuid || characterUuidFromHook;
+ 
+    if (!currentCharacterUuid) {
+      console.warn("trackLoreImages: Character UUID not available for image tracking.");
+      return;
+    }
+    
+    processLoreEntriesForImageTracking(matchedEntries, currentCharacterUuid);
+ 
+    const updatedGlobalTriggeredImages = getGlobalTriggeredLoreImages();
+    setTriggeredLoreImages(updatedGlobalTriggeredImages);
+ 
+    const charImgPath = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
+      ? `/api/character-image/${characterData.data.character_uuid}.png`
+      : '';
+    
+    const newAvailableImages = getAvailableImagesForPreview(charImgPath);
+    setAvailablePreviewImages(newAvailableImages);
+ 
+    let switchedToTriggeredImage = false;
+    for (const entry of matchedEntries) {
+      if (entry.has_image && entry.image_uuid) {
+        const triggeredImageIndex = newAvailableImages.findIndex(
+          (img) =>
+            img.type === 'lore' &&
+            img.entryId === entry.id.toString() &&
+            img.imageUuid === entry.image_uuid
+        );
+        if (triggeredImageIndex !== -1) {
+          setCurrentPreviewImageIndex(triggeredImageIndex);
+          switchedToTriggeredImage = true;
+          break; 
+        }
+      }
+    }
+ 
+    if (!switchedToTriggeredImage) {
+      if (newAvailableImages.length > 0 && currentPreviewImageIndex >= newAvailableImages.length) {
+        setCurrentPreviewImageIndex(0); 
+      } else if (newAvailableImages.length === 0) {
+        setCurrentPreviewImageIndex(0); 
+      } else if (newAvailableImages.length > 0 && availablePreviewImages.length !== newAvailableImages.length) {
+        const currentImageStillExists = newAvailableImages[currentPreviewImageIndex];
+        if (!currentImageStillExists) {
+            setCurrentPreviewImageIndex(0);
+        }
+      }
+    }
+  }, [characterData, availablePreviewImages, currentPreviewImageIndex, getGlobalTriggeredLoreImages, getAvailableImagesForPreview]);
+ 
   // Clear error
   const clearError = useCallback(() => {
     setError(null);
@@ -1437,36 +1549,37 @@ export const ChatProvider: React.FC<{
   
   // Create the context value
   const contextValue: ChatContextType = {
-    // State
-    messages,
-    isLoading,
-    isGenerating,
-    error,
-    currentUser,
-    lastContextWindow,
-    generatingId,
-    reasoningSettings,
+    messages: messages,
+    isLoading: isLoading,
+    isGenerating: isGenerating,
+    error: error,
+    currentUser: currentUser,
+    lastContextWindow: lastContextWindow,
+    generatingId: generatingId,
+    reasoningSettings: reasoningSettings,
+    triggeredLoreImages: triggeredLoreImages,
+    availablePreviewImages: availablePreviewImages,
+    currentPreviewImageIndex: currentPreviewImageIndex,
+
+    updateMessage: updateMessage,
+    deleteMessage: deleteMessage,
+    addMessage: addMessage,
+    cycleVariation: cycleVariation,
     
-    // Message Management
-    updateMessage,
-    deleteMessage,
-    addMessage,
-    cycleVariation,
+    generateResponse: generateResponse,
+    regenerateMessage: regenerateMessage,
+    continueResponse: continueResponse,
+    stopGeneration: stopGeneration,
     
-    // Generation
-    generateResponse,
-    regenerateMessage,
-    continueResponse,
-    stopGeneration,
-    
-    // Chat Management
     setCurrentUser: setCurrentUserHandler,
-    loadExistingChat,
-    createNewChat,
-    updateReasoningSettings,
+    loadExistingChat: loadExistingChat,
+    createNewChat: createNewChat,
+    updateReasoningSettings: updateReasoningSettings,
+    navigateToPreviewImage: navigateToPreviewImage,
+    trackLoreImages: trackLoreImages,
+    resetTriggeredLoreImagesState: resetTriggeredLoreImagesState,
     
-    // Error Management
-    clearError
+    clearError: clearError
   };
   
   return (
