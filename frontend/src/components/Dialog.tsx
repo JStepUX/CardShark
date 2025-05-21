@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import Button from './common/Button';
 
 interface DialogButton {
-  label: string;
+  label: React.ReactNode; // Changed from string to React.ReactNode
   onClick: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
+  className?: string; // Added optional className for custom button styling
 }
 
 interface DialogProps {
@@ -78,27 +80,47 @@ export function Dialog({
           {/* Footer with Buttons */}
           {(buttons.length > 0 || showCloseButton) && (
             <div className="px-6 py-4 border-t border-stone-700 flex justify-end gap-2">
-              {buttons.map((button, index) => (
-                <button
-                  key={index}
-                  onClick={button.onClick}
-                  disabled={button.disabled}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    button.variant === 'primary'
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'text-gray-300 hover:text-white hover:bg-gray-700'
-                  } ${button.disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                >
-                  {button.label}
-                </button>
-              ))}
+              {buttons.map((button, index) => {
+                let buttonPropsVariant: 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost' = 'primary';
+                let buttonPropsClassName = button.className || '';
+
+                if (button.variant === 'primary') {
+                  if (button.className && (button.className.includes('bg-red-500') || button.className.includes('bg-red-600'))) {
+                    buttonPropsVariant = 'destructive';
+                    buttonPropsClassName = buttonPropsClassName
+                      .replace(/bg-red-\d00\s?/g, '')
+                      .replace(/hover:bg-red-\d00\s?/g, '')
+                      .trim();
+                  } else {
+                    buttonPropsVariant = 'primary';
+                  }
+                } else { // Handles 'secondary' or undefined from DialogButton interface
+                  buttonPropsVariant = 'ghost';
+                  buttonPropsClassName = `text-gray-300 hover:text-white hover:bg-gray-700 ${buttonPropsClassName}`.trim();
+                }
+
+                return (
+                  <Button
+                    key={index}
+                    onClick={button.onClick}
+                    disabled={button.disabled}
+                    variant={buttonPropsVariant}
+                    size="md"
+                    className={buttonPropsClassName}
+                  >
+                    {button.label}
+                  </Button>
+                );
+              })}
               {showCloseButton && (
-                <button
+                <Button
                   onClick={onClose}
-                  className="px-4 py-2 text-stone-300 hover:text-white hover:bg-stone-900 rounded-lg transition-colors"
+                  variant="ghost"
+                  size="md"
+                  className="text-stone-300 hover:text-white hover:bg-stone-900"
                 >
                   Close
-                </button>
+                </Button>
               )}
             </div>
           )}

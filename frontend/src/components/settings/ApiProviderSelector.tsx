@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Button from '../common/Button';
 import { useSettings } from '../../contexts/SettingsContext';
 import { APIConfig, APIProvider } from '../../types/api';
 
@@ -149,12 +150,14 @@ export const ApiProviderSelector: React.FC = () => {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-medium">API Providers</h2>
-        <button 
+        <Button
+          variant="primary"
+          size="sm"
           onClick={handleAddProvider}
-          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          className="bg-blue-600 hover:bg-blue-700 rounded"
         >
           Add Provider
-        </button>
+        </Button>
       </div>
       
       {/* Provider List */}
@@ -284,19 +287,23 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
       <ModelSelector api={api} onUpdate={onUpdate} />
       
       <div className="flex justify-between pt-2">
-        <button
+        <Button
+          variant="primary"
+          size="md"
           onClick={onSelect}
-          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+          className="bg-green-600 hover:bg-green-700 rounded"
         >
           Use This Provider
-        </button>
+        </Button>
         
-        <button
+        <Button
+          variant="destructive"
+          size="md"
           onClick={onDelete}
-          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+          className="bg-red-600 hover:bg-red-700 rounded"
         >
           Delete Provider
-        </button>
+        </Button>
       </div>
     </div>
   );

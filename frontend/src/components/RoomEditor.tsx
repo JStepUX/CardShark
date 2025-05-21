@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Room, NPC } from '../types/room'; // Import NPC type
+import Button from './common/Button';
 import { XCircle } from 'lucide-react'; // Import an icon for remove button
 
 interface RoomEditorProps {
@@ -111,24 +112,27 @@ const RoomEditor: React.FC<RoomEditorProps> = ({
 
       <div className="mb-4">
         <h4 className="text-md font-semibold mb-2 text-stone-800 dark:text-stone-200">NPCs in Room ({room.npcs.length})</h4>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={onAddNpc}
-          className="w-full mb-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition-colors"
+          className="w-full mb-2 bg-green-600 hover:bg-green-700 text-sm rounded"
         >
           Add NPC
-        </button>
+        </Button>
         <div className="max-h-48 overflow-y-auto border border-stone-200 dark:border-stone-700 rounded p-2 bg-stone-50 dark:bg-stone-800/50 space-y-1">
           {room.npcs.length > 0 ? (
             room.npcs.map((npc: NPC) => ( // Ensure npc is typed
               <div key={npc.path} className="flex items-center justify-between p-1.5 bg-white dark:bg-stone-700 rounded text-sm">
                 <span className="truncate text-stone-800 dark:text-stone-200" title={npc.name}>{npc.name || 'Unnamed NPC'}</span>
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => onRemoveNpc(npc.path)}
-                  className="ml-2 p-0.5 text-red-500 hover:text-red-700 dark:hover:text-red-400 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                  className="ml-2 p-0.5 text-red-500 hover:text-red-700 dark:hover:text-red-400 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50"
                   title={`Remove ${npc.name || 'NPC'}`}
                 >
                   <XCircle size={16} />
-                </button>
+                </Button>
               </div>
             ))
           ) : (
@@ -138,18 +142,22 @@ const RoomEditor: React.FC<RoomEditorProps> = ({
       </div>
 
       <div className="mt-auto pt-4 border-t border-stone-200 dark:border-stone-700 flex flex-wrap gap-2 justify-between">
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={onPlayHere}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+          className="bg-blue-600 hover:bg-blue-700 text-sm rounded"
         >
           Play Here
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
           onClick={onDelete}
-          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
+          className="bg-red-600 hover:bg-red-700 text-sm rounded"
         >
           Delete Room
-        </button>
+        </Button>
       </div>
        <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">ID: {room.id}</p>
        <p className="text-xs text-stone-500 dark:text-stone-400">Coords: ({room.x}, {room.y})</p>

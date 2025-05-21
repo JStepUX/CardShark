@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Button from './common/Button';
 
 interface WorldSaveButtonProps {
   worldName: string;
@@ -53,13 +54,15 @@ const WorldSaveButton: React.FC<WorldSaveButtonProps> = ({ worldName, worldState
 
   return (
     <div className="my-4">
-      <button
-        className="px-6 py-2 rounded-lg shadow bg-green-700 text-white hover:bg-green-800 transition-colors font-medium"
+      <Button
+        variant="primary"
+        size="md"
+        className="bg-green-700 hover:bg-green-800 px-6 rounded-lg shadow font-medium"
         onClick={handleSave}
         disabled={saving}
       >
         {saving ? "Saving..." : "Save World"}
-      </button>
+      </Button>
       {message && (
         <div className="mt-2 text-sm text-white bg-black/70 rounded p-2">{message}</div>
       )}

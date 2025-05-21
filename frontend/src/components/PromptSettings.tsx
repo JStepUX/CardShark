@@ -1,5 +1,6 @@
 // components/PromptSettings.tsx
 import React, { useState, useEffect } from 'react';
+import Button from './common/Button';
 import { usePrompts } from '../hooks/usePrompts';
 import { RefreshCw, Save, Plus, Download, Upload, AlertCircle, Info, Trash2 } from 'lucide-react';
 import RichTextEditor from './RichTextEditor'; // Import RichTextEditor
@@ -63,41 +64,36 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
             {isCustomPrompt(promptKey) && (
               <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">Custom</span>
             )}
-            <button 
+            <Button
+              variant="ghost"
               onClick={() => setShowInfo(!showInfo)}
               className="ml-2 p-1 text-gray-400 hover:text-gray-200 rounded-full"
               title="Show information about this prompt"
             >
               <Info size={14} />
-            </button>
+            </Button>
           </h3>
           <p className="text-sm text-gray-400 mt-1">{description}</p>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
+            variant="ghost"
             onClick={handleReset}
             disabled={!isCustomPrompt(promptKey)}
-            className={`p-2 rounded-lg flex items-center gap-1 ${
-              isCustomPrompt(promptKey)
-                ? 'text-gray-300 hover:bg-stone-700'
-                : 'text-gray-600 cursor-not-allowed'
-            }`}
+            className="p-2 rounded-lg flex items-center gap-1 text-gray-300 hover:bg-stone-700"
             title="Reset to default"
           >
             <RefreshCw size={16} />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             onClick={handleSave}
             disabled={!isEdited}
-            className={`p-2 rounded-lg flex items-center gap-1 ${
-              isEdited
-                ? 'text-green-500 hover:bg-stone-700'
-                : 'text-gray-600 cursor-not-allowed'
-            }`}
+            className="p-2 rounded-lg flex items-center gap-1 text-green-500 hover:bg-stone-700"
             title="Save changes"
           >
             <Save size={16} />
-          </button>
+          </Button>
         </div>
       </div>
       
@@ -513,30 +509,36 @@ const PromptSettings: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-3">
-          <button
+          <Button
+            variant="secondary"
+            size="md"
             onClick={handleImport}
-            className="px-4 py-2 bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
+            className="bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
             title="Import prompts"
           >
             <Upload size={16} />
             <span>Import</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
             onClick={handleExport}
-            className="px-4 py-2 bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
+            className="bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
             title="Export prompts"
           >
             <Download size={16} />
             <span>Export</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={() => setIsNewPromptDialogOpen(true)}
-            className="px-4 py-2 bg-blue-900 hover:bg-blue-800 rounded-lg flex items-center gap-2"
+            className="bg-blue-900 hover:bg-blue-800 rounded-lg flex items-center gap-2"
             title="Create new custom prompt"
           >
             <Plus size={16} />
             <span>New Prompt</span>
-          </button>
+          </Button>
         </div>
       </div>
       
@@ -572,13 +574,14 @@ const PromptSettings: React.FC = () => {
           
           {customPromptKeys.map(key => (
             <div key={key} className="relative">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => handleDeletePrompt(key)}
                 className="absolute right-8 top-8 p-2 text-gray-400 hover:text-red-500 hover:bg-stone-800 rounded-full"
                 title="Delete this custom prompt"
               >
                 <Trash2 size={16} />
-              </button>
+              </Button>
               <PromptEditor
                 promptKey={key}
                 title={key}

@@ -1,6 +1,7 @@
 // frontend/src/components/WorldCreationModal.tsx
 import React, { useState, useEffect } from 'react';
 import { Dialog } from './Dialog';
+import Button from './common/Button';
 import CharacterGallery from './CharacterGallery';
 import { worldStateApi } from '../utils/worldStateApi';
 
@@ -232,22 +233,26 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
                   </div>
                   <div className="text-white">{selectedCharacter.name}</div>
                 </div>
-                <button
+                <Button
                   type="button"
-                  className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  variant="primary"
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 py-1"
                   onClick={() => setShowCharacterSelector(true)}
                 >
                   Change
-                </button>
+                </Button>
               </div>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                variant="primary"
+                size="md"
+                className="w-full bg-blue-600 hover:bg-blue-700 rounded-lg"
                 onClick={() => setShowCharacterSelector(true)}
               >
                 Select Character
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -259,21 +264,25 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
         )}
 
         <div className="flex gap-2 justify-end mt-4">
-          <button
+          <Button
             type="button"
-            className="px-6 py-2 rounded-lg shadow bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors font-medium dark:bg-stone-700 dark:text-white dark:hover:bg-stone-600"
+            variant="secondary"
+            size="md"
+            className="px-6 rounded-lg shadow font-medium bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-stone-700 dark:text-white dark:hover:bg-stone-600"
             onClick={onClose}
             disabled={loading}
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
-            className="px-6 py-2 rounded-lg shadow bg-blue-700 text-white hover:bg-blue-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="primary"
+            size="md"
+            className="px-6 rounded-lg shadow font-medium bg-blue-700 hover:bg-blue-800"
             disabled={loading || (createType === "character" && !selectedCharacter)}
           >
             {loading ? "Creating..." : "Create World"}
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>
