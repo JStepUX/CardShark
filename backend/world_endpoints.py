@@ -8,7 +8,7 @@ import time
 import traceback
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, FileResponse
@@ -18,7 +18,11 @@ from backend.log_manager import LogManager
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.handlers.world_state_handler import WorldStateHandler
 from backend.handlers.world_card_chat_handler import WorldCardChatHandler
-from backend.models.world_state import WorldState # Import the Pydantic model
+from backend.models.world_state import WorldState  # Import the Pydantic model
+from backend import models as pydantic_models # Renamed to avoid conflict
+from backend.services import world_service
+from backend.database import get_db # Import get_db
+from sqlalchemy.orm import Session # Import Session
 
 # Dependency provider functions (defined locally, import from main inside)
 def get_logger() -> LogManager:
@@ -46,6 +50,109 @@ router = APIRouter(
     prefix="/api", # Set prefix for consistency
     tags=["worlds"], # Add tags for documentation
 )
+
+# --- World CRUD Endpoints (Database) ---
+
+@router.post("/worlds/", response_model=pydantic_models.WorldRead, status_code=201)
+def create_world_db(
+    world: pydantic_models.WorldCreate,
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.log_step(f"Request to create world: {world.name}")
+    try:
+        db_world = world_service.create_world(db=db, world=world)
+        logger.log_step(f"Successfully created world with UUID: {db_world.world_uuid}")
+        return db_world
+    except Exception as e:
+        logger.log_error(f"Error creating world '{world.name}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to create world: {str(e)}")
+
+@router.get("/worlds/", response_model=List[pydantic_models.WorldRead])
+def read_worlds_db(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.log_step(f"Request to read worlds, skip: {skip}, limit: {limit}")
+    try:
+        worlds = world_service.get_worlds(db, skip=skip, limit=limit)
+        logger.log_step(f"Successfully retrieved {len(worlds)} worlds")
+        return worlds
+    except Exception as e:
+        logger.log_error(f"Error reading worlds: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to read worlds: {str(e)}")
+
+@router.get("/worlds/{world_id}", response_model=pydantic_models.WorldRead)
+def read_world_db(
+    world_id: str,
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.log_step(f"Request to read world with UUID: {world_id}")
+    try:
+        db_world = world_service.get_world(db, world_uuid=world_id)
+        if db_world is None:
+            logger.warning(f"World with UUID '{world_id}' not found")
+            raise HTTPException(status_code=404, detail="World not found")
+        logger.log_step(f"Successfully retrieved world: {db_world.name}")
+        return db_world
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.log_error(f"Error reading world '{world_id}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to read world: {str(e)}")
+
+@router.put("/worlds/{world_id}", response_model=pydantic_models.WorldRead)
+def update_world_db(
+    world_id: str,
+    world: pydantic_models.WorldUpdate,
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.log_step(f"Request to update world with UUID: {world_id}")
+    try:
+        db_world = world_service.update_world(db=db, world_uuid=world_id, world_update=world)
+        if db_world is None:
+            logger.warning(f"World with UUID '{world_id}' not found for update")
+            raise HTTPException(status_code=404, detail="World not found")
+        logger.log_step(f"Successfully updated world: {db_world.name}")
+        return db_world
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.log_error(f"Error updating world '{world_id}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to update world: {str(e)}")
+
+@router.delete("/worlds/{world_id}", response_model=pydantic_models.WorldRead) # Or perhaps a status code 204 No Content
+def delete_world_db(
+    world_id: str,
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    logger.log_step(f"Request to delete world with UUID: {world_id}")
+    try:
+        db_world = world_service.delete_world(db=db, world_uuid=world_id)
+        if db_world is None: # Or if delete_world returns None on success when not found
+            logger.warning(f"World with UUID '{world_id}' not found for deletion")
+            raise HTTPException(status_code=404, detail="World not found")
+        logger.log_step(f"Successfully deleted world: {db_world.name}")
+        # If delete_world returns the deleted object, we can return it.
+        # Otherwise, if it returns a boolean or None on success, adjust response.
+        # For now, assuming it returns the deleted object (or raises if not found).
+        return db_world # Or return JSONResponse(status_code=204) if nothing to return
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.log_error(f"Error deleting world '{world_id}': {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to delete world: {str(e)}")
+
 
 # --- World Card Management Endpoints ---
 

@@ -95,7 +95,7 @@ from backend.lore_handler import LoreHandler
 import backend.sql_models # Use sql_models.py instead of models.py to avoid package conflicts
 
 # API endpoint modules
-from backend.chat_endpoints import router as chat_router
+from backend.chat_endpoints import router as chat_session_router # Router for ChatSession CRUD
 # Import routers directly, no need for class instances
 from backend.background_endpoints import router as background_router
 from backend.room_card_endpoint import router as room_card_router
@@ -106,6 +106,8 @@ from backend.settings_endpoints import router as settings_router
 from backend.world_endpoints import router as world_router
 from backend.template_endpoints import router as template_router  # Import the new template router
 from backend.lore_endpoints import router as lore_router  # Import the lore router
+from backend.room_endpoints import router as room_router # Import the room_router
+from backend.npc_room_assignment_endpoints import router as npc_room_assignment_router # Import the new NPC-Room assignment router
 # from backend.character_inventory_endpoints import router as character_inventory_router # REMOVED - functionality integrated into CharacterService
 # from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
 
@@ -215,7 +217,7 @@ world_card_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
 # Set up and include routers directly
 # setup_background_router call removed as it's no longer needed
 app.include_router(health_router) # Include the health check router
-app.include_router(chat_router) # Include the refactored chat router
+# app.include_router(chat_router) # This line is now handled by chat_session_router inclusion
 app.include_router(koboldcpp_router)
 app.include_router(room_card_router)
 app.include_router(character_router)
@@ -224,9 +226,12 @@ app.include_router(settings_router)
 app.include_router(world_router)
 app.include_router(template_router)  # Include the new template router
 app.include_router(lore_router)  # Include the lore router
+app.include_router(room_router) # Include the room_router
+app.include_router(npc_room_assignment_router) # Include the new NPC-Room assignment router
 # app.include_router(character_inventory_router) # REMOVED
 # app.include_router(world_chat_router) # Removed, functionality merged into world_router
 app.include_router(background_router)
+app.include_router(chat_session_router) # Include the new chat session router
 
 # ---------- FastAPI Dependency for Services ----------
 # get_character_service_dependency is now imported from backend.dependencies

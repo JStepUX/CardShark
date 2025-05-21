@@ -80,3 +80,66 @@ class LoreImage(Base):
     # Relationships
     uploader_character = relationship("Character", back_populates="uploaded_lore_images", foreign_keys=[uploader_character_uuid])
     lore_entries = relationship("LoreEntry", back_populates="image")
+
+class World(Base):
+    __tablename__ = "worlds"
+
+    world_uuid = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    source_character_uuid = Column(String, ForeignKey("characters.character_uuid"), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    rooms = relationship("Room", back_populates="world", cascade="all, delete-orphan")
+    source_character = relationship("Character") # Simple relationship, no back_populates needed if Character doesn't link back to Worlds
+
+class Room(Base):
+    __tablename__ = "rooms"
+
+    room_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    world_uuid = Column(String, ForeignKey("worlds.world_uuid"), nullable=False)
+    name = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    introduction_text = Column(Text, nullable=True)
+    grid_coordinates = Column(String, nullable=True) # e.g., "x,y" or JSON string
+
+    # Relationships
+    world = relationship("World", back_populates="rooms")
+    npcs_in_room = relationship("NPCInRoom", back_populates="room", cascade="all, delete-orphan")
+
+class NPCInRoom(Base):
+    __tablename__ = "npcs_in_rooms"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    room_id = Column(Integer, ForeignKey("rooms.room_id"), nullable=False)
+    npc_character_uuid = Column(String, ForeignKey("characters.character_uuid"), nullable=False)
+    npc_role_in_room = Column(Text, nullable=True)
+
+    # __table_args__ = (UniqueConstraint('room_id', 'npc_character_uuid', name='_room_npc_uc'),) # As per plan
+
+    # Relationships
+    room = relationship("Room", back_populates="npcs_in_room")
+    npc_character = relationship("Character") # Simple relationship
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    chat_session_uuid = Column(String, primary_key=True, index=True)
+    character_uuid = Column(String, ForeignKey("characters.character_uuid"), nullable=False)
+    # Assuming UserProfile model will exist or be added later as per the plan
+    # If UserProfile model is not guaranteed, this FK might cause issues if that table isn't created.
+    # For now, following the plan.
+    user_uuid = Column(String, ForeignKey("user_profiles.user_uuid"), nullable=True) 
+    
+    start_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_message_time = Column(DateTime(timezone=True), nullable=True)
+    message_count = Column(Integer, default=0)
+    chat_log_path = Column(String, nullable=False) # Path to the JSONL file
+    title = Column(String, nullable=True)
+
+    # Relationships
+    character = relationship("Character") # Add back_populates if Character links to ChatSessions
+    # user_profile = relationship("UserProfile") # Add back_populates if UserProfile links to ChatSessions
