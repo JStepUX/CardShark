@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
 from backend import sql_models # Adjusted import
-from backend import models # Adjusted import
+from backend import schemas # Adjusted import
 import uuid
 
-def create_world(db: Session, world: models.WorldCreate) -> sql_models.World:
+def create_world(db: Session, world: schemas.WorldCreate) -> sql_models.World:
     db_world = sql_models.World(
         world_uuid=str(uuid.uuid4()),
         name=world.name,
@@ -21,7 +21,7 @@ def get_world(db: Session, world_uuid: str) -> sql_models.World | None:
 def get_worlds(db: Session, skip: int = 0, limit: int = 100) -> list[sql_models.World]:
     return db.query(sql_models.World).offset(skip).limit(limit).all()
 
-def update_world(db: Session, world_uuid: str, world_update: models.WorldUpdate) -> sql_models.World | None:
+def update_world(db: Session, world_uuid: str, world_update: schemas.WorldUpdate) -> sql_models.World | None:
     db_world = get_world(db, world_uuid)
     if db_world:
         update_data = world_update.model_dump(exclude_unset=True)

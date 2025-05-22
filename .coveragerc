@@ -1,0 +1,10 @@
+[run]
+source = backend
+branch = True
+omit =
+    backend/tests/*
+    */conftest.py
+
+[report]
+show_missing = True
+precision = 2

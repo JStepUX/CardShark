@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
-from backend import sql_models, models
+from backend import sql_models, schemas
 from fastapi import HTTPException
 
-def create_room(db: Session, room: models.RoomCreate, world_uuid: str) -> sql_models.Room:
+def create_room(db: Session, room: schemas.RoomCreate, world_uuid: str) -> sql_models.Room:
     # Check if the world exists
     db_world = db.query(sql_models.World).filter(sql_models.World.world_uuid == world_uuid).first()
     if not db_world:
@@ -23,7 +23,7 @@ def get_rooms(db: Session, world_uuid: str | None = None, skip: int = 0, limit: 
         query = query.filter(sql_models.Room.world_uuid == world_uuid)
     return query.offset(skip).limit(limit).all()
 
-def update_room(db: Session, room_id: int, room_update: models.RoomUpdate) -> sql_models.Room | None:
+def update_room(db: Session, room_id: int, room_update: schemas.RoomUpdate) -> sql_models.Room | None:
     db_room = db.query(sql_models.Room).filter(sql_models.Room.room_id == room_id).first()
     if db_room:
         update_data = room_update.model_dump(exclude_unset=True)

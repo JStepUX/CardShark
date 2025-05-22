@@ -2,19 +2,22 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from backend import models
+from backend import schemas as pydantic_models # Use schemas for Pydantic models
 from backend.services import npc_room_assignment_service
 from backend.database import get_db
+# Import LogManager and get_logger if they are intended to be used
+# from backend.log_manager import LogManager
+# from backend.main import get_logger
 
 router = APIRouter(
     tags=["NPC Room Assignments"], # Tag for API documentation
 )
 
-@router.post("/api/rooms/{room_id}/characters/{character_uuid}", response_model=models.NPCInRoomRead, status_code=status.HTTP_201_CREATED)
+@router.post("/api/rooms/{room_id}/characters/{character_uuid}", response_model=pydantic_models.NPCInRoomRead, status_code=status.HTTP_201_CREATED)
 def assign_character_to_room(
     room_id: int,
     character_uuid: str,
-    assignment_details: models.NPCInRoomCreate, # Request body for role
+    assignment_details: pydantic_models.NPCInRoomCreate, # Request body for role
     db: Session = Depends(get_db)
 ):
     """
@@ -54,7 +57,7 @@ def unassign_character_from_room(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get("/api/rooms/{room_id}/characters", response_model=List[models.CharacterInRoomResponse])
+@router.get("/api/rooms/{room_id}/characters", response_model=List[pydantic_models.CharacterInRoomResponse])
 def get_room_characters(
     room_id: int,
     db: Session = Depends(get_db)
@@ -70,7 +73,7 @@ def get_room_characters(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get("/api/characters/{character_uuid}/rooms", response_model=List[models.RoomRead])
+@router.get("/api/characters/{character_uuid}/rooms", response_model=List[pydantic_models.RoomRead])
 def get_character_rooms(
     character_uuid: str,
     db: Session = Depends(get_db)

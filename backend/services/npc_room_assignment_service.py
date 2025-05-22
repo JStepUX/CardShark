@@ -4,9 +4,9 @@ from fastapi import HTTPException, status
 from typing import List, Optional
 
 from backend import sql_models
-from backend import models
+from backend import schemas as pydantic_models # Use schemas for Pydantic models
 
-def add_character_to_room(db: Session, room_id: int, character_uuid: str, assignment_details: models.NPCInRoomCreate) -> sql_models.NPCInRoom:
+def add_character_to_room(db: Session, room_id: int, character_uuid: str, assignment_details: pydantic_models.NPCInRoomCreate) -> sql_models.NPCInRoom:
     """
     Assigns a character to a room.
     """
@@ -75,7 +75,7 @@ def remove_character_from_room(db: Session, room_id: int, character_uuid: str) -
         )
     return True
 
-def get_characters_in_room(db: Session, room_id: int) -> List[models.CharacterInRoomResponse]:
+def get_characters_in_room(db: Session, room_id: int) -> List[pydantic_models.CharacterInRoomResponse]:
     """
     Gets all characters assigned to a specific room, including their role.
     """
@@ -86,12 +86,12 @@ def get_characters_in_room(db: Session, room_id: int) -> List[models.CharacterIn
 
     assignments = db.query(sql_models.NPCInRoom).filter(sql_models.NPCInRoom.room_id == room_id).all()
     
-    characters_in_room: List[models.CharacterInRoomResponse] = []
+    characters_in_room: List[pydantic_models.CharacterInRoomResponse] = []
     for assignment in assignments:
         character = assignment.npc_character # Access the related Character object
         if character:
             characters_in_room.append(
-                models.CharacterInRoomResponse(
+                pydantic_models.CharacterInRoomResponse(
                     character_uuid=character.character_uuid,
                     name=character.name,
                     description=character.description,
@@ -104,7 +104,7 @@ def get_characters_in_room(db: Session, room_id: int) -> List[models.CharacterIn
             )
     return characters_in_room
 
-def get_rooms_for_character(db: Session, character_uuid: str) -> List[models.RoomRead]:
+def get_rooms_for_character(db: Session, character_uuid: str) -> List[pydantic_models.RoomRead]:
     """
     Gets all rooms a specific character is assigned to.
     """
@@ -115,13 +115,13 @@ def get_rooms_for_character(db: Session, character_uuid: str) -> List[models.Roo
 
     assignments = db.query(sql_models.NPCInRoom).filter(sql_models.NPCInRoom.npc_character_uuid == character_uuid).all()
     
-    rooms_for_character: List[models.RoomRead] = []
+    rooms_for_character: List[pydantic_models.RoomRead] = []
     for assignment in assignments:
         room = assignment.room # Access the related Room object
         if room:
             # Manually construct RoomRead to ensure all fields are present
             rooms_for_character.append(
-                models.RoomRead(
+                pydantic_models.RoomRead(
                     room_id=room.room_id,
                     world_uuid=room.world_uuid,
                     name=room.name,

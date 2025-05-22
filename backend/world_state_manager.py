@@ -257,9 +257,8 @@ class WorldStateManager:
                         with open(state_path, "r", encoding="utf-8") as f:
                             state = json.load(f)
                         if "metadata" in state:
-                            for key, value in state["metadata"].items():
-                                if key not in world_info:
-                                    world_info[key] = value
+                            # Allow state metadata to overwrite metadata.json metadata
+                            world_info.update(state["metadata"])
                     except Exception:
                         pass
                 

@@ -1,10 +1,10 @@
 from sqlalchemy.orm import Session
-from backend import sql_models, models
+from backend import sql_models, schemas as pydantic_models # Use schemas for Pydantic models
 import uuid
 from typing import List, Optional
 from datetime import datetime
 
-def create_chat_session(db: Session, chat_session: models.ChatSessionCreate) -> sql_models.ChatSession:
+def create_chat_session(db: Session, chat_session: pydantic_models.ChatSessionCreate) -> sql_models.ChatSession:
     # In a real scenario, chat_log_path would be more robustly generated
     # e.g., based on world_uuid, character_uuid, session_uuid to ensure uniqueness and organization.
     # For now, we'll use a simple placeholder or assume it's provided if critical.
@@ -42,7 +42,7 @@ def get_chat_sessions(
         query = query.filter(sql_models.ChatSession.user_uuid == user_uuid)
     return query.offset(skip).limit(limit).all()
 
-def update_chat_session(db: Session, chat_session_uuid: str, chat_update: models.ChatSessionUpdate) -> Optional[sql_models.ChatSession]:
+def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydantic_models.ChatSessionUpdate) -> Optional[sql_models.ChatSession]:
     db_chat_session = get_chat_session(db, chat_session_uuid)
     if db_chat_session:
         if chat_update.title is not None:

@@ -2,15 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from backend import models, sql_models
+from backend import schemas as pydantic_models, sql_models # Use schemas for Pydantic models
 from backend.services import chat_service
 from backend.database import get_db
+# Import LogManager and get_logger if they are intended to be used, currently not used in this file
+# from backend.log_manager import LogManager
+# from backend.main import get_logger
 
 router = APIRouter()
 
-@router.post("/api/chat_sessions/", response_model=models.ChatSessionRead, status_code=201)
+@router.post("/api/chat_sessions/", response_model=pydantic_models.ChatSessionRead, status_code=201)
 def create_chat_session_endpoint(
-    chat_session: models.ChatSessionCreate, 
+    chat_session: pydantic_models.ChatSessionCreate,
     db: Session = Depends(get_db)
 ):
     # Basic validation or pre-processing if needed
@@ -18,17 +21,17 @@ def create_chat_session_endpoint(
     # This might be better handled in the service or via DB constraints.
     return chat_service.create_chat_session(db=db, chat_session=chat_session)
 
-@router.get("/api/chat_sessions/{session_id}", response_model=models.ChatSessionRead)
+@router.get("/api/chat_sessions/{session_id}", response_model=pydantic_models.ChatSessionRead)
 def read_chat_session_endpoint(session_id: str, db: Session = Depends(get_db)):
     db_chat_session = chat_service.get_chat_session(db, chat_session_uuid=session_id)
     if db_chat_session is None:
         raise HTTPException(status_code=404, detail="ChatSession not found")
     return db_chat_session
 
-@router.get("/api/chat_sessions/", response_model=List[models.ChatSessionRead])
+@router.get("/api/chat_sessions/", response_model=List[pydantic_models.ChatSessionRead])
 def read_chat_sessions_endpoint(
-    skip: int = 0, 
-    limit: int = 100, 
+    skip: int = 0,
+    limit: int = 100,
     character_uuid: Optional[str] = None,
     user_uuid: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -38,10 +41,10 @@ def read_chat_sessions_endpoint(
     )
     return chat_sessions
 
-@router.put("/api/chat_sessions/{session_id}", response_model=models.ChatSessionRead)
+@router.put("/api/chat_sessions/{session_id}", response_model=pydantic_models.ChatSessionRead)
 def update_chat_session_endpoint(
-    session_id: str, 
-    chat_update: models.ChatSessionUpdate, 
+    session_id: str,
+    chat_update: pydantic_models.ChatSessionUpdate,
     db: Session = Depends(get_db)
 ):
     db_chat_session = chat_service.update_chat_session(db, chat_session_uuid=session_id, chat_update=chat_update)
@@ -49,7 +52,7 @@ def update_chat_session_endpoint(
         raise HTTPException(status_code=404, detail="ChatSession not found")
     return db_chat_session
 
-@router.delete("/api/chat_sessions/{session_id}", response_model=models.ChatSessionRead) # Or just status_code=204
+@router.delete("/api/chat_sessions/{session_id}", response_model=pydantic_models.ChatSessionRead) # Or just status_code=204
 def delete_chat_session_endpoint(session_id: str, db: Session = Depends(get_db)):
     db_chat_session = chat_service.delete_chat_session(db, chat_session_uuid=session_id)
     if db_chat_session is None:

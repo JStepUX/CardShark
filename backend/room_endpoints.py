@@ -2,15 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-from backend import models, sql_models
+from backend import sql_models
+from backend.schemas import RoomRead, RoomCreate, RoomUpdate # Import from schemas
 from backend.services import room_service
 from backend.database import get_db
 
 router = APIRouter()
 
-@router.post("/api/worlds/{world_uuid}/rooms/", response_model=models.RoomRead, tags=["Rooms"])
+@router.post("/api/worlds/{world_uuid}/rooms/", response_model=RoomRead, tags=["Rooms"]) # Use direct import
 def create_room_for_world(
-    world_uuid: str, room: models.RoomCreate, db: Session = Depends(get_db)
+    world_uuid: str, room: RoomCreate, db: Session = Depends(get_db) # Use direct import
 ):
     # Ensure world_uuid in path matches world_uuid in body if present, or use path.
     if room.world_uuid and room.world_uuid != world_uuid:
@@ -28,30 +29,30 @@ def create_room_for_world(
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 
-@router.get("/api/rooms/{room_id}", response_model=models.RoomRead, tags=["Rooms"])
+@router.get("/api/rooms/{room_id}", response_model=RoomRead, tags=["Rooms"]) # Use direct import
 def read_room(room_id: int, db: Session = Depends(get_db)):
     db_room = room_service.get_room(db, room_id=room_id)
     if db_room is None:
         raise HTTPException(status_code=404, detail="Room not found")
     return db_room
 
-@router.get("/api/rooms/", response_model=List[models.RoomRead], tags=["Rooms"])
+@router.get("/api/rooms/", response_model=List[RoomRead], tags=["Rooms"]) # Use direct import
 def read_rooms(
     world_uuid: str | None = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
 ):
     rooms = room_service.get_rooms(db, world_uuid=world_uuid, skip=skip, limit=limit)
     return rooms
 
-@router.put("/api/rooms/{room_id}", response_model=models.RoomRead, tags=["Rooms"])
+@router.put("/api/rooms/{room_id}", response_model=RoomRead, tags=["Rooms"]) # Use direct import
 def update_existing_room(
-    room_id: int, room: models.RoomUpdate, db: Session = Depends(get_db)
+    room_id: int, room: RoomUpdate, db: Session = Depends(get_db) # Use direct import
 ):
     db_room = room_service.update_room(db, room_id=room_id, room_update=room)
     if db_room is None:
         raise HTTPException(status_code=404, detail="Room not found")
     return db_room
 
-@router.delete("/api/rooms/{room_id}", response_model=models.RoomRead, tags=["Rooms"])
+@router.delete("/api/rooms/{room_id}", response_model=RoomRead, tags=["Rooms"]) # Use direct import
 def delete_existing_room(room_id: int, db: Session = Depends(get_db)):
     db_room = room_service.delete_room(db, room_id=room_id)
     if db_room is None:

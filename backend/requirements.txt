@@ -10,3 +10,6 @@ sse-starlette>=1.6.5        # Server-sent events for streaming progress
 requests>=2.31.0            # HTTP requests
 aiofiles>=0.8.0             # Asynchronous file operations
 SQLAlchemy>=1.4               # ORM for database interaction (SQLite)
+pytest-asyncio>=0.21.0      # For asynchronous testing with pytest
+pytest-cov>=2.12.1            # For test coverage
+pytest-mock>=3.6.1            # For mocking in tests

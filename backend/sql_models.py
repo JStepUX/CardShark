@@ -8,6 +8,7 @@ import datetime
 
 class Character(Base):
     __tablename__ = "characters"
+    __table_args__ = {'extend_existing': True}
 
     character_uuid = Column(String, primary_key=True, index=True)
     original_character_id = Column(String, unique=True, index=True, nullable=True)
@@ -36,6 +37,7 @@ class Character(Base):
 
 class LoreBook(Base):
     __tablename__ = "lore_books"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
     character_uuid = Column(String, ForeignKey("characters.character_uuid"), nullable=False)
@@ -47,6 +49,7 @@ class LoreBook(Base):
 
 class LoreEntry(Base):
     __tablename__ = "lore_entries"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True) # Corresponds to LoreEntry.id from original spec
     lore_book_id = Column(Integer, ForeignKey("lore_books.id"), nullable=False)
@@ -70,6 +73,7 @@ class LoreEntry(Base):
 
 class LoreImage(Base):
     __tablename__ = "lore_images"
+    __table_args__ = {'extend_existing': True}
 
     image_uuid = Column(String, primary_key=True, index=True) # UUID of the image file itself
     uploader_character_uuid = Column(String, ForeignKey("characters.character_uuid"), nullable=False)
@@ -83,6 +87,7 @@ class LoreImage(Base):
 
 class World(Base):
     __tablename__ = "worlds"
+    __table_args__ = {'extend_existing': True}
 
     world_uuid = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
@@ -98,6 +103,7 @@ class World(Base):
 
 class Room(Base):
     __tablename__ = "rooms"
+    __table_args__ = {'extend_existing': True}
 
     room_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     world_uuid = Column(String, ForeignKey("worlds.world_uuid"), nullable=False)
@@ -112,6 +118,7 @@ class Room(Base):
 
 class NPCInRoom(Base):
     __tablename__ = "npcs_in_rooms"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     room_id = Column(Integer, ForeignKey("rooms.room_id"), nullable=False)
@@ -126,6 +133,7 @@ class NPCInRoom(Base):
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
+    __table_args__ = {'extend_existing': True}
 
     chat_session_uuid = Column(String, primary_key=True, index=True)
     character_uuid = Column(String, ForeignKey("characters.character_uuid"), nullable=False)

@@ -19,7 +19,7 @@ from backend.png_metadata_handler import PngMetadataHandler
 from backend.handlers.world_state_handler import WorldStateHandler
 from backend.handlers.world_card_chat_handler import WorldCardChatHandler
 from backend.models.world_state import WorldState  # Import the Pydantic model
-from backend import models as pydantic_models # Renamed to avoid conflict
+from backend import schemas as pydantic_models # Renamed to avoid conflict, and import from schemas
 from backend.services import world_service
 from backend.database import get_db # Import get_db
 from sqlalchemy.orm import Session # Import Session
