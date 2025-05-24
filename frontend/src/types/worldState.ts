@@ -38,6 +38,7 @@ export type Room = {
 
 // Type for an NPC (assuming this structure, might need adjustment based on actual usage)
 export interface NpcGridItem {
+  character_id: any;
   name: string;
   path: string; // Path to character file/data
   // Add other relevant NPC properties if needed for the grid display

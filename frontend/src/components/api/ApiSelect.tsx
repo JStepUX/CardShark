@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Server, ChevronDown, ChevronUp, Check, Loader2 } from 'lucide-react'; // Added Loader2
+import { Server, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import LoadingSpinner from '../common/LoadingSpinner'; // Added
 import { useAPIConfig } from '../../contexts/APIConfigContext';
 import { useSettings } from '../../contexts/SettingsContext';
 
@@ -124,7 +125,7 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
             </div>
           )}
           {isSwitchingApiTo === id && showSpinner ? (
-            <Loader2 size={16} className="animate-spin text-blue-400" />
+            <LoadingSpinner size={16} className="text-blue-400" />
           ) : id === activeApiId ? (
             <Check size={16} className="text-blue-400" aria-hidden="true" />
           ) : (
@@ -151,7 +152,7 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
           aria-expanded={isOpen}
         >
           {isSwitchingApiTo && showSpinner ? (
-            <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+            <LoadingSpinner size={18} aria-hidden="true" />
           ) : (
             <Server size={18} aria-hidden="true" />
           )}
@@ -194,7 +195,7 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
           </span>
         </div>
         {isSwitchingApiTo && showSpinner ? (
-          <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+          <LoadingSpinner size={16} aria-hidden="true" />
         ) : isOpen ? (
           <ChevronUp size={16} aria-hidden="true" />
         ) : (

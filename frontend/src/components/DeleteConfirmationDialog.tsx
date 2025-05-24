@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { Dialog } from './Dialog'; // Import the generic Dialog component
 
 interface DeleteConfirmationDialogProps {
@@ -29,7 +30,7 @@ const DeleteConfirmationDialog: React.FC<DeleteConfirmationDialogProps> = ({
   // Let's construct the delete button label with the loader if needed.
   const deleteButtonLabel = isDeleting ? (
     <span className="flex items-center gap-2">
-      <Loader2 className="animate-spin h-4 w-4" />
+      <LoadingSpinner size="sm" />
       Deleting...
     </span>
   ) : (

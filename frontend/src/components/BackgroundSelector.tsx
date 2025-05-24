@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash, Edit, Image, Loader2 } from 'lucide-react';
+import { Plus, Trash, Edit, Image } from 'lucide-react';
+import LoadingSpinner from './common/LoadingSpinner'; // Changed
 import { generateUUID } from '../utils/generateUUID';
 import BackgroundCropper from './BackgroundCropper'; // Import the cropper component
 
@@ -262,7 +263,7 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+        <LoadingSpinner size={32} className="text-gray-400" />
       </div>
     );
   }
@@ -286,7 +287,7 @@ const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
           />
           <div className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors">
             {isUploading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <LoadingSpinner size={16} />
             ) : (
               <Plus size={16} />
             )}

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { WordSwapRule } from '../utils/contentProcessing';
 import { SubstitutionManager } from './SubstitutionManager';
-import { Info, Loader2, ToggleLeft, ToggleRight, Edit, Trash2 } from 'lucide-react';
+import { Info, ToggleLeft, ToggleRight, Edit, Trash2 } from 'lucide-react';
+import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { FilterPackage, FilterPackageClient } from '@/services/filterPackageClient';
 import { ContentFilterClient } from '@/services/contentFilterClient';
 import { toast } from 'sonner';
@@ -281,7 +282,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
               <span className="text-sm text-gray-300">
                 Remove unfinished sentences from chat responses
                 {isSavingIncomplete && (
-                  <Loader2 size={14} className="inline ml-2 animate-spin" />
+                  <LoadingSpinner size={14} className="inline ml-2" />
                 )}
               </span>
             </label>
@@ -327,7 +328,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
           
           {isLoadingPackages ? (
             <div className="flex justify-center py-4">
-              <Loader2 size={24} className="animate-spin text-blue-500" />
+              <LoadingSpinner size={24} className="text-blue-500" />
             </div>
           ) : (
             <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -427,7 +428,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
           
           {isLoading && (
             <div className="flex items-center text-sm text-blue-400">
-              <Loader2 size={16} className="mr-2 animate-spin" />
+              <LoadingSpinner size={16} className="mr-2" />
               Saving rules...
             </div>
           )}

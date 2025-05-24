@@ -12,6 +12,7 @@ import {
 import { LoreEntry, WorldInfoLogic } from '../types/schema';
 import RichTextEditor from './RichTextEditor';
 import LoreImageUploader from './LoreImageUploader'; // Import the uploader
+import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { useCharacter } from '../contexts/CharacterContext'; // To get character UUID
 // import { useChat } from '../contexts/ChatContext'; // Import useChat when needed
 import { useCharacterUuid } from '../hooks/useCharacterUuid'; // Import UUID hook
@@ -145,8 +146,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
       loreImageUploaderElement = (
         <div className="p-4 bg-zinc-900/70 rounded-lg mt-2">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
-            <span className="ml-2 text-gray-300">Preparing image uploader...</span>
+            <LoadingSpinner size="md" text="Preparing image uploader..." />
           </div>
         </div>
       );

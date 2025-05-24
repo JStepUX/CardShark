@@ -1,8 +1,9 @@
 // frontend/src/components/ModelSelector.tsx
 import React, { useState, useEffect } from 'react';
-import { Loader2, AlertCircle as AlertCircleIcon } from 'lucide-react';
+import { AlertCircle as AlertCircleIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { APIProvider, ModelInfo, FeatherlessModelInfo } from '../types/api';
+import LoadingSpinner from './common/LoadingSpinner';
 import { useKoboldCPP } from '../hooks/useKoboldCPP';
 
 // --- Interfaces ---
@@ -121,7 +122,7 @@ const OpenRouterModelSelector: React.FC<OpenRouterModelSelectorProps> = ({
       />
       {isLoading ? (
         <div className="flex items-center text-gray-400">
-          <Loader2 className="animate-spin mr-2" size={16} /> Loading models...
+          <LoadingSpinner text="Loading models..." />
         </div>
       ) : error ? (
         <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
@@ -248,7 +249,7 @@ const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
       />
       {isLoading ? (
         <div className="flex items-center text-gray-400">
-          <Loader2 className="animate-spin mr-2" size={16} /> Loading models...
+          <LoadingSpinner text="Loading models..." />
         </div>
       ) : error ? (
         <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
@@ -480,7 +481,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         />
         {isLoading && !models.length ? ( // Show loading only if models aren't loaded yet
           <div className="flex items-center text-gray-400">
-            <Loader2 className="animate-spin mr-2" size={16} /> Loading models...
+            <LoadingSpinner text="Loading models..." />
           </div>
         ) : error ? (
           <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">

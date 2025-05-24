@@ -10,6 +10,7 @@ import { WorldMetadata } from "../types/world";
 import { formatWorldName } from "../utils/formatters"; // Import our formatter function
 import { Trash2, AlertTriangle, X } from 'lucide-react'; // Added AlertTriangle and X icons
 import { useCharacter } from '../contexts/CharacterContext'; // Import character context
+import LoadingSpinner from "../components/common/LoadingSpinner";
 
 
 const WorldCardsView: React.FC = () => {
@@ -194,7 +195,7 @@ useEffect(() => {
       <div className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm flex-1 flex flex-col">
         {isLoading ? (
           <div className="flex-1 flex items-center justify-center">
-             <p className="text-slate-500 dark:text-slate-400">Loading worlds...</p>
+             <LoadingSpinner text="Loading worlds..." />
            </div>
         ) : error ? (
            <div className="flex-1 flex items-center justify-center text-red-500">

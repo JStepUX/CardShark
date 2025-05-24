@@ -6,6 +6,9 @@ import worldStateApi from '../utils/worldStateApi';
  * and data validation
  */
 class WorldDataService {
+  loadCharacter(character_id: any) {
+    throw new Error('Method not implemented.');
+  }
   /**
    * Loads a world with validation and error handling
    */

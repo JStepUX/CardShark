@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Play, AlertCircle } from 'lucide-react';
+import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { useSettings } from '../contexts/SettingsContext';
 
 interface Model {
@@ -198,9 +199,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
                   />
                   {isLoading && (
                     <div className="absolute right-3 top-2.5 flex items-center justify-center">
-                      <div className="relative w-5 h-5">
-                        <div className="absolute top-0 left-0 w-full h-full rounded-full border-2 border-t-blue-500 border-l-blue-400 border-r-transparent border-b-transparent animate-spin"></div>
-                      </div>
+                      <LoadingSpinner size="sm" />
                     </div>
                   )}
                 </div>
@@ -209,12 +208,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
                 <div className="max-h-40 overflow-y-auto overflow-x-hidden border border-zinc-700 rounded-lg overscroll-contain">
                   {isLoading && filteredModels.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
-                      <div className="relative w-12 h-12 mb-3">
-                        {/* Animated spinner with gradient */}
-                        <div className="absolute top-0 left-0 w-full h-full rounded-full border-t-3 border-l-3 border-r-3 border-transparent border-t-blue-500 border-l-blue-400 animate-spin"></div>
-                        <div className="absolute top-0 left-0 w-full h-full rounded-full border-b-3 border-transparent border-b-indigo-600 animate-pulse"></div>
-                      </div>
-                      <p className="text-base font-semibold text-blue-400 animate-pulse">Scanning models...</p>
+                      <LoadingSpinner size="lg" text="Scanning models..." className="text-blue-400 mb-3" />
                       <p className="text-xs text-zinc-500 mt-1">This might take a moment</p>
                     </div>
                   ) : filteredModels.length > 0 ? (
@@ -326,9 +320,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
           >
             {isLaunching ? (
               <>
-                <div className="relative w-5 h-5">
-                  <div className="absolute top-0 left-0 w-full h-full rounded-full border-2 border-t-blue-300 border-l-blue-300 border-r-transparent border-b-transparent animate-spin"></div>
-                </div>
+                <LoadingSpinner size="sm" />
                 <span>Starting...</span>
               </>
             ) : (

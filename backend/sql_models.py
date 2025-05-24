@@ -6,6 +6,25 @@ from sqlalchemy.sql import func
 from backend.database import Base
 import datetime
 
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+    # It's good practice to include extend_existing=True if you anticipate re-running table creation
+    # or if the table might be defined/extended elsewhere, though it might not be strictly necessary
+    # if this is the sole definition and you're creating from scratch.
+    # However, given the context of fixing an existing application, it's a safe addition.
+    __table_args__ = {'extend_existing': True}
+
+    user_uuid = Column(String, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=True) # Assuming email can be optional
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # If UserProfile needs to link back to ChatSession (e.g., a user has many chat sessions),
+    # you would add a relationship here. For now, this is commented out as the immediate
+    # fix is just to define UserProfile for the foreign key in ChatSession.
+    chat_sessions = relationship("ChatSession", back_populates="user_profile")
 class Character(Base):
     __tablename__ = "characters"
     __table_args__ = {'extend_existing': True}
@@ -150,4 +169,4 @@ class ChatSession(Base):
 
     # Relationships
     character = relationship("Character") # Add back_populates if Character links to ChatSessions
-    # user_profile = relationship("UserProfile") # Add back_populates if UserProfile links to ChatSessions
+    user_profile = relationship("UserProfile", back_populates="chat_sessions")

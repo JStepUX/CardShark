@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Download, AlertCircle, X, CheckCircle, Loader2, RefreshCw, ArrowUpCircle } from 'lucide-react';
+import { Download, AlertCircle, X, CheckCircle, RefreshCw, ArrowUpCircle } from 'lucide-react';
+import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { useKoboldCPP } from '../hooks/useKoboldCPP';
 
 interface DownloadProgress {
@@ -291,7 +292,7 @@ const KoboldCPPManager: React.FC = () => {
           disabled={isLoading}
         >
           {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <LoadingSpinner size="sm" />
           ) : (
             <RefreshCw className="h-5 w-5" />
           )}
@@ -300,7 +301,7 @@ const KoboldCPPManager: React.FC = () => {
       
       {isLoading && !status ? (
         <div className="flex justify-center items-center py-8">
-          <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+          <LoadingSpinner size="lg" className="text-blue-500" />
         </div>
       ) : status ? (
         <>
@@ -347,7 +348,7 @@ const KoboldCPPManager: React.FC = () => {
                     title="Check for updates"
                   >
                     {checkingForUpdates ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <LoadingSpinner size={12} />
                     ) : (
                       <RefreshCw className="h-3 w-3" />
                     )}
@@ -402,7 +403,7 @@ const KoboldCPPManager: React.FC = () => {
               >
                 {isDownloading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <LoadingSpinner size="sm" />
                     Downloading...
                   </>
                 ) : (
@@ -434,7 +435,7 @@ const KoboldCPPManager: React.FC = () => {
               >
                 {isDownloading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <LoadingSpinner size="sm" />
                     Updating...
                   </>
                 ) : (

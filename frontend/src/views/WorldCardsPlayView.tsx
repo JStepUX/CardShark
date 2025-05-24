@@ -1,36 +1,30 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, User } from 'lucide-react'; // Removed unused MapIcon import
-import GameWorldIconBar from '../components/GameWorldIconBar'; // Re-introduce the import
+import { Send, User } from 'lucide-react';
+import GameWorldIconBar from '../components/GameWorldIconBar';
 import { useCharacter, CharacterData } from '../contexts/CharacterContext';
-import { Dialog } from '../components/Dialog'; // Correctly import the custom Dialog
+import { Dialog } from '../components/Dialog';
 import { CharacterCard } from '../types/schema';
 import { NpcGridItem } from '../types/worldState';
-import { Location as WorldLocation } from '../types/world'; // Import Location directly from world.ts as WorldLocation
+import { Location as WorldLocation } from '../types/world';
 import worldStateApi from '../utils/worldStateApi';
+import { apiService } from '../services/apiService';
 import ChatBubble from '../components/ChatBubble';
 import ThoughtBubble from '../components/ThoughtBubble';
 import UserSelect from '../components/UserSelect';
-// import MoodBackground from '../components/MoodBackground'; // Removed
 import MoodIndicator from '../components/MoodIndicator';
 import { useChatMessages } from '../hooks/useChatMessages';
-// import { useEmotionDetection, EmotionState } from '../hooks/useEmotionDetection'; // Removed
 import { Message, UserProfile } from '../types/messages';
 import RichTextEditor from '../components/RichTextEditor';
-// import { htmlToText, markdownToHtml } from '../utils/contentUtils'; // Unused
 import { generateUUID } from '../utils/uuidUtils';
-// import { substituteVariables } from '../utils/variableUtils'; // Unused
 import ErrorMessage from '../components/ErrorMessage';
-// import { BackgroundSettings } from '../components/ChatBackgroundSettings'; // Removed unused import
 import GalleryGrid from '../components/GalleryGrid';
 import NpcCard from '../components/NpcCard';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import MapDialog from '../components/MapDialog';
-import { formatWorldName } from '../utils/formatters'; // Removed unused formatUserName import
+import { formatWorldName } from '../utils/formatters';
 import { worldDataService } from '../services/WorldDataService';
-
-// Custom hooks for generation timing management (Included as they were in the provided file)
-// Removed unused useGenerationTimeout hook
+import LoadingSpinner from '../components/common/LoadingSpinner';
 
 const useEnhancedGenerationTimeout = (isGenerating: boolean, stopGeneration: () => void, initialTimeout = 30000, hardTimeout = 60000) => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -87,13 +81,12 @@ function useScrollToBottom() {
   return { messagesEndRef, messagesContainerRef, scrollToBottom };
 }
 
-// Separate InputArea component
 const InputArea: React.FC<{
   onSend: (text: string) => void;
   isGenerating: boolean;
   currentUser: UserProfile | null;
   onUserSelect: () => void;
-  emotion: any; // Changed EmotionState to any as it's no longer defined here
+  emotion: any; 
 }> = ({ onSend, isGenerating, currentUser, onUserSelect, emotion }) => {
   const [inputValue, setInputValue] = useState('');
   const [imageError, setImageError] = useState(false);
@@ -122,10 +115,6 @@ const InputArea: React.FC<{
   );
 };
 
-// Removed MoodEmotionBackground wrapper component
-
-// Room Introduction Utilities removed as intro generation is handled differently now
-// --- Type Definitions for useChatMessages Hook Return ---
 interface ReasoningSettings {
   enabled: boolean;
   visible: boolean;
@@ -155,12 +144,10 @@ interface UseChatMessagesReturn extends SimplifiedChatState {
   handleNewChat: () => Promise<void>;
   clearError: () => void;
   activeCharacterData: CharacterData;
-  generateNpcIntroduction: (roomContext: string) => Promise<void>; // Added this
+  generateNpcIntroduction: (roomContext: string) => Promise<void>;
 }
 
-// --- Main WorldCardsPlayView component ---
 const WorldCardsPlayView: React.FC = () => {
-  // --- State ---
   const { worldId } = useParams<{ worldId: string }>();
   const navigate = useNavigate();
   const { characterData, setCharacterData, setImageUrl } = useCharacter();
@@ -168,17 +155,15 @@ const WorldCardsPlayView: React.FC = () => {
   const [worldLoadError, setWorldLoadError] = useState<string | null>(null);
   const [currentRoomName, setCurrentRoomName] = useState<string>("Play");
   const [currentRoom, setCurrentRoom] = useState<WorldLocation | null>(null);
-  const [worldState, setWorldState] = useState<any>(null); // Renamed from worldDataState to worldState for clarity
+  const [worldState, setWorldState] = useState<any>(null);
   const { apiConfig } = useAPIConfig();
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [isNpcDialogOpen, setIsNpcDialogOpen] = useState(false);
   const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
 
-  // Use the custom scroll hook
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
-  // Use the chat messages hook
   const {
     messages,
     isGenerating,
@@ -194,57 +179,40 @@ const WorldCardsPlayView: React.FC = () => {
     setCurrentUser,
     clearError: clearChatError,
     activeCharacterData,
-    generateNpcIntroduction // Added this
+    generateNpcIntroduction
   }: UseChatMessagesReturn = useChatMessages(characterData, { isWorldPlay: true });
 
-  // Load world chat data
   useEffect(() => {
     const loadWorldChat = async () => {
       if (!worldId) return;
-      
       try {
-        // Try to load the latest chat for this world
         const chatData = await worldStateApi.loadLatestChat(worldId);
-        
         if (chatData) {
-          // setWorldChatData(chatData);
-          // Generate a unique chat ID if none exists
           if (chatData.metadata?.chat_id) {
             setChatId(chatData.metadata.chat_id);
           } else {
             const newChatId = `${worldId}-${generateUUID().slice(0, 8)}`;
             setChatId(newChatId);
           }
-          
-          // TODO: Initialize messages from chatData if we want to handle
-          // world chat storage separately from the useChatMessages hook
         } else {
-          // Create a new chat ID if none exists
           const newChatId = `${worldId}-${generateUUID().slice(0, 8)}`;
           setChatId(newChatId);
         }
       } catch (error) {
         console.error("Error loading world chat:", error);
-        // Create a new chat ID if loading fails
         const newChatId = `${worldId}-${generateUUID().slice(0, 8)}`;
         setChatId(newChatId);
       }
     };
-    
     loadWorldChat();
   }, [worldId]);
 
-  // Save chat messages when they change
   useEffect(() => {
     const saveWorldChat = async () => {
       if (!worldId || !chatId || messages.length === 0) return;
-      
       try {
-        // Debug which messages are being saved
         console.log("Saving chat messages:", messages.length, 
           messages.map(m => ({id: m.id.substring(0, 6), role: m.role, preview: m.content.substring(0, 20)})));
-        
-        // Save the current messages to the world chat
         await worldStateApi.saveChat(worldId, chatId, {
           messages: messages,
           metadata: {
@@ -257,14 +225,23 @@ const WorldCardsPlayView: React.FC = () => {
         console.error("Error saving world chat:", error);
       }
     };
-    
-    // Only save when messages change and we're not generating
     if (!isGenerating && messages.length > 0) {
       saveWorldChat();
     }
   }, [messages, worldId, chatId, isGenerating]);
 
-  // Fetch world/character data when component mounts or worldId changes
+  const ensureAllLocationsConnected = (worldData: any): any => {
+    if (!worldData || !worldData.locations) return worldData;
+    const updatedWorldData = JSON.parse(JSON.stringify(worldData));
+    Object.entries(updatedWorldData.locations).forEach(([_, location]: [string, any]) => {
+      if (location && location.connected !== false) {
+        location.connected = true;
+      }
+    });
+    console.log(`Processed ${Object.keys(updatedWorldData.locations).length} locations, ensuring they are connected`);
+    return updatedWorldData;
+  };
+
   useEffect(() => {
     const loadWorldForPlay = async () => {
       if (!worldId) {
@@ -275,13 +252,11 @@ const WorldCardsPlayView: React.FC = () => {
       setIsLoadingWorld(true);
       setWorldLoadError(null);
       try {
-        // Use the new data service to load and validate world data
-        const worldData = await worldDataService.loadWorld(worldId);
-        setWorldState(worldData);
+        const initialWorldData = await worldDataService.loadWorld(worldId);
+        const processedWorldData = ensureAllLocationsConnected(initialWorldData);
+        setWorldState(processedWorldData);
 
-        // Get the current room with position-based fallbacks
-        const { room: currentLoc } = worldDataService.getCurrentRoom(worldData);
-
+        const { room: currentLoc } = worldDataService.getCurrentRoom(processedWorldData); 
         if (!currentLoc) {
           setWorldLoadError('No locations found in this world state or current position is invalid. Please add a location or check world state.');
           setCurrentRoom(null);
@@ -289,57 +264,49 @@ const WorldCardsPlayView: React.FC = () => {
           setIsLoadingWorld(false);
           return;
         }
-
-        // Set the current room and name
         setCurrentRoom(currentLoc);
         setCurrentRoomName(currentLoc.name || 'Unnamed Room');
 
-        // Get world context description (for AI system prompt/memory)
         const worldSystemDescription = currentLoc.description ||
-          `This location is part of the world of ${formatWorldName(worldData.name) || 'Unknown'}.`;
-        
-        // Use introduction field for the user-facing first message
+          `This location is part of the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`;
         const worldUserIntroduction = currentLoc.introduction ||
-          `You find yourself in ${currentLoc.name || 'an interesting place'}.`; // More generic fallback if introduction is missing
+          `You find yourself in ${currentLoc.name || 'an interesting place'}.`; 
+        const characterBookEntries = worldDataService.processWorldItems(processedWorldData);
 
-        // Process world items using the service
-        const characterBookEntries = worldDataService.processWorldItems(worldData);
-
-        // Create CharacterCard for Context (using world info and current location)
         const characterCardForContext: CharacterCard = {
-          name: worldData.name || "World Narrator",
-          description: worldSystemDescription, // This is for the AI's understanding of the place
-          personality: "", // World narrator is neutral
-          scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`,
-          first_mes: worldUserIntroduction, // This is the user-facing initial message
+          name: processedWorldData.name || "World Narrator",
+          description: worldSystemDescription, 
+          personality: "", 
+          scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`,
+          first_mes: worldUserIntroduction, 
           mes_example: "",
           creatorcomment: "",
           avatar: "none",
           chat: "",
           talkativeness: "0.5",
           fav: false,
-          tags: ["world", worldData.name || "unknown"],
+          tags: ["world", processedWorldData.name || "unknown"],
           spec: "chara_card_v2",
           spec_version: "2.0",
           create_date: "",
           data: {
-            name: worldData.name || "World Narrator",
-            description: worldSystemDescription, // For AI
-            personality: "", // World narrator is neutral
-            scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(worldData.name) || 'Unknown'}.`,
-            first_mes: worldUserIntroduction, // For User
+            name: processedWorldData.name || "World Narrator",
+            description: worldSystemDescription, 
+            personality: "", 
+            scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`,
+            first_mes: worldUserIntroduction, 
             mes_example: "",
             creator_notes: "",
-            system_prompt: `You are the narrator describing the world of ${formatWorldName(worldData.name) || 'Unknown'}.`,
+            system_prompt: `You are the narrator describing the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`,
             post_history_instructions: "Describe the surroundings and events.",
-            tags: ["world", worldData.name || "unknown"],
+            tags: ["world", processedWorldData.name || "unknown"],
             creator: "",
             character_version: "1.0",
             alternate_greetings: [],
             extensions: {
               talkativeness: "0.5",
               fav: false,
-              world: worldData.name || "Unknown World",
+              world: processedWorldData.name || "Unknown World",
               depth_prompt: { prompt: "", depth: 4, role: "system" }
             },
             group_only_greetings: [],
@@ -350,8 +317,6 @@ const WorldCardsPlayView: React.FC = () => {
             spec: ''
           }
         };
-        
-        // Set this world-based character data in context if no character is selected
         if (!characterData) {
           setCharacterData(characterCardForContext);
         }
@@ -366,11 +331,9 @@ const WorldCardsPlayView: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worldId, setCharacterData, apiConfig]);
 
-  // --- Generation Management ---
   useEnhancedGenerationTimeout(isGenerating, stopGeneration);
   useStallDetection(isGenerating, messages[messages.length - 1]?.content || '', stopGeneration);
 
-  // Force stop generation on unmount
   useEffect(() => {
     return () => {
       if (isGenerating) {
@@ -380,94 +343,21 @@ const WorldCardsPlayView: React.FC = () => {
     };
   }, [isGenerating, stopGeneration]);
 
-  // --- Scrolling --- // Removed Emotion detection logic
-  // const { currentEmotion } = useEmotionDetection(messages, activeCharacterData?.data?.name); // Removed unused variable
-
-  // Scroll to bottom when messages change or generation stops
   useEffect(() => {
     scrollToBottom();
-    const timer = setTimeout(scrollToBottom, 100); // Ensure scroll after render
+    const timer = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timer);
   }, [messages, isGenerating, scrollToBottom]);
 
-  // Add this function to process world data and ensure all locations are properly initialized
-  const ensureAllLocationsConnected = (worldData: any): any => {
-    if (!worldData || !worldData.locations) return worldData;
-    
-    // Create a deep copy to avoid mutating the original
-    const updatedWorldData = JSON.parse(JSON.stringify(worldData));
-    
-    // Ensure all locations have connected=true unless explicitly set to false
-    Object.entries(updatedWorldData.locations).forEach(([_, location]: [string, any]) => {
-      if (location && location.connected !== false) {
-        location.connected = true;
-      }
-    });
-    
-    console.log(`Processed ${Object.keys(updatedWorldData.locations).length} locations, ensuring they are connected`);
-    
-    return updatedWorldData;
-  };
-
-  // Load world data when the component mounts or when the worldId changes
-  useEffect(() => {
-    if (!worldId) return;
-    
-    setIsLoadingWorld(true);
-    setWorldLoadError(null);
-
-    worldStateApi.getWorldState(worldId)
-      .then(data => {
-        // Process the world data to ensure all locations are properly connected
-        const processedData = ensureAllLocationsConnected(data);
-        
-        // Log the counts before and after processing
-        const locationCount = Object.keys(data.locations || {}).length;
-        const processedLocationCount = Object.keys(processedData.locations || {}).length;
-        console.log(`World loaded with ${locationCount} locations, processed to ensure ${processedLocationCount} connected locations`);
-        
-        // Set the processed world data
-        setWorldState(processedData);
-        
-        // Get the current room from the world state
-        const currentPosition = processedData.current_position;
-        const currentRoom = processedData.locations[currentPosition];
-        
-        // Update the current room state
-        if (currentRoom) {
-          setCurrentRoom(currentRoom);
-          setCurrentRoomName(currentRoom.name || 'Unknown Location');
-        } else {
-          console.error('Current position does not correspond to a valid location');
-        }
-        
-        setIsLoadingWorld(false);
-      })
-      .catch(error => {
-        console.error('Error loading world state:', error);
-        setWorldLoadError(`Failed to load world: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        setIsLoadingWorld(false);
-      });
-  }, [worldId]);
-
-  // --- Room Navigation ---
   const handleRoomSelect = useCallback(async (position: string) => {
     if (!worldId) return;
-    
     try {
-      // Use existing worldState if available for better performance, otherwise fetch fresh data
       const currentState = worldState || await worldDataService.loadWorld(worldId);
-      
-      // Check if the selected position exists in locations
       if (!currentState.locations[position]) {
         throw new Error("Selected room not found in world state");
       }
-      
-      // Store the previous room for context
       const previousPosition = currentState.current_position;
       const previousRoom = previousPosition ? currentState.locations[previousPosition] : null;
-      
-      // Update the world state with the new position
       const updatedState = {
         ...currentState,
         current_position: position,
@@ -475,303 +365,202 @@ const WorldCardsPlayView: React.FC = () => {
           ? currentState.visited_positions 
           : [...currentState.visited_positions, position]
       };
-      
-      // Save the updated state using the data service
       await worldDataService.saveWorldState(worldId, updatedState);
-      
-      // Get the selected room
       const selectedRoom = updatedState.locations[position];
-      
-      // Update local state
       setWorldState(updatedState);
       setCurrentRoom(selectedRoom);
       setCurrentRoomName(selectedRoom.name || "Unnamed Room");
-      
-      // Generate a narrative for entering the new room
       const roomIntroduction = selectedRoom.introduction || 
         selectedRoom.description || 
         `You've entered ${selectedRoom.name || "a new room"}.`;
-      
-      // Add a message about entering the new room
       const previousRoomName = previousRoom?.name || "the previous area";
       const message = `You leave ${previousRoomName} and enter ${selectedRoom.name || "a new area"}. ${roomIntroduction}`;
-      
       generateResponse(message);
     } catch (error) {
       console.error("Error navigating to room:", error);
-      setWorldLoadError(`Failed to navigate to the selected room: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setWorldLoadError(`Failed to navigate: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [worldId, generateResponse, worldState]);
+  }, [worldId, worldState, generateResponse]);
 
-  // --- NPC Dialog ---
   const handleNpcIconClick = useCallback(() => {
-    // Get processed NPCs from the current room
-    const npcs = currentRoom ? worldDataService.processNpcs(currentRoom) : [];
-    
-    // Only open dialog if we have NPCs to display
-    if (npcs.length > 0) {
-      setIsNpcDialogOpen(true);
-    } else {
-      console.log("No NPCs available in this room");
+    if (!currentRoom || !currentRoom.npcs || currentRoom.npcs.length === 0) {
+      console.log("No NPCs in the current room.");
+      return;
     }
+    setIsNpcDialogOpen(true);
   }, [currentRoom]);
 
-  // --- Other GameWorldIconBar Handlers ---
-  const handleMapIconClick = useCallback(() => {
-    setIsMapDialogOpen(true);
-  }, []);
-
   const handleInventoryIconClick = useCallback(() => {
-    // TODO: Implement inventory management
-    console.log("Inventory icon clicked - feature to be implemented");
-    window.alert("Inventory feature coming soon!");
+    console.log("Inventory icon clicked");
   }, []);
 
   const handleSpellsIconClick = useCallback(() => {
-    // TODO: Implement spells/abilities management
-    console.log("Spells icon clicked - feature to be implemented");
-    window.alert("Spells feature coming soon!");
+    console.log("Spells icon clicked");
   }, []);
 
   const handleMeleeIconClick = useCallback(() => {
-    // TODO: Implement combat system
-    console.log("Combat icon clicked - feature to be implemented");
-    window.alert("Combat feature coming soon!");
+    console.log("Melee icon clicked");
   }, []);
 
   const handleNpcSelect = useCallback(async (npc: NpcGridItem) => {
-    console.log("Selected NPC:", npc.name);
-    
+    setIsNpcDialogOpen(false);
+    if (!npc.path) {
+      console.warn("NPC path is missing, cannot load character.");
+      return;
+    }
     try {
-      // First load the character image
-      const imageResponse = await fetch(`/api/character-image/${encodeURIComponent(npc.path)}`);
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to load NPC image: ${imageResponse.statusText}`);
-      }
-      
-      // Then load the character metadata
-      const metadataResponse = await fetch(`/api/character-metadata/${encodeURIComponent(npc.path)}`);
-      if (!metadataResponse.ok) {
-        throw new Error(`Failed to load NPC metadata: ${metadataResponse.statusText}`);
-      }
-      
-      const data = await metadataResponse.json();
-      // Handle both formats: either {success: true, metadata: {...}} or just the raw metadata object
-      const metadata = data.success && data.metadata ? data.metadata : data;
-      
-      if (metadata) {
-        // Set the original NPC character data.
-        // The generateNpcIntroduction function will handle the dynamic intro.
-        setCharacterData(metadata);
-        
-        // Create image URL for the character
-        const blob = await imageResponse.blob();
-        const imageUrl = URL.createObjectURL(blob);
-        
-        // Set the image URL in context
-        setImageUrl(imageUrl);
-        
-        // Close the NPC dialog
-        setIsNpcDialogOpen(false);
-        
-        // Prepare context for the NPC introduction
-        const roomName = currentRoom?.name || currentRoomName || "this mysterious place";
-        const roomDescription = currentRoom?.description || `You are in ${roomName}.`;
-        const fullRoomContext = `${roomName}: ${roomDescription}`;
-        
-        // Call the new function to generate a dynamic NPC introduction
-        // npcName, npcPersonality, and userName will be sourced from context within useChatMessages
-        generateNpcIntroduction(fullRoomContext);
-        
+      const fetchedNpcData: any = await apiService.get(`/api/character-by-path?path=${encodeURIComponent(npc.path)}`);
+      if (fetchedNpcData) {
+        const npcCharacterCard = fetchedNpcData as CharacterCard;
+        setCharacterData(npcCharacterCard);
+        if (npcCharacterCard.avatar && npcCharacterCard.avatar !== 'none') {
+          setImageUrl(`/api/character-image/${encodeURIComponent(npcCharacterCard.avatar)}`);
+        } else {
+          setImageUrl(undefined); 
+        }
+        const introContext = `The user, ${currentUser?.name || 'Adventurer'}, encounters ${npcCharacterCard.name} in ${currentRoomName || 'this area'}. ${npcCharacterCard.first_mes || npcCharacterCard.data.first_mes || ''}`;
+        await generateNpcIntroduction(introContext);
       } else {
-        throw new Error("Failed to get valid character metadata");
+        console.error(`Could not load character data for NPC: ${npc.name} with path ${npc.path}`);
       }
     } catch (error) {
-      console.error("Error loading NPC character:", error);
-      window.alert(`Failed to load NPC: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error selecting NPC:", error);
     }
-  }, [setCharacterData, setImageUrl, currentRoom, currentRoomName, currentUser?.name, generateNpcIntroduction]);
+  }, [setCharacterData, setImageUrl, currentRoomName, currentUser?.name, generateNpcIntroduction, worldId, apiConfig]);
 
-  // --- Helper Functions ---
-  const getStopHandler = (message: Message): (() => void) | undefined => {
-    return (message.id === generatingId && isGenerating) ? stopGeneration : undefined;
-  };
-
-  // --- Event Handlers ---
   const handleClearError = () => {
-    clearChatError();
-    // setIntroError(null); // Removed
     setWorldLoadError(null);
+    clearChatError();
   };
 
   const handleSendMessage = (content: string) => {
-    if (!currentUser) { setShowUserSelect(true); return; }
-    if (content.trim()) {
-      generateResponse(content.trim());
+    if (!currentUser) {
+      setShowUserSelect(true);
+      return;
     }
+    generateResponse(content);
   };
 
-  // --- Render Logic ---
-  const npcCount = currentRoom?.npcs?.length || 0;
-  const combinedError = chatError || worldLoadError;
-
-  // Debug: Add console log to verify messages when they update
   useEffect(() => {
-      if (messages && messages.length > 0) {
-          console.log("WorldCardsPlayView: Messages updated:", messages.length, 
-              messages.map(m => ({id: m.id, role: m.role, contentPreview: m.content.substring(0, 30)})));
-      }
-  }, [messages]);
+    if (!currentUser && !characterData && worldState) {
+      // Default narrator logic handled in loadWorldForPlay
+    }
+  }, [currentUser, characterData, worldState, setCharacterData, worldId]);
 
-  // Ensure scroll to bottom when new messages appear
-  useEffect(() => {
-      scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  // Move rendering logic below all hooks to avoid early returns that break hook rules
-  // Prepare the UI elements based on loading state
   let content;
   if (isLoadingWorld) {
-      content = <div className="flex items-center justify-center h-full">Loading World...</div>;
+    content = <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>;
+  } else if (worldLoadError) {
+    content = <ErrorMessage message={worldLoadError} onDismiss={handleClearError} />;
+  } else if (!worldState || !currentRoom) {
+    content = <ErrorMessage message="World data or current room is not available. Please check the world configuration." onDismiss={handleClearError} />;
   } else {
-      content = (
-        <>
-          {/* Foreground Content Layer */}
-          <div className="relative h-full flex flex-col z-10">
-            {/* Top Bar */}
-            <nav className="flex-none flex items-center gap-2 p-4 bg-stone-900/80">
-              <button onClick={() => navigate('/worldcards')} className="px-3 py-1 bg-stone-700 hover:bg-stone-600 text-white rounded text-sm">Back to Worlds</button>
-              <span className="font-bold text-lg">{currentRoomName}</span>
-              {npcCount > 0 && (
-                 <button onClick={handleNpcIconClick} className="px-3 py-1 bg-stone-700 hover:bg-stone-600 text-white rounded text-sm flex items-center gap-1" title={`View NPCs (${npcCount})`}>
-                   <User size={18} /> <span>({npcCount})</span>
-                 </button>
-              )}
-            </nav>
-
-            {/* Error Display */}
-            {combinedError && (
-              <div className="relative z-10 px-8 py-2">
-                {/* Ensure ErrorMessage is rendered correctly */}
-                <ErrorMessage
-                  message={combinedError}
-                  onDismiss={handleClearError} // Use combined handler
-                />
-              </div>
+    content = (
+      <>
+        <div className="absolute inset-0 bg-black opacity-50" />
+        <div className="relative h-full flex flex-col z-10">
+          <nav className="flex-none flex items-center gap-2 p-4 bg-stone-900/80">
+            <button onClick={() => navigate(`/worlds/${worldId}`)} className="text-orange-500 hover:text-orange-300">
+              &larr; Back to World
+            </button>
+            <h1 className="text-xl font-semibold text-stone-200">{currentRoomName}</h1>
+          </nav>
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-opacity-75 bg-stone-950 scrollbar-thin scrollbar-thumb-stone-700 scrollbar-track-transparent">
+            {chatError && (
+            <div className="relative z-10 px-8 py-2">
+              <ErrorMessage message={chatError} onDismiss={clearChatError} />
+            </div>
             )}
-
-            {/* Chat Messages Area */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-               {messages.map((message: Message) => (
-                <React.Fragment key={message.id}>
-                  {message.role === 'thinking' && (
-                      // Correct props for ThoughtBubble
-                      <ThoughtBubble
-                        message={message}
-                        isGenerating={message.id === generatingId && isGenerating}
-                        onContentChange={(newContent: string) => updateMessage(message.id, newContent)} // Add type
-                        onDelete={() => deleteMessage(message.id)}
-                        characterName={activeCharacterData?.data?.name}
-                      />
-                  )}
-                  {message.role !== 'thinking' && (
-                    // Correct props for ChatBubble
-                    <ChatBubble
-                      message={message}
-                      isGenerating={message.id === generatingId && isGenerating}
-                      onContentChange={(newContent: string) => updateMessage(message.id, newContent)} // Add type
-                      onDelete={() => deleteMessage(message.id)}
-                      onStop={getStopHandler(message)}
-                      onTryAgain={() => regenerateMessage(message)} // Map onRegenerate to onTryAgain
-                      // onContinue prop is optional and not used here
-                      onNextVariation={() => cycleVariation(message.id, 'next')} // Split cycleVariation
-                      onPrevVariation={() => cycleVariation(message.id, 'prev')} // Split cycleVariation
-                      currentUser={currentUser || undefined} // Convert null to undefined for type compatibility
-                      characterName={activeCharacterData?.data?.name} // Pass name string
-                    />
-                  )}
-                </React.Fragment>
-               ))}
-              <div ref={messagesEndRef} /> {/* Scroll target */}
-            </div>
-
-            {/* Icon Bar - Inserted between chat and input */}
-            <div className="px-4 py-2 bg-stone-900/90 border-t border-b border-stone-700">
-              <GameWorldIconBar 
-                onNpcs={npcCount > 0 ? handleNpcIconClick : undefined}
-                npcCount={npcCount}
-                onMap={handleMapIconClick}
-                onInventory={handleInventoryIconClick}
-                onSpells={handleSpellsIconClick}
-                onMelee={handleMeleeIconClick}
-              />
-            </div>
-
-            {/* Input Area */}
-            <div className="bg-stone-900/95 border-t border-stone-700">
-              <InputArea
-                onSend={handleSendMessage}
-                isGenerating={isGenerating} // Removed isIntroGenerating
-                currentUser={currentUser}
-                onUserSelect={() => setShowUserSelect(true)}
-                emotion={{}} // Pass empty object as emotion is no longer calculated
-              />
-            </div>
+            {messages.map((message: Message) => (
+              <React.Fragment key={message.id}>
+                {message.role === 'thinking' && (
+                  <ThoughtBubble
+                    message={message}
+                    isGenerating={isGenerating && generatingId === message.id}
+                    characterName={activeCharacterData?.data?.name || characterData?.data?.name}
+                    onDelete={() => deleteMessage(message.id)}
+                    onContentChange={(newContent) => updateMessage(message.id, newContent)}
+                  />
+                )}
+                {message.role !== 'thinking' && (
+                  <ChatBubble
+                    message={message}
+                    isGenerating={isGenerating && generatingId === message.id}
+                    characterName={activeCharacterData?.data?.name || characterData?.data?.name}
+                    onContentChange={(newContent) => updateMessage(message.id, newContent)}
+                    onDelete={() => deleteMessage(message.id)}
+                    onStop={stopGeneration}
+                    onTryAgain={() => regenerateMessage(message)}
+                    onNextVariation={() => cycleVariation(message.id, 'next')}
+                    onPrevVariation={() => cycleVariation(message.id, 'prev')}
+                    currentUser={currentUser || undefined}
+                  />
+                )}
+              </React.Fragment>
+            ))}
+            <div ref={messagesEndRef} />
           </div>
-        </>
-      );
+          <div className="px-4 py-2 bg-stone-900/90 border-t border-b border-stone-700">
+            <GameWorldIconBar
+              onMap={() => setIsMapDialogOpen(true)}
+              onNpcs={handleNpcIconClick}
+              onInventory={handleInventoryIconClick}
+              onSpells={handleSpellsIconClick}
+              onMelee={handleMeleeIconClick}
+              npcCount={currentRoom?.npcs?.length || 0}
+            />
+          </div>
+          <div className="bg-stone-900/95 border-t border-stone-700">
+            <InputArea
+              onSend={handleSendMessage}
+              isGenerating={isGenerating}
+              currentUser={currentUser}
+              onUserSelect={() => setShowUserSelect(true)}
+              emotion={null}
+            />
+          </div>
+        </div>
+      </>
+    );
   }
 
   return (
     <div className="w-full h-full relative">
       {content}
-
-      {/* Modals */}
-      {/* Use the custom Dialog component */}
-      <Dialog
-        isOpen={isNpcDialogOpen}
-        onClose={() => setIsNpcDialogOpen(false)}
-        title={`NPCs in ${currentRoomName}`}
-        className="max-w-3xl"
-      >
-        <p className="text-sm text-stone-400 mb-4">
-          Select an NPC to interact with.
-        </p>
+      <Dialog isOpen={isNpcDialogOpen} onClose={() => setIsNpcDialogOpen(false)} title="Select NPC">
         <div className="max-h-[60vh] overflow-y-auto pr-2 -mr-2 mb-4">
-           <GalleryGrid
-              items={currentRoom ? worldDataService.processNpcs(currentRoom) : []}
-              renderItem={(npc: NpcGridItem, idx: number) => (
-                <NpcCard key={npc.path || idx} npc={npc} onClick={() => handleNpcSelect(npc)} />
+          {currentRoom && currentRoom.npcs && currentRoom.npcs.length > 0 ? (
+            <GalleryGrid
+              items={worldDataService.processNpcs(currentRoom)}
+              renderItem={(item: NpcGridItem, index) => (
+                <NpcCard npc={item} onClick={() => handleNpcSelect(item)} />
               )}
-              emptyMessage="No NPCs found in this room."
-           />
-        </div>
-        <div className="flex justify-end mt-4">
-          <button
-            onClick={() => setIsNpcDialogOpen(false)}
-            className="px-4 py-2 bg-stone-600 hover:bg-stone-500 text-white rounded text-sm"
-          >
-            Cancel
-          </button>
+              columns={3}
+            />
+          ) : (
+            <p>No NPCs in this room.</p>
+          )}
         </div>
       </Dialog>
-
-      <UserSelect
-        isOpen={showUserSelect}
-        onClose={() => setShowUserSelect(false)}
-        onSelect={(user) => {
-          setCurrentUser(user);
-          setShowUserSelect(false);
-        }}
-      />
-
-      <MapDialog
-        isOpen={isMapDialogOpen}
-        onClose={() => setIsMapDialogOpen(false)}
-        worldId={worldId}
-        onRoomSelect={handleRoomSelect}
-        playMode={true} // Enable play mode for the map
-      />
+      {showUserSelect && (
+        <UserSelect
+          isOpen={showUserSelect}
+          onClose={() => setShowUserSelect(false)}
+          onSelect={(user) => {
+            setCurrentUser(user);
+            setShowUserSelect(false);
+          }}
+        />
+      )}
+      {isMapDialogOpen && worldId && (
+        <MapDialog
+          worldId={worldId}
+          isOpen={isMapDialogOpen} 
+          onClose={() => setIsMapDialogOpen(false)}
+          onRoomSelect={(roomId, position) => handleRoomSelect(position)}
+          playMode={true}
+        />
+      )}
     </div>
   );
 };

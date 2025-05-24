@@ -2,7 +2,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
-import { Trash2, AlertTriangle, X, Loader2 } from 'lucide-react';
+import { Trash2, AlertTriangle, X } from 'lucide-react';
+import LoadingSpinner from './common/LoadingSpinner';
 import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from './KoboldCPPDrawerManager';
@@ -496,12 +497,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         {/* Loading/Empty/Error States - More clearly separated conditions */}
         {isLoading && characters.length === 0 && (
           <div className="flex flex-col items-center justify-center p-12 text-center">
-            <div className="relative w-16 h-16 mb-4">
-              {/* Animated spinner with gradient */}
-              <div className="absolute top-0 left-0 w-full h-full rounded-full border-t-4 border-l-4 border-r-4 border-transparent border-t-blue-500 border-l-blue-400 animate-spin"></div>
-              <div className="absolute top-0 left-0 w-full h-full rounded-full border-b-4 border-transparent border-b-indigo-600 animate-pulse"></div>
-            </div>
-            <p className="text-lg font-semibold text-blue-400 animate-pulse">Loading characters...</p>
+            <LoadingSpinner size="lg" text="Loading characters..." className="text-blue-400 mb-4" />
             <p className="text-sm text-slate-400 mt-2">If character directory is set, but characters aren't loading: Try restarting CardShark</p>
           </div>
         )}
@@ -543,18 +539,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   role="button"
                   tabIndex={0}
                   aria-label={`Select character ${character.name}`}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleCharacterClick(character); }}
                 >
-                  {/* Delete Button (Hide if animating out) */}
-                  {!isDeleting && (
+                  {/* Delete Button - Only show if not in comparison selection mode */}
+                  {!isSecondarySelector && (
                     <button
-                      title="Delete character"
                       onClick={(e) => handleTrashIconClick(e, character)}
-                      className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full backdrop-blur-sm
-                                bg-black/40 text-white opacity-0 group-hover:opacity-100
-                                transition-all duration-200 ease-in-out
-                                hover:bg-red-700/70 hover:scale-110 focus:outline-none
-                                focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
+                      className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full 
+                                 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600
+                                 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
                       aria-label={`Delete ${character.name}`}
                     >
                       <Trash2 size={16} />
@@ -594,8 +586,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         >
           {isLoadingMore && (
             <div className="flex items-center text-blue-400">
-              <Loader2 size={20} className="animate-spin mr-2" />
-              <span>Loading more characters...</span>
+              <LoadingSpinner size={20} className="mr-2" text="Loading more characters..." />
             </div>
           )}
           {!isLoadingMore && displayedCount < filteredCharacters.length && (

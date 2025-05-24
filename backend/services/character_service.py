@@ -229,6 +229,7 @@ class CharacterService:
                         )
                         self.db.add(new_db_char)
                         # Ensure lore image directory exists for new character
+                        self.db.flush() # <<< ADD THIS LINE HERE
                         self._ensure_lore_image_directory(final_char_uuid)
                     
                     # Sync Lore for this character
