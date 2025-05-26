@@ -139,16 +139,19 @@ from backend.database import init_db, SessionLocal, get_db # Import SessionLocal
 async def startup():
     try:
         init_db()
-        logger.log_info("Database tables initialised")
-
-        # Synchronize character directories
+        logger.log_info("Database tables initialised")        # Synchronize character directories
         with SessionLocal() as db:
-            CharacterService(
-                db_session=db,
-                png_handler=png_handler,
-                settings_manager=settings_manager,
-                logger=logger,
-            ).sync_character_directories()
+            try:
+                CharacterService(
+                    db_session=db,
+                    png_handler=png_handler,
+                    settings_manager=settings_manager,
+                    logger=logger,
+                ).sync_character_directories()
+            except Exception as sync_exc:
+                logger.log_error(f"Character sync failed, rolling back session: {sync_exc}")
+                db.rollback()
+                raise
         logger.log_info("Initial character directory synchronization complete.")
     except Exception as exc:
         logger.log_error(f"DB init or character sync failed: {exc}\n{traceback.format_exc()}")

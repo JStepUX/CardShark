@@ -118,33 +118,80 @@ def normalize_path(path_str: str, logger: LogManager) -> str:
 
 def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIBase:
     """Helper function to convert a DB model to an API model with proper handling of JSON fields."""
-    api_char = CharacterAPIBase.model_validate(db_char)
     try:
-        # Check if tags is already a dict/list or if it needs to be parsed from JSON string
+        # Parse JSON fields before validation
+        parsed_tags = []
+        parsed_extensions = {}
+        
+        # Parse tags field
         if db_char.tags:
             if isinstance(db_char.tags, str):
-                api_char.tags = json.loads(db_char.tags)
+                try:
+                    parsed_tags = json.loads(db_char.tags)
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid JSON in tags field for character {db_char.character_uuid}")
+                    parsed_tags = []
+            elif isinstance(db_char.tags, list):
+                parsed_tags = db_char.tags
             else:
-                # If it's already a list/dict, use it directly
-                api_char.tags = db_char.tags
-        else:
-            api_char.tags = []
-            
-        # Similar check for extensions_json
+                parsed_tags = []
+        
+        # Parse extensions_json field
         if db_char.extensions_json:
             if isinstance(db_char.extensions_json, str):
-                api_char.extensions_json = json.loads(db_char.extensions_json)
+                try:
+                    parsed_extensions = json.loads(db_char.extensions_json)
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid JSON in extensions_json field for character {db_char.character_uuid}")
+                    parsed_extensions = {}
+            elif isinstance(db_char.extensions_json, dict):
+                parsed_extensions = db_char.extensions_json
             else:
-                # If it's already a dict, use it directly
-                api_char.extensions_json = db_char.extensions_json
-        else:
-            api_char.extensions_json = {}
-    except json.JSONDecodeError:
-        # Log the error but continue with empty defaults
-        logger.warning(f"JSON parsing error for character {db_char.character_uuid}: tags or extensions_json is not valid JSON")
-        api_char.tags = []
-        api_char.extensions_json = {}
-    return api_char
+                parsed_extensions = {}
+        
+        # Create API model with parsed data
+        api_char = CharacterAPIBase(
+            character_uuid=db_char.character_uuid,
+            name=db_char.name,
+            description=db_char.description,
+            personality=db_char.personality,
+            scenario=db_char.scenario,
+            first_mes=db_char.first_mes,
+            mes_example=db_char.mes_example,
+            creator_comment=db_char.creator_comment,
+            png_file_path=db_char.png_file_path,
+            tags=parsed_tags,
+            spec_version=db_char.spec_version,
+            created_at=db_char.created_at,
+            updated_at=db_char.updated_at,
+            db_metadata_last_synced_at=db_char.db_metadata_last_synced_at,
+            extensions_json=parsed_extensions,
+            original_character_id=db_char.original_character_id
+        )
+        
+        return api_char
+        
+    except Exception as e:
+        logger.error(f"Error converting DB model to API model for character {db_char.character_uuid}: {str(e)}")
+        # Create a minimal valid model as fallback
+        return CharacterAPIBase(
+            character_uuid=db_char.character_uuid,
+            name=db_char.name or "Unknown",
+            description=db_char.description,
+            personality=db_char.personality,
+            scenario=db_char.scenario,
+            first_mes=db_char.first_mes,
+            mes_example=db_char.mes_example,
+            creator_comment=db_char.creator_comment,
+            png_file_path=db_char.png_file_path or "",
+            tags=[],
+            spec_version=db_char.spec_version,
+            created_at=db_char.created_at,
+            updated_at=db_char.updated_at,
+            db_metadata_last_synced_at=db_char.db_metadata_last_synced_at,
+            extensions_json={},
+            original_character_id=db_char.original_character_id
+        )
 
 # --- Character Endpoints ---
 

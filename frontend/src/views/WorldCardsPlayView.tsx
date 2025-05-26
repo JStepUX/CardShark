@@ -532,7 +532,7 @@ const WorldCardsPlayView: React.FC = () => {
           {currentRoom && currentRoom.npcs && currentRoom.npcs.length > 0 ? (
             <GalleryGrid
               items={worldDataService.processNpcs(currentRoom)}
-              renderItem={(item: NpcGridItem, index) => (
+              renderItem={(item: NpcGridItem) => (
                 <NpcCard npc={item} onClick={() => handleNpcSelect(item)} />
               )}
               columns={3}
@@ -557,7 +557,7 @@ const WorldCardsPlayView: React.FC = () => {
           worldId={worldId}
           isOpen={isMapDialogOpen} 
           onClose={() => setIsMapDialogOpen(false)}
-          onRoomSelect={(roomId, position) => handleRoomSelect(position)}
+          onRoomSelect={(_, position) => handleRoomSelect(position)}
           playMode={true}
         />
       )}

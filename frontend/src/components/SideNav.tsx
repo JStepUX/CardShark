@@ -77,7 +77,7 @@ const SideNav: React.FC<SideNavProps> = ({
   backendStatus,
   onImageChange
 }) => {
-const { characterData, imageUrl: characterImageUrl } = useCharacter(); // Rename to avoid conflict
+const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter(); // Add setters
 const {
   availablePreviewImages,
   currentPreviewImageIndex,
@@ -208,6 +208,11 @@ return (
                     availableImages={availablePreviewImages}
                     currentIndex={currentPreviewImageIndex}
                     onNavigate={navigateToPreviewImage}
+                    onUnloadCharacter={() => {
+                      setCharacterData(null);
+                      setImageUrl(undefined);
+                    }}
+                    hasCharacterLoaded={!!characterData}
                   />
                 </div>
                 <TokenCounter characterData={characterData} />

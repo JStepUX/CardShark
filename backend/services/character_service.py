@@ -231,12 +231,14 @@ class CharacterService:
                         # Ensure lore image directory exists for new character
                         self.db.flush() # <<< ADD THIS LINE HERE
                         self._ensure_lore_image_directory(final_char_uuid)
-                    
-                    # Sync Lore for this character
+                      # Sync Lore for this character
                     self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}))
 
                 except Exception as e:
                     self.logger.log_error(f"Failed to process/sync PNG {abs_png_path}: {e} - {traceback.format_exc()}")
+                    # Rollback any changes for this character to avoid partial state
+                    self.db.rollback()
+                    # Continue processing other characters
         
         # Prune characters from DB that no longer exist on disk
         # This is a destructive operation, ensure it's desired.
@@ -294,46 +296,25 @@ class CharacterService:
         elif lore_book.name != lore_book_name:
             self.logger.log_info(f"Updating lore book name for {character_uuid} from '{lore_book.name}' to '{lore_book_name}'.")
             lore_book.name = lore_book_name
-            self.db.add(lore_book) # Mark as dirty
-
-        # Sync LoreEntries: Create, Update, Delete
-        # Get existing entry IDs from DB for this book to find which ones to delete
-        db_entry_ids = {entry.id for entry in lore_book.entries}
-        
-        # Get entry IDs from the current character_book_data
-        # Ensure entry_data["id"] is treated as the primary key for LoreEntry model
-        # The LoreEntry model uses 'id' as its PK, which should map to 'id' from the JSON.
-        data_entry_ids = set()
-        valid_entries_data_for_upsert = []
-
-        for entry_data_item in entries_data:
-            if not isinstance(entry_data_item, dict):
-                self.logger.log_warning(f"Skipping non-dict lore entry item for {character_uuid}: {entry_data_item}")
+            self.db.add(lore_book) # Mark as dirty        # Sync LoreEntries: Clear existing entries and recreate them
+        # Since JSON IDs are not unique across characters, we need to clear and recreate
+        # Delete all existing entries for this lore book
+        if lore_book.entries:
+            self.logger.log_info(f"Clearing {len(lore_book.entries)} existing lore entries for book {lore_book.id} (Char: {character_uuid})")
+            for entry in lore_book.entries:
+                self.db.delete(entry)
+            self.db.flush()  # Ensure deletions are processed before creating new entries        # Create new entries from the character book data
+        for entry_data in entries_data:
+            if not isinstance(entry_data, dict):
+                self.logger.log_warning(f"Skipping non-dict lore entry item for {character_uuid}: {entry_data}")
                 continue
-            
-            entry_id = entry_data_item.get("id") # This 'id' is from the JSON structure
-            if entry_id is None:
-                self.logger.log_warning(f"Lore entry for {character_uuid} is missing 'id'. Cannot process. Data: {entry_data_item}")
-                continue # Cannot process without an ID
-            
-            data_entry_ids.add(entry_id)
-            valid_entries_data_for_upsert.append(entry_data_item)
 
-        # Entries to delete: in DB but not in current data
-        ids_to_delete_from_db = db_entry_ids - data_entry_ids
-        if ids_to_delete_from_db:
-            self.logger.log_info(f"Deleting {len(ids_to_delete_from_db)} lore entries for book {lore_book.id} (Char: {character_uuid}): {ids_to_delete_from_db}")
-            self.db.query(LoreEntryModel).filter(
-                LoreEntryModel.lore_book_id == lore_book.id,
-                LoreEntryModel.id.in_(ids_to_delete_from_db) # Using the 'id' from JSON as the PK
-            ).delete(synchronize_session=False)
-
-        # Upsert entries: in current data (either new or update)
-        for entry_data in valid_entries_data_for_upsert:
-            entry_id = entry_data["id"] # Already validated this exists
+            # Store the original JSON ID for reference but don't use it as DB primary key
+            original_json_id = entry_data.get("id", "unknown")
             
             # Data for the LoreEntry model instance
             lore_entry_model_data = {
+                "lore_book_id": lore_book.id,
                 "keys_json": json.dumps(entry_data.get("keys", [])),
                 "secondary_keys_json": json.dumps(entry_data.get("secondary_keys", [])),
                 "content": entry_data.get("content", ""), # Ensure content is not None
@@ -346,26 +327,10 @@ class CharacterService:
                 "extensions_json": json.dumps(entry_data.get("extensions", {}))
             }
 
-            # Try to find existing entry by its 'id' (which is the PK in LoreEntry model)
-            # and ensure it belongs to the correct lore_book.
-            db_entry = self.db.query(LoreEntryModel).filter(
-                LoreEntryModel.id == entry_id,
-                LoreEntryModel.lore_book_id == lore_book.id
-            ).first()
-
-            if db_entry: # Update existing entry
-                self.logger.log_info(f"Updating lore entry (JSON ID: {entry_id}, DB PK: {db_entry.id}) for book {lore_book.id}")
-                for key, value in lore_entry_model_data.items():
-                    setattr(db_entry, key, value)
-                self.db.add(db_entry) # Mark as dirty
-            else: # Create new entry
-                self.logger.log_info(f"Creating new lore entry (JSON ID: {entry_id}) for book {lore_book.id}")
-                new_db_entry = LoreEntryModel(
-                    id=entry_id, # Set the PK from the JSON 'id'
-                    lore_book_id=lore_book.id,
-                    **lore_entry_model_data
-                )
-                self.db.add(new_db_entry)
+            # Create new entry (let DB auto-generate the primary key)
+            self.logger.log_info(f"Creating new lore entry (JSON ID: {original_json_id}) for book {lore_book.id}")
+            new_db_entry = LoreEntryModel(**lore_entry_model_data)
+            self.db.add(new_db_entry)
         # self.db.commit() will be called by the calling function (e.g. sync_character_directories or save_uploaded_character_card)
 
 

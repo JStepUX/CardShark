@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Upload, Crop, ChevronLeft, ChevronRight } from 'lucide-react'; // Added Chevrons
+import { Upload, Crop, ChevronLeft, ChevronRight, X } from 'lucide-react'; // Added X icon
 import ImageCropperModal from './ImageCropperModal';
 import { AvailablePreviewImage } from '../handlers/loreHandler'; // Import type
 
@@ -10,6 +10,8 @@ interface ImagePreviewProps {
   availableImages?: AvailablePreviewImage[];
   currentIndex?: number;
   onNavigate?: (newIndex: number) => void;
+  onUnloadCharacter?: () => void; // New prop for unloading character
+  hasCharacterLoaded?: boolean; // New prop to know if character is loaded
 }
 
 const ImagePreview: React.FC<ImagePreviewProps> = ({
@@ -18,7 +20,9 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     onImageChange,
     availableImages,
     currentIndex,
-    onNavigate
+    onNavigate,
+    onUnloadCharacter,
+    hasCharacterLoaded = false
 }) => {
   const [imageError, setImageError] = useState(false);
   
@@ -218,7 +222,21 @@ const handleMouseEnter = () => {
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
                 {currentIndex + 1} / {availableImages.length}
               </div>
-            </>
+            </>          )}
+          
+          {/* Character unload button - only show when character is loaded and hovering */}
+          {isHovering && hasCharacterLoaded && onUnloadCharacter && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnloadCharacter();
+              }}
+              className="absolute top-2 right-2 p-2 bg-red-600 bg-opacity-80 hover:bg-red-700 hover:bg-opacity-90 rounded-full text-white transition-all duration-200 shadow-lg"
+              title="Switch to Assistant Mode (unload character)"
+              aria-label="Unload character"
+            >
+              <X size={16} />
+            </button>
           )}
           
           {/* Hover overlay with controls - Conditionally show based on image type or if onImageChange is provided */}
