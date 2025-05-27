@@ -144,7 +144,7 @@ interface UseChatMessagesReturn extends SimplifiedChatState {
   handleNewChat: () => Promise<void>;
   clearError: () => void;
   activeCharacterData: CharacterData;
-  generateNpcIntroduction: (roomContext: string) => Promise<void>;
+  generateNpcIntroduction: (npcCharacterData: CharacterCard, worldInfo?: { worldName: string; settingDescription: string }, encounterContext?: string) => Promise<null>;
 }
 
 const WorldCardsPlayView: React.FC = () => {
@@ -419,7 +419,7 @@ const WorldCardsPlayView: React.FC = () => {
           setImageUrl(undefined); 
         }
         const introContext = `The user, ${currentUser?.name || 'Adventurer'}, encounters ${npcCharacterCard.name} in ${currentRoomName || 'this area'}. ${npcCharacterCard.first_mes || npcCharacterCard.data.first_mes || ''}`;
-        await generateNpcIntroduction(introContext);
+        await generateNpcIntroduction(npcCharacterCard, undefined, introContext);
       } else {
         console.error(`Could not load character data for NPC: ${npc.name} with path ${npc.path}`);
       }

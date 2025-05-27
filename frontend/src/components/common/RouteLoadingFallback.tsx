@@ -8,7 +8,7 @@ import LoadingSpinner from './LoadingSpinner';
 const RouteLoadingFallback: React.FC = () => {
   return (
     <div className="flex items-center justify-center h-full min-h-[50vh]">
-      <LoadingSpinner size="md" message="Loading view..." />
+      <LoadingSpinner size="md" text="Loading view..." />
     </div>
   );
 };

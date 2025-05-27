@@ -1476,6 +1476,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     updateReasoningSettings,
     loadExistingChat, 
     handleNewChat,     
-    generateNpcIntroduction, 
+    generateNpcIntroduction,
+    activeCharacterData: effectiveCharacterData, // Add the missing activeCharacterData property
   };
 }

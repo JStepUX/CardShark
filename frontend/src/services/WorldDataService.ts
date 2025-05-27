@@ -5,8 +5,7 @@ import worldStateApi from '../utils/worldStateApi';
  * Service for handling world data operations with proper error handling
  * and data validation
  */
-class WorldDataService {
-  loadCharacter(character_id: any) {
+class WorldDataService {  loadCharacter(_character_id: any) {
     throw new Error('Method not implemented.');
   }
   /**
@@ -103,12 +102,13 @@ class WorldDataService {
   processNpcs(room: WorldLocation | null): NpcGridItem[] {
     if (!room || !room.npcs) {
       return [];
-    }
-
-    return room.npcs.map((npc: any) => {
+    }    return room.npcs.map((npc: any) => {
       // If npc is already a valid object with name and path, return it
       if (typeof npc === 'object' && npc !== null && typeof npc.name === 'string' && typeof npc.path === 'string') {
-        return npc as NpcGridItem;
+        return {
+          ...npc,
+          character_id: npc.character_id || npc.path // Use existing character_id or fallback to path
+        } as NpcGridItem;
       }
       
       // If npc is a string (path), create an object with path and derived name
@@ -118,6 +118,7 @@ class WorldDataService {
         const name = fileName.replace(/\.\w+$/, '') || 'Unknown NPC';
         
         return {
+          character_id: npc, // Use the path as character_id for string NPCs
           name,
           path: npc
         };
@@ -125,6 +126,7 @@ class WorldDataService {
       
       // Default fallback for unknown formats
       return {
+        character_id: typeof npc === 'string' ? npc : 'unknown',
         name: 'Unknown NPC',
         path: typeof npc === 'string' ? npc : ''
       };

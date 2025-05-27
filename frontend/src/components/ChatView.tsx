@@ -261,10 +261,10 @@ const ChatView: React.FC = () => {
 
     // Also update background settings in current chat metadata
     if (characterData && messages.length > 0 && !isGenerating) { // Avoid saving during generation
-      try {
-        // Pass current background settings when saving the chat
+      try {        // Pass current background settings when saving the chat
         ChatStorage.saveChat(
           characterData,
+          currentChatId,
           messages,
           currentUser,
           null, // No need to pass apiInfo here, saveChat uses global
@@ -293,15 +293,14 @@ const ChatView: React.FC = () => {
     continueResponse,
     stopContinuation,
     error: continuationError,
-    clearError: clearContinuationError
-  } = useChatContinuation(
+    clearError: clearContinuationError  } = useChatContinuation(
     messages,
     characterData,
-    (updatedMessages) => {
-      // This is the saveMessages function passed to useChatContinuation
+    currentChatId,
+    (updatedMessages) => {      // This is the saveMessages function passed to useChatContinuation
       // Use ChatStorage directly as apiService.saveChat might not exist or be correct
       if (characterData) {
-          ChatStorage.saveChat(characterData, updatedMessages, currentUser, null, backgroundSettings);
+          ChatStorage.saveChat(characterData, currentChatId, updatedMessages, currentUser, null, backgroundSettings);
       }
     },
     (updatedMessages) => {

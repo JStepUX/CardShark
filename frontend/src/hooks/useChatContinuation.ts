@@ -9,6 +9,7 @@ import { APIConfig } from '../types/api';
 export function useChatContinuation(
   messages: Message[],
   characterData: CharacterData | null,
+  chatSessionId: string,
   saveMessages: (messages: Message[]) => void,
   updateMessagesState: (updatedMessages: Message[]) => void,
   setIsGenerating: (isGenerating: boolean) => void,
@@ -104,14 +105,12 @@ export function useChatContinuation(
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
       
       const abortController = new AbortController();
-      currentGenerationRef.current = abortController;
-      const response = await PromptHandler.generateChatResponse(
-        characterData,
-        message.content,
+      currentGenerationRef.current = abortController;      const response = await PromptHandler.generateChatResponse(
+        chatSessionId, // chat session UUID
         contextMessages,
-        'User', // Using default user name as currentUser is not available in this hook
         formattedAPIConfig, 
-        abortController.signal
+        abortController.signal,
+        characterData // Optional character card parameter
       );
 
       if (!response.ok) {

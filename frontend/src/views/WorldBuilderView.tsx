@@ -30,6 +30,7 @@ const normalizeNpc = (npc: any): NpcGridItem => {
     const name = fileName.replace(/\.\w+$/, ''); // Remove file extension
     
     return {
+      character_id: npc, // Use the path as character_id
       name: name || 'Unknown Character',
       path: npc
     };
@@ -37,6 +38,7 @@ const normalizeNpc = (npc: any): NpcGridItem => {
   
   // Default fallback for unknown formats
   return {
+    character_id: typeof npc === 'string' ? npc : 'unknown',
     name: 'Unknown Character',
     path: typeof npc === 'string' ? npc : ''
   };
