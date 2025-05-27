@@ -61,8 +61,11 @@ def create_new_chat_endpoint(
 @router.post("/api/load-latest-chat", response_model=Optional[pydantic_models.ChatSessionRead])
 def load_latest_chat_endpoint(
     payload: pydantic_models.CharacterUUIDPayload, # Use the new Pydantic model for the request body
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    chat_handler: ChatHandler = Depends(get_chat_handler),
+    character_service: CharacterService = Depends(get_character_service_dependency)
 ):
+    # Get the latest session from database
     latest_session = chat_service.get_latest_chat_session_for_character(db=db, character_uuid=payload.character_uuid)
     if not latest_session:
         # As per user clarification, robustly tolerate this. Frontend might call create-new-chat.
@@ -70,6 +73,25 @@ def load_latest_chat_endpoint(
         # For now, let's return None, which will be an empty 200 if no session.
         # If a 404 is preferred, raise HTTPException(status_code=404, detail="No chat session found for this character")
         return None
+    
+    # Also load the actual messages from the chat file using ChatHandler
+    character = character_service.get_character_by_uuid(payload.character_uuid)
+    if character:
+        character_data_for_handler = {
+            "character_uuid": character.character_uuid,
+            "uuid": character.character_uuid, 
+            "data": {"name": character.name}
+        }
+        
+        # Load the chat messages from file
+        chat_data = chat_handler.load_latest_chat(character_data_for_handler, scan_all_files=True)
+        if chat_data and chat_data.get("success") and chat_data.get("messages"):
+            # Add the messages to the session response
+            session_dict = latest_session.__dict__.copy()
+            session_dict["messages"] = chat_data["messages"]
+            session_dict["success"] = True
+            return session_dict
+    
     return latest_session
 
 @router.post("/api/save-chat", response_model=pydantic_models.ChatSessionRead)

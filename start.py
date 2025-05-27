@@ -9,12 +9,112 @@ import subprocess
 import shutil  # Import shutil for rmtree
 from fastapi import FastAPI
 import tempfile  # Import tempfile for getting temp directory
+import psutil  # For process management
+import requests  # For health checks
 
 app = FastAPI()
+
+# CardShark ports
+BACKEND_PORT = 9696
+FRONTEND_PORT = 6969
 
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+def check_port_in_use(port):
+    """Check if a port is in use and return the process using it."""
+    try:
+        for conn in psutil.net_connections():
+            if conn.laddr.port == port and conn.status == psutil.CONN_LISTEN:
+                try:
+                    proc = psutil.Process(conn.pid)
+                    return {
+                        'in_use': True,
+                        'pid': conn.pid,
+                        'process': proc.name(),
+                        'cmdline': ' '.join(proc.cmdline()) if proc.cmdline() else proc.name()
+                    }
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    return {'in_use': True, 'pid': conn.pid, 'process': 'Unknown', 'cmdline': 'Unknown'}
+    except Exception as e:
+        print(f"Error checking port {port}: {e}")
+    return {'in_use': False}
+
+def kill_process_on_port(port):
+    """Kill process using the specified port."""
+    port_info = check_port_in_use(port)
+    if port_info['in_use']:
+        try:
+            print(f"Killing process {port_info['pid']} ({port_info['process']}) using port {port}")
+            proc = psutil.Process(port_info['pid'])
+            proc.terminate()
+            # Wait up to 5 seconds for graceful termination
+            try:
+                proc.wait(timeout=5)
+                print(f"Process {port_info['pid']} terminated gracefully")
+            except psutil.TimeoutExpired:
+                print(f"Process {port_info['pid']} didn't terminate gracefully, force killing...")
+                proc.kill()
+                proc.wait()
+                print(f"Process {port_info['pid']} force killed")
+            return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+            print(f"Error killing process on port {port}: {e}")
+            return False
+    return True
+
+def check_service_health(port, path="/"):
+    """Check if a service is responding on the given port."""
+    try:
+        response = requests.get(f"http://localhost:{port}{path}", timeout=2)
+        return response.status_code == 200
+    except:
+        return False
+
+def ensure_ports_available():
+    """Ensure both CardShark ports are available, killing existing processes if needed."""
+    print("Checking port availability...")
+    
+    # Check backend port
+    backend_info = check_port_in_use(BACKEND_PORT)
+    if backend_info['in_use']:
+        print(f"Port {BACKEND_PORT} is in use by: {backend_info['process']} (PID: {backend_info['pid']})")
+        print(f"Command: {backend_info['cmdline']}")
+        
+        # Check if it's a CardShark backend by testing health endpoint
+        if check_service_health(BACKEND_PORT, "/api/health"):
+            print("Detected running CardShark backend - shutting down...")
+        else:
+            print("Port is used by another service - shutting down...")
+        
+        if not kill_process_on_port(BACKEND_PORT):
+            print(f"Failed to free port {BACKEND_PORT}. Please manually kill the process and try again.")
+            sys.exit(1)
+        
+        # Wait a moment for port to be freed
+        time.sleep(1)
+    
+    # Check frontend port  
+    frontend_info = check_port_in_use(FRONTEND_PORT)
+    if frontend_info['in_use']:
+        print(f"Port {FRONTEND_PORT} is in use by: {frontend_info['process']} (PID: {frontend_info['pid']})")
+        print(f"Command: {frontend_info['cmdline']}")
+        
+        # Check if it's a CardShark frontend
+        if check_service_health(FRONTEND_PORT):
+            print("Detected running CardShark frontend - shutting down...")
+        else:
+            print("Port is used by another service - shutting down...")
+        
+        if not kill_process_on_port(FRONTEND_PORT):
+            print(f"Failed to free port {FRONTEND_PORT}. Please manually kill the process and try again.")
+            sys.exit(1)
+        
+        # Wait a moment for port to be freed
+        time.sleep(1)
+    
+    print("Ports are now available for CardShark services")
 
 def check_npm():
     try:
@@ -60,7 +160,7 @@ def run_backend():
         uvicorn.run(
             "main:app",
             host="127.0.0.1",
-            port=9696,
+            port=BACKEND_PORT,
             reload=False
         )
     except Exception as e:
@@ -122,6 +222,14 @@ def clean_mei_folders(max_age_hours=1):
         print(f"Error while cleaning _MEI folders: {e}")
 
 def main():
+    print("=== CardShark Development Server ===")
+    print(f"Backend will run on: http://localhost:{BACKEND_PORT}")
+    print(f"Frontend will run on: http://localhost:{FRONTEND_PORT}")
+    print()
+    
+    # Ensure ports are available before starting
+    ensure_ports_available()
+    
     root_dir = os.path.dirname(os.path.abspath(__file__))
     os.environ['PYTHONPATH'] = root_dir  # Set PYTHONPATH
     backend_dir = os.path.join(root_dir, 'backend') # Define backend_dir earlier
@@ -157,21 +265,37 @@ def main():
         print(f"Error checking KoboldCPP: {e}")
 
     # Start backend
+    print(f"Starting CardShark backend on port {BACKEND_PORT}...")
     backend_thread = Thread(target=run_backend)
     backend_thread.daemon = True
     backend_thread.start()
     
-    print("Starting backend server...")
-    time.sleep(2)  # Wait for backend
+    # Wait for backend to be ready
+    print("Waiting for backend to start...")
+    backend_ready = False
+    for i in range(30):  # Wait up to 30 seconds
+        if check_service_health(BACKEND_PORT, "/api/health"):
+            print("Backend is ready!")
+            backend_ready = True
+            break
+        time.sleep(1)
+        if i % 5 == 4:  # Print every 5 seconds
+            print(f"Still waiting for backend... ({i+1}s)")
+    
+    if not backend_ready:
+        print("Backend failed to start properly. Check for errors above.")
+        sys.exit(1)
     
     # Open browser
-    webbrowser.open('http://localhost:6969')
+    print(f"Opening browser to http://localhost:{FRONTEND_PORT}")
+    webbrowser.open(f'http://localhost:{FRONTEND_PORT}')
     
     # Run frontend (blocking)
+    print(f"Starting CardShark frontend on port {FRONTEND_PORT}...")
     try:
         run_frontend(root_dir)
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        print("\nShutting down CardShark...")
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)

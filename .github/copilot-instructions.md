@@ -218,6 +218,32 @@ When implementing features, prioritize approaches in this order:
 - **Custom templates not saving**: Check template persistence and validation logic
 - **Template detection not working**: Verify detection patterns are correctly implemented
 
+## CardShark Development Environment
+
+### Terminal Configuration
+- **Default Shell**: The development environment uses `bash.exe` as the default terminal
+- **Command Generation**: All terminal commands should be generated for Bash compatibility
+- **Process Management**: Use standard Unix process management commands (ps, kill, etc.) when troubleshooting
+- **Path Handling**: Be aware of Windows/Unix path differences when working with file operations
+
+> **Important**: Always generate terminal commands for Bash compatibility since `bash.exe` is the default shell in this environment.
+
+### Port Configuration
+- **Backend API**: Runs on port **9696** (http://localhost:9696)
+- **Frontend Dev Server**: Runs on port **6969** (http://localhost:6969) 
+- **API Base URL**: All API calls should target `http://localhost:9696/api/`
+- **Development URLs**: 
+  - Frontend: http://localhost:6969
+  - Backend API: http://localhost:9696
+  - API endpoints: http://localhost:9696/api/*
+
+> **Critical**: Never assume default ports (8000, 3000, 5000). Always use the CardShark-specific ports above.
+
+### Common Development Issues
+- **Port Conflicts**: Check for zombie Node.js or Python processes using `ps aux | grep node` or `ps aux | grep python`
+- **Service Startup**: Always use `start.py` to launch both backend and frontend services together
+- **Process Cleanup**: Kill lingering processes with `kill -9 <PID>` before restarting services
+
 ## CardShark Build System Guidelines
 
 ### PyInstaller Deployment Rules

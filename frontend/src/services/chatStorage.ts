@@ -271,14 +271,14 @@ export class ChatStorage {
 
       const data = await response.json();
       console.log('New chat created:', data);
-      // Ensure chat_session_uuid is returned as per the guide
-      if (data.success && data.chat_session_uuid) {
-        return { ...data, chat_id: data.chat_id }; // Keep chat_id if backend still sends it for file naming
-      } else if (data.success && !data.chat_session_uuid) {
-        console.warn('/api/create-new-chat success response missing chat_session_uuid');
-        return { ...data, success: false, error: 'Missing chat_session_uuid in response' };
+      
+      // The API returns the chat session data directly (no wrapper 'success' field)
+      if (data.chat_session_uuid) {
+        return { success: true, ...data };
+      } else {
+        console.error('/api/create-new-chat response missing chat_session_uuid:', data);
+        return { success: false, error: 'Missing chat_session_uuid in response' };
       }
-      return data; // Return full data which might include error messages
     } catch (error) {
       console.error('Error creating new chat:', error);
       return { success: false, error: `Error: ${error}` };
@@ -445,19 +445,22 @@ export class ChatStorage {
       if (data === null) {
         console.log('/api/load-latest-chat returned null, treating as "no chat session found"');
         return {
-          success: true, // API call successful, but no chat data
+          success: false, // Change to false so it triggers recovery logic
           data: null,
           chat_session_uuid: null,
           messages: [],
           title: null,
-          chat_id: null // To be consistent with the non-null response structure
+          chat_id: null,
+          error: "No chats found",
+          isRecoverable: true,
+          first_mes_available: character?.data?.first_mes ? true : false
         };
       }
       
       // Handle empty success responses from Featherless
       // This check should now be safe as 'data' is confirmed not to be null.
-      if (data.success === true && !data.chatId && !data.messages) {
-        console.log('API returned success but no chat ID or messages, treating as "no chats found"');
+      if (data.success === true && (!data.messages || (Array.isArray(data.messages) && data.messages.length === 0))) {
+        console.log('API returned success but no messages, treating as "no chats found"');
         return {
           success: false,
           error: "No chats found (API returned empty success response)",
@@ -493,18 +496,28 @@ export class ChatStorage {
         console.warn('Chat loading response format:', data);
       }
       
-      // Ensure chat_session_uuid is returned as per the guide
-      if (data.success && data.chat_session_uuid) {
-        return { ...data, chat_id: data.chat_id }; // Keep chat_id if backend still sends it for file naming
-      } else if (data.success && !data.chat_session_uuid) {
-         console.warn('/api/load-latest-chat success response missing chat_session_uuid');
-         // Treat as recoverable if first_mes is available, as a new chat can be started
-         return {
-           success: false,
-           error: "Missing chat_session_uuid in response",
-           isRecoverable: character?.data?.first_mes ? true : false,
-           first_mes_available: character?.data?.first_mes ? true : false
-         };
+      // Check if we have a chat_session_uuid and handle response appropriately
+      if (data.chat_session_uuid) {
+        // If we have messages from the updated endpoint, return success
+        if (data.success && data.messages) {
+          return { success: true, ...data };
+        } else {
+          // If we only have session metadata (no messages), treat as success but empty
+          return { 
+            success: true, 
+            ...data, 
+            messages: [] 
+          };
+        }
+      } else {
+        console.warn('/api/load-latest-chat response missing chat_session_uuid');
+        // Treat as recoverable if first_mes is available, as a new chat can be started
+        return {
+          success: false,
+          error: "Missing chat_session_uuid in response",
+          isRecoverable: character?.data?.first_mes ? true : false,
+          first_mes_available: character?.data?.first_mes ? true : false
+        };
       }
       return data; // Return full data which might include error messages
     } catch (error) {

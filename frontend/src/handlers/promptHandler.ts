@@ -246,54 +246,76 @@ ${character.data.mes_example || ''}
 
   /**
    * Generates a chat response using the provided parameters.
-   * Overloaded method to support different parameter combinations used throughout the app.
+   * Routes to the working /api/generate endpoint with proper payload structure.
    */
   public static async generateChatResponse(
-    chatSessionUuid: string, // Added chat_session_uuid
-    // characterCard: CharacterCard, // No longer needed directly for payload, but keep for template/stop sequences if used by backend
-    // prompt: string, // Backend will construct the prompt
-    contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>, // This is the current_context
-    // userName: string, // No longer needed for payload
-    _apiConfig?: any, // Keep for stop_sequences or other non-payload backend params
+    chatSessionUuid: string, // For context tracking and save operations
+    contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
+    apiConfig: any, // API configuration for LLM generation
     signal?: AbortSignal,
-    _characterCard?: CharacterCard // Optional: if needed for stop sequences from template
+    characterCard?: CharacterCard // Optional: for stop sequences and prompt formatting
   ): Promise<Response> {
     if (!chatSessionUuid) {
-      throw new Error("chat_session_uuid is required for /api/chat/generate");
+      throw new Error("chat_session_uuid is required for chat generation");
     }
+    
+    if (!apiConfig) {
+      throw new Error("apiConfig is required for LLM generation");
+    }
+    
     try {
-      // const characterName = characterCard?.data.name || 'Character'; // Needed if stop_sequences are derived here
-      // const templateId = apiConfig?.templateId;
-      // const template = this.getTemplate(templateId);
-      // const stopSequences = this.getStopSequences(template, characterName);
-
-      // The backend now handles prompt construction.
-      // We only send chat_session_uuid and current_context.
-      // Ensure contextMessages are in the format: [{"sender": "user", "text": "Hi"}]
-      // The current contextMessages are {role: '...', content: '...'}
-      // We need to map them to {sender: '...', text: '...'}
-      const current_context_payload = contextMessages.map(msg => ({
-        sender: msg.role, // 'user' or 'assistant' (or 'system' if backend supports)
-        text: msg.content
-      }));
-
-      const payload: any = {
-        chat_session_uuid: chatSessionUuid,
-        current_context: current_context_payload,
+      // Build the prompt from context messages and character data
+      let prompt = '';
+      let memory = '';
+      
+      // Extract character information for prompt building
+      if (characterCard?.data) {
+        const characterName = characterCard.data.name || 'Character';
+        const characterDescription = characterCard.data.description || '';
+        const personality = characterCard.data.personality || '';
+        const scenario = characterCard.data.scenario || '';
+        const systemPrompt = characterCard.data.system_prompt || '';
+        
+        // Build memory/system context
+        memory = `Character: ${characterName}\n`;
+        if (characterDescription) memory += `Description: ${characterDescription}\n`;
+        if (personality) memory += `Personality: ${personality}\n`;
+        if (scenario) memory += `Scenario: ${scenario}\n`;
+        if (systemPrompt) memory += `${systemPrompt}\n`;
+      }
+      
+      // Build conversation history into prompt
+      const conversationHistory = contextMessages.map(msg => {
+        const role = msg.role === 'user' ? 'User' : 
+                    msg.role === 'assistant' ? (characterCard?.data?.name || 'Assistant') : 
+                    'System';
+        return `${role}: ${msg.content}`;
+      }).join('\n');
+      
+      prompt = conversationHistory;
+      
+      // Get stop sequences from template or use defaults
+      const templateId = apiConfig?.templateId;
+      const template = this.getTemplate(templateId);
+      const characterName = characterCard?.data?.name || 'Character';
+      const stopSequences = this.getStopSequences(template, characterName);
+      
+      // Build the payload for /api/generate endpoint
+      const payload = {
+        api_config: apiConfig,
+        generation_params: {
+          prompt: prompt,
+          memory: memory,
+          stop_sequence: stopSequences,
+          chat_session_uuid: chatSessionUuid, // Include for potential backend use
+          character_data: characterCard, // Include for lore matching and context
+          chat_history: contextMessages, // Include for backend context processing
+          quiet: true
+        }
       };
 
-      // If backend still uses stop_sequences or other params from apiConfig, add them.
-      // For now, strictly adhering to the guide for /api/chat/generate.
-      // if (stopSequences && stopSequences.length > 0) {
-      //   payload.stop_sequences = stopSequences;
-      // }
-      // if (apiConfig?.generation_settings) { // Example if backend needs generation settings
-      //    payload.generation_settings = apiConfig.generation_settings;
-      // }
-
-
-      // Make the actual API request
-      const response = await fetch('/api/chat/generate', {
+      // Make the actual API request to the working streaming endpoint
+      const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

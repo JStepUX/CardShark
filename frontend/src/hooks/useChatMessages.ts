@@ -1400,7 +1400,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         setState(prev => ({...prev, isGenerating: false, generatingId: null}));
       }
     };
-   }, [effectiveCharacterData, isGenericAssistant, handleNewChat]); 
+   }, [effectiveCharacterData, isGenericAssistant]); 
 
 
    useEffect(() => {

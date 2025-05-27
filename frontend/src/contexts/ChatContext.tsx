@@ -277,8 +277,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const defAvail = getAvailableImagesForPreview(charImgP);
           setAvailablePreviewImages(defAvail);
           setCurrentPreviewImageIndex(0);
-          setTriggeredLoreImages([]);
-        } else {
+          setTriggeredLoreImages([]);        } else {
           console.error('Failed to load chat. Resp:', response, 'Has first_mes:', !!characterData?.data?.first_mes);
           setError(response.error || 'Failed to load chat & no initial message.');
           setMessages([]);
@@ -288,7 +287,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             error: response.error || 'Failed to load chat & no initial message.'
           });
         }
-        lastCharacterId.current = currentCharacterFileId;
       } catch (err) {
         console.error('Unexpected error during chat loading:', err);
         setError(err instanceof Error ? err.message : 'Unexpected error loading chat.');
@@ -300,10 +298,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       } finally {
         setIsLoading(false);
-      }
-    }
+        // Always update the last character ID to prevent infinite loops
+        lastCharacterId.current = currentCharacterFileId;
+      }    }
     loadChatForCharacterInternal();
-  }, [characterData, resetTriggeredLoreImagesState, saveChat, currentUser]);
+  }, [characterData, resetTriggeredLoreImagesState, currentUser]);
   
   const debouncedSave = MessageUtils.createDebouncedSave(
     (msgs: Message[]): Promise<boolean> => saveChat(msgs).catch(e => { console.error("Debounced saveChat err:", e); throw e; }), 500

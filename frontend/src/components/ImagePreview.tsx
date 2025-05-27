@@ -26,13 +26,12 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   
-  // Determine the source for the current image
-  const currentImageSrc =
-    availableImages && typeof currentIndex === 'number' && availableImages[currentIndex]
-    ? availableImages[currentIndex].src
-    : imageUrl || placeholderUrl;
-
-  const [currentImage, setCurrentImage] = useState(currentImageSrc);
+  // Initialize currentImage with a stable value to prevent infinite loops
+  const [currentImage, setCurrentImage] = useState(() => {
+    return availableImages && typeof currentIndex === 'number' && availableImages[currentIndex]
+      ? availableImages[currentIndex].src
+      : imageUrl || placeholderUrl;
+  });
   const [isHovering, setIsHovering] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [tempImageUrl, setTempImageUrl] = useState<string | null>(null);
@@ -253,11 +252,10 @@ const handleMouseEnter = () => {
                   onClick={() => fileInputRef.current?.click()}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                 >
-                  <Upload size={16} />
-                  <span>Replace Image</span>
+                  <Upload size={16} />                <span>Replace Image</span>
                 </button>
                 
-                {currentImageSrc !== placeholderUrl && ( // Only show adjust if not placeholder
+                {currentImage !== placeholderUrl && ( // Only show adjust if not placeholder
                   <button
                     onClick={() => {
                       setTempImageUrl(currentImage); // Use currentImage which reflects the displayed one
