@@ -251,7 +251,8 @@ backend_datas = [
     ('content_filters/*.json', 'content_filters'),   # Add content filters JSON files
     ('content_filters/builtin/*.json', 'content_filters/builtin'),  # Add builtin filter packages
     ('uploads', 'uploads'),  # Add uploads directory
-    ('cardshark.sqlite', '.')  # Add SQLite database file
+    # Note: Database file is now created/managed at runtime, not bundled
+    # This ensures fresh installations start clean while preserving user data across updates
 ]
 
 # Create empty KoboldCPP directory structure but don't include existing files
@@ -285,8 +286,7 @@ hidden_imports = [
     'uvicorn.lifespan.on',
     'uvicorn.protocols.websockets.auto',
     'uvicorn.supervisors',
-    'uvicorn.supervisors.multiprocess',
-      # Backend modules - only include ones that exist
+    'uvicorn.supervisors.multiprocess',      # Backend modules - only include ones that exist
     'backend',
     'backend.api_handler',
     'backend.api_provider_adapters',
@@ -297,6 +297,8 @@ hidden_imports = [
     'backend.chat_handler',
     'backend.content_filter_manager',  # Add content filter manager
     'backend.content_filter_endpoints', # Add content filter endpoints
+    'backend.database',                 # Add database module
+    'backend.database_migrations',      # Add database migration system
     'backend.errors',
     'backend.koboldcpp_manager',
     'backend.koboldcpp_handler',
@@ -308,6 +310,7 @@ hidden_imports = [
     'backend.png_metadata_handler',
     'backend.room_card_endpoint',
     'backend.settings_manager',
+    'backend.sql_models',               # Add SQL models
     'backend.template_handler',
     'backend.test_module',
     'backend.test_restructure', # Added missing test module
@@ -341,16 +344,23 @@ hidden_imports = [
     'backend.utils.worldcard_location_utils', # Ensure specific util is included
     'backend.worldcards',
     'backend.worldcards.errors',          # Ensure specific worldcard module is included
-    'backend.worldcards.storage',         # Ensure specific worldcard module is included
-
-    # Important dependencies
+    'backend.worldcards.storage',         # Ensure specific worldcard module is included    # Important dependencies
     'email_validator',
     'typing_extensions',
     'packaging',
+    
+    # Database dependencies for migration system
+    'sqlalchemy',
+    'sqlalchemy.orm',
+    'sqlalchemy.ext',
+    'sqlalchemy.ext.declarative',
+    'sqlalchemy.sql',
+    'sqlalchemy.sql.func',
+    'sqlite3',
 ]
 
 # Add collections using collect_submodules
-for module in ['PIL', 'requests', 'fastapi', 'starlette', 'pydantic', 'uvicorn']:
+for module in ['PIL', 'requests', 'fastapi', 'starlette', 'pydantic', 'uvicorn', 'sqlalchemy']:
     hidden_imports.extend(collect_submodules(module))
 
 a = Analysis(

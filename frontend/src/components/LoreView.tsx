@@ -20,7 +20,8 @@ function isLoreEntry(value: unknown): value is LoreEntry {
 }
 
 const LoreView: React.FC = () => {
-  const { characterData, setCharacterData } = useCharacter();
+  const characterContext = useCharacter(); // Use characterContext directly
+  const { characterData, setCharacterData } = characterContext;
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -86,49 +87,84 @@ const LoreView: React.FC = () => {
     setCharacterData(updatedCharacterData);
   };
 
-  // Generic import handler
-  const handleImport = async (
-    importFunction: (file: File, startIndex: number) => Promise<LoreEntry[]>,
-    accept: string,
-    fileType: string
+  // Factory function to create specific import handlers
+  const createImportHandler = (
+    importLogicCallback: (file: File) => Promise<LoreEntry[]>,
+    acceptTypes: string,
+    fileTypeNameForError: string // e.g., 'JSON', 'TSV', 'PNG'
   ) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = accept;
+    return async () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = acceptTypes;
 
-    input.onchange = async (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      const file = target.files?.[0];
-      
-      if (!file || !characterData) return;
+      input.onchange = async (event: Event) => {
+        const targetElement = event.target as HTMLInputElement;
+        const selectedFile = targetElement.files?.[0];
 
-      try {
-        const importedEntries = await importFunction(file, entries.length);
-        
-        // Add imported entries to existing ones
-        const updatedEntries = [
-          ...entries,
-          ...importedEntries.map((entry, index) => ({
-            ...entry,
-            id: entries.length + index + 1,
-            insertion_order: entries.length + index
-          }))
-        ];
+        if (!selectedFile || !characterData) {
+          setError(selectedFile ? 'Character data is not loaded.' : 'No file selected.');
+          return;
+        }
 
-        updateCharacterData(updatedEntries);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : `Failed to import ${fileType}`);
-      }
+        try {
+          const importedNewEntries = await importLogicCallback(selectedFile);
+
+          // For PNG and JSON, the respective import handlers (importPng, importJson)
+          // already update characterData via setCharacterData.
+          // For TSV (and potentially other future types), we merge entries here.
+          if (fileTypeNameForError !== 'PNG' && fileTypeNameForError !== 'JSON') {
+            const currentBookEntries = characterData.data?.character_book?.entries || [];
+            // Ensure currentBookEntries is an array of LoreEntry and filter out invalid items
+            const validCurrentEntries = Array.isArray(currentBookEntries)
+              ? currentBookEntries.filter(isLoreEntry)
+              : [];
+
+            const combinedEntries = [
+              ...validCurrentEntries,
+              ...importedNewEntries.map((entry, idx) => ({
+                ...entry,
+                id: validCurrentEntries.length + idx + 1, // Assign new local ID
+                // Use insertion_order from entry if valid, otherwise append
+                insertion_order: typeof entry.insertion_order === 'number'
+                  ? entry.insertion_order
+                  : validCurrentEntries.length + idx,
+              })),
+            ];
+            updateCharacterData(combinedEntries);
+          }
+          // If it was a PNG import, characterData was updated by importPng,
+          // and 'entries' (derived from useMemo) will reflect this.
+          setError(null); // Clear any previous error
+        } catch (importError) {
+          setError(importError instanceof Error ? importError.message : `Failed to import ${fileTypeNameForError} file.`);
+        }
+      };
+      input.click();
     };
-
-    input.click();
   };
 
-  // Specific import handlers using the generic handler
-  const handleImportJson = () => handleImport(importJson, '.json', 'JSON');
-  const handleImportTsv = () => handleImport(importTsv, '.tsv,.txt', 'TSV');
-  const handleImportPng = () => handleImport(importPng, '.png', 'PNG');
+  // Define the actual import logic functions to be passed to createImportHandler
+  const jsonFileImportLogic = async (file: File): Promise<LoreEntry[]> => {
+    // importJson now expects the file object and characterContext
+    return importJson(file, characterContext);
+  };
+
+  const tsvFileImportLogic = (file: File): Promise<LoreEntry[]> => {
+    const currentBookEntries = characterData?.data?.character_book?.entries || [];
+    const validCurrentEntries = Array.isArray(currentBookEntries) ? currentBookEntries.filter(isLoreEntry) : [];
+    return importTsv(file, validCurrentEntries.length); // importTsv is from '../handlers/importHandlers'
+  };
+
+  const pngFileImportLogic = (file: File): Promise<LoreEntry[]> => {
+    // importPng needs the characterContext, which is available in the LoreView component's scope
+    return importPng(file, characterContext); // importPng is from '../handlers/importHandlers'
+  };
+
+  // Create specific import handlers
+  const handleImportJson = createImportHandler(jsonFileImportLogic, '.json', 'JSON');
+  const handleImportTsv = createImportHandler(tsvFileImportLogic, '.tsv,.txt', 'TSV');
+  const handleImportPng = createImportHandler(pngFileImportLogic, '.png', 'PNG');
 
   // Basic entry management handlers
   const handleAddEntry = () => {

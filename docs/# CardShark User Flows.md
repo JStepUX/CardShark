@@ -22,7 +22,7 @@ This document outlines the key user flows and interactions within the CardShark 
 |------|------------|
 | Character | JSONified metadata embedded in the `char` exif field in a very specific `v2` format that is designed to be compatible with other applications of this type. These are sometimes referred to as "Character Cards," hence the name CardShark. |
 | API | Combination of API URL and usually an API key that enables communication either within the local machine or on the internet. |
-| Chat | The interaction between {{user}} and {{char}} is a written exchange back and forth with {{user}}'s messages being delivered via API to the local or web-based LLM for processing and response generation. `Chats` refers to the collection of multiple game instances between {{user}} and that specific {{char}}. |
+| Chat | The interaction between {{user}} and {{char}} is a written exchange. With SQLite persistence, each continuous conversation is a "chat session" identified by a `chat_session_uuid`. Messages are sent via API (e.g., `/api/append-chat-message`, `/api/chat/generate`) to an LLM for response. `Chats` now refers to these persistent sessions stored in the database. |
 | User | {{user}} is the human player interacting with CardShark, but may also be represented by a JSONified metadata embedded `char` PNG file just like {{char}}, except {{user}} is only ever loaded/chosen using UserSelect in the Chat and WorldCardPlay views. |
 | World | A world is a world_state.json containing relationships between a grid of "rooms" (often referred to as "locations"), NPCs, per-room metadata (Introduction/Description/Name/etc), and dynamic content like "events." |
 | NPC | When a {{char}} is loaded as contained within a World Card's "Location" or "Room", it is referred to as an NPC. For our purposes, {{char}}/Character and an NPC are the same thing presenting in two different contexts. |
@@ -75,24 +75,29 @@ This document outlines the key user flows and interactions within the CardShark 
 ### Chat Flows
 
 #### 1. Start a New Chat
-1. User loads a character
-2. User clicks "Chat" in the side navigation
-3. System displays ChatView with the character's first_mes
-4. User can type and send messages to interact with the character
+1. User loads a character (or enters Assistant Mode).
+2. User clicks "Chat" in side navigation or a "New Chat" button.
+3. Frontend calls `POST /api/create-new-chat` (optionally with `character_id`).
+4. Backend creates a new chat session in SQLite, generates a `chat_session_uuid`, and returns it.
+5. Frontend stores the `chat_session_uuid`.
+6. System displays ChatView. If a character is loaded and has a `first_mes`, it might be displayed (or sent as the first "assistant" message via API).
+7. User can type and send messages.
 
 #### 2. Continue a Chat
-1. User loads a character
-2. User clicks "Load Chat" to view historical chats
-3. User selects a specific chat from the history
-4. System loads the selected chat history
-5. User continues the conversation from where it left off
+1. User loads a character (or intends to continue an Assistant Mode chat).
+2. Frontend calls `POST /api/load-latest-chat` (with `character_id` if applicable, or a stored `chat_session_uuid` for a specific session).
+3. Backend retrieves the chat session (identified by `chat_session_uuid`) and its messages from SQLite.
+4. System loads the chat history into ChatView.
+5. User continues the conversation. The frontend includes the `chat_session_uuid` in all subsequent chat-related API calls for this session.
 
-#### 3. Chat Interaction
-1. User types a message and sends it
-2. Message is marked as "user" and sent to the API
-3. System processes response through the current API
-4. Response is marked as "assistant" and displayed in the chat
-5. Additional context may be injected as "system" messages when appropriate
+#### 3. Chat Interaction (with `chat_session_uuid`)
+1. User types a message in ChatView.
+2. Frontend sends the message via `POST /api/append-chat-message`, including the active `chat_session_uuid` and the message content (role: "user").
+3. Backend service ([`backend/services/chat_service.py`](backend/services/chat_service.py:0)) saves the user's message to the database, associated with the `chat_session_uuid`.
+4. For generating a response, frontend calls `POST /api/chat/generate`, including the `chat_session_uuid`.
+5. Backend service retrieves necessary context (character details, chat history from DB using `chat_session_uuid`), calls the LLM, and saves the assistant's response to the database, associated with the `chat_session_uuid`.
+6. The assistant's response is sent back to the frontend and displayed.
+7. The `/api/save-chat` endpoint can be used for explicit save points if needed, though individual messages are persisted.
 
 ### World Card Flows
 
@@ -159,9 +164,14 @@ This document outlines the key user flows and interactions within the CardShark 
 ### Combined Save Functionality (Potential UI Enhancement)
 Consideration for future UI development: We currently have separate "Save Character" and "Save World" buttons. A unified save button in the sidebar could be explored, potentially with a toggle in views to switch context between "Character" and "World" modes, as a World and a Character are not likely to be simultaneously selected for saving.
 
-### Chat Message Processing
-Chat substitutes {{char}} for {{characterdata.name}} and {{user}} for {{currentUserSelected}}. Messages are processed through the current API configuration with appropriate template formatting.
+### Chat Message Processing & Persistence
+- Chat messages are now associated with a `chat_session_uuid` in the SQLite database.
+- The frontend sends the `chat_session_uuid` with API requests like `/api/append-chat-message` and `/api/chat/generate`.
+- The backend ([`backend/services/chat_service.py`](backend/services/chat_service.py:0)) uses this UUID to retrieve context, store new messages, and manage chat history.
+- Placeholders like `{{char}}` and `{{user}}` are resolved by the backend or frontend as needed, but the core data linkage is through `chat_session_uuid` and `character_id` in the database.
 
 ### Character/World Data Management
-Character data, including a canonical `character_uuid`, is embedded in PNG metadata (see `backend_character_uuid_implementation_plan.md`). World data is managed via `world_state.json` files and a dedicated directory structure (see `plan_WorldCards2.md` and `world_persistence_strategy.md`). Worlds can be optionally based on character cards, leveraging their lore for initial content.
+- Character data (including `character_uuid`) remains in PNG metadata.
+- Chat data is now separate, stored in the SQLite database (`cardshark.sqlite`) and linked to characters via `character_id` within the chat session records.
+- World data remains in `world_state.json` and associated files.
 

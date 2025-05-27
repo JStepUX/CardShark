@@ -201,6 +201,7 @@ world_state_handler = WorldStateHandler(logger, settings_manager)
 # Store handlers on app.state for access in dependencies
 app.state.png_handler = png_handler
 app.state.settings_manager = settings_manager
+app.state.chat_handler = chat_handler # Store ChatHandler for dependency injection
 # app.state.logger is already set above
 
 # Initialize the world card chat handler with explicit worlds directory

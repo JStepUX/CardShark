@@ -7,6 +7,7 @@ from .services.character_service import CharacterService
 from .png_metadata_handler import PngMetadataHandler
 from .settings_manager import SettingsManager
 from .log_manager import LogManager
+from .chat_handler import ChatHandler # Import ChatHandler
 
 def get_character_service_dependency(request: Request, db: Session = Depends(get_db)) -> CharacterService:
     """
@@ -32,3 +33,13 @@ def get_character_service_dependency(request: Request, db: Session = Depends(get
         settings_manager=settings_manager,
         logger=logger
     )
+
+def get_chat_handler(request: Request) -> ChatHandler:
+    """
+    FastAPI dependency to get an instance of ChatHandler.
+    Retrieves ChatHandler from app.state.
+    """
+    chat_handler = cast(ChatHandler, request.app.state.chat_handler)
+    if chat_handler is None:
+        raise HTTPException(status_code=500, detail="ChatHandler not initialized in app.state")
+    return chat_handler

@@ -34,7 +34,7 @@ const PngUpload: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await fetch('/api/upload-png', {
+      const response = await fetch('/api/characters/extract-metadata', {
         method: 'POST',
         body: formData,
       });

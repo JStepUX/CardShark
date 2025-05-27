@@ -5,6 +5,7 @@ import requests # type: ignore
 import httpx # Add httpx import
 import json
 import re
+import certifi # For SSL certificate bundle
 from typing import Dict, Optional, Tuple, Generator
 
 class ApiHandler:
@@ -298,7 +299,7 @@ class ApiHandler:
             # --- End payload construction ---
             self.logger.log_step(f"Making non-streaming request to {endpoint}")
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=certifi.where()) as client:
                 response = await client.post(endpoint, headers=headers, json=data, timeout=30)
             
             if response.status_code != 200:
@@ -462,20 +463,29 @@ class ApiHandler:
                     from pathlib import Path
                     
                     base_dir = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path.cwd()
+                    self.logger.log_info(f"Context saving: base_dir = {str(base_dir)}")
                     
                     # Create context directory if it doesn't exist
                     context_dir = base_dir / 'context'
+                    self.logger.log_info(f"Context saving: context_dir = {str(context_dir)}")
+                    
+                    self.logger.log_step(f"Attempting to create directory: {str(context_dir)}")
                     context_dir.mkdir(parents=True, exist_ok=True)
+                    self.logger.log_step(f"Successfully created or ensured directory exists: {str(context_dir)}")
                     
                     # Context file path
                     context_file = context_dir / 'latest_context.json'
+                    self.logger.log_info(f"Context saving: context_file = {str(context_file)}")
                     
                     # Write the context data
+                    self.logger.log_step(f"Attempting to open and write to: {str(context_file)}")
                     with open(context_file, 'w', encoding='utf-8') as f:
                         json.dump(context_window, f, indent=2)
+                    self.logger.log_step(f"Successfully wrote to: {str(context_file)}")
 
                 except Exception as e:
                     self.logger.log_error(f"Error saving context window: {str(e)}")
+                    self.logger.log_error(traceback.format_exc()) # Add full traceback for context saving error
             # Validate required fields
             if not url:
                 raise ValueError("API URL is missing in api_config")

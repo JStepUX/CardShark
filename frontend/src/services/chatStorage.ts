@@ -240,31 +240,45 @@ export class ChatStorage {
       console.log('Creating new chat for character:', character.data?.name);
       
       // Extract character ID
-      const characterId = this.getCharacterId(character);
-      console.log('Using character ID:', characterId);
+      const characterUuid = character.data?.character_uuid;
+      if (!characterUuid) {
+        console.error('Cannot create chat: Missing character_uuid in character.data');
+        return { success: false, error: 'Missing character_uuid' };
+      }
+      console.log('Using character_uuid:', characterUuid);
       
+      const payload: { character_uuid: string; user_uuid?: string; title?: string } = {
+        character_uuid: characterUuid
+      };
+      // Optional fields can be added here if available, e.g.:
+      // if (currentUser?.uuid) payload.user_uuid = currentUser.uuid;
+      // if (character.data?.name) payload.title = `Chat with ${character.data.name}`;
+
+
       const response = await fetch('/api/create-new-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          character_data: character, // Send full character object
-          character_id: characterId,
-          char_name: character.data?.name || '',
-          format: 'jsonl'
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to create new chat:', response.status, errorText);
-        return { success: false, error: `Failed to create chat: ${response.status}` };
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to create new chat:', response.status, errorData.detail || errorData.message);
+        return { success: false, error: `Failed to create chat: ${response.status} - ${errorData.detail || errorData.message || 'Unknown error'}` };
       }
 
       const data = await response.json();
       console.log('New chat created:', data);
-      return data;
+      // Ensure chat_session_uuid is returned as per the guide
+      if (data.success && data.chat_session_uuid) {
+        return { ...data, chat_id: data.chat_id }; // Keep chat_id if backend still sends it for file naming
+      } else if (data.success && !data.chat_session_uuid) {
+        console.warn('/api/create-new-chat success response missing chat_session_uuid');
+        return { ...data, success: false, error: 'Missing chat_session_uuid in response' };
+      }
+      return data; // Return full data which might include error messages
     } catch (error) {
       console.error('Error creating new chat:', error);
       return { success: false, error: `Error: ${error}` };
@@ -275,53 +289,65 @@ export class ChatStorage {
    * Saves a chat session
    */
   static async saveChat(
-    character: CharacterCard,
+    _character: CharacterCard, // Keep for potential title generation or other metadata
+    chatSessionUuid: string,
     messages: Message[],
-    currentUser: UserProfile | null,
-    apiInfo: any = null,
-    backgroundSettings: any = null,  // Existing parameter
-    lorePersistenceData?: { // New optional parameter for lore data
-      triggeredLoreImages: any[]; // Use specific type if available, e.g., TriggeredLoreImage[]
+    _currentUser: UserProfile | null, // Keep for potential future use or logging
+    _apiInfo: any = null, // Keep for potential future use or logging
+    _backgroundSettings: any = null,
+    _lorePersistenceData?: {
+      triggeredLoreImages: any[];
       currentDisplayedImage?: { type: 'character' | 'lore'; entryId?: string; imageUuid?: string };
-    }
+    },
+    title?: string // Optional title for the chat session
   ): Promise<any> {
-    if (!character) {
-      console.error('Cannot save chat: No character provided');
-      return { success: false, error: 'No character selected' };
+    if (!chatSessionUuid) {
+      console.error('Cannot save chat: No chat_session_uuid provided');
+      return { success: false, error: 'No chat_session_uuid provided' };
+    }
+    // Runtime check to ensure chatSessionUuid is a string, as per payload requirements
+    if (typeof chatSessionUuid !== 'string') {
+      console.error(`SAVE CHAT ERROR: chat_session_uuid must be a string, but received type ${typeof chatSessionUuid}. Value:`, chatSessionUuid);
+      return { success: false, error: 'Invalid payload: chat_session_uuid is not a string.' };
+    }
+
+    if (!messages) {
+      console.error('Cannot save chat: No messages provided');
+      return { success: false, error: 'No messages provided' };
+    }
+    // Runtime check to ensure messages is an array, as per payload requirements
+    if (!Array.isArray(messages)) {
+      console.error(`SAVE CHAT ERROR: messages must be an array, but received type ${typeof messages}. Value:`, messages);
+      return { success: false, error: 'Invalid payload: messages is not an array.' };
     }
 
     try {
-      console.log(`Saving chat with ${messages.length} messages for character:`, character.data?.name);
+      console.log(`Saving chat for session ID: ${chatSessionUuid} with ${messages.length} messages.`);
       
-      // Get any stored background settings from localStorage if not provided
-      if (!backgroundSettings) {
-        try {
-          const storedSettings = localStorage.getItem('cardshark_background_settings');
-          if (storedSettings) {
-            backgroundSettings = JSON.parse(storedSettings);
-          }
-        } catch (e) {
-          console.warn('Failed to load background settings from localStorage:', e);
-        }
+      const payload: {
+        chat_session_uuid: string;
+        messages: Message[];
+        title?: string;
+      } = {
+        chat_session_uuid: chatSessionUuid,
+        messages: messages,
+      };
+
+      if (title) {
+        payload.title = title;
       }
-      
+      // The "Backend API Payload Guide" for /api/save-chat only specifies:
+      // {"chat_session_uuid": "string", "messages": [MessageObject, ...], "title": "optional_string"}
+      // Other parameters like character, currentUser, apiInfo, backgroundSettings, lorePersistenceData
+      // are passed to this saveChat function but are not part of the /api/save-chat payload itself.
+      // They might be used for logging or other client-side logic if needed, or for generating the title.
+
       const response = await fetch('/api/save-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          character_data: character, // Send full character object
-          messages: messages,
-          lastUser: currentUser, // Corrected key name
-          api_info: apiInfo,
-          metadata: {
-            backgroundSettings: backgroundSettings,
-            // Add lore persistence data to metadata
-            triggeredLoreImages: lorePersistenceData?.triggeredLoreImages,
-            currentDisplayedImage: lorePersistenceData?.currentDisplayedImage,
-          }
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -350,8 +376,12 @@ export class ChatStorage {
     try {
       console.log('Loading latest chat for character:', character.data?.name);
       
-      const characterId = this.getCharacterId(character);
-      console.log('Using character ID:', characterId);
+      const characterUuid = character.data?.character_uuid;
+      if (!characterUuid) {
+        console.error('Cannot load latest chat: Missing character_uuid in character.data');
+        return { success: false, error: 'Missing character_uuid', isRecoverable: true, first_mes_available: character?.data?.first_mes ? true : false };
+      }
+      console.log('Using character_uuid for load-latest-chat:', characterUuid);
       
       const response = await fetch('/api/load-latest-chat', {
         method: 'POST',
@@ -359,10 +389,7 @@ export class ChatStorage {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          character_data: character, // Send full character object
-          character_id: characterId,
-          char_name: character.data?.name || '',
-          scan_all_files: true // Add parameter to ensure we scan all chat files
+          character_uuid: characterUuid
         }),
       });
 
@@ -413,8 +440,22 @@ export class ChatStorage {
           first_mes_available: character?.data?.first_mes ? true : false
         };
       }
+
+      // Handle if response.json() successfully parses to null (valid backend response for no chat)
+      if (data === null) {
+        console.log('/api/load-latest-chat returned null, treating as "no chat session found"');
+        return {
+          success: true, // API call successful, but no chat data
+          data: null,
+          chat_session_uuid: null,
+          messages: [],
+          title: null,
+          chat_id: null // To be consistent with the non-null response structure
+        };
+      }
       
       // Handle empty success responses from Featherless
+      // This check should now be safe as 'data' is confirmed not to be null.
       if (data.success === true && !data.chatId && !data.messages) {
         console.log('API returned success but no chat ID or messages, treating as "no chats found"');
         return {
@@ -452,7 +493,20 @@ export class ChatStorage {
         console.warn('Chat loading response format:', data);
       }
       
-      return data;
+      // Ensure chat_session_uuid is returned as per the guide
+      if (data.success && data.chat_session_uuid) {
+        return { ...data, chat_id: data.chat_id }; // Keep chat_id if backend still sends it for file naming
+      } else if (data.success && !data.chat_session_uuid) {
+         console.warn('/api/load-latest-chat success response missing chat_session_uuid');
+         // Treat as recoverable if first_mes is available, as a new chat can be started
+         return {
+           success: false,
+           error: "Missing chat_session_uuid in response",
+           isRecoverable: character?.data?.first_mes ? true : false,
+           first_mes_available: character?.data?.first_mes ? true : false
+         };
+      }
+      return data; // Return full data which might include error messages
     } catch (error) {
       console.error('Error loading latest chat:', error);
       return { 
@@ -466,23 +520,22 @@ export class ChatStorage {
   /**
    * Appends a message to the current chat
    */
-  static async appendMessage(character: CharacterCard, message: Message): Promise<any> {
-    if (!character) {
-      console.error('Cannot append message: No character provided');
-      return { success: false, error: 'No character selected' };
+  static async appendMessage(chatSessionUuid: string, message: Message): Promise<any> {
+    if (!chatSessionUuid) {
+      console.error('Cannot append message: No chat_session_uuid provided');
+      return { success: false, error: 'No chat_session_uuid provided' };
+    }
+    if (!message) {
+      console.error('Cannot append message: No message provided');
+      return { success: false, error: 'No message provided' };
     }
 
     try {
-      // Ensure we're using the consistent character name from character data
-      const characterName = character.data?.name || '';
-      console.log(`Appending message to chat for character: ${characterName}`);
+      console.log(`Appending message to chat session ID: ${chatSessionUuid}`);
       
-      const characterId = this.getCharacterId(character);
-      
-      // Create a normalized message that ensures character name consistency
-      const normalizedMessage = {
-        ...message,
-        characterName: characterName // Add explicit character name to the message
+      const payload = {
+        chat_session_uuid: chatSessionUuid,
+        message: message
       };
       
       const response = await fetch('/api/append-chat-message', {
@@ -490,12 +543,7 @@ export class ChatStorage {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          character_data: character, // Send full character object
-          character_id: characterId,
-          char_name: characterName, // Use the consistent name
-          message: normalizedMessage
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {

@@ -82,11 +82,16 @@ class CharacterInRoomResponse(CharacterRead):
 
 # Response model for listing rooms an NPC is in (RoomRead can be used directly or a more specific one if needed)
 # For now, we assume existing RoomRead is sufficient.
+
+# Pydantic model for simple Character UUID payload
+class CharacterUUIDPayload(BaseModel):
+    character_uuid: str
+
 # Pydantic models for ChatSession
 class ChatSessionBase(BaseModel):
     character_uuid: str
     user_uuid: Optional[str] = None
-    chat_log_path: str # Initially, this might be set by the service
+    chat_log_path: Optional[str] = None # Can be service-generated if not provided
     title: Optional[str] = None
     # message_count is managed by the system
     # last_message_time is managed by the system
@@ -99,9 +104,33 @@ class ChatSessionCreate(ChatSessionBase):
 
 class ChatSessionUpdate(BaseModel):
     title: Optional[str] = None
+    chat_log_path: Optional[str] = None  # Added for consistency if path is updated
+    chat_log: Optional[List[dict]] = None # Added to allow updating the log content
+    message_count: Optional[int] = None # Allow updating message count
     # Potentially other updatable fields like status, if added to the model
     # last_message_time would be updated internally when a message is added
-    # message_count would be updated internally
+
+# Schema for saving chat content
+class ChatSavePayload(BaseModel):
+    chat_session_uuid: str
+    messages: List[dict]
+    title: Optional[str] = None
+
+class ChatMessageAppend(BaseModel):
+    chat_session_uuid: str
+    message: dict # Represents a single message object, e.g., {"user": "hello", "assistant": "hi"} or {"sender": "user", "text": "Hello"}
+
+class ChatGenerateRequest(BaseModel):
+    chat_session_uuid: str
+    # `current_context` could be the list of messages so far, or a pre-processed string.
+    # Using List[dict] to represent a list of message objects.
+    current_context: List[dict]
+    # Potentially add other parameters like max_tokens, temperature for generation
+
+class ChatGenerateResponse(BaseModel):
+    chat_session_uuid: str
+    generated_message: dict # The new message from the assistant
+    # Potentially include updated context or other relevant data
 
 class ChatSessionRead(ChatSessionBase):
     chat_session_uuid: str

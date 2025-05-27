@@ -2,6 +2,8 @@
 
 ## Primary Navigation & User Journey Map
 
+**Note on Chat Persistence:** This document reflects the application flow *after* the introduction of SQLite-based chat persistence and new chat API endpoints (e.g., `/api/create-new-chat`, `/api/load-latest-chat`, `/api/append-chat-message`). Chat sessions for characters are now persistent in the database and managed via `chat_session_uuid`.
+
 ```mermaid
 flowchart TD
     Start([User Opens CardShark]) --> SideNav{Side Navigation}
@@ -25,17 +27,28 @@ flowchart TD
     LoadChar --> CharGallery
     CharGallery --> SelectChar[Select Character] --> Chat
       HasUser -->|No| UserSelect[User Select Dialog]
-    HasUser -->|Yes| ChatActive[Character Chat Session]
-    UserSelect --> ChatActive
+    HasUser -->|Yes| APIGetChatSession{API: Create/Load Chat Session e.g. /api/create-new-chat}
+    UserSelect --> APIGetChatSession
+    APIGetChatSession --> |Success (chat_session_uuid received)| ChatActive[Character Chat Session (SQLite backed, API-driven)]
+    APIGetChatSession --> |Error| HandleChatError[Error Handling / Display]
     
-    ChatActive --> ChatActions{User Actions}
-    ChatActiveAssistant --> ChatActions
-    ChatActions --> SendMsg[Send Message]
-    ChatActions --> RegenerateMsg[Regenerate Response]
-    ChatActions --> DeleteMsg[Delete Message]
-    ChatActions --> LoadBg[Change Background]
-    ChatActions --> LoadCharacterFromChat[Load Character Card]
+    ChatActive --> ChatActionsAPI{User Actions (using chat_session_uuid)}
+    ChatActiveAssistant --> ChatActionsAssistant{User Actions (Assistant Mode)}
+
+    ChatActionsAPI --> SendMsgAPI[Send Msg (/api/append-chat-message)]
+    ChatActionsAPI --> RegenerateMsgAPI[Regen Msg (/api/chat/generate)]
+    ChatActionsAPI --> SaveChatAPI[Save Chat (/api/save-chat)]
+    ChatActionsAPI --> DeleteMsgAPI[Delete Message (API)]
+    ChatActionsAPI --> LoadBg[Change Background]
+    ChatActionsAPI --> LoadCharacterFromChat[Load Character Card]
     LoadCharacterFromChat --> CharGallery
+
+    ChatActionsAssistant --> SendMsgAssistant[Send Message (Assistant)]
+    ChatActionsAssistant --> RegenerateMsgAssistant[Regenerate Response (Assistant)]
+    ChatActionsAssistant --> DeleteMsgAssistant[Delete Message (Assistant)]
+    ChatActionsAssistant --> LoadBgAssistant[Change Background (Assistant)]
+    ChatActionsAssistant --> LoadCharacterFromChatAssistant[Load Character Card]
+    LoadCharacterFromChatAssistant --> CharGallery
     
     %% World Cards Flow
     Worlds --> WorldsList[Worlds List]
@@ -192,33 +205,52 @@ stateDiagram-v2
 3. **Clear Mode Indication**: UI should clearly indicate when in Assistant Mode vs Character Mode
 4. **Seamless Character Loading**: User can load a character at any time without losing chat context
 
-### **API Payload Differences**
+### **API Interaction for Chat (with `chat_session_uuid`)**
 
-#### Assistant Mode Payload (No Character):
+With the introduction of SQLite-based persistence, API interactions for chat are now session-based, using a `chat_session_uuid`.
+
+**Key API Endpoints:**
+
+*   `POST /api/create-new-chat`:
+    *   **Request:** May include `character_id`.
+    *   **Response:** `{ "chat_session_uuid": "new-uuid", "messages": [] }` (or initial messages if applicable).
+    *   **Action:** Creates a new chat session in the database and returns its UUID.
+
+*   `POST /api/load-latest-chat`:
+    *   **Request:** `{ "character_id": "some_char_id" }` (or potentially `chat_session_uuid` to load a specific one).
+    *   **Response:** `{ "chat_session_uuid": "existing-uuid", "messages": [...] }` or `null` if no chat exists.
+    *   **Action:** Loads the most recent (or specified) chat session and its messages for a character.
+
+*   `POST /api/append-chat-message`:
+    *   **Request:** `{ "chat_session_uuid": "uuid", "message": { "role": "user/assistant", "content": "...", "timestamp": ... } }`
+    *   **Response:** Success/failure confirmation, potentially the updated message list or just the new message ID.
+    *   **Action:** Appends a new message to the specified chat session in the database.
+
+*   `POST /api/chat/generate`:
+    *   **Request:** `{ "chat_session_uuid": "uuid", "prompt_data": { ... } }` (prompt_data might include current message, temperature, etc.)
+    *   **Response:** The generated assistant message.
+    *   **Action:** Fetches context from the specified chat session, generates a response, and appends both user (if applicable) and assistant messages to the session.
+
+*   `POST /api/save-chat`:
+    *   **Request:** `{ "chat_session_uuid": "uuid", "messages": [...] }` (Potentially for saving a full state if needed, though individual appends are more common).
+    *   **Response:** Success/failure.
+    *   **Action:** Ensures the current state of the chat session is saved. Its role might be more for explicit "save points" if not relying solely on append/generate.
+
+**Payload Structure (Example for `/api/append-chat-message`):**
 ```json
 {
-  "messages": [
-    {"role": "system", "content": "You are a helpful AI assistant."},
-    {"role": "user", "content": "User's message"}
-  ],
-  "temperature": 0.7,
-  "max_tokens": 500
+  "chat_session_uuid": "your-active-chat-session-uuid",
+  "message": {
+    "role": "user",
+    "content": "This is my new message.",
+    "timestamp": 1678886400000
+  }
 }
 ```
 
-#### Character Mode Payload (With Character):
-```json
-{
-  "messages": [
-    {"role": "system", "content": "Character description + personality + scenario"},
-    {"role": "system", "content": "Character book entries (lore)"},
-    {"role": "user", "content": "User's message"}
-  ],
-  "temperature": 0.8,
-  "max_tokens": 500,
-  "character_context": true
-}
-```
+**Assistant Mode vs. Character Mode with `chat_session_uuid`:**
+*   **Assistant Mode:** A `chat_session_uuid` is still created (e.g., via `/api/create-new-chat` without a `character_id` or with a generic one). Payloads to `/api/append-chat-message` and `/api/chat/generate` will include this `chat_session_uuid`. The backend service ([`backend/services/chat_service.py`](backend/services/chat_service.py:0)) handles storing these messages without character-specific context.
+*   **Character Mode:** A `chat_session_uuid` is created or loaded, associated with a `character_id`. All chat interactions use this UUID. The backend service links messages to this session and character. The context for generation (character description, lore) is pulled by the backend based on the `character_id` associated with the `chat_session_uuid`.
 
 ### **UI Affordances to Implement**
 1. **Mode Indicator**: Show "Assistant Mode" or character name in chat header
@@ -226,8 +258,12 @@ stateDiagram-v2
 3. **Visual Distinction**: Different styling (subtle background color, icon) for Assistant Mode
 4. **Transition Handling**: Smooth transition when switching between modes
 
-### **State Management Changes**
-- `characterData` can be `null` (currently required)
-- Chat history should be preserved when switching modes
-- API service should handle both payload types
-- Template system should support basic assistant templates
+### **State Management Changes (Post-SQLite Implementation)**
+- **`chat_session_uuid` is Key:** The frontend is responsible for obtaining, storing (e.g., in local storage, associated with a character or as a general assistant chat UUID), and sending the `chat_session_uuid` with relevant API calls.
+- **Chat History Source of Truth:** The backend database (SQLite) is now the primary source of truth for chat history. The frontend loads history via API calls (e.g., `/api/load-latest-chat`) and appends messages via API calls.
+- **Local State as Cache/Working Copy:** The frontend might still hold the current chat messages in its local state for UI rendering, but this state is populated from and synchronized with the backend.
+- **Switching Modes:**
+    - When switching from Assistant Mode to Character Mode (by loading a character), the frontend would typically call `/api/load-latest-chat` for that character (or `/api/create-new-chat` if none exists) to get the appropriate `chat_session_uuid` and history.
+    - The previous Assistant Mode `chat_session_uuid` might be stored if the user wants to switch back, or a new one created if they return to Assistant Mode later.
+- **API Service (`ResilientApiService.ts`):** Must be updated to call the new chat endpoints (`/api/create-new-chat`, `/api/load-latest-chat`, `/api/append-chat-message`, `/api/chat/generate`, `/api/save-chat`) with the correct payloads, including `chat_session_uuid`.
+- **Error Handling:** Robust error handling for API calls related to chat (e.g., `chat_session_uuid` not found, database errors) is crucial.

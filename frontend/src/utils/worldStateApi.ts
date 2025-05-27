@@ -121,21 +121,27 @@ export const worldStateApi = {
   /**
    * Move the player in a specific direction
    */
-  movePlayer: async (worldName: string, direction: string): Promise<FullWorldState> => {
-    const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/move`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ direction }),
-    });
+  // movePlayer: async (worldName: string, direction: string): Promise<FullWorldState> => {
+  //   // TODO: Refactor to use full world state save (POST /api/world-cards/{world_name}/state)
+  //   // This would involve:
+  //   // 1. Fetching current world state
+  //   // 2. Calculating new player position based on direction
+  //   // 3. Updating the player's position in the state object
+  //   // 4. Calling saveWorldState(worldName, updatedState)
+  //   const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/move`, {
+  //     method: 'POST',
+  //     headers: {
+  //       'Content-Type': 'application/json',
+  //     },
+  //     body: JSON.stringify({ direction }),
+  //   });
 
-    if (!response.ok) {
-      throw new Error(`Failed to move player: ${response.statusText}`);
-    }
+  //   if (!response.ok) {
+  //     throw new Error(`Failed to move player: ${response.statusText}`);
+  //   }
 
-    return await response.json();
-  },
+  //   return await response.json();
+  // },
 
   /**
    * Create a new location adjacent to the current one

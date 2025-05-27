@@ -2,6 +2,7 @@
 import { APIConfig } from '@/types';
 import { getApiBaseUrl } from '../utils/apiConfig';
 import { CharacterData } from '../types/character';
+import { LoreEntry } from '../types/schema'; // Added import for LoreEntry
 
 interface LoreImageResponse {
   success: boolean;
@@ -59,6 +60,24 @@ class ApiService {
         cache: 'no-store'
         // priority: 'high',
         // keepalive: true
+      });
+      return await this.handleResponse(response);
+    } catch (error) {
+      this.handleError(error, endpoint);
+      throw error;
+    }
+  }
+/**
+   * Performs a PUT request to the specified endpoint with the given data
+   */
+  async put(endpoint: string, data: any) {
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
       });
       return await this.handleResponse(response);
     } catch (error) {
@@ -133,38 +152,29 @@ class ApiService {
   /**
    * Loads the latest chat for a character
    */
-  async loadLatestChat(characterData: any) {
-    return this.post('/api/load-latest-chat', { character_data: characterData });
+  async loadLatestChat(characterUuid: string) {
+    // Fetch all sessions for the character
+    const sessions = await this.get(`/api/chat_sessions/?character_uuid=${characterUuid}`);
+    // Sort by last_modified timestamp in descending order and return the latest
+    // Assuming 'sessions' is an array and each session has a 'last_modified' field.
+    if (sessions && Array.isArray(sessions) && sessions.length > 0) {
+      sessions.sort((a, b) => new Date(b.last_modified).getTime() - new Date(a.last_modified).getTime());
+      return sessions[0];
+    }
+    return null; // Or handle as appropriate if no sessions are found
   }
 
   /**
    * Saves the current chat state
    */
-  async saveChat(characterData: any, messages: any[], lastUser?: any, apiInfo?: any, backgroundSettings?: any) {
-    console.debug(`apiService.saveChat called with ${messages.length} messages`);
+  async saveChat(sessionId: string, chatSessionData: any) { // Assuming chatSessionData contains messages, metadata etc.
+    console.debug(`apiService.saveChat called for session ${sessionId}`);
     
     try {
-      // Create the payload with all necessary data
-      const payload = {
-        character_data: characterData,
-        messages,
-        lastUser,
-        api_info: apiInfo,
-        metadata: {
-          backgroundSettings
-        }
-      };
-      
       // Log the full payload for debugging
-      console.debug('Saving chat with payload:', {
-        characterName: characterData?.data?.name || 'Unknown',
-        messageCount: messages.length,
-        hasLastUser: !!lastUser,
-        hasApiInfo: !!apiInfo,
-        hasBackgroundSettings: !!backgroundSettings
-      });
+      console.debug('Saving chat session with data:', chatSessionData);
       
-      const response = await this.post('/api/save-chat', payload);
+      const response = await this.put(`/api/chat_sessions/${sessionId}`, chatSessionData);
       
       console.debug('API response from save-chat:', response);
       return response;
@@ -177,35 +187,51 @@ class ApiService {
   /**
    * Appends a message to the current chat
    */
-  async appendChatMessage(characterData: any, message: any) {
-    return this.post('/api/append-chat-message', {
-      character_data: characterData,
-      message
-    });
+  async appendChatMessage(sessionId: string, message: any) {
+    // 1. Load session
+    const session = await this.loadChat(sessionId);
+    if (!session) {
+      throw new Error(`Session with ID ${sessionId} not found.`);
+    }
+
+    // 2. Append message to log locally
+    // Assuming session.log is the array of messages
+    if (!session.log) session.log = [];
+    session.log.push(message);
+    
+    // 3. PUT the entire updated session
+    // The body of the PUT request should match the ChatSessionUpdate schema
+    // This might mean just sending session.log or the entire session object
+    // For now, let's assume the backend expects the full session object for update
+    // and that the `saveChat` method is now `put /api/chat_sessions/{sessionId}`
+    return this.saveChat(sessionId, session); // saveChat now handles the PUT
   }
 
   /**
    * Creates a new empty chat
    */
-  async createNewChat(characterData: any) {
-    return this.post('/api/create-new-chat', { character_data: characterData });
+  async createNewChat(chatSessionCreateData: any) { // Assuming chatSessionCreateData matches ChatSessionCreate schema
+    return this.post('/api/chat_sessions/', chatSessionCreateData);
   }
 
   /**
    * Loads a specific chat
    */
-  async loadChat(characterData: any, chatId: string) {
-    return this.post('/api/load-chat', {
-      character_data: characterData,
-      chat_id: chatId
-    });
+  async loadChat(sessionId: string) {
+    return this.get(`/api/chat_sessions/${sessionId}`);
   }
 
   /**
    * Lists all available chats for a character
    */
-  async listCharacterChats(characterData: any) {
-    return this.post('/api/list-character-chats', { character_data: characterData });
+/**
+   * Deletes a specific chat session
+   */
+  async deleteChat(sessionId: string) {
+    return this.delete(`/api/chat_sessions/${sessionId}`);
+  }
+  async listCharacterChats(characterUuid: string) {
+    return this.get(`/api/chat_sessions/?character_uuid=${characterUuid}`);
   }
 /**
    * Fetches available models from the Featherless API via the backend
@@ -263,6 +289,13 @@ class ApiService {
     return this.post('/api/lore/extract', {
       character_data: characterData,
       text: textContent,
+    });
+  }
+
+  // --- Lore Entry Management ---
+  async saveLoreEntries(characterUuid: string, loreEntries: LoreEntry[]): Promise<any> {
+    return this.post(`/api/lore/character/${characterUuid}/batch`, {
+      lore_entries: loreEntries,
     });
   }
 }

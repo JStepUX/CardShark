@@ -42,15 +42,30 @@ def get_chat_sessions(
         query = query.filter(sql_models.ChatSession.user_uuid == user_uuid)
     return query.offset(skip).limit(limit).all()
 
+def get_latest_chat_session_for_character(db: Session, character_uuid: str) -> Optional[sql_models.ChatSession]:
+    """
+    Retrieves the most recent chat session for a given character,
+    ordered by last_message_time descending.
+    """
+    return db.query(sql_models.ChatSession)\
+        .filter(sql_models.ChatSession.character_uuid == character_uuid)\
+        .order_by(sql_models.ChatSession.last_message_time.desc().nulls_last(), sql_models.ChatSession.start_time.desc())\
+        .first()
+
 def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydantic_models.ChatSessionUpdate) -> Optional[sql_models.ChatSession]:
     db_chat_session = get_chat_session(db, chat_session_uuid)
     if db_chat_session:
         if chat_update.title is not None:
             db_chat_session.title = chat_update.title
-        # last_message_time and message_count are typically updated when messages are added,
-        # not directly via a generic update endpoint for the session metadata itself.
-        # If other fields become updatable, add them here.
-        db_chat_session.last_message_time = datetime.utcnow() # Or keep existing if no messages added
+        if chat_update.chat_log_path is not None: # Added to allow updating chat_log_path if necessary
+            db_chat_session.chat_log_path = chat_update.chat_log_path
+        if chat_update.message_count is not None:
+            db_chat_session.message_count = chat_update.message_count
+        
+        # Always update last_message_time on any meaningful update
+        # to reflect activity. If chat_log (messages) were part of this update,
+        # this would be even more critical.
+        db_chat_session.last_message_time = datetime.utcnow()
         db.commit()
         db.refresh(db_chat_session)
     return db_chat_session
@@ -62,4 +77,21 @@ def delete_chat_session(db: Session, chat_session_uuid: str) -> Optional[sql_mod
         # For now, we just delete the metadata record.
         db.delete(db_chat_session)
         db.commit()
+    return db_chat_session
+
+def append_message_to_chat_session(db: Session, chat_session_uuid: str, message_payload: dict) -> Optional[sql_models.ChatSession]:
+    """
+    Appends a message to a chat session.
+    This function primarily updates the session metadata in the database (message_count, last_message_time).
+    The actual writing of the message to the chat log file is handled by ChatHandler.
+    """
+    db_chat_session = get_chat_session(db, chat_session_uuid)
+    if db_chat_session:
+        # Increment message count
+        db_chat_session.message_count += 1 # Assuming one message is appended at a time
+        # Update last message time
+        db_chat_session.last_message_time = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(db_chat_session)
     return db_chat_session

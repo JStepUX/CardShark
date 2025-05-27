@@ -48,7 +48,9 @@ def init_db():
     # This ensures that Base has all table metadata before create_all is called.
     # Models should be imported in the main application file before calling init_db
     try:
-        Base.metadata.create_all(bind=engine)
+        # Use migration-aware initialization
+        from backend.database_migrations import init_db_with_migrations
+        init_db_with_migrations()
         logger.info("Database tables checked/created successfully.")
     except SQLAlchemyError as e: # More specific exception for database errors
         logger.error(f"A database error occurred during table creation: {e}", exc_info=True)

@@ -409,7 +409,7 @@ const WorldCardsPlayView: React.FC = () => {
       return;
     }
     try {
-      const fetchedNpcData: any = await apiService.get(`/api/character-by-path?path=${encodeURIComponent(npc.path)}`);
+      const fetchedNpcData: any = await apiService.get(`/api/character-metadata/${encodeURIComponent(npc.path)}`);
       if (fetchedNpcData) {
         const npcCharacterCard = fetchedNpcData as CharacterCard;
         setCharacterData(npcCharacterCard);

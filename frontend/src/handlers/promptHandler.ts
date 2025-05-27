@@ -249,41 +249,56 @@ ${character.data.mes_example || ''}
    * Overloaded method to support different parameter combinations used throughout the app.
    */
   public static async generateChatResponse(
-    characterCard: CharacterCard,
-    prompt: string,
-    contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
-    userName: string, // Added userName parameter
-    apiConfig?: any,
-    signal?: AbortSignal
+    chatSessionUuid: string, // Added chat_session_uuid
+    // characterCard: CharacterCard, // No longer needed directly for payload, but keep for template/stop sequences if used by backend
+    // prompt: string, // Backend will construct the prompt
+    contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>, // This is the current_context
+    // userName: string, // No longer needed for payload
+    _apiConfig?: any, // Keep for stop_sequences or other non-payload backend params
+    signal?: AbortSignal,
+    _characterCard?: CharacterCard // Optional: if needed for stop sequences from template
   ): Promise<Response> {
+    if (!chatSessionUuid) {
+      throw new Error("chat_session_uuid is required for /api/chat/generate");
+    }
     try {
-      // Extract character name from the card
-      const characterName = characterCard.data.name || 'Character';
-      const templateId = apiConfig?.templateId;
-      
-      // Format the prompt with the provided context messages
-      const formattedPrompt = this.formatPromptWithContextMessages(
-        characterCard,
-        prompt,
-        contextMessages,
-        userName, // Pass userName here
-        templateId
-      );
-      
-      const template = this.getTemplate(templateId);
-      const stopSequences = this.getStopSequences(template, characterName);
-      
+      // const characterName = characterCard?.data.name || 'Character'; // Needed if stop_sequences are derived here
+      // const templateId = apiConfig?.templateId;
+      // const template = this.getTemplate(templateId);
+      // const stopSequences = this.getStopSequences(template, characterName);
+
+      // The backend now handles prompt construction.
+      // We only send chat_session_uuid and current_context.
+      // Ensure contextMessages are in the format: [{"sender": "user", "text": "Hi"}]
+      // The current contextMessages are {role: '...', content: '...'}
+      // We need to map them to {sender: '...', text: '...'}
+      const current_context_payload = contextMessages.map(msg => ({
+        sender: msg.role, // 'user' or 'assistant' (or 'system' if backend supports)
+        text: msg.content
+      }));
+
+      const payload: any = {
+        chat_session_uuid: chatSessionUuid,
+        current_context: current_context_payload,
+      };
+
+      // If backend still uses stop_sequences or other params from apiConfig, add them.
+      // For now, strictly adhering to the guide for /api/chat/generate.
+      // if (stopSequences && stopSequences.length > 0) {
+      //   payload.stop_sequences = stopSequences;
+      // }
+      // if (apiConfig?.generation_settings) { // Example if backend needs generation settings
+      //    payload.generation_settings = apiConfig.generation_settings;
+      // }
+
+
       // Make the actual API request
       const response = await fetch('/api/chat/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prompt: formattedPrompt,
-          stop_sequences: stopSequences,
-          ...(apiConfig || {})
-        }),
+        body: JSON.stringify(payload),
         signal // Pass the abort signal for cancellation
       });
       

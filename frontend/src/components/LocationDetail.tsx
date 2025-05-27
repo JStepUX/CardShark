@@ -99,6 +99,13 @@ const LocationDetail: React.FC = () => {
             </ul>
           </div>
         )}
+        
+        {/* Lore Source */}
+        {location.lore_source && (
+          <div className="mt-4 p-4 border-t border-stone-700">
+            <p className="text-sm text-stone-400 italic">From lore: {location.lore_source}</p>
+          </div>
+        )}
       </div>
     </div>
   );

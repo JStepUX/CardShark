@@ -17,10 +17,11 @@ These principles apply across all persistence domains in CardShark:
 
 ### 1. Data Integrity
 
-- All write operations use atomic patterns to prevent corruption
-- Critical operations include verification steps
-- Backup mechanisms protect against data loss
-- All data formats include validation schemas
+- All write operations use atomic patterns to prevent corruption (primarily for file-based storage).
+- For database operations (like Chat), transactions ensure data integrity.
+- Critical operations include verification steps.
+- Backup mechanisms protect against data loss.
+- All data formats include validation schemas.
 
 ### 2. Performance Optimization
 
@@ -72,18 +73,16 @@ These principles apply across all persistence domains in CardShark:
 - **Detailed spec**: See Character Card format specification
 
 ### Chats
-- **Primary location**: `/chats/{{characterName}}/` directory
-- **Format**: JSONL files with metadata header and message entries (older chats might be JSON files with UUIDs as filenames).
-- **Organization**:
-    - Each character has its own subdirectory
-    - `folders.json` may map UUIDs to character names for efficient lookup in older chat versions.
-- **Key handlers**: `chat_handler.py`, `chat_endpoints.py`
-- **Frontend service**: `ChatStorage` service in the frontend
+- **Primary location**: SQLite database (`cardshark.sqlite`)
+- **Format**: SQLite tables (see [`backend/schemas.py`](backend/schemas.py:0) and [`backend/sql_models.py`](backend/sql_models.py:0) for details). Chat sessions are identified by `chat_session_uuid`.
+- **Key handlers**: [`backend/services/chat_service.py`](backend/services/chat_service.py:0), [`backend/chat_endpoints.py`](backend/chat_endpoints.py:0)
+- **Frontend service**: `ChatStorage` service in the frontend (interacts with new chat API endpoints)
 - **Access patterns**:
-    - Chat history is loaded when a character is selected
-    - New messages are appended to the current chat file
-    - Chat lists are loaded when the chat selector is opened
-- **Detailed strategy**: See `chat_persistence_strategy.md`
+    - A new chat session is created via `POST /api/create-new-chat`, returning a `chat_session_uuid`.
+    - Existing chat history is loaded using `POST /api/load-latest-chat` (or by providing a specific `chat_session_uuid`).
+    - New messages are appended via `POST /api/append-chat-message`, including the `chat_session_uuid`.
+    - Message generation (`POST /api/chat/generate`) uses the `chat_session_uuid` to fetch context and persist the new message.
+- **Detailed strategy**: See [`docs/chat_persistence_strategy.md`](docs/chat_persistence_strategy.md) (now titled "Chat Persistence Architecture (SQLite)")
 
 ### Worlds
 - **Primary location**: `/worlds/{worldName}/` directories
@@ -135,7 +134,7 @@ These principles apply across all persistence domains in CardShark:
 ## Common Implementation Patterns
 
 ### Atomic File Operations
-All domains implement atomic file operations following this pattern:
+All domains using file-based persistence implement atomic file operations following this pattern. This is less directly relevant for data stored in SQLite (like Chat), where database transactions handle atomicity.
 
 ```python
 import os
@@ -257,7 +256,7 @@ class DebouncedSaver:
 ## Cross-Domain Interactions
 Different persistence domains interact in structured ways:
 
-1.  **Characters → Chats**: Character IDs link to chat directories
+1.  **Characters → Chats**: Character IDs are associated with `chat_session_uuid`s in the SQLite database, linking characters to their chat histories.
 2.  **Characters → Worlds**: Character cards can generate worlds
 3.  **Worlds → Characters**: Worlds reference character UUIDs for NPCs
 4.  **Templates → Chats**: Templates are applied in chat contexts
@@ -269,7 +268,7 @@ Each storage domain has a corresponding service layer that abstracts implementat
 ### Backend Services
 - **`settings_manager.py`**: Manages application settings
 - **`png_metadata_handler.py`**: Handles reading/writing PNG metadata
-- **`chat_handler.py`**: Manages chat operations
+- **[`backend/services/chat_service.py`](backend/services/chat_service.py:0)**: Manages chat operations via the SQLite database.
 - **`lore_handler.py`**: Handles character lore entries
 - **`background_handler.py`**: Manages background resources
 - **`world_state_manager.py`**: Handles world state persistence
@@ -293,14 +292,23 @@ Frontend components interact with the backend storage through a set of REST APIs
 Example API patterns:
 ```typescript
 // Assuming apiService is a configured client
-// Reading chat history
-// const chatHistory = await apiService.fetchData(`chat/${characterId}/history`);
 
-// Saving a message
-// await apiService.saveData(`chat/${characterId}/message`, {
-//   message: newMessage,
-//   timestamp: Date.now()
-// });
+// Example: Creating a new chat session
+// const { chat_session_uuid } = await apiService.postData('/api/create-new-chat', { character_id: 'some_char_id' });
+
+// Example: Appending a message to an existing chat
+// if (chat_session_uuid) {
+//   await apiService.postData('/api/append-chat-message', {
+//     chat_session_uuid: chat_session_uuid,
+//     message: { role: 'user', content: 'Hello there!' }
+//   });
+// }
+
+// Example: Loading the latest chat for a character
+// const latestChat = await apiService.postData('/api/load-latest-chat', { character_id: 'some_char_id' });
+// if (latestChat && latestChat.chat_session_uuid) {
+//   // Use latestChat.messages and latestChat.chat_session_uuid
+// }
 ```
 
 ## Best Practices
@@ -316,7 +324,7 @@ When working with CardShark's storage architecture:
 ## Future Enhancements
 Planned improvements to the persistence architecture:
 
-1.  **Database Migration**: For higher scalability in high-volume domains
+1.  **Database Migration**: Partially addressed for chat data with the move to SQLite. Ongoing for other domains or further chat enhancements.
 2.  **Distributed Storage**: For multi-device synchronization
 3.  **Conflict Resolution**: For collaborative editing scenarios
 4.  **Compression Strategies**: For reducing storage footprint
@@ -334,7 +342,11 @@ Common persistence issues and their solutions:
 
 ### Domain-Specific Issues
 - **Character Card Problems**: Check PNG metadata integrity. Ensure EXIFtool or chosen library works correctly.
-- **Chat History Issues**: Validate JSONL format and structure. Ensure atomic appends or full rewrites are handled safely.
+- **Chat History Issues**: With SQLite, issues might involve:
+    - Verifying database connection and `cardshark.sqlite` file integrity.
+    - Checking logs from [`backend/services/chat_service.py`](backend/services/chat_service.py:0) for errors during database operations.
+    - Ensuring `chat_session_uuid` is correctly managed and passed between frontend and backend.
+    - Querying the database directly (e.g., using an SQLite browser) to inspect `ChatSessions` and `ChatMessages` tables for expected data.
 - **World State Errors**: Verify JSON schema compliance. Check for race conditions if multiple users/processes can modify.
 - **Settings Conflicts**: Check for concurrent modifications. Consider a lock file or versioning for settings.
 
