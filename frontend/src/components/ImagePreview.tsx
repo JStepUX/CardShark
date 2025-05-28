@@ -84,7 +84,8 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
   };
 
 const handleMouseEnter = () => {
-  if (onImageChange) {            // show overlay whenever image is user-modifiable
+  // Show overlay if image is user-modifiable OR if character can be dismissed
+  if (onImageChange || (hasCharacterLoaded && onUnloadCharacter)) {
     setIsHovering(true);
   }
 };
@@ -221,50 +222,55 @@ const handleMouseEnter = () => {
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
                 {currentIndex + 1} / {availableImages.length}
               </div>
-            </>          )}
-          
-          {/* Character unload button - only show when character is loaded and hovering */}
-          {isHovering && hasCharacterLoaded && onUnloadCharacter && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnloadCharacter();
-              }}
-              className="absolute top-2 right-2 p-2 bg-red-600 bg-opacity-80 hover:bg-red-700 hover:bg-opacity-90 rounded-full text-white transition-all duration-200 shadow-lg"
-              title="Switch to Assistant Mode (unload character)"
-              aria-label="Unload character"
-            >
-              <X size={16} />
-            </button>
-          )}
-          
-          {/* Hover overlay with controls - Conditionally show based on image type or if onImageChange is provided */}
-          {isHovering
-  && onImageChange
-  && (
-       !availableImages
-       || (typeof currentIndex === 'number'
-           && availableImages[currentIndex]?.type === 'character')
-     ) && (
+            </>          )}          {/* Hover overlay with controls */}
+          {isHovering && (
+            // Show overlay if we have image editing capabilities OR character dismissal
+            (onImageChange && (
+              !availableImages ||
+              (typeof currentIndex === 'number' && availableImages[currentIndex]?.type === 'character')
+            )) ||
+            (hasCharacterLoaded && onUnloadCharacter)
+          ) && (
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 transition-opacity">
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  <Upload size={16} />                <span>Replace Image</span>
-                </button>
-                
-                {currentImage !== placeholderUrl && ( // Only show adjust if not placeholder
+              <div className="flex flex-col gap-3">                {/* Image editing buttons - only show if onImageChange is available */}
+                {onImageChange && (
+                  <>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    >
+                      <Upload size={16} />
+                      <span>Replace Image</span>
+                    </button>
+                    
+                    {currentImage !== placeholderUrl && ( // Only show adjust if not placeholder
+                      <button
+                        onClick={() => {
+                          setTempImageUrl(currentImage); // Use currentImage which reflects the displayed one
+                          setShowCropper(true);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-stone-700 hover:bg-stone-600 text-white rounded-lg transition-colors"
+                      >
+                        <Crop size={16} />
+                        <span>Adjust Image</span>
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {/* Character dismiss button - only show when character is loaded */}
+                {hasCharacterLoaded && onUnloadCharacter && (
                   <button
-                    onClick={() => {
-                      setTempImageUrl(currentImage); // Use currentImage which reflects the displayed one
-                      setShowCropper(true);
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnloadCharacter();
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-stone-700 hover:bg-stone-600 text-white rounded-lg transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                    title="Switch to Assistant Mode (unload character)"
+                    aria-label="Dismiss character"
                   >
-                    <Crop size={16} />
-                    <span>Adjust Image</span>
+                    <X size={16} />
+                    <span>Dismiss Character</span>
                   </button>
                 )}
               </div>

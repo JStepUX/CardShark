@@ -18,6 +18,7 @@ __mocks__
 *.test.ts
 jest*.*
 scripts
+cardshark.sqlite
 
 # Editor directories and files
 .vscode/*

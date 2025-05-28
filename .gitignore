@@ -10,6 +10,7 @@ coverage/
 .nyc_output/
 *.test.tsx
 testHelpers/
+cardshark.sqlite
 
 # Environment files
 .env
