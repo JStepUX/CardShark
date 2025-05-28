@@ -79,20 +79,55 @@
   padding: 0;
   background-color: transparent;
   white-space: pre-wrap !important;
+  cursor: text;
+}
+
+.chat-bubble-editor .ProseMirror p {
+  margin: 0 0 1em 0;
+}
+
+.chat-bubble-editor .ProseMirror p:last-child {
+  margin-bottom: 0;
 }
 
 .chat-bubble-editor .ProseMirror:hover {
-  background-color: rgba(30, 41, 59, 0.1);
-  border-radius: 0.25rem;
+  background-color: transparent;
 }
 
 .chat-bubble-editor .ProseMirror:focus {
   outline: none;
-  background-color: rgba(30, 41, 59, 0.2);
-  border-radius: 0.25rem;
+  background-color: transparent;
 }
 
-/* Enhanced streaming content styles */
+/* Seamless text editing experience */
+.chat-bubble-editor {
+  cursor: text;
+}
+
+.chat-bubble-editor .ProseMirror {
+  cursor: text;
+  /* Ensure consistent text selection behavior */
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+/* Make the entire container clickable for focusing */
+.chat-bubble-editor:hover {
+  cursor: text;
+}
+
+/* Ensure text selection looks consistent */
+.chat-bubble-editor .ProseMirror::selection {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+.chat-bubble-editor .ProseMirror::-moz-selection {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Enhanced streaming content styles - match editor exactly */
 .streaming-content {
   font-family: inherit;
   font-size: inherit;
@@ -101,6 +136,15 @@
   color: white;
   word-break: break-word;
   overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.streaming-content p {
+  margin: 0 0 1em 0;
+}
+
+.streaming-content p:last-child {
+  margin-bottom: 0;
 }
 
 /* Elegant blinking cursor for streaming content */

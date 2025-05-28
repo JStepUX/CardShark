@@ -22,6 +22,36 @@ export function markdownToHtml(markdown: string): string {
 }
 
 /**
+ * Convert plain text with newlines to proper HTML paragraph structure
+ */
+export function textToHtmlParagraphs(text: string): string {
+  if (!text) return '';
+  
+  // If text already contains HTML tags, return as is
+  if (text.includes('<p>') || text.includes('<br>') || text.includes('<div>')) {
+    return text;
+  }
+  
+  // Split by double newlines to create paragraphs
+  const paragraphs = text.split(/\n\s*\n/);
+  
+  // Convert each paragraph, handling single newlines within paragraphs
+  const htmlParagraphs = paragraphs
+    .map(paragraph => {
+      const trimmedParagraph = paragraph.trim();
+      if (!trimmedParagraph) return '';
+      
+      // Convert single newlines within paragraphs to <br> tags
+      const paragraphWithBreaks = trimmedParagraph.replace(/\n/g, '<br>');
+      return `<p>${paragraphWithBreaks}</p>`;
+    })
+    .filter(p => p)
+    .join('');
+    
+  return htmlParagraphs || `<p>${text}</p>`;
+}
+
+/**
  * Converts markdown image syntax ![alt](url) to HTML <img> tags
  * Used specifically for handling images in messages
  */

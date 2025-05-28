@@ -376,7 +376,7 @@ const Layout: React.FC = () => {
       />
       
       {/* Main Content Area - added pb-8 to account for bottom banner */}
-      <div className={`flex flex-1 ${isCompareMode ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900 pb-8`}>
+      <div className={`flex flex-1 ${isCompareMode ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900`}>
         {/* Main content column */}
         <div className={`flex flex-col ${isCompareMode ? 'w-1/2' : 'flex-1'} mb-8`}>
           {error && (

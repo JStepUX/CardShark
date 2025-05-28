@@ -7,7 +7,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
 import { MarkdownSyntaxHighlighter } from './tiptap/extensions/MarkdownSyntaxHighlighter';
 import { MarkdownImage } from './tiptap/extensions/MarkdownImage';
-import { markdownToHtml } from '../utils/contentUtils';
+import { markdownToHtml, textToHtmlParagraphs } from '../utils/contentUtils';
 
 // Import the CSS file
 import './tiptap/tiptap.css';
@@ -40,14 +40,13 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const initialContent = content?.includes('![') 
     ? markdownToHtml(content)
     : content;
-  
-  const editor = useEditor({
+    const editor = useEditor({
     extensions: [
       StarterKit.configure({
         // Disable built-in markdown parsing features
         // and remove paragraph from starter kit to configure it separately
         paragraph: false,
-        hardBreak: {}, // Ensure HardBreak is active with default options
+        hardBreak: {}, // Keep HardBreak for within-paragraph line breaks
         bold: false,
         italic: false,
         code: false,
@@ -81,19 +80,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     autofocus,
     parseOptions: {
       preserveWhitespace: preserveWhitespace ? 'full' : undefined, // Use undefined for default behavior when false
-    },
-    onUpdate: ({ editor }: { editor: Editor }) => {
+    },onUpdate: ({ editor }: { editor: Editor }) => {
       // Save cursor position before content update
       cursorPosRef.current = editor.state.selection;
       
-      // Get HTML with preserved newlines
-      let html = editor.getHTML();
-      
-      // If we're editing plain text without HTML tags, handle newlines specially
-      if (!html.includes('<p>') && html.includes('<br>')) {
-        // Convert <br> tags to newlines for plain text editing
-        html = html.replace(/<br>/g, '\n');
-      }
+      // Get HTML content directly - let TipTap handle proper paragraph structure
+      const html = editor.getHTML();
       
       onChange(html);
     },
@@ -104,9 +96,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         return text;
       },
     },
-  });
-
-  // Update content from props (for external changes)
+  });  // Update content from props (for external changes)
   useEffect(() => {
     if (editor && editor.getHTML() !== content) {
       // Save current cursor position before updating
@@ -117,9 +107,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       // Process content for update
       let contentToSet = content;
       
-      // Handle newlines
+      // Convert plain text with newlines to proper HTML paragraphs
       if (!contentToSet.includes('<p>') && !contentToSet.includes('<br>') && contentToSet.includes('\n')) {
-        contentToSet = contentToSet.replace(/\n/g, '<br>');
+        contentToSet = textToHtmlParagraphs(contentToSet);
       }
       
       // Process markdown images
@@ -146,20 +136,24 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       onKeyDown(_e);
     }
   };
-
-  // Handle clicks on the container to focus the editor
-  const handleContainerClick = (_e: React.MouseEvent<HTMLDivElement>) => {
-    if (editor && !readOnly && !editor.isFocused) {
-      editor.commands.focus();
+  // Handle clicks on the container to focus the editor seamlessly
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (editor && !readOnly) {
+      // Always focus the editor when clicking anywhere in the container
+      if (!editor.isFocused) {
+        editor.commands.focus();
+      }
+      // Allow clicks to propagate to set cursor position
+      e.stopPropagation();
     }
   };
-
   return (
     <div 
       className={`tiptap-editor ${className}`}
       onKeyDown={handleKeyDown}
       onClick={handleContainerClick}
       ref={editorContainerRef}
+      style={{ cursor: readOnly ? 'default' : 'text' }}
     >
       <EditorContent editor={editor} />
     </div>

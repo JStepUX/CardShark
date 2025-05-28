@@ -40,37 +40,25 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         throw new Error(`Failed to fetch settings: ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
-      if (data.success && data.settings) {
-        // Merge fetched settings with defaults to ensure all keys exist
+      if (data.success && data.settings) {        // Merge fetched settings with defaults to ensure all keys exist
         // Use deep merge for nested objects like 'apis' and 'syntaxHighlighting'
         const deepMerge = (target: any, source: any): any => {
           Object.keys(source).forEach(key => {
             const targetValue = target[key];
-            const sourceValue = source[key];
-
-            if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
+            const sourceValue = source[key];            if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
               // Ensure target node exists and is an object
               if (!targetValue || typeof targetValue !== 'object' || Array.isArray(targetValue)) {
                 target[key] = {};
               }
-              deepMerge(target[key], sourceValue);
-            } else {
+              deepMerge(target[key], sourceValue);            } else {
               // Assign non-object values directly (including null/undefined from source)
               target[key] = sourceValue;
             }
           });
           return target;
-        };
-
-        // Start with a deep copy of defaults, then merge fetched settings onto it
-        const merged = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), data.settings);
-
-        setSettings(merged);
-        console.log("[SettingsContext] Settings loaded:", {
-          character_directory: merged.character_directory,
-          models_directory: merged.models_directory,
-          model_directory: merged.model_directory // Keep logging legacy field for comparison
-        });
+        };        // Start with a deep copy of defaults, then merge fetched settings onto it
+        const merged = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), data.settings);        setSettings(merged);
+        console.log("[SettingsContext] Settings loaded successfully");
       } else {
         throw new Error(data.message || 'Failed to parse settings from response');
       }
