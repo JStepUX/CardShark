@@ -103,16 +103,17 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const isDisabled = template?.isBuiltIn && !isNew;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col performance-contain performance-transform">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 border-b border-stone-800">
-        <h3 className="text-lg font-medium">
-          {isNew ? 'Create New Template' : 'Edit Template'}
-        </h3>
+      <div className="p-4 border-b border-stone-800 flex items-center justify-between performance-contain">
+        <h2 className="text-lg font-semibold">
+          {isNew ? 'Create Template' : 'Edit Template'}
+        </h2>
+        
         <div className="flex gap-2">
           <button
             onClick={onCancel}
-            className="p-2 rounded-lg flex items-center gap-1 hover:bg-red-900/50 transition-colors"
+            className="p-2 rounded-lg flex items-center gap-1 hover:bg-red-900/50 transition-colors performance-transform"
           >
             <X size={16} />
             <span>Cancel</span>
@@ -124,7 +125,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
               isDisabled 
                 ? 'bg-green-900/30 text-green-500/50 cursor-not-allowed' 
                 : 'bg-green-900/50 hover:bg-green-900 text-green-500'
-            } transition-colors`}
+            } transition-colors performance-transform`}
           >
             <Save size={16} />
             <span>Save</span>
@@ -133,10 +134,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
       </div>
       
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 performance-contain">
         <div className="space-y-6">
           {/* Basic Information */}
-          <div className="space-y-4">
+          <div className="space-y-4 performance-contain">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Name
@@ -171,7 +172,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
           
           {/* Memory Format */}
-          <div>
+          <div className="performance-contain performance-transform">
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Memory Format
             </label>
@@ -193,7 +194,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
           
           {/* Prompt Formats */}
-          <div className="space-y-4">
+          <div className="space-y-4 performance-contain performance-transform">
             <h4 className="text-sm font-medium text-gray-300">Prompt Formats</h4>
             
             {/* System */}
@@ -246,7 +247,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
           
           {/* Stop Sequences */}
-          <div>
+          <div className="performance-contain performance-transform">
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-gray-300">
                 Stop Sequences
@@ -309,7 +310,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
           </div>
           
           {/* Detection Patterns */}
-          <div>
+          <div className="performance-contain performance-transform">
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-gray-300">
                 Auto-detection Patterns

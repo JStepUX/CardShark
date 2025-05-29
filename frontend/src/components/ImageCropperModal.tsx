@@ -108,22 +108,17 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     <Dialog
       isOpen={isOpen}
       onClose={onClose}
-      title="Crop Background Image"
-      className="max-w-4xl"
+      title={getAspectRatioLabel()}
+      showCloseButton={false}
+      className="max-w-3xl w-full"
     >
-      <div className="space-y-4">
-        {loading && (
-          <div className="flex justify-center py-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        )}
-        
+      <div className="w-full performance-contain">
+        {/* Container for cropper */}
         <div 
-          ref={containerRef} 
-          className="crop-container mx-auto bg-stone-900 rounded-lg overflow-hidden"
+          ref={containerRef}
+          className="relative w-full mx-auto bg-black rounded-lg overflow-hidden performance-contain performance-transform"
           style={{ 
-            height: containerHeight,
-            maxHeight: '70vh', // Additional safeguard
+            height: `${containerHeight}px`,
             visibility: loading ? 'hidden' : 'visible'
           }}
         >
@@ -145,7 +140,7 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           />
         </div>
 
-        <div className="flex justify-between items-center pt-4">
+        <div className="flex justify-between items-center pt-4 performance-contain performance-transform">
           <div className="text-sm text-gray-400">
             {getAspectRatioLabel()}
           </div>
@@ -153,7 +148,7 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex items-center gap-2 px-4 py-2 bg-stone-800 hover:bg-stone-700 rounded-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-stone-800 hover:bg-stone-700 rounded-lg performance-transform"
             >
               <X size={16} />
               <span>Cancel</span>
@@ -161,7 +156,7 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg performance-transform"
               disabled={loading}
             >
               <Save size={16} />

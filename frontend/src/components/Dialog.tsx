@@ -62,24 +62,24 @@ export function Dialog({
         <div
           ref={dialogRef}
           // Changed to flex layout to allow fixed footer
-          className={`${className} my-8 text-left transition-all transform bg-stone-800 shadow-xl rounded-lg flex flex-col max-h-[calc(100vh-4rem)]`}
+          className={`${className} my-8 text-left transition-all transform bg-stone-800 shadow-xl rounded-lg flex flex-col max-h-[calc(100vh-4rem)] performance-contain performance-transform`}
         >
           {/* Header */}
           {title && (
-            <div className="px-6 py-4 border-b border-stone-700">
+            <div className="px-6 py-4 border-b border-stone-700 performance-contain">
               <h2 id="dialog-title" className="text-lg font-semibold text-white">
                 {title}
               </h2>
             </div>
           )}
           {/* Scrollable Content Area */}
-          <div className="px-6 py-4 flex-grow overflow-y-auto">
+          <div className="px-6 py-4 flex-grow overflow-y-auto performance-contain">
             {children}
           </div>
           
           {/* Footer with Buttons */}
           {(buttons.length > 0 || showCloseButton) && (
-            <div className="px-6 py-4 border-t border-stone-700 flex justify-end gap-2">
+            <div className="px-6 py-4 border-t border-stone-700 flex justify-end gap-2 performance-contain performance-transform">
               {buttons.map((button, index) => {
                 let buttonPropsVariant: 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost' = 'primary';
                 let buttonPropsClassName = button.className || '';

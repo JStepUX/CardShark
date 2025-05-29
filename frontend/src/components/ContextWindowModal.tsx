@@ -341,12 +341,12 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
       showCloseButton={true}
       className="max-w-4xl w-2/3"
     >
-      <div className="w-full h-[70vh] flex flex-col">
+      <div className="w-full h-[70vh] flex flex-col performance-contain performance-transform">
         {/* Tab Controls */}
-        <div className="flex border-b border-stone-700 mb-4">
+        <div className="flex border-b border-stone-700 mb-4 performance-contain">
           <button
             onClick={() => setActiveTab('analysis')}
-            className={`px-4 py-2 ${activeTab === 'analysis' 
+            className={`px-4 py-2 performance-transform ${activeTab === 'analysis' 
               ? 'border-b-2 border-blue-500 text-blue-400' 
               : 'text-gray-400 hover:text-gray-300'
             }`}
@@ -355,20 +355,20 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('raw')}
-            className={`px-4 py-2 ${activeTab === 'raw' 
+            className={`px-4 py-2 performance-transform ${activeTab === 'raw' 
               ? 'border-b-2 border-blue-500 text-blue-400' 
               : 'text-gray-400 hover:text-gray-300'
             }`}
           >
             Raw Data
           </button>
-          
+
           {/* Copy button aligned to the right */}
-          <div className="ml-auto">
+          <div className="ml-auto performance-contain">
             <button
               onClick={handleCopy}
               className="flex items-center gap-1 px-3 py-1 my-1 bg-stone-800 hover:bg-stone-700 
-                         rounded text-sm transition-colors"
+                         rounded text-sm transition-colors performance-transform"
               title="Copy raw data to clipboard"
             >
               <Copy size={14} />
@@ -379,15 +379,15 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
 
         {/* Content based on active tab */}
         {activeTab === 'analysis' ? (
-          <div className="flex-1 overflow-auto px-1">
+          <div className="flex-1 overflow-auto px-1 performance-contain">
             {renderTokenAnalysis()}
           </div>
         ) : (
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto performance-contain">
             {/* Display context history in reverse chronological order (newest first) */}
             {contextHistory.length > 0 ? (
               contextHistory.map((context, index) => (
-                <div key={index} className="mb-6">
+                <div key={index} className="mb-6 performance-contain performance-transform">
                   <pre className="bg-stone-900 text-gray-300 font-mono text-sm
                               rounded-lg p-4 overflow-auto whitespace-pre-wrap">
                     {JSON.stringify(context, null, 2)}
@@ -396,7 +396,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
               ))
             ) : (
               <pre className="bg-stone-900 text-gray-300 font-mono text-sm
-                           rounded-lg p-4 overflow-auto whitespace-pre-wrap">
+                           rounded-lg p-4 overflow-auto whitespace-pre-wrap performance-contain">
                 {JSON.stringify(contextData, null, 2)}
               </pre>
             )}

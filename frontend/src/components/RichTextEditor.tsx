@@ -149,7 +149,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   };
   return (
     <div 
-      className={`tiptap-editor ${className}`}
+      className={`tiptap-editor ${className} performance-contain performance-transform`}
       onKeyDown={handleKeyDown}
       onClick={handleContainerClick}
       ref={editorContainerRef}

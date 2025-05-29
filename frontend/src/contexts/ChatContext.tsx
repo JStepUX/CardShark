@@ -8,6 +8,8 @@ import { PromptHandler } from '../handlers/promptHandler';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
 import { useContentFilter } from '../hooks/useContentFilter';
+import { usePerformanceAware } from './PerformanceContext';
+import { PerformanceMonitor } from '../utils/performance';
 import {
   TriggeredLoreImage,
   AvailablePreviewImage,
@@ -63,9 +65,10 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | null>(null);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { characterData } = useCharacter();
-  const apiConfigContext = useContext(APIConfigContext);
+  const { characterData } = useCharacter();  const apiConfigContext = useContext(APIConfigContext);
   const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
+  const performanceAware = usePerformanceAware();
+  const performanceMonitor = useRef(PerformanceMonitor.getInstance());
   
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesRef = useRef<Message[]>(messages);
@@ -480,28 +483,67 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsGenerating(true); setGeneratingId(assistantMsgId); setError(null);
 
     const abortCtrl = new AbortController();
-    currentGenerationRef.current = abortCtrl;
-
-    try {      const ctxMsgs = messagesRef.current.filter(msg => msg.id !== assistantMsgId && msg.role !== 'thinking')
+    currentGenerationRef.current = abortCtrl;    try {      // Start performance measurement for streaming
+      const streamStartTime = performance.now();
+      let chunkCount = 0;
+      let lastUpdateTime = streamStartTime;
+      
+      // Record streaming start metric
+      performanceMonitor.current.recordMetric('stream_start', streamStartTime);
+      
+      const ctxMsgs = messagesRef.current.filter(msg => msg.id !== assistantMsgId && msg.role !== 'thinking')
         .map(({ role, content }) => ({ role: (role === 'user' || role === 'assistant' || role === 'system' ? role : 'system') as 'user' | 'assistant' | 'system', content }));
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const response = await PromptHandler.generateChatResponse(
         effectiveChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
       );
 
-      let fullContent = ''; let buffer = ''; const bufferInt = 50;
-      let bufTimer: NodeJS.Timeout | null = null;
+      let fullContent = ''; 
+      let buffer = '';
+      // Use performance-aware streaming config
+      const streamingConfig = performanceAware.getStreamingConfig();
+      const bufferInt = streamingConfig.flushInterval;
 
-      const updateAssistantMsgContent = (chunk: string, isFinal = false) => {
+      let bufTimer: NodeJS.Timeout | null = null;      const updateAssistantMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
+        
+        // Performance monitoring for streaming updates
+        const now = performance.now();
+        
         if (!bufTimer || isFinal) {
-          if (bufTimer) clearTimeout(bufTimer);          bufTimer = setTimeout(() => {
-            const curBuf = buffer; buffer = ''; fullContent += curBuf;
+          if (bufTimer) clearTimeout(bufTimer);          
+          bufTimer = setTimeout(() => {
+            const renderStartTime = performance.now();
+            const curBuf = buffer; 
+            buffer = ''; 
+            fullContent += curBuf;
             const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
-            setMessages((prevMsgs: Message[]) => prevMsgs.map((msg: Message) =>
-              msg.id === assistantMsgId ? { ...msg, content: filtContent, variations: [filtContent], currentVariation: 0 } : msg
-            ));
-            if (isFinal) setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
+            
+            // Check if we should throttle updates based on performance
+            if (!performanceAware.isPerformanceCritical() || isFinal) {
+              setMessages((prevMsgs: Message[]) => prevMsgs.map((msg: Message) =>
+                msg.id === assistantMsgId ? { ...msg, content: filtContent, variations: [filtContent], currentVariation: 0 } : msg
+              ));
+            }
+            
+            const renderTime = performance.now() - renderStartTime;
+              // Track performance metrics
+            const timeSinceLastUpdate = now - lastUpdateTime;
+            performanceMonitor.current.recordMetric('update_interval', timeSinceLastUpdate);
+            
+            if (renderTime > 16.67) { // Over 60fps threshold
+              console.debug(`Slow streaming update: ${renderTime.toFixed(2)}ms`);
+              performanceMonitor.current.recordMetric('slow_render', renderTime);
+            }
+            
+            if (isFinal) {
+              const totalStreamTime = performance.now() - streamStartTime;
+              console.debug(`Stream completed: ${chunkCount} chunks in ${totalStreamTime.toFixed(2)}ms`);
+              performanceMonitor.current.recordMetric('stream_total_time', totalStreamTime);
+              setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
+            }
+            
+            lastUpdateTime = now;
           }, bufferInt);
         }
       };
@@ -513,8 +555,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (buffer.length > 0) updateAssistantMsgContent('', true);
           break;
         }
+        chunkCount++;
         updateAssistantMsgContent(chunk);
-      }      if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
+      }      
+      
+      if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
       
       const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? { ...msg, content: shouldUseClientFiltering ? filterText(fullContent) : fullContent } : msg);
       saveChat(finalMsgs);

@@ -19,6 +19,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import PromptSettings from './PromptSettings';
 import HighlightingSettings from './HighlightingSettings';
 import { ContentFilteringTab } from './ContentFilteringTab';
+
 import { WordSwapRule } from '../utils/contentProcessing';
 // import KoboldCPPManager from './KoboldCPPManager'; // Removed
 import ModelDirectorySettings from './settings/ModelDirectorySettings';
@@ -501,8 +502,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                 onUpdateRules={handleUpdateWordSwapRules}
                 removeIncompleteSentences={settings.remove_incomplete_sentences || false}
                 onUpdateRemoveIncompleteSentences={(value) => updateSettings({ remove_incomplete_sentences: value })}
-              />
-            </div>
+              />            </div>
           </div>
         </SettingsTab>
       </SettingsTabs>

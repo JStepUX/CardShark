@@ -77,8 +77,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
           }`}
         >
           Templates
-        </button>
-        <button
+        </button>        <button
           onClick={() => handleTabClick('prompts')}
           className={`px-6 py-3 text-sm font-medium ${
             activeTab === 'prompts'
@@ -102,8 +101,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
             activeTab === 'filtering'
               ? 'text-blue-500 border-b-2 border-blue-500'
               : 'text-gray-400 hover:text-gray-200'
-          }`}
-        >
+          }`}        >
           Chat
         </button>
       </div>

@@ -230,17 +230,16 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   if (!message.content && !isGenerating) {
     console.warn(`[ChatBubble] Rendering bubble with empty content: ID=${message.id}, Role=${message.role}`);
   }
-
-  // Use original styling, different than what I introduced before
+  // Use original styling with performance optimizations
   return (
-    <div className="w-full rounded-lg transition-colors bg-stone-800 text-white">
+    <div className="w-full rounded-lg transition-colors bg-stone-800 text-white performance-contain performance-transform">
       {/* Message header - shows name and buttons */}
-      <div className="px-4 pt-2 flex justify-between items-center">
+      <div className="px-4 pt-2 flex justify-between items-center performance-contain">
         <div className="font-medium text-sm">
           {message.role === 'assistant' ? characterName : formattedUserName}
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 performance-contain performance-transform">
           {/* Show different buttons based on message role and state */}
           {message.role === 'assistant' && (
             <>
@@ -339,15 +338,13 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
             </button>
           )}
         </div>
-      </div>
-
-      {/* Message content */}
-      <div className="p-4 pt-2">
+      </div>      {/* Message content */}
+      <div className="p-4 pt-2 performance-contain">
         {isGenerating || isRegeneratingGreeting ? (
           /* Show non-editable content with cursor while generating */
-          <div className="streaming-content whitespace-pre-wrap break-words">
+          <div className="streaming-content whitespace-pre-wrap break-words performance-contain performance-transform">
             <div 
-              className="prose prose-invert max-w-none"
+              className="prose prose-invert max-w-none performance-contain"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
             {/* Animating cursor for generating state */}

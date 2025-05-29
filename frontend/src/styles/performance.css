@@ -1,0 +1,143 @@
+/* Performance-optimized CSS for 60fps */
+
+/* Essential performance classes for 60fps rendering */
+.performance-contain {
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+.performance-transform {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.performance-scroll {
+  contain: layout;
+  overflow: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* GPU acceleration for smooth animations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Optimized transitions */
+.smooth-transition {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.smooth-scale {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.smooth-opacity {
+  transition: opacity 0.15s ease-out;
+}
+
+/* Message containers with performance optimizations */
+.chat-message-container {
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+/* Streaming content optimizations */
+.streaming-content {
+  contain: content;
+  overflow-anchor: auto;
+}
+
+/* Virtual scrolling container */
+.virtual-scroll-container {
+  contain: strict;
+  overflow: auto;
+  height: 100%;
+}
+
+/* Reduce paint/layout thrashing */
+.static-content {
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+/* Optimized button hover states */
+.performance-button {
+  transform: translateZ(0);
+  transition: background-color 0.1s ease-out, 
+              transform 0.1s ease-out;
+}
+
+.performance-button:hover {
+  transform: translateZ(0) scale(1.02);
+}
+
+/* Prevent layout shifts */
+.fixed-dimensions {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+}
+
+/* Smooth scrolling with momentum */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+  contain: layout;
+}
+
+/* Hardware-accelerated animations */
+@keyframes slideInUp {
+  from {
+    transform: translate3d(0, 100%, 0);
+    opacity: 0;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    transform: scale3d(0.95, 0.95, 1);
+    opacity: 0;
+  }
+  to {
+    transform: scale3d(1, 1, 1);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.2s ease-out forwards;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 0.15s ease-out forwards;
+}
+
+/* Critical performance: prevent repaints during streaming */
+.streaming-message {
+  contain: layout style paint;
+  will-change: contents;
+}
+
+/* Optimize text rendering */
+.optimized-text {
+  text-rendering: optimizeSpeed;
+  font-smooth: never;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+/* Background image optimizations */
+.background-optimized {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  background-attachment: scroll; /* Better than fixed for performance */
+}
