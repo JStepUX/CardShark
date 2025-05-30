@@ -1,97 +1,96 @@
 # backend/world_chat_endpoints.py
 # Implements API endpoints specifically for world chat operations
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Depends
 import traceback
 import time
 import re
 import uuid
 from pathlib import Path
 
-# Create router
-router = APIRouter()
+# Import standardized response models and error handling
+from backend.response_models import (
+    DataResponse,
+    ListResponse,
+    ErrorResponse,
+    STANDARD_RESPONSES,
+    create_data_response,
+    create_list_response,
+    create_error_response
+)
+from backend.error_handlers import (
+    handle_database_error,
+    handle_validation_error,
+    handle_generic_error,
+    NotFoundException,
+    ValidationException
+)
+from backend.dependencies import (
+    get_logger_dependency,
+    get_world_card_chat_handler
+)
 
 # Import handlers
 from backend.log_manager import LogManager
 from backend.handlers.world_card_chat_handler import WorldCardChatHandler
 
-# Initialize handler with worlds directory
-logger = LogManager()
-worlds_dir = Path("worlds")
-if not worlds_dir.exists():
-    worlds_dir.mkdir(parents=True, exist_ok=True)
-logger.log_step(f"World chat endpoints using worlds directory: {worlds_dir.absolute()}")
-world_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
+# Create router
+router = APIRouter(
+    tags=["world-chat"],
+    responses=STANDARD_RESPONSES
+)
 
-@router.get("/api/world-chat/{world_name}/latest")
-async def get_latest_world_chat(world_name: str):
+# Handler initialization now handled by dependency injection
+
+@router.get("/api/world-chat/{world_name}/latest", response_model=DataResponse[dict])
+async def get_latest_world_chat(
+    world_name: str,
+    world_card_chat_handler: WorldCardChatHandler = Depends(get_world_card_chat_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
     """Gets the latest chat session for a specific world."""
     try:
         # Validate and sanitize world name for security
         safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
         if not safe_world_name:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "Invalid world name"
-                }
-            )
+            raise ValidationException("Invalid world name")
         
         logger.log_step(f"Loading latest chat for world: {safe_world_name}")
         
         # Get list of available chats for the world and take the latest one
-        chats = world_chat_handler.list_chats(safe_world_name)
+        chats = world_card_chat_handler.list_chats(safe_world_name)
         
         if not chats:
             logger.log_warning(f"No chats found for world '{world_name}'")
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "success": False,
-                    "message": f"No chats found for world '{world_name}'"
-                }
-            )
+            raise NotFoundException(f"No chats found for world '{world_name}'")
         
         # Get the first chat (most recent) from the list
         latest_chat_info = chats[0]
         chat_id = latest_chat_info["id"]
         
         # Get the full chat data
-        latest_chat = world_chat_handler.get_chat(safe_world_name, chat_id)
+        latest_chat = world_card_chat_handler.get_chat(safe_world_name, chat_id)
         
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "chat": latest_chat
-            }
-        )
+        return create_data_response({"chat": latest_chat})
+    except (ValidationException, NotFoundException):
+        raise
     except Exception as e:
         logger.log_error(f"Error getting latest chat for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to get latest chat: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, logger, "getting latest chat")
 
-@router.post("/api/world-chat/{world_name}/save")
-async def save_world_chat(world_name: str, request: Request):
+@router.post("/api/world-chat/{world_name}/save", response_model=DataResponse[dict])
+async def save_world_chat(
+    world_name: str, 
+    request: Request,
+    world_card_chat_handler: WorldCardChatHandler = Depends(get_world_card_chat_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
     """Saves a chat session for a specific world."""
     try:
         # Validate and sanitize world name for security
         safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
         if not safe_world_name:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "Invalid world name"
-                }
-            )
+            raise ValidationException("Invalid world name")
         
         # Get request data
         data = await request.json()
@@ -107,102 +106,65 @@ async def save_world_chat(world_name: str, request: Request):
             logger.log_step(f"Generated new chat ID: {chat_id}")
         
         # Save the chat data
-        success = world_chat_handler.save_chat(safe_world_name, chat_id, data)
+        success = world_card_chat_handler.save_chat(safe_world_name, chat_id, data)
         
         if not success:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "success": False,
-                    "message": f"Failed to save chat for world '{world_name}'"
-                }
-            )
+            raise ValidationException(f"Failed to save chat for world '{world_name}'")
         
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": f"Chat saved for world '{world_name}'",
-                "chat_id": chat_id
-            }
-        )
+        return create_data_response({
+            "success": True,
+            "message": f"Chat saved for world '{world_name}'",
+            "chat_id": chat_id
+        })
+    except (ValidationException, NotFoundException):
+        raise
     except Exception as e:
         logger.log_error(f"Error saving chat for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to save chat: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, logger, "saving chat")
 
-@router.get("/api/world-chat/{world_name}/{chat_id}")
-async def get_world_chat(world_name: str, chat_id: str):
+@router.get("/api/world-chat/{world_name}/{chat_id}", response_model=DataResponse[dict])
+async def get_world_chat(
+    world_name: str, 
+    chat_id: str,
+    world_card_chat_handler: WorldCardChatHandler = Depends(get_world_card_chat_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
     """Gets a specific chat session for a world by ID."""
     try:
         # Validate and sanitize world name for security
         safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
         if not safe_world_name:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "Invalid world name"
-                }
-            )
+            raise ValidationException("Invalid world name")
         
         # Get the requested chat
-        chat = world_chat_handler.get_chat(safe_world_name, chat_id)
+        chat = world_card_chat_handler.get_chat(safe_world_name, chat_id)
         
         if not chat:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "success": False,
-                    "message": f"Chat '{chat_id}' not found for world '{world_name}'"
-                }
-            )
+            raise NotFoundException(f"Chat '{chat_id}' not found for world '{world_name}'")
         
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "chat": chat
-            }
-        )
+        return create_data_response({"chat": chat})
     except ValueError as ve:
-        return JSONResponse(
-            status_code=404,
-            content={
-                "success": False,
-                "message": str(ve)
-            }
-        )
+        raise NotFoundException(str(ve))
+    except (ValidationException, NotFoundException):
+        raise
     except Exception as e:
         logger.log_error(f"Error getting chat '{chat_id}' for world '{world_name}': {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to get chat: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, logger, "getting chat")
 
-@router.post("/api/world-chat/{world_name}/create")
-async def create_world_chat(world_name: str, request: Request):
+@router.post("/api/world-chat/{world_name}/create", response_model=DataResponse[dict])
+async def create_world_chat(
+    world_name: str, 
+    request: Request,
+    world_card_chat_handler: WorldCardChatHandler = Depends(get_world_card_chat_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
     """Creates a new chat session for a world."""
     try:
         # Validate and sanitize world name for security
         safe_world_name = re.sub(r'[^\w\-]+', '_', world_name)
         if not safe_world_name:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "Invalid world name"
-                }
-            )
+            raise ValidationException("Invalid world name")
         
         # Get request data
         data = await request.json()
@@ -210,22 +172,15 @@ async def create_world_chat(world_name: str, request: Request):
         location_id = data.get("location_id", "")
         
         # Create a new chat
-        chat = world_chat_handler.create_chat(safe_world_name, title, location_id)
+        chat = world_card_chat_handler.create_chat(safe_world_name, title, location_id)
         
-        return JSONResponse(
-            status_code=201,
-            content={
-                "success": True,
-                "chat": chat,
-                "chat_id": chat["id"]
-            }
-        )
+        return create_data_response({
+            "success": True,
+            "chat": chat,
+            "chat_id": chat["id"]
+        })
+    except (ValidationException, NotFoundException):
+        raise
     except Exception as e:
         logger.log_error(f"Error creating chat for world '{world_name}': {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to create chat: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, logger, "creating chat")

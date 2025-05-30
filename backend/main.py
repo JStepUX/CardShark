@@ -94,6 +94,26 @@ from backend.content_filter_manager import ContentFilterManager
 from backend.lore_handler import LoreHandler
 import backend.sql_models # Use sql_models.py instead of models.py to avoid package conflicts
 
+# Import standardized response models and error handling
+from backend.response_models import (
+    HealthCheckResponse, 
+    ErrorResponse, 
+    STANDARD_RESPONSES,
+    create_error_response,
+    create_data_response
+)
+from backend.error_handlers import (
+    CardSharkException,
+    ValidationException,
+    NotFoundException,
+    ConfigurationException,
+    APIException,
+    register_exception_handlers,
+    handle_generic_error
+)
+from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+
 # API endpoint modules
 from backend.chat_endpoints import router as chat_session_router # Router for ChatSession CRUD
 # Import routers directly, no need for class instances
@@ -125,21 +145,28 @@ from backend.handlers.world_card_chat_handler import WorldCardChatHandler
 VERSION = "0.1.0"
 DEBUG = os.environ.get("DEBUG", "").lower() in ("true", "1", "t")
 
-# Initialize FastAPI app
-logger = LogManager()
-app = FastAPI(debug=DEBUG)
-
-# Store logger on app.state for access in dependencies
-app.state.logger = logger
-
-# Initialize Database
+# Initialize Database imports
 from backend.database import init_db, SessionLocal, get_db # Import SessionLocal and get_db
+from contextlib import asynccontextmanager
+from backend.services.character_service import CharacterService # Import CharacterService
+from sqlalchemy.orm import Session # For type hinting in dependency
+from fastapi import Depends # For dependency injection
 
-@app.on_event("startup")
-async def startup():
+# Initialize core handlers first (needed for lifespan)
+logger = LogManager()
+settings_manager = SettingsManager(logger)
+settings_manager._load_settings()
+content_filter_manager = ContentFilterManager(logger)
+validator = CharacterValidator(logger)
+png_handler = PngMetadataHandler(logger)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     try:
         init_db()
-        logger.log_info("Database tables initialised")        # Synchronize character directories
+        logger.log_info("Database tables initialised")        
+        # Synchronize character directories
         with SessionLocal() as db:
             try:
                 CharacterService(
@@ -156,20 +183,114 @@ async def startup():
     except Exception as exc:
         logger.log_error(f"DB init or character sync failed: {exc}\n{traceback.format_exc()}")
         raise
+    
+    yield  # App is running
+    
+    # Shutdown (optional cleanup)
+    logger.log_info("Application shutting down")
 
-from backend.services.character_service import CharacterService # Import CharacterService
-from sqlalchemy.orm import Session # For type hinting in dependency
-from fastapi import Depends # For dependency injection
+# Initialize FastAPI app with comprehensive metadata
+description = """
+## CardShark API 🃏
+
+AI-powered character chat and world simulation platform providing comprehensive tools for interactive storytelling.
+
+### Features
+
+* **Character Management** - Create, import, and manage AI characters with rich metadata and chat capabilities
+* **World Building** - Design immersive worlds with custom backgrounds, NPCs, and interactive environments  
+* **Chat System** - Real-time streaming conversations with multiple AI providers (OpenAI, Claude, KoboldCPP, etc.)
+* **Template System** - Customizable prompt templates for different conversation styles and scenarios
+* **Content Filtering** - Advanced content moderation and safety controls
+* **Room Management** - Create and manage different conversation spaces and contexts
+
+### API Organization
+
+All endpoints are organized under `/api/` with consistent patterns and comprehensive error handling.
+"""
+
+tags_metadata = [
+    {
+        "name": "health",
+        "description": "System health and status monitoring",
+    },
+    {
+        "name": "characters", 
+        "description": "Character management operations including creation, import, and metadata handling",
+    },
+    {
+        "name": "chat",
+        "description": "Real-time chat operations with streaming support and session management",
+    },
+    {
+        "name": "worlds",
+        "description": "World building and simulation features including NPCs and environments",
+    },
+    {
+        "name": "templates",
+        "description": "Prompt template management for different conversation scenarios",
+    },
+    {
+        "name": "settings",
+        "description": "Application configuration and user preferences",
+    },
+    {
+        "name": "backgrounds",
+        "description": "Background image management for visual customization",
+    },
+    {
+        "name": "rooms",
+        "description": "Chat room and conversation space management",
+    },
+    {
+        "name": "content-filters",
+        "description": "Content moderation and filtering operations",
+    },
+    {
+        "name": "lore",
+        "description": "Lore and narrative element management",
+    },
+]
+
+app = FastAPI(
+    title="CardShark API",
+    description=description,
+    summary="AI-powered character chat and world simulation platform",
+    version=VERSION,
+    debug=DEBUG,
+    lifespan=lifespan,
+    openapi_tags=tags_metadata,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    contact={
+        "name": "CardShark Development Team",
+        "url": "https://github.com/your-org/cardshark",
+    },
+    license_info={
+        "name": "MIT",
+        "identifier": "MIT",
+    },
+)
+
+# Store logger on app.state for access in dependencies
+app.state.logger = logger
+
+# Register global exception handlers
+register_exception_handlers(app)
 
 # Original database initialization block removed; moved to startup event.
 # Create a dedicated router for health check
 health_router = APIRouter(prefix="/api", tags=["health"])
 
-@health_router.get("/health")
+@health_router.get("/health", response_model=HealthCheckResponse, responses=STANDARD_RESPONSES)
 async def health_check():
-    """Health check endpoint."""
-    # Optionally add more checks here (e.g., database connection)
-    return {"status": "ok", "version": VERSION}
+    """Health check endpoint with standardized response."""
+    return create_data_response({
+        "status": "healthy",
+        "version": VERSION,
+        "service": "CardShark API"
+    })
 
 # Add CORS middleware to allow all origins (for development)
 app.add_middleware(
@@ -180,14 +301,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Initialize Handlers ----------
+# ---------- Initialize Remaining Handlers ----------
 
-# Initialize core handlers
-settings_manager = SettingsManager(logger)
-settings_manager._load_settings()
-content_filter_manager = ContentFilterManager(logger)
-validator = CharacterValidator(logger)
-png_handler = PngMetadataHandler(logger)
+# Remaining handler initialization
 debug_handler = PngDebugHandler(logger)
 backyard_handler = BackyardHandler(logger)
 api_handler = ApiHandler(logger)

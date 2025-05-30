@@ -16,6 +16,27 @@ from backend.lore_handler import LoreHandler
 from backend.services.character_service import CharacterService # Import CharacterService
 from backend.dependencies import get_character_service_dependency # For CharacterService dependency
 
+# Import standardized response models and error handling
+from backend.response_models import (
+    DataResponse,
+    ListResponse,
+    ErrorResponse,
+    STANDARD_RESPONSES,
+    create_data_response,
+    create_list_response,
+    create_error_response
+)
+from backend.error_handlers import (
+    handle_database_error,
+    handle_validation_error,
+    handle_generic_error,
+    NotFoundException,
+    ValidationException
+)
+from backend.dependencies import (
+    get_logger_dependency
+)
+
 # Get dependencies
 
 # Dependency function to provide the global logger instance
@@ -29,7 +50,11 @@ def get_lore_handler(logger: LogManager = Depends(get_main_app_logger)):
     return LoreHandler(logger)
 
 # Create router
-router = APIRouter(prefix="/api/lore", tags=["lore"]) # Changed prefix to /api/lore
+router = APIRouter(
+    prefix="/api/lore", 
+    tags=["lore"],
+    responses=STANDARD_RESPONSES
+)
 
 # --- Helper Functions ---
 # get_lore_image_dir is now handled by CharacterService.get_lore_image_paths
@@ -97,14 +122,14 @@ async def save_lore_image(
 
 # --- API Endpoints ---
 
-@router.post("/images/upload")
+@router.post("/images/upload", response_model=DataResponse[dict])
 async def upload_lore_image(
     request: Request, # Add request parameter
     character_uuid: str = Form(None),  # Made optional
     character_fallback_id: Optional[str] = Form(None),  # Added fallback ID
     lore_entry_id: str = Form(...),  # This ID is used to update the correct lore entry
     image_file: UploadFile = File(...),
-    logger: LogManager = Depends(get_main_app_logger),
+    logger: LogManager = Depends(get_logger_dependency),
     character_service: CharacterService = Depends(get_character_service_dependency) # Added CharacterService
 ):
     """
@@ -149,7 +174,7 @@ async def upload_lore_image(
              # For now, we pass it as is.
              pass
         elif not character_identifier and not character_fallback_id:
-             raise HTTPException(status_code=400, detail="Either character_uuid or character_fallback_id must be provided")
+             raise ValidationException("Either character_uuid or character_fallback_id must be provided")
 
     
     # If we still don't have a character identifier, use fallback or raise error
@@ -160,12 +185,12 @@ async def upload_lore_image(
             character_identifier = character_fallback_id
         else:
             # No identifiers provided
-            raise HTTPException(status_code=400, detail="Either character_uuid or character_fallback_id must be provided")
+            raise ValidationException("Either character_uuid or character_fallback_id must be provided")
     
     logger.log_info(f"Processing lore image upload for char: {character_identifier}, lore_entry: {lore_entry_id}")
 
     if not image_file.content_type or not image_file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Invalid file type. Only images are allowed.")
+        raise ValidationException("Invalid file type. Only images are allowed.")
 
     try:
         image_uuid, image_disk_path = await save_lore_image(logger, character_service, character_identifier, lore_entry_id, image_file)
@@ -178,30 +203,29 @@ async def upload_lore_image(
         paths = character_service.get_lore_image_paths(character_identifier, saved_image_filename)
         relative_image_path = f"/{paths['relative_path']}" # Ensure leading slash for URL
         
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Image uploaded successfully.",
-                "image_uuid": image_uuid,
-                "image_path": relative_image_path, # Path client can use in <img> src
-                "lore_entry_id": lore_entry_id # Return for client to update correct entry
-            }
-        )
+        return create_data_response({
+            "success": True,
+            "message": "Image uploaded successfully.",
+            "image_uuid": image_uuid,
+            "image_path": relative_image_path, # Path client can use in <img> src
+            "lore_entry_id": lore_entry_id # Return for client to update correct entry
+        })
+    except (ValidationException, NotFoundException):
+        raise
     except HTTPException as http_exc:
         raise http_exc # Re-raise HTTP exceptions from save_lore_image
     except Exception as e:
         logger.log_error(f"Unhandled error in lore image upload: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+        return handle_generic_error(e, logger, "uploading lore image")
 
-@router.post("/images/from-url")
+@router.post("/images/from-url", response_model=DataResponse[dict])
 async def import_lore_image_from_url(
     request: Request, # Add request parameter
     character_uuid: str = Form(None),  # Made optional
     character_fallback_id: Optional[str] = Form(None),  # Added fallback ID
     lore_entry_id: str = Form(...),
     image_url: str = Form(...),
-    logger: LogManager = Depends(get_main_app_logger),
+    logger: LogManager = Depends(get_logger_dependency),
     character_service: CharacterService = Depends(get_character_service_dependency) # Added CharacterService
 ):
     """
@@ -225,7 +249,7 @@ async def import_lore_image_from_url(
         if not character_identifier and character_fallback_id:
             pass # character_identifier is character_fallback_id
         elif not character_identifier and not character_fallback_id:
-            raise HTTPException(status_code=400, detail="Either character_uuid or character_fallback_id must be provided")
+            raise ValidationException("Either character_uuid or character_fallback_id must be provided")
     
     # If we still don't have a character identifier, use fallback or raise error
     if not character_identifier:
@@ -235,13 +259,13 @@ async def import_lore_image_from_url(
             character_identifier = character_fallback_id
         else:
             # No identifiers provided
-            raise HTTPException(status_code=400, detail="Either character_uuid or character_fallback_id must be provided")
+            raise ValidationException("Either character_uuid or character_fallback_id must be provided")
     
     logger.log_info(f"Importing lore image from URL: {image_url} for char: {character_identifier}, lore: {lore_entry_id}")
     
     # Basic URL validation (can be more robust)
     if not image_url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="Invalid image URL provided.")
+        raise ValidationException("Invalid image URL provided.")
 
     try:
         # Use a library like 'requests' to download the image.
@@ -303,32 +327,31 @@ async def import_lore_image_from_url(
         paths = character_service.get_lore_image_paths(character_identifier, saved_image_filename)
         relative_image_path = f"/{paths['relative_path']}" # Ensure leading slash
 
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Image imported from URL successfully.",
-                "image_uuid": image_uuid_val,
-                "image_path": relative_image_path,
-                "lore_entry_id": lore_entry_id
-            }
-        )
+        return create_data_response({
+            "success": True,
+            "message": "Image imported from URL successfully.",
+            "image_uuid": image_uuid_val,
+            "image_path": relative_image_path,
+            "lore_entry_id": lore_entry_id
+        })
     except httpx.RequestError as req_err: # Catch httpx specific request errors
         logger.log_error(f"Error downloading image from URL {image_url}: {req_err}")
-        raise HTTPException(status_code=400, detail=f"Failed to download image: {req_err}")
+        raise ValidationException(f"Failed to download image: {req_err}")
+    except (ValidationException, NotFoundException):
+        raise
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
         logger.log_error(f"Error importing image from URL: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not import image from URL: {e}")
+        return handle_generic_error(e, logger, "importing image from URL")
 
 
-@router.delete("/images/{character_uuid}/{image_uuid_or_filename}")
+@router.delete("/images/{character_uuid}/{image_uuid_or_filename}", response_model=DataResponse[dict])
 async def delete_lore_image(
     request: Request, # Add request parameter
     character_uuid: str,
     image_uuid_or_filename: str, # This is the UUID of the image or its full filename
-    logger: LogManager = Depends(get_main_app_logger),
+    logger: LogManager = Depends(get_logger_dependency),
     character_service: CharacterService = Depends(get_character_service_dependency) # Added CharacterService
 ):
     """
@@ -350,10 +373,10 @@ async def delete_lore_image(
         paths = character_service.get_lore_image_paths(character_uuid, image_uuid_or_filename)
         image_path_to_delete = Path(paths["absolute_image_path"])
     except ValueError as ve: # Catch error if character_uuid is empty
-        raise HTTPException(status_code=400, detail=str(ve))
+        raise ValidationException(str(ve))
     except Exception as e:
         logger.log_error(f"Error getting image path for deletion: {e}")
-        raise HTTPException(status_code=500, detail="Could not determine image path for deletion.")
+        return handle_generic_error(e, logger, "determining image path for deletion")
 
 
     if not image_path_to_delete.is_file(): # Check if it's a file, not just if path exists
@@ -362,7 +385,7 @@ async def delete_lore_image(
         # This requires listing the directory, which CharacterService could provide a helper for.
         # For now, keeping it simple: if exact filename doesn't match, it's a 404.
         # A more robust solution would involve CharacterService listing files for a UUID.
-        raise HTTPException(status_code=404, detail="Lore image file not found.")
+        raise NotFoundException("Lore image file not found.")
 
     try:
         # Use send2trash if available (recommended)
@@ -379,25 +402,24 @@ async def delete_lore_image(
             os.remove(image_path_to_delete)
             logger.log_info(f"Lore image deleted directly after trash error: {image_path_to_delete}")
 
-        return JSONResponse(
-            status_code=200,
-            content={"success": True, "message": "Lore image deleted successfully."}
-        )
+        return create_data_response({"success": True, "message": "Lore image deleted successfully."})
     except FileNotFoundError: # Should be caught by exists() check, but as a safeguard
         logger.log_warning(f"Lore image not found during deletion attempt: {image_path_to_delete}")
-        raise HTTPException(status_code=404, detail="Lore image file not found.")
+        raise NotFoundException("Lore image file not found.")
+    except (ValidationException, NotFoundException):
+        raise
     except Exception as e:
         logger.log_error(f"Error deleting lore image {image_path_to_delete}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete lore image: {e}")
+        return handle_generic_error(e, logger, "deleting lore image")
 
 
-@router.delete("/images/delete")
+@router.delete("/images/delete", response_model=DataResponse[dict])
 async def delete_lore_image_with_fallback(
     request: Request, # Add request parameter
     character_uuid: Optional[str] = None,
     character_fallback_id: Optional[str] = None,
     image_uuid: str = None, # This should be the filename or UUID part
-    logger: LogManager = Depends(get_main_app_logger),
+    logger: LogManager = Depends(get_logger_dependency),
     character_service: CharacterService = Depends(get_character_service_dependency) # Added CharacterService
 ):
     """
@@ -424,7 +446,7 @@ async def delete_lore_image_with_fallback(
         if character_fallback_id:
             character_identifier = character_fallback_id
         else:
-            raise HTTPException(status_code=400, detail="Either character_uuid or character_fallback_id must be provided")
+            raise ValidationException("Either character_uuid or character_fallback_id must be provided")
     
     logger.log_info(f"Deleting lore image: {image_uuid} for character: {character_identifier}")
     
@@ -436,13 +458,13 @@ async def delete_lore_image_with_fallback(
         # We need the directory first.
         lore_image_dir = Path(paths["base_path"])
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        raise ValidationException(str(ve))
     except Exception as e:
         logger.log_error(f"Error getting base path for deletion: {e}")
-        raise HTTPException(status_code=500, detail="Could not determine image directory for deletion.")
+        return handle_generic_error(e, logger, "determining image directory for deletion")
 
     if not image_uuid: # Must have an image_uuid (or filename) to delete
-        raise HTTPException(status_code=400, detail="image_uuid (filename) must be provided for deletion.")
+        raise ValidationException("image_uuid (filename) must be provided for deletion.")
     
     # Try to find the file
     if image_uuid.endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif')):
@@ -456,11 +478,11 @@ async def delete_lore_image_with_fallback(
             logger.log_info(f"Found matching file by UUID stem: {image_path_to_delete}")
         else:
             logger.log_warning(f"Lore image not found: {image_uuid} in {lore_image_dir}")
-            raise HTTPException(status_code=404, detail="Lore image file not found.")
+            raise NotFoundException("Lore image file not found.")
     
     if not image_path_to_delete.exists() or not image_path_to_delete.is_file():
         logger.log_warning(f"Lore image not found: {image_path_to_delete}")
-        raise HTTPException(status_code=404, detail="Lore image file not found.")
+        raise NotFoundException("Lore image file not found.")
 
     try:
         # Use send2trash if available (recommended)
@@ -477,16 +499,15 @@ async def delete_lore_image_with_fallback(
             os.remove(image_path_to_delete)
             logger.log_info(f"Lore image deleted directly after trash error: {image_path_to_delete}")
 
-        return JSONResponse(
-            status_code=200,
-            content={"success": True, "message": "Lore image deleted successfully."}
-        )
+        return create_data_response({"success": True, "message": "Lore image deleted successfully."})
     except FileNotFoundError:
         logger.log_warning(f"Lore image not found during deletion attempt: {image_path_to_delete}")
-        raise HTTPException(status_code=404, detail="Lore image file not found.")
+        raise NotFoundException("Lore image file not found.")
+    except (ValidationException, NotFoundException):
+        raise
     except Exception as e:
         logger.log_error(f"Error deleting lore image {image_path_to_delete}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete lore image: {e}")
+        return handle_generic_error(e, logger, "deleting lore image")
 
 
 # Endpoint for serving lore images - this should align with how main.py serves /uploads
@@ -504,11 +525,11 @@ async def delete_lore_image_with_fallback(
 
 
 # Original /extract-lore endpoint, now prefixed under /api/lore
-@router.post("/extract") # Changed from /extract-lore to just /extract (relative to /api/lore)
+@router.post("/extract", response_model=DataResponse[dict]) # Changed from /extract-lore to just /extract (relative to /api/lore)
 async def extract_lore_entries( # Renamed function for clarity
     request: Request,
     lore_handler: LoreHandler = Depends(get_lore_handler),
-    logger: LogManager = Depends(get_main_app_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
     """
     Extract and match lore entries from character metadata and chat text.
@@ -519,13 +540,7 @@ async def extract_lore_entries( # Renamed function for clarity
         chat_text = data.get("text", "")
         
         if not character_data:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "Character data is required"
-                }
-            )
+            raise ValidationException("Character data is required")
             
         # Extract lore entries from character metadata
         lore_entries = lore_handler.extract_lore_from_metadata(character_data)
@@ -536,23 +551,16 @@ async def extract_lore_entries( # Renamed function for clarity
             matched_entries = lore_handler.match_lore_entries(lore_entries, chat_text)
             
         # Return all lore entries and matched entries
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "lore_entries": lore_entries,
-                "matched_entries": matched_entries,
-                "count": len(lore_entries),
-                "matched_count": len(matched_entries)
-            }
-        )
+        return create_data_response({
+            "success": True,
+            "lore_entries": lore_entries,
+            "matched_entries": matched_entries,
+            "count": len(lore_entries),
+            "matched_count": len(matched_entries)
+        })
+    except (ValidationException, NotFoundException):
+        raise
     except Exception as e:
         logger.log_error(f"Error extracting lore: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to extract lore: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, logger, "extracting lore")

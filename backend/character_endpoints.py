@@ -17,38 +17,41 @@ from backend.log_manager import LogManager
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.backyard_handler import BackyardHandler # For Backyard import endpoint
 from backend.settings_manager import SettingsManager
-from backend.dependencies import get_character_service_dependency # Import from new dependencies file
 from backend.services.character_service import CharacterService
 from backend.services.character_indexing_service import CharacterIndexingService
 
 # Use sql_models.py instead of models.py to avoid conflicts with models package
 from backend.sql_models import Character as CharacterDBModel
 
-# Dependency provider functions (for handlers not directly part of CharacterService scope if needed elsewhere)
-def get_logger() -> LogManager:
-    from backend.main import logger
-    if logger is None: raise HTTPException(status_code=500, detail="Logger not initialized")
-    return logger
-
-def get_png_handler() -> PngMetadataHandler:
-    from backend.main import png_handler
-    if png_handler is None: raise HTTPException(status_code=500, detail="PNG handler not initialized")
-    return png_handler
-
-def get_backyard_handler() -> BackyardHandler:
-    from backend.main import backyard_handler
-    if backyard_handler is None: raise HTTPException(status_code=500, detail="Backyard handler not initialized")
-    return backyard_handler
-
-def get_settings_manager() -> SettingsManager: # Still needed for save_card path logic
-    from backend.main import settings_manager
-    if settings_manager is None: raise HTTPException(status_code=500, detail="Settings manager not initialized")
-    return settings_manager
+# Import standardized response models and error handling
+from backend.response_models import (
+    DataResponse,
+    ListResponse,
+    ErrorResponse,
+    STANDARD_RESPONSES,
+    create_data_response,
+    create_list_response,
+    create_error_response
+)
+from backend.error_handlers import (
+    handle_database_error,
+    handle_validation_error,
+    handle_generic_error,
+    NotFoundException,
+    ValidationException
+)
+from backend.dependencies import (
+    get_logger_dependency,
+    get_character_service_dependency,
+    get_png_handler_dependency,
+    get_backyard_handler_dependency,
+    get_settings_manager_dependency
+)
 
 def get_character_indexing_service(
     char_service: CharacterService = Depends(get_character_service_dependency),
-    settings_manager: SettingsManager = Depends(get_settings_manager),
-    logger: LogManager = Depends(get_logger)
+    settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ) -> CharacterIndexingService:
     """Get the character indexing service for database-first directory syncing"""
     return CharacterIndexingService(char_service, settings_manager, logger)
@@ -210,7 +213,7 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
 
 # --- Character Endpoints ---
 
-@router.get("/characters", summary="List characters from database with directory sync")
+@router.get("/characters", response_model=ListResponse, responses=STANDARD_RESPONSES, summary="List characters from database with directory sync")
 async def list_characters(
     directory: Optional[str] = Query(None, description="Get characters from a specific directory instead of DB"),
     skip: int = Query(0, ge=0),
@@ -218,8 +221,10 @@ async def list_characters(
     db_limit: Optional[int] = Query(None, ge=1, description="Limit for DB queries when filtering by directory (None for no limit)"),
     char_service: CharacterService = Depends(get_character_service_dependency),
     indexing_service: CharacterIndexingService = Depends(get_character_indexing_service),
-    logger: LogManager = Depends(get_logger)
-):# If a directory is provided, we'll use the legacy directory-scanning behavior
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """List characters with directory sync and standardized response."""
+    # If a directory is provided, we'll use the legacy directory-scanning behavior
     if directory:
         logger.info(f"GET /api/characters with directory={directory}")
         try:
@@ -237,15 +242,11 @@ async def list_characters(
             # Check if directory exists
             if not directory_path.exists() or not directory_path.is_dir():
                 logger.warning(f"Directory not found: {directory_path}")
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "success": False, 
-                        "exists": False,
-                        "message": f"Directory not found: {directory}",
-                        "directory": str(directory)
-                    }
-                )              # Try database-first approach for better performance
+                return create_error_response(
+                    f"Directory not found: {directory}",
+                    404,
+                    {"exists": False, "directory": str(directory)}
+                )# Try database-first approach for better performance
             files = []
             try:                # First attempt: Get characters from database that are in this directory
                 from fastapi.concurrency import run_in_threadpool
@@ -310,25 +311,18 @@ async def list_characters(
                         logger.error(f"Error processing file {file_path}: {e}")
                         
             logger.info(f"Successfully processed {len(files)} characters in directory {directory}")
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True, 
-                    "exists": True,
-                    "directory": str(directory),
-                    "files": files
-                }
-            )
+            return create_data_response({
+                "success": True, 
+                "exists": True,
+                "directory": str(directory),
+                "files": files
+            })
         except Exception as e:
             logger.error(f"Error scanning directory {directory}: {e}")
-            return JSONResponse(
-                status_code=200,  # Return 200 but with error details in content
-                content={
-                    "success": False,
-                    "exists": False,
-                    "message": f"Error scanning directory: {str(e)}",
-                    "directory": directory
-                }
+            return create_error_response(
+                f"Error scanning directory: {str(e)}",
+                500,
+                {"exists": False, "directory": directory}
             )    # If no directory is provided, use the new database-first approach with directory sync
     logger.info(f"GET /api/characters - using database-first with directory sync (skip: {skip}, limit: {limit})")
     try:
@@ -355,39 +349,49 @@ async def list_characters(
         logger.error(f"Error fetching or processing characters: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while fetching or processing characters.")
 
-@router.get("/character/{character_uuid}", response_model=CharacterDetailResponse, summary="Get a specific character by UUID")
+@router.get("/character/{character_uuid}", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Get a specific character by UUID")
 async def get_character_by_uuid_endpoint(
     character_uuid: str,
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    logger.info(f"GET /api/character/{character_uuid}")
-    db_char = char_service.get_character_by_uuid(character_uuid)
-    if not db_char:
-        raise HTTPException(status_code=404, detail="Character not found")
-    
-    api_char = to_api_model(db_char, logger)
+    """Get a specific character by UUID with standardized response."""
+    try:
+        logger.info(f"GET /api/character/{character_uuid}")
+        db_char = char_service.get_character_by_uuid(character_uuid)
+        if not db_char:
+            raise NotFoundException(f"Character with UUID {character_uuid} not found")
         
-    return CharacterDetailResponse(character=api_char)
+        api_char = to_api_model(db_char, logger)
+        return create_data_response(api_char)
+        
+    except NotFoundException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving character {character_uuid}: {str(e)}")
+        return handle_generic_error(e, logger)
 
-@router.post("/characters/save-card", response_model=CharacterDetailResponse, summary="Save/Update character card (PNG+DB)")
+@router.post("/characters/save-card", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Save/Update character card (PNG+DB)")
 async def save_character_card_endpoint(
     file: UploadFile = File(...),
     metadata_json: str = Form(...), # Full character card spec as JSON string
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    logger.info(f"POST /api/characters/save-card for file: {file.filename}")
+    """Save/Update character card (PNG+DB) with standardized response."""
     try:
+        logger.info(f"POST /api/characters/save-card for file: {file.filename}")
+        
         image_bytes = await file.read()
-        if not image_bytes: # Ensure file is not empty
-             raise HTTPException(status_code=400, detail="Uploaded image file is empty.")
-        if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'): # PNG signature
-            raise HTTPException(status_code=400, detail="Invalid image file: not a PNG.")
+        if not image_bytes:
+            raise ValidationException("Uploaded image file is empty")
+        if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+            raise ValidationException("Invalid image file: not a PNG")
 
-        try:            raw_metadata = json.loads(metadata_json)
+        try:
+            raw_metadata = json.loads(metadata_json)
         except json.JSONDecodeError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {e}")
+            raise ValidationException(f"Invalid metadata JSON: {e}")
 
         saved_db_character = char_service.save_uploaded_character_card(
             raw_character_card_data=raw_metadata,
@@ -396,39 +400,50 @@ async def save_character_card_endpoint(
         )
 
         if not saved_db_character:
-            raise HTTPException(status_code=500, detail="Failed to save character card.")
+            raise ValidationException("Failed to save character card")
 
         api_char_response = to_api_model(saved_db_character, logger)
-
-        return CharacterDetailResponse(character=api_char_response)
-    except HTTPException as http_exc:
-        raise http_exc
+        return create_data_response({"character": api_char_response})
+        
+    except ValidationException:
+        raise
     except Exception as e:
-        logger.error(f"Error in save_character_card endpoint: {e}", error=e)
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        logger.error(f"Error in save_character_card endpoint: {e}")
+        return handle_generic_error(e, logger)
 
-@router.delete("/character/{character_uuid}", response_model=SimpleSuccessResponse, summary="Delete a character by UUID")
+@router.delete("/character/{character_uuid}", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Delete a character by UUID")
 async def delete_character_by_uuid_endpoint(
     character_uuid: str,
     delete_png: bool = Query(False, description="Whether to also delete the character's PNG file from disk."),
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    logger.info(f"DELETE /api/character/{character_uuid} with delete_png: {delete_png}")
-    success = char_service.delete_character(character_uuid, delete_png_file=delete_png)
-    if not success:
-        # Check if it was not found vs other error, service method could return more info or raise
-        db_char_check = char_service.get_character_by_uuid(character_uuid) # Check if it was a not found case
-        if not db_char_check:
-            raise HTTPException(status_code=404, detail="Character not found.")
-        raise HTTPException(status_code=500, detail="Failed to delete character.")
-    return SimpleSuccessResponse(success=True, message="Character deleted successfully.")
+    """Delete a character by UUID with standardized response."""
+    try:
+        logger.info(f"DELETE /api/character/{character_uuid} with delete_png: {delete_png}")
+        success = char_service.delete_character(character_uuid, delete_png_file=delete_png)
+        if not success:
+            # Check if it was not found vs other error
+            db_char_check = char_service.get_character_by_uuid(character_uuid)
+            if not db_char_check:
+                raise NotFoundException(f"Character with UUID {character_uuid} not found")
+            raise ValidationException("Failed to delete character")
+        
+        return create_data_response({"success": True, "message": "Character deleted successfully"})
+        
+    except NotFoundException:
+        raise
+    except ValidationException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting character {character_uuid}: {str(e)}")
+        return handle_generic_error(e, logger)
 
 @router.get("/character-image/{character_uuid}", summary="Serve a character's PNG image by UUID")
 async def get_character_image_by_uuid(
     character_uuid: str,
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
     logger.info(f"Request for image for character UUID: {character_uuid}")
     
@@ -451,7 +466,7 @@ async def get_character_image_by_uuid(
 @router.get("/character-image/{path:path}", summary="Serve a character's PNG image by file path")
 async def get_character_image_by_path(
     path: str,
-    logger: LogManager = Depends(get_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
     logger.info(f"Request for image for character path: {path}")
     
@@ -490,27 +505,28 @@ async def get_character_image_by_path(
         logger.error(f"Error serving character image by path {path}: {str(e)}")
         raise HTTPException(status_code=404, detail=f"Error serving character image: {str(e)}")
 
-@router.post("/characters/scan-sync", response_model=SimpleSuccessResponse, summary="Manually trigger character directory synchronization")
+@router.post("/characters/scan-sync", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Manually trigger character directory synchronization")
 async def trigger_scan_character_directory_endpoint(
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    logger.info("POST /api/characters/scan-sync - Manual character directory synchronization triggered.")
+    """Manually trigger character directory synchronization with standardized response."""
     try:
+        logger.info("POST /api/characters/scan-sync - Manual character directory synchronization triggered.")
         char_service.sync_character_directories() # This is synchronous within the request
-        return SimpleSuccessResponse(success=True, message="Character directory synchronization complete.")
+        return create_data_response({"success": True, "message": "Character directory synchronization complete"})
     except Exception as e:
         logger.error(f"Error during manual character directory scan: {e}", error=e)
-        raise HTTPException(status_code=500, detail=f"Failed to synchronize character directories: {str(e)}")
+        return handle_generic_error(e, logger)
 
 # --- Utility Endpoints (Primarily for uploaded files, not interacting with DB characters directly) ---
 
-@router.get("/character-metadata/{path:path}", summary="Get character metadata by file path")
+@router.get("/character-metadata/{path:path}", response_model=DataResponse[dict], responses=STANDARD_RESPONSES, summary="Get character metadata by file path")
 async def get_character_metadata_by_path(
     path: str,
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger)
+    logger: LogManager = Depends(get_logger_dependency)
 ):
     logger.info(f"Request for metadata for character path: {path}")
     
@@ -600,9 +616,7 @@ async def get_character_metadata_by_path(
                 logger.info(f"Updated metadata with correct UUID from database: {db_char.character_uuid}")
             
             # Return the metadata, now with UUID if it was added to DB
-            return JSONResponse(
-                content=metadata
-            )
+            return create_data_response(metadata)
         except Exception as read_error:
             logger.error(f"Error reading metadata: {read_error}")
             raise HTTPException(status_code=500, detail=f"Error reading metadata: {str(read_error)}")
@@ -613,37 +627,42 @@ async def get_character_metadata_by_path(
         logger.error(f"Error serving character metadata by path {path}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting character metadata: {str(e)}")
 
-@router.post("/characters/extract-metadata", response_model=ExtractedMetadataResponse, summary="Upload PNG and extract metadata")
+@router.post("/characters/extract-metadata", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Upload PNG and extract metadata")
 async def extract_metadata_from_upload_endpoint(
     file: UploadFile = File(...),
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
-    logger: LogManager = Depends(get_logger)
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    logger.info(f"POST /api/characters/extract-metadata for file: {file.filename}")
+    """Upload PNG and extract metadata with standardized response."""
     try:
+        logger.info(f"POST /api/characters/extract-metadata for file: {file.filename}")
+        
         image_bytes = await file.read()
         if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
-            raise HTTPException(status_code=400, detail="Invalid file: not a PNG.")
+            raise ValidationException("Invalid file: not a PNG")
         
-        metadata = png_handler.read_metadata(image_bytes) # This is the raw card spec
-        return ExtractedMetadataResponse(metadata=metadata or {})
-    except HTTPException as http_exc:
-        raise http_exc
+        metadata = png_handler.read_metadata(image_bytes)
+        return create_data_response({"metadata": metadata or {}})
+        
+    except ValidationException:
+        raise
     except Exception as e:
-        logger.error(f"Error extracting metadata from upload: {e}", error=e)
-        raise HTTPException(status_code=500, detail=f"Failed to extract metadata: {str(e)}")
+        logger.error(f"Error extracting metadata from upload: {e}")
+        return handle_generic_error(e, logger)
 
-@router.post("/characters/extract-lore", response_model=ExtractedLoreResponse, summary="Upload PNG and extract lore book")
+@router.post("/characters/extract-lore", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Upload PNG and extract lore book")
 async def extract_lore_from_upload_endpoint(
     file: UploadFile = File(...),
-    png_handler: PngMetadataHandler = Depends(get_png_handler),
-    logger: LogManager = Depends(get_logger)
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    logger.info(f"POST /api/characters/extract-lore for file: {file.filename}")
+    """Upload PNG and extract lore book with standardized response."""
     try:
+        logger.info(f"POST /api/characters/extract-lore for file: {file.filename}")
+        
         image_bytes = await file.read()
         if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
-            raise HTTPException(status_code=400, detail="Invalid file: not a PNG.")
+            raise ValidationException("Invalid file: not a PNG")
 
         metadata = png_handler.read_metadata(image_bytes)
         lore_book_data = None
@@ -651,39 +670,47 @@ async def extract_lore_from_upload_endpoint(
             lore_book_data = metadata["data"].get("character_book")
         
         if lore_book_data:
-            return ExtractedLoreResponse(lore_book=lore_book_data)
+            return create_data_response({
+                "lore_book": lore_book_data,
+                "message": "Lore extracted successfully"
+            })
         else:
-            return ExtractedLoreResponse(success=True, message="No lore book found in character data.", lore_book=None)
-    except HTTPException as http_exc:
-        raise http_exc
+            return create_data_response({
+                "lore_book": None,
+                "message": "No lore book found in character data"
+            })
+            
+    except ValidationException:
+        raise
     except Exception as e:
-        logger.error(f"Error extracting lore from upload: {e}", error=e)
-        raise HTTPException(status_code=500, detail=f"Failed to extract lore: {str(e)}")
+        logger.error(f"Error extracting lore from upload: {e}")
+        return handle_generic_error(e, logger)
 
-@router.post("/characters/import-backyard", response_model=CharacterDetailResponse, summary="Import character from Backyard.ai URL")
+@router.post("/characters/import-backyard", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Import character from Backyard.ai URL")
 async def import_from_backyard_endpoint(
-    request: Request, # For full URL if needed, or pass URL as body/query. Also needed for dependency.
+    request: Request,
     backyard_url_param: str = Query(..., alias="backyardUrl", description="The Backyard.ai character URL"),
     char_service: CharacterService = Depends(get_character_service_dependency),
-    backyard_handler: BackyardHandler = Depends(get_backyard_handler), # Keep for download
-    png_handler: PngMetadataHandler = Depends(get_png_handler), # Keep for initial parse
-    logger: LogManager = Depends(get_logger)
+    backyard_handler: BackyardHandler = Depends(get_backyard_handler_dependency),
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    logger.info(f"POST /api/characters/import-backyard for URL: {backyard_url_param}")
+    """Import character from Backyard.ai URL with standardized response."""
     try:
-        image_bytes = await backyard_handler.download_character_bytes(backyard_url_param) # Modified to async
+        logger.info(f"POST /api/characters/import-backyard for URL: {backyard_url_param}")
+        
+        image_bytes = await backyard_handler.download_character_bytes(backyard_url_param)
         if not image_bytes:
-            raise HTTPException(status_code=400, detail="Failed to download character from Backyard URL.")
+            raise ValidationException("Failed to download character from Backyard URL")
         
         if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
-             raise HTTPException(status_code=400, detail="Downloaded file is not a valid PNG.")
+            raise ValidationException("Downloaded file is not a valid PNG")
 
         raw_metadata = png_handler.read_metadata(image_bytes)
         if not raw_metadata:
-            raw_metadata = {} # Ensure it's a dict for the service
-            logger.warning("No metadata found in downloaded Backyard card, will save with minimal data.")
-          # Use the save_uploaded_character_card service method
-        # It handles UUID generation, path determination, metadata embedding, DB save, PNG save
+            raw_metadata = {}
+            logger.warning("No metadata found in downloaded Backyard card, will save with minimal data")
+        
         original_filename = Path(urllib.parse.urlparse(backyard_url_param).path).name or "imported_backyard_char.png"
 
         saved_db_character = char_service.save_uploaded_character_card(
@@ -693,17 +720,19 @@ async def import_from_backyard_endpoint(
         )
 
         if not saved_db_character:
-            raise HTTPException(status_code=500, detail="Failed to save imported Backyard character.")
+            raise ValidationException("Failed to save imported Backyard character")
 
         api_char_response = to_api_model(saved_db_character, logger)
-            
-        return CharacterDetailResponse(character=api_char_response)
+        return create_data_response({
+            "character": api_char_response,
+            "message": "Character imported successfully"
+        })
         
-    except HTTPException as http_exc:
-        raise http_exc
+    except ValidationException:
+        raise
     except Exception as e:
-        logger.error(f"Error importing from Backyard: {e}", error=e)
-        raise HTTPException(status_code=500, detail=f"Failed to import from Backyard: {str(e)}")
+        logger.error(f"Error importing from Backyard: {e}")
+        return handle_generic_error(e, logger)
 
 # Deprecated/Old Endpoints to be removed or fully refactored:
 # - /characters/{character_id}/avatar (avatar handling is part of save_card now)

@@ -1,27 +1,37 @@
 # backend/template_endpoints.py
-# Implements API endpoints for template management
+# Implements API endpoints for template management with standardized FastAPI patterns
 import json
 import traceback
 from typing import Dict, List, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # Import handler types for type hinting
 from backend.log_manager import LogManager
 from backend.template_handler import TemplateHandler
 
-# Dependency provider functions (defined locally, import from main inside)
-def get_logger() -> LogManager:
-    from backend.main import logger  # Import locally
-    if logger is None: raise HTTPException(status_code=500, detail="Logger not initialized")
-    return logger
-
-def get_template_handler() -> TemplateHandler:
-    from backend.main import template_handler  # Import locally
-    if template_handler is None: raise HTTPException(status_code=500, detail="Template handler not initialized")
-    return template_handler
+# Import standardized response models and error handling
+from backend.response_models import (
+    DataResponse,
+    ListResponse,
+    ErrorResponse,
+    STANDARD_RESPONSES,
+    create_data_response,
+    create_list_response,
+    create_error_response
+)
+from backend.error_handlers import (
+    handle_database_error,
+    handle_validation_error,
+    handle_generic_error,
+    NotFoundException,
+    ValidationException
+)
+from backend.dependencies import (
+    get_logger_dependency,
+    get_template_handler_dependency
+)
 
 # Template models
 class TemplateBase(BaseModel):
@@ -37,210 +47,214 @@ class TemplateBase(BaseModel):
     isBuiltIn: bool = False
     isEditable: bool = True
 
+class TemplateCreate(TemplateBase):
+    pass
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    userFormat: Optional[str] = None
+    assistantFormat: Optional[str] = None
+    description: Optional[str] = None
+    systemFormat: Optional[str] = None
+    memoryFormat: Optional[str] = None
+    stopSequences: Optional[List[str]] = None
+    detectionPatterns: Optional[List[str]] = None
+
 # Create router
 router = APIRouter(
-    prefix="/api",  # Use common /api prefix
+    prefix="/api",
     tags=["templates"],
     responses={404: {"description": "Not found"}}
 )
 
-@router.get("/templates")
+@router.get("/templates", response_model=ListResponse, responses=STANDARD_RESPONSES)
 async def get_templates(
-    template_handler: TemplateHandler = Depends(get_template_handler),
-    logger: LogManager = Depends(get_logger)
+    template_handler: TemplateHandler = Depends(get_template_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    """Get all templates."""
+    """Get all templates with standardized response."""
     try:
         logger.log_step("Getting all templates")
         templates = template_handler.get_all_templates()
         
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "templates": templates
-            }
-        )
+        return create_list_response(templates)
     except Exception as e:
         logger.log_error(f"Error getting templates: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to get templates: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, "Failed to get templates")
 
-@router.post("/templates/save")
+@router.post("/templates/save", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def save_template(
     request: Request,
-    template_handler: TemplateHandler = Depends(get_template_handler),
-    logger: LogManager = Depends(get_logger)
+    template_handler: TemplateHandler = Depends(get_template_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    """Save a template."""
+    """Save a template with standardized response."""
     try:
         # Parse JSON body
         template_data = await request.json()
         
         if not template_data:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "No template data provided"
-                }
-            )
-            
-        # Save template
-        logger.log_step(f"Saving template: {template_data.get('id')}")
-        success = template_handler.save_template(template_data)
+            raise ValidationException("No template data provided")
         
-        if success:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "message": "Template saved successfully"
-                }
-            )
+        logger.log_step(f"Saving template: {template_data.get('name', 'Unknown')}")
+        
+        # Save the template
+        result = template_handler.save_template(template_data)
+        
+        if result.get("success"):
+            return create_data_response({
+                "message": "Template saved successfully",
+                "template": result.get("template")
+            })
         else:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "success": False,
-                    "message": "Failed to save template"
-                }
+            return create_error_response(
+                result.get("message", "Failed to save template"),
+                400
             )
-    except json.JSONDecodeError as e:
-        logger.log_error(f"Error parsing template JSON: {str(e)}")
-        return JSONResponse(
-            status_code=400,
-            content={
-                "success": False,
-                "message": f"Invalid JSON: {str(e)}"
-            }
-        )
+    except ValidationException as e:
+        return handle_validation_error(e)
     except Exception as e:
         logger.log_error(f"Error saving template: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to save template: {str(e)}"
-            }
-        )
-        
-@router.post("/templates/delete")
+        return handle_generic_error(e, "Failed to save template")
+
+@router.delete("/templates/{template_id}", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def delete_template(
-    request: Request,
-    template_handler: TemplateHandler = Depends(get_template_handler),
-    logger: LogManager = Depends(get_logger)
+    template_id: str,
+    template_handler: TemplateHandler = Depends(get_template_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    """Delete a template."""
+    """Delete a template with standardized response."""
     try:
-        # Parse JSON body
-        data = await request.json()
-        
-        template_id = data.get("id")
-        if not template_id:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "Template ID is required"
-                }
-            )
-            
-        # Delete template
         logger.log_step(f"Deleting template: {template_id}")
-        success = template_handler.delete_template(template_id)
         
-        if success:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "message": "Template deleted successfully"
-                }
-            )
+        # Check if template exists
+        template = template_handler.get_template_by_id(template_id)
+        if not template:
+            raise NotFoundException(f"Template with ID '{template_id}' not found")
+        
+        # Check if template is editable
+        if not template.get("isEditable", True):
+            raise ValidationException("Cannot delete built-in templates")
+        
+        # Delete the template
+        result = template_handler.delete_template(template_id)
+        
+        if result.get("success"):
+            return create_data_response({
+                "message": "Template deleted successfully"
+            })
         else:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "success": False,
-                    "message": "Template not found or could not be deleted"
-                }
+            return create_error_response(
+                result.get("message", "Failed to delete template"),
+                400
             )
+    except (NotFoundException, ValidationException) as e:
+        if isinstance(e, NotFoundException):
+            return create_error_response(str(e), 404)
+        else:
+            return handle_validation_error(e)
     except Exception as e:
         logger.log_error(f"Error deleting template: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to delete template: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, "Failed to delete template")
 
-@router.post("/templates/import")
-async def import_templates(
-    request: Request,
-    template_handler: TemplateHandler = Depends(get_template_handler),
-    logger: LogManager = Depends(get_logger)
+@router.get("/templates/{template_id}", response_model=DataResponse, responses=STANDARD_RESPONSES)
+async def get_template_by_id(
+    template_id: str,
+    template_handler: TemplateHandler = Depends(get_template_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
 ):
-    """Import multiple templates."""
+    """Get a specific template by ID with standardized response."""
+    try:
+        logger.log_step(f"Getting template: {template_id}")
+        
+        template = template_handler.get_template_by_id(template_id)
+        if not template:
+            raise NotFoundException(f"Template with ID '{template_id}' not found")
+        
+        return create_data_response({
+            "template": template
+        })
+    except NotFoundException as e:
+        return create_error_response(str(e), 404)
+    except Exception as e:
+        logger.log_error(f"Error getting template {template_id}: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return handle_generic_error(e, "Failed to get template")
+
+@router.put("/templates/{template_id}", response_model=DataResponse, responses=STANDARD_RESPONSES)
+async def update_template(
+    template_id: str,
+    template_update: TemplateUpdate,
+    template_handler: TemplateHandler = Depends(get_template_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Update a template with standardized response."""
+    try:
+        logger.log_step(f"Updating template: {template_id}")
+        
+        # Check if template exists
+        existing_template = template_handler.get_template_by_id(template_id)
+        if not existing_template:
+            raise NotFoundException(f"Template with ID '{template_id}' not found")
+        
+        # Check if template is editable
+        if not existing_template.get("isEditable", True):
+            raise ValidationException("Cannot modify built-in templates")
+        
+        # Update the template
+        update_data = template_update.dict(exclude_unset=True)
+        result = template_handler.update_template(template_id, update_data)
+        
+        if result.get("success"):
+            return create_data_response({
+                "message": "Template updated successfully",
+                "template": result.get("template")
+            })
+        else:
+            return create_error_response(
+                result.get("message", "Failed to update template"),
+                400
+            )
+    except (NotFoundException, ValidationException) as e:
+        if isinstance(e, NotFoundException):
+            return create_error_response(str(e), 404)
+        else:
+            return handle_validation_error(e)
+    except Exception as e:
+        logger.log_error(f"Error updating template {template_id}: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return handle_generic_error(e, "Failed to update template")
+
+@router.post("/templates/detect", response_model=DataResponse, responses=STANDARD_RESPONSES)
+async def detect_template(
+    request: Request,
+    template_handler: TemplateHandler = Depends(get_template_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Detect template from text sample with standardized response."""
     try:
         # Parse JSON body
-        data = await request.json()
+        request_data = await request.json()
+        text_sample = request_data.get("text", "")
         
-        templates = data.get("templates")
-        if not templates or not isinstance(templates, list):
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "No templates provided or invalid format"
-                }
-            )
-            
-        # Save templates
-        logger.log_step(f"Importing {len(templates)} templates")
-        success = template_handler.save_templates(templates)
+        if not text_sample:
+            raise ValidationException("No text sample provided for detection")
         
-        if success:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "message": f"Successfully imported {len(templates)} templates"
-                }
-            )
-        else:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "success": False,
-                    "message": "Some templates failed to import"
-                }
-            )
-    except json.JSONDecodeError as e:
-        logger.log_error(f"Error parsing templates JSON: {str(e)}")
-        return JSONResponse(
-            status_code=400,
-            content={
-                "success": False,
-                "message": f"Invalid JSON: {str(e)}"
-            }
-        )
+        logger.log_step("Detecting template from text sample")
+        
+        # Detect template
+        detected_template = template_handler.detect_template(text_sample)
+        
+        return create_data_response({
+            "detected_template": detected_template,
+            "confidence": detected_template.get("confidence", 0) if detected_template else 0
+        })
+    except ValidationException as e:
+        return handle_validation_error(e)
     except Exception as e:
-        logger.log_error(f"Error importing templates: {str(e)}")
+        logger.log_error(f"Error detecting template: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "message": f"Failed to import templates: {str(e)}"
-            }
-        )
+        return handle_generic_error(e, "Failed to detect template")
