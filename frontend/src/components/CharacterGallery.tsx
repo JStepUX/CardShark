@@ -8,10 +8,11 @@ import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from './KoboldCPPDrawerManager';
 
-// Track API calls across component instances with a request cache
+// Track API calls across component instances with enhanced caching
 const apiRequestCache = {
   pendingRequests: new Map<string, Promise<any>>(),
-  lastRequestTime: 0
+  lastRequestTime: 0,
+  characterListCache: new Map<string, { data: any; timestamp: number; ttl: number }>()
 };
 
 // Interface for character file data received from the backend
@@ -54,13 +55,26 @@ const encodeFilePath = (path: string): string => {
 };
 
 /**
- * Creates a cached fetch request to prevent duplicate API calls
+ * Creates a cached fetch request to prevent duplicate API calls with TTL support
  * @param url The URL to fetch
  * @param options Fetch options
+ * @param ttl Time to live for cached responses (default: 30 seconds)
  * @returns Promise with the fetch response
  */
-const cachedFetch = (url: string, options?: RequestInit): Promise<Response> => {
+const cachedFetch = (url: string, options?: RequestInit, ttl: number = 30000): Promise<Response> => {
   const cacheKey = `${url}`;
+  
+  // Check for cached response (TTL-based caching for character lists)
+  if (url.includes('/api/characters') && apiRequestCache.characterListCache) {
+    const cached = apiRequestCache.characterListCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < cached.ttl) {
+      console.log(`[Cache] Using cached response for: ${url}`);
+      return Promise.resolve(new Response(JSON.stringify(cached.data), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+  }
   
   // If we have a pending request for this URL, return it
   const existingRequest = apiRequestCache.pendingRequests.get(cacheKey);
@@ -76,9 +90,32 @@ const cachedFetch = (url: string, options?: RequestInit): Promise<Response> => {
   
   // Create a new request with optional delay
   const newRequest = new Promise<Response>((resolve) => {
-    setTimeout(() => {
+    setTimeout(async () => {
       apiRequestCache.lastRequestTime = Date.now();
-      fetch(url, options).then(resolve);
+      const response = await fetch(url, options);
+      
+      // Cache successful character list responses
+      if (response.ok && url.includes('/api/characters')) {
+        try {
+          const clonedResponse = response.clone();
+          const data = await clonedResponse.json();
+          
+          // Initialize cache if needed
+          if (!apiRequestCache.characterListCache) {
+            apiRequestCache.characterListCache = new Map();
+          }
+          
+          apiRequestCache.characterListCache.set(cacheKey, {
+            data,
+            timestamp: Date.now(),
+            ttl
+          });
+        } catch (cacheError) {
+          console.warn('Failed to cache response:', cacheError);
+        }
+      }
+      
+      resolve(response);
     }, delay);
   }).finally(() => {
     // Clean up the cache after the request is completed
@@ -202,7 +239,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   }, [loadMore, isLoading, isLoadingMore, displayedCount, filteredCharacters.length]);
 
-  // Load from directory function with caching
+  // Load characters with database-first optimization
   const loadFromDirectory = useCallback(async (directory: string) => {
     try {
       setIsLoading(true);
@@ -211,24 +248,60 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setDeletingPath(null); // Reset animation on reload
       setDisplayedCount(20); // Reset to initial batch size
       
-      const url = `/api/characters?directory=${encodeFilePath(directory)}`;
-      console.log(`[${componentId.current}] Loading characters from: ${directory}`);
+      console.log(`[${componentId.current}] Loading characters (database-first approach)`);
 
-      // Use the cached fetch to prevent duplicate requests
-      const response = await cachedFetch(url);
+      // OPTIMIZATION: Try database-first approach for better performance
+      let response: Response;
+      let data: any;
+      
+      try {
+        // First attempt: Load from database (much faster)
+        const dbUrl = `/api/characters`;
+        console.log(`[${componentId.current}] Attempting database-first load...`);
+        response = await cachedFetch(dbUrl);
+        
+        if (response.ok) {
+          data = await response.json();
+          
+          // If we got characters from database, use them
+          if (data.success && data.characters && data.characters.length > 0) {
+            console.log(`[${componentId.current}] ✓ Database-first load successful: ${data.characters.length} characters`);
+            
+            // Convert database format to file format for compatibility
+            const files = data.characters.map((char: any) => ({
+              name: char.name,
+              path: char.png_file_path,
+              size: 0, // Size not critical for display
+              modified: new Date(char.updated_at).getTime() / 1000
+            }));
+            
+            setCharacters(files);
+            setCurrentDirectory(directory);
+            setIsLoading(false);
+            return; // Success! No need for directory scanning
+          }
+        }
+      } catch (dbError) {
+        console.log(`[${componentId.current}] Database load failed, falling back to directory scan:`, dbError);
+      }
+      
+      // Fallback: Use directory scanning if database is empty or failed
+      console.log(`[${componentId.current}] Falling back to directory scanning: ${directory}`);
+      const dirUrl = `/api/characters?directory=${encodeFilePath(directory)}`;
+      response = await cachedFetch(dirUrl);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: `Server error (${response.status})` }));
         throw new Error(errorData.message || `Failed to load characters. Status: ${response.status}`);
       }
       
-      const data = await response.json();
+      data = await response.json();
       if (data.success === false || data.exists === false) {
          setError(data.message || "Directory not found or inaccessible.");
          setCharacters([]);
          setCurrentDirectory(data.directory || directory);
       } else if (data.exists) {
-        console.log(`[${componentId.current}] Loaded ${data.files.length} characters`);
+        console.log(`[${componentId.current}] Directory scan loaded ${data.files.length} characters`);
         setCharacters(data.files);
         setCurrentDirectory(data.directory);
         if (data.files.length === 0) {
@@ -280,6 +353,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         setDeletingPath(null);
         setCurrentDirectory(null);
         setCharacters([]);
+
+        // Clear character cache when settings change (directory might have changed)
+        if (settingsChangeCount > 0) {
+          apiRequestCache.characterListCache.clear();
+          console.log(`[${componentId.current}] Cleared character cache due to settings change`);
+        }
 
         // Use cached fetch for settings to prevent duplicate calls
         const response = await cachedFetch('/api/settings');

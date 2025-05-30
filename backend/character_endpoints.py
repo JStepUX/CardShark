@@ -4,7 +4,7 @@ import json
 
 import urllib.parse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File, Form, Query, Request
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from backend.backyard_handler import BackyardHandler # For Backyard import endpo
 from backend.settings_manager import SettingsManager
 from backend.dependencies import get_character_service_dependency # Import from new dependencies file
 from backend.services.character_service import CharacterService
+from backend.services.character_indexing_service import CharacterIndexingService
 
 # Use sql_models.py instead of models.py to avoid conflicts with models package
 from backend.sql_models import Character as CharacterDBModel
@@ -43,6 +44,14 @@ def get_settings_manager() -> SettingsManager: # Still needed for save_card path
     from backend.main import settings_manager
     if settings_manager is None: raise HTTPException(status_code=500, detail="Settings manager not initialized")
     return settings_manager
+
+def get_character_indexing_service(
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    settings_manager: SettingsManager = Depends(get_settings_manager),
+    logger: LogManager = Depends(get_logger)
+) -> CharacterIndexingService:
+    """Get the character indexing service for database-first directory syncing"""
+    return CharacterIndexingService(char_service, settings_manager, logger)
 
 
 router = APIRouter(
@@ -147,7 +156,11 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             elif isinstance(db_char.extensions_json, dict):
                 parsed_extensions = db_char.extensions_json
             else:
-                parsed_extensions = {}
+                parsed_extensions = {}          # Handle None datetime values with defaults
+        now = datetime.now(tz=timezone.utc)
+        created_at = db_char.created_at if db_char.created_at is not None else now
+        updated_at = db_char.updated_at if db_char.updated_at is not None else now
+        synced_at = db_char.db_metadata_last_synced_at if db_char.db_metadata_last_synced_at is not None else now
         
         # Create API model with parsed data
         api_char = CharacterAPIBase(
@@ -162,18 +175,20 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             png_file_path=db_char.png_file_path,
             tags=parsed_tags,
             spec_version=db_char.spec_version,
-            created_at=db_char.created_at,
-            updated_at=db_char.updated_at,
-            db_metadata_last_synced_at=db_char.db_metadata_last_synced_at,
+            created_at=created_at,
+            updated_at=updated_at,
+            db_metadata_last_synced_at=synced_at,
             extensions_json=parsed_extensions,
-            original_character_id=db_char.original_character_id
-        )
+            original_character_id=db_char.original_character_id        )
         
         return api_char
-        
     except Exception as e:
-        logger.error(f"Error converting DB model to API model for character {db_char.character_uuid}: {str(e)}")
-        # Create a minimal valid model as fallback
+        logger.error(f"Error converting DB model to API model for character {db_char.character_uuid}: {str(e)}")        # Create a minimal valid model as fallback
+        now = datetime.now(tz=timezone.utc)
+        fallback_created_at = db_char.created_at if db_char.created_at is not None else now
+        fallback_updated_at = db_char.updated_at if db_char.updated_at is not None else now
+        fallback_synced_at = db_char.db_metadata_last_synced_at if db_char.db_metadata_last_synced_at is not None else now
+        
         return CharacterAPIBase(
             character_uuid=db_char.character_uuid,
             name=db_char.name or "Unknown",
@@ -186,23 +201,25 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             png_file_path=db_char.png_file_path or "",
             tags=[],
             spec_version=db_char.spec_version,
-            created_at=db_char.created_at,
-            updated_at=db_char.updated_at,
-            db_metadata_last_synced_at=db_char.db_metadata_last_synced_at,
+            created_at=fallback_created_at,
+            updated_at=fallback_updated_at,
+            db_metadata_last_synced_at=fallback_synced_at,
             extensions_json={},
             original_character_id=db_char.original_character_id
         )
 
 # --- Character Endpoints ---
 
-@router.get("/characters", summary="List characters from database or directory")
+@router.get("/characters", summary="List characters from database with directory sync")
 async def list_characters(
     directory: Optional[str] = Query(None, description="Get characters from a specific directory instead of DB"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    db_limit: Optional[int] = Query(None, ge=1, description="Limit for DB queries when filtering by directory (None for no limit)"),
     char_service: CharacterService = Depends(get_character_service_dependency),
+    indexing_service: CharacterIndexingService = Depends(get_character_indexing_service),
     logger: LogManager = Depends(get_logger)
-):    # If a directory is provided, we'll use the legacy directory-scanning behavior
+):# If a directory is provided, we'll use the legacy directory-scanning behavior
     if directory:
         logger.info(f"GET /api/characters with directory={directory}")
         try:
@@ -228,24 +245,70 @@ async def list_characters(
                         "message": f"Directory not found: {directory}",
                         "directory": str(directory)
                     }
-                )
-              # Scan for PNG files in the directory
+                )              # Try database-first approach for better performance
             files = []
-            png_files = list(directory_path.glob("*.png"))
-            logger.info(f"Found {len(png_files)} PNG files in directory {directory}")
-            
-            for file_path in png_files:
-                try:
-                    name = file_path.stem
-                    # Store the path in a platform-independent format
-                    # When opening as a file, the Path object will handle platform specifics
-                    files.append({
-                        "name": name,
-                        "path": str(file_path)
-                    })
-                except Exception as e:
-                    logger.error(f"Error processing file {file_path}: {e}")
+            try:                # First attempt: Get characters from database that are in this directory
+                from fastapi.concurrency import run_in_threadpool
+                # Use configurable limit or None for no limit
+                query_limit = db_limit if db_limit is not None else None
+                if query_limit is None:
+                    # Get all characters if no limit specified
+                    db_characters = await run_in_threadpool(char_service.get_all_characters, 0, None)
+                else:
+                    db_characters = await run_in_threadpool(char_service.get_all_characters, 0, query_limit)
+                  # Filter for characters in the requested directory
+                db_files_in_dir = []
+                for db_char in db_characters:
+                    char_path = Path(db_char.png_file_path).resolve()
+                    if char_path.parent == directory_path.resolve() and char_path.exists():
+                        db_files_in_dir.append({
+                            "name": char_path.stem,
+                            "path": str(char_path),
+                            "size": char_path.stat().st_size,
+                            "modified": char_path.stat().st_mtime
+                        })
+                
+                logger.info(f"Found {len(db_files_in_dir)} characters in database for directory {directory}")
+                
+                # If we found characters in DB, use those
+                if db_files_in_dir:
+                    files = db_files_in_dir
+                else:
+                    # Fallback to directory scanning if database is empty
+                    logger.info("No database records found, falling back to directory scanning")
+                    png_files = list(directory_path.glob("*.png"))
+                    logger.info(f"Found {len(png_files)} PNG files in directory {directory}")
                     
+                    for file_path in png_files:
+                        try:
+                            stat_info = file_path.stat()
+                            files.append({
+                                "name": file_path.stem,
+                                "path": str(file_path),
+                                "size": stat_info.st_size,
+                                "modified": stat_info.st_mtime
+                            })
+                        except Exception as e:
+                            logger.error(f"Error processing file {file_path}: {e}")
+                            
+            except Exception as db_error:
+                logger.warning(f"Database query failed, falling back to directory scan: {db_error}")
+                # Final fallback to directory scanning
+                png_files = list(directory_path.glob("*.png"))
+                logger.info(f"Found {len(png_files)} PNG files in directory {directory}")
+                
+                for file_path in png_files:
+                    try:
+                        stat_info = file_path.stat()
+                        files.append({
+                            "name": file_path.stem,
+                            "path": str(file_path),
+                            "size": stat_info.st_size,
+                            "modified": stat_info.st_mtime
+                        })
+                    except Exception as e:
+                        logger.error(f"Error processing file {file_path}: {e}")
+                        
             logger.info(f"Successfully processed {len(files)} characters in directory {directory}")
             return JSONResponse(
                 status_code=200,
@@ -266,25 +329,25 @@ async def list_characters(
                     "message": f"Error scanning directory: {str(e)}",
                     "directory": directory
                 }
-            )
-    
-    # If no directory is provided, we'll use the DB characters
-    logger.info(f"GET /api/characters - skip: {skip}, limit: {limit}")
-    from fastapi.concurrency import run_in_threadpool
+            )    # If no directory is provided, use the new database-first approach with directory sync
+    logger.info(f"GET /api/characters - using database-first with directory sync (skip: {skip}, limit: {limit})")
     try:
-        db_characters = await run_in_threadpool(
-            char_service.get_all_characters, skip=skip, limit=limit
-        )
-        total_characters = await run_in_threadpool(
-            char_service.count_all_characters
-        )
-
+        # Use the new indexing service to get characters with directory sync
+        all_characters = await indexing_service.get_characters_with_directory_sync()
+        
+        # Apply pagination to the results
+        total_characters = len(all_characters)
+        paginated_characters = all_characters[skip:skip + limit] if limit > 0 else all_characters[skip:]
+        
+        # Convert to API format using the existing to_api_model function
         characters_api_list = []
-        for db_char in db_characters:
-            # Assuming to_api_model is defined and accessible
-            # If to_api_model can raise an error, it's correctly in the try block
-            api_char = to_api_model(db_char, logger)
-            characters_api_list.append(api_char)
+        for db_char in paginated_characters:
+            try:
+                api_char = to_api_model(db_char, logger)
+                characters_api_list.append(api_char)
+            except Exception as e:
+                logger.error(f"Error converting character to API model: {e}")
+                continue
         
         return CharacterListResponse(characters=characters_api_list, total=total_characters)
 

@@ -65,14 +65,23 @@ class CharacterService:
 
     def _get_character_dirs(self) -> List[str]:
         """Gets character directories from settings or uses a default."""
-        character_dirs_setting = self.settings_manager.get_setting("character_directories")
+        # Check for the singular setting first (this is what's actually used in settings.json)
+        character_dir_setting = self.settings_manager.get_setting("character_directory")
+        # Fallback to plural if singular not found (for backward compatibility)
+        if not character_dir_setting:
+            character_dirs_setting = self.settings_manager.get_setting("character_directories")
+            if isinstance(character_dirs_setting, str):
+                character_dirs_setting = [character_dirs_setting]
+        else:
+            character_dirs_setting = [character_dir_setting] if isinstance(character_dir_setting, str) else character_dir_setting
+        
         # project_root is no longer defined here, assuming settings_manager provides absolute paths or paths relative to a known root
         # For default, let's assume a path relative to the script's parent's parent (original project_root logic)
         # This might need adjustment based on how project_root was used elsewhere or if settings_manager handles this.
         default_character_dir = Path(__file__).resolve().parent.parent.parent / "characters"
         if not character_dirs_setting or not isinstance(character_dirs_setting, list):
             self.logger.log_warning(
-                f"'character_directories' not found in settings or invalid. Using default: {default_character_dir}"
+                f"'character_directory' not found in settings or invalid. Using default: {default_character_dir}"
             )
             return [str(default_character_dir)]
         return character_dirs_setting
@@ -173,7 +182,18 @@ class CharacterService:
                         continue
                     
                     data_section = metadata["data"]
-                    char_name = data_section.get("name", png_file.stem)
+                    char_name = data_section.get("name")
+                    if not char_name:
+                        # Extract name from filename, removing trailing _\d+ if present
+                        stem_name = png_file.stem
+                        match = re.match(r"^(.*?)(_\d+)?$", stem_name)
+                        if match:
+                            char_name = match.group(1)
+                        else:
+                            char_name = stem_name # Fallback if regex fails
+                    
+                    if not char_name: # Final fallback if name is still empty
+                        char_name = "Unknown Character"
                     
                     char_uuid_from_png = data_section.get("character_uuid")
                     final_char_uuid = char_uuid_from_png
@@ -243,14 +263,14 @@ class CharacterService:
         # Prune characters from DB that no longer exist on disk
         # This is a destructive operation, ensure it's desired.
         # Could be made optional via a setting.
-        # for db_char_path_tuple in self.db.query(CharacterModel.png_file_path, CharacterModel.character_uuid).all():
-        #     db_char_path = db_char_path_tuple[0]
-        #     db_char_uuid = db_char_path_tuple[1]
-        #     if db_char_path not in all_png_files_on_disk:
-        #         self.logger.log_info(f"Character PNG {db_char_path} (UUID: {db_char_uuid}) no longer exists. Removing from DB.")
-        #         char_to_delete = self.db.query(CharacterModel).filter(CharacterModel.character_uuid == db_char_uuid).first()
-        #         if char_to_delete:
-        #             self.db.delete(char_to_delete) # Cascade should handle related lore if set up
+        for db_char_path_tuple in self.db.query(CharacterModel.png_file_path, CharacterModel.character_uuid).all():
+            db_char_path = db_char_path_tuple[0]
+            db_char_uuid = db_char_path_tuple[1]
+            if db_char_path not in all_png_files_on_disk:
+                self.logger.log_info(f"Character PNG {db_char_path} (UUID: {db_char_uuid}) no longer exists. Removing from DB.")
+                char_to_delete = self.db.query(CharacterModel).filter(CharacterModel.character_uuid == db_char_uuid).first()
+                if char_to_delete:
+                    self.db.delete(char_to_delete) # Cascade should handle related lore if set up
 
         self.db.commit()
         self.logger.log_info("Character directory synchronization finished.")
