@@ -1,16 +1,17 @@
-import uuid
-import re
 # backend/main.py
 # Main application file for CardShark
-import argparse
+import os
 import sys
+import traceback
+import argparse
 import urllib.parse
 import glob
+import uuid
+import re
 import uvicorn
+import webbrowser
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-import traceback
-import webbrowser
 from threading import Timer
 
 # FastAPI imports
@@ -167,18 +168,22 @@ async def lifespan(app: FastAPI):
         init_db()
         logger.log_info("Database tables initialised")        
         # Synchronize character directories
-        with SessionLocal() as db:
-            try:
-                CharacterService(
-                    db_session=db,
-                    png_handler=png_handler,
-                    settings_manager=settings_manager,
-                    logger=logger,
-                ).sync_character_directories()
-            except Exception as sync_exc:
-                logger.log_error(f"Character sync failed, rolling back session: {sync_exc}")
-                db.rollback()
-                raise
+        # Initialize CharacterService and attach to app.state
+        db_session_generator = SessionLocal # Pass the callable for CharacterService to manage its own sessions
+        app.state.character_service = CharacterService(
+            db_session_generator=db_session_generator,
+            png_handler=png_handler,
+            settings_manager=settings_manager,
+            logger=logger,
+            # character_indexing_service=character_indexing_service # Add this if CharacterService needs it
+        )
+        
+        # Synchronize character directories using the initialized service
+        try:
+            app.state.character_service.sync_character_directories()
+        except Exception as sync_exc:
+            logger.log_error(f"Character sync failed: {sync_exc}")
+            raise
         logger.log_info("Initial character directory synchronization complete.")
     except Exception as exc:
         logger.log_error(f"DB init or character sync failed: {exc}\n{traceback.format_exc()}")
@@ -311,13 +316,19 @@ chat_handler = ChatHandler(logger, api_handler) # Pass api_handler here
 template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds() # Initialize default backgrounds
-# lore_handler = LoreHandler(logger, default_position=0) # LoreHandler is now dependency injected in its router
+lore_handler = LoreHandler(logger, default_position=0) # Create LoreHandler for dependency injection
 world_state_handler = WorldStateHandler(logger, settings_manager)
 
 # Store handlers on app.state for access in dependencies
 app.state.png_handler = png_handler
 app.state.settings_manager = settings_manager
 app.state.chat_handler = chat_handler # Store ChatHandler for dependency injection
+app.state.background_handler = background_handler # Store BackgroundHandler for dependency injection
+app.state.content_filter_manager = content_filter_manager # Store ContentFilterManager for dependency injection
+app.state.template_handler = template_handler # Store TemplateHandler for dependency injection
+app.state.backyard_handler = backyard_handler # Store BackyardHandler for dependency injection
+app.state.world_state_handler = world_state_handler # Store WorldStateHandler for dependency injection
+app.state.lore_handler = lore_handler # Store LoreHandler for dependency injection
 # app.state.logger is already set above
 
 # Initialize the world card chat handler with explicit worlds directory
@@ -326,6 +337,9 @@ if not worlds_dir.exists():
     worlds_dir.mkdir(parents=True, exist_ok=True)
 logger.log_step(f"Initializing world chat handler with worlds directory: {worlds_dir.absolute()}")
 world_card_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
+
+# Store world card chat handler on app.state
+app.state.world_card_chat_handler = world_card_chat_handler
 
 # ---------- Initialize and register endpoints ----------
 # NOTE: Removed initialization and registration of endpoint classes (ChatEndpoints, UserEndpoints, etc.)

@@ -81,7 +81,7 @@ async def get_content_filters(
     except Exception as e:
         logger.log_error(f"Error getting content filters: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting content filters")
+        raise handle_generic_error(e, logger, "getting content filters")
 
 @router.post("/content-filters", response_model=DataResponse[Dict])
 async def update_content_filters(
@@ -110,7 +110,7 @@ async def update_content_filters(
     except Exception as e:
         logger.log_error(f"Error updating content filters: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "updating content filters")
+        raise handle_generic_error(e, logger, "updating content filters")
 
 @router.put("/content-filters", response_model=DataResponse[Dict])
 async def update_content_filters_put(
@@ -139,7 +139,7 @@ async def update_content_filters_put(
     except Exception as e:
         logger.log_error(f"Error updating content filters via PUT: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "updating content filters")
+        raise handle_generic_error(e, logger, "updating content filters")
 
 @router.post("/content-filters/incomplete-sentences", response_model=DataResponse[Dict])
 async def update_incomplete_sentences_setting(
@@ -169,7 +169,7 @@ async def update_incomplete_sentences_setting(
     except Exception as e:
         logger.log_error(f"Error updating incomplete sentences setting: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "updating incomplete sentences setting")
+        raise handle_generic_error(e, logger, "updating incomplete sentences setting")
 
 # --- Filter Package Endpoints ---
 
@@ -185,7 +185,7 @@ async def get_filter_packages(
     except Exception as e:
         logger.log_error(f"Error getting filter packages: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting filter packages")
+        raise handle_generic_error(e, logger, "getting filter packages")
 
 @router.get("/content-filters/active-packages", response_model=DataResponse[Dict])
 async def get_active_filter_packages(
@@ -199,7 +199,7 @@ async def get_active_filter_packages(
     except Exception as e:
         logger.log_error(f"Error getting active filter packages: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting active filter packages")
+        raise handle_generic_error(e, logger, "getting active filter packages")
 
 @router.get("/content-filters/package/{package_id}", response_model=DataResponse[Dict])
 async def get_filter_package_rules(
@@ -217,7 +217,7 @@ async def get_filter_package_rules(
     except Exception as e:
         logger.log_error(f"Error getting filter package rules: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting filter package rules")
+        raise handle_generic_error(e, logger, "getting filter package rules")
 
 @router.post("/content-filters/package/activate", response_model=DataResponse[Dict])
 async def activate_filter_package(
@@ -239,7 +239,7 @@ async def activate_filter_package(
     except Exception as e:
         logger.log_error(f"Error activating filter package: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "activating filter package")
+        raise handle_generic_error(e, logger, "activating filter package")
 
 @router.post("/content-filters/package/deactivate", response_model=DataResponse[Dict])
 async def deactivate_filter_package(
@@ -261,7 +261,7 @@ async def deactivate_filter_package(
     except Exception as e:
         logger.log_error(f"Error deactivating filter package: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "deactivating filter package")
+        raise handle_generic_error(e, logger, "deactivating filter package")
 
 @router.post("/content-filters/package", response_model=DataResponse[Dict], status_code=201)
 async def create_filter_package(
@@ -287,7 +287,7 @@ async def create_filter_package(
     except Exception as e:
         logger.log_error(f"Error creating filter package: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "creating filter package")
+        raise handle_generic_error(e, logger, "creating filter package")
 
 @router.put("/content-filters/package/{package_id}", response_model=DataResponse[Dict])
 async def update_filter_package(
@@ -310,7 +310,7 @@ async def update_filter_package(
     except Exception as e:
         logger.log_error(f"Error updating filter package: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "updating filter package")
+        raise handle_generic_error(e, logger, "updating filter package")
 
 @router.delete("/content-filters/package/{package_id}", response_model=DataResponse[Dict])
 async def delete_filter_package(
@@ -332,4 +332,4 @@ async def delete_filter_package(
     except Exception as e:
         logger.log_error(f"Error deleting filter package: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "deleting filter package")
+        raise handle_generic_error(e, logger, "deleting filter package")

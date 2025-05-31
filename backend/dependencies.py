@@ -43,7 +43,7 @@ def get_png_handler(request: Request) -> PngMetadataHandler:
     """Get PngMetadataHandler instance from app state."""
     png_handler = cast(PngMetadataHandler, request.app.state.png_handler)
     if png_handler is None:
-        raise HTTPException(status_code=500, detail="PNG metadata handler not initialized")
+        raise HTTPException(status_code=500, detail="PNG handler not initialized")
     return png_handler
 
 # Service dependency providers
@@ -166,6 +166,12 @@ def get_request_context(request: Request) -> dict:
     }
 
 # Standardized dependency functions with consistent naming convention
+# These can be used directly in endpoint signatures for clarity
+
+def get_db_dependency(db: Session = Depends(get_db)) -> Session:
+    """FastAPI dependency to get a database session."""
+    return db
+
 def get_logger_dependency(request: Request) -> LogManager:
     """Get LogManager instance from app state (standardized dependency)."""
     return get_logger(request)

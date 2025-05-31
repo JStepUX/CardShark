@@ -216,7 +216,7 @@ async def upload_lore_image(
         raise http_exc # Re-raise HTTP exceptions from save_lore_image
     except Exception as e:
         logger.log_error(f"Unhandled error in lore image upload: {e}", exc_info=True)
-        return handle_generic_error(e, logger, "uploading lore image")
+        raise handle_generic_error(e, logger, "uploading lore image")
 
 @router.post("/images/from-url", response_model=DataResponse[dict])
 async def import_lore_image_from_url(
@@ -343,7 +343,7 @@ async def import_lore_image_from_url(
         raise http_exc
     except Exception as e:
         logger.log_error(f"Error importing image from URL: {e}", exc_info=True)
-        return handle_generic_error(e, logger, "importing image from URL")
+        raise handle_generic_error(e, logger, "importing image from URL")
 
 
 @router.delete("/images/{character_uuid}/{image_uuid_or_filename}", response_model=DataResponse[dict])
@@ -376,7 +376,7 @@ async def delete_lore_image(
         raise ValidationException(str(ve))
     except Exception as e:
         logger.log_error(f"Error getting image path for deletion: {e}")
-        return handle_generic_error(e, logger, "determining image path for deletion")
+        raise handle_generic_error(e, logger, "determining image path for deletion")
 
 
     if not image_path_to_delete.is_file(): # Check if it's a file, not just if path exists
@@ -410,7 +410,7 @@ async def delete_lore_image(
         raise
     except Exception as e:
         logger.log_error(f"Error deleting lore image {image_path_to_delete}: {e}", exc_info=True)
-        return handle_generic_error(e, logger, "deleting lore image")
+        raise handle_generic_error(e, logger, "deleting lore image")
 
 
 @router.delete("/images/delete", response_model=DataResponse[dict])
@@ -461,7 +461,7 @@ async def delete_lore_image_with_fallback(
         raise ValidationException(str(ve))
     except Exception as e:
         logger.log_error(f"Error getting base path for deletion: {e}")
-        return handle_generic_error(e, logger, "determining image directory for deletion")
+        raise handle_generic_error(e, logger, "determining image directory for deletion")
 
     if not image_uuid: # Must have an image_uuid (or filename) to delete
         raise ValidationException("image_uuid (filename) must be provided for deletion.")
@@ -507,7 +507,7 @@ async def delete_lore_image_with_fallback(
         raise
     except Exception as e:
         logger.log_error(f"Error deleting lore image {image_path_to_delete}: {e}", exc_info=True)
-        return handle_generic_error(e, logger, "deleting lore image")
+        raise handle_generic_error(e, logger, "deleting lore image")
 
 
 # Endpoint for serving lore images - this should align with how main.py serves /uploads
@@ -563,4 +563,4 @@ async def extract_lore_entries( # Renamed function for clarity
     except Exception as e:
         logger.log_error(f"Error extracting lore: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "extracting lore")
+        raise handle_generic_error(e, logger, "extracting lore")

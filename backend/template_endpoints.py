@@ -77,11 +77,11 @@ async def get_templates(
         logger.log_step("Getting all templates")
         templates = template_handler.get_all_templates()
         
-        return create_list_response(templates)
+        return create_list_response(templates, total=len(templates))
     except Exception as e:
         logger.log_error(f"Error getting templates: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to get templates")
+        raise handle_generic_error(e, "Failed to get templates")
 
 @router.post("/templates/save", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def save_template(
@@ -117,7 +117,7 @@ async def save_template(
     except Exception as e:
         logger.log_error(f"Error saving template: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to save template")
+        raise handle_generic_error(e, "Failed to save template")
 
 @router.delete("/templates/{template_id}", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def delete_template(
@@ -158,7 +158,7 @@ async def delete_template(
     except Exception as e:
         logger.log_error(f"Error deleting template: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to delete template")
+        raise handle_generic_error(e, "Failed to delete template")
 
 @router.get("/templates/{template_id}", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def get_template_by_id(
@@ -182,7 +182,7 @@ async def get_template_by_id(
     except Exception as e:
         logger.log_error(f"Error getting template {template_id}: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to get template")
+        raise handle_generic_error(e, "Failed to get template")
 
 @router.put("/templates/{template_id}", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def update_template(
@@ -226,7 +226,7 @@ async def update_template(
     except Exception as e:
         logger.log_error(f"Error updating template {template_id}: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to update template")
+        raise handle_generic_error(e, "Failed to update template")
 
 @router.post("/templates/detect", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def detect_template(
@@ -257,4 +257,4 @@ async def detect_template(
     except Exception as e:
         logger.log_error(f"Error detecting template: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to detect template")
+        raise handle_generic_error(e, "Failed to detect template")

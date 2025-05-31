@@ -83,7 +83,7 @@ def create_new_chat_endpoint(
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
-        return handle_generic_error(e, logger, "creating new chat session")
+        raise handle_generic_error(e, logger, "creating new chat session")
 
 @router.post("/load-latest-chat", response_model=DataResponse[Optional[pydantic_models.ChatSessionRead]])
 def load_latest_chat_endpoint(
@@ -123,7 +123,7 @@ def load_latest_chat_endpoint(
         return create_data_response(latest_session)
     
     except Exception as e:
-        return handle_generic_error(e, logger, "loading latest chat")
+        raise handle_generic_error(e, logger, "loading latest chat")
 
 @router.post("/save-chat", response_model=DataResponse[pydantic_models.ChatSessionRead])
 def save_chat_endpoint(
@@ -196,7 +196,7 @@ def save_chat_endpoint(
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
-        return handle_generic_error(e, logger, "saving chat")
+        raise handle_generic_error(e, logger, "saving chat")
 
 @router.post("/append-chat-message", response_model=DataResponse[pydantic_models.ChatSessionRead])
 def append_chat_message_endpoint(
@@ -306,7 +306,7 @@ def append_chat_message_endpoint(
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
-        return handle_generic_error(e, logger, "appending chat message")
+        raise handle_generic_error(e, logger, "appending chat message")
 
 @router.post("/chat/generate", response_model=DataResponse[pydantic_models.ChatGenerateResponse])
 async def generate_chat_response_endpoint( # Made async to accommodate potential async API calls
@@ -392,7 +392,7 @@ async def generate_chat_response_endpoint( # Made async to accommodate potential
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
-        return handle_generic_error(e, logger, "generating chat response")
+        raise handle_generic_error(e, logger, "generating chat response")
 
 # --- Existing ChatSession CRUD ---
 # These routes use /chat_sessions/ prefix and are kept as is.
@@ -407,7 +407,7 @@ def create_chat_session_endpoint(
         result = chat_service.create_chat_session(db=db, chat_session=chat_session)
         return create_data_response(result)
     except Exception as e:
-        return handle_generic_error(e, logger, "creating chat session")
+        raise handle_generic_error(e, logger, "creating chat session")
 
 @router.get("/chat_sessions/{session_id}", response_model=DataResponse[pydantic_models.ChatSessionRead])
 def read_chat_session_endpoint(
@@ -423,7 +423,7 @@ def read_chat_session_endpoint(
     except NotFoundException:
         raise
     except Exception as e:
-        return handle_generic_error(e, logger, "reading chat session")
+        raise handle_generic_error(e, logger, "reading chat session")
 
 @router.get("/chat_sessions/", response_model=ListResponse[pydantic_models.ChatSessionRead])
 def read_chat_sessions_endpoint(
@@ -438,9 +438,9 @@ def read_chat_sessions_endpoint(
         chat_sessions = chat_service.get_chat_sessions(
             db, skip=skip, limit=limit, character_uuid=character_uuid, user_uuid=user_uuid
         )
-        return create_list_response(chat_sessions)
+        return create_list_response(chat_sessions, total=len(chat_sessions))
     except Exception as e:
-        return handle_generic_error(e, logger, "reading chat sessions")
+        raise handle_generic_error(e, logger, "reading chat sessions")
 
 @router.put("/chat_sessions/{session_id}", response_model=DataResponse[pydantic_models.ChatSessionRead])
 def update_chat_session_endpoint(
@@ -457,7 +457,7 @@ def update_chat_session_endpoint(
     except NotFoundException:
         raise
     except Exception as e:
-        return handle_generic_error(e, logger, "updating chat session")
+        raise handle_generic_error(e, logger, "updating chat session")
 
 @router.delete("/chat_sessions/{session_id}", response_model=DataResponse[pydantic_models.ChatSessionRead]) # Or just status_code=204
 def delete_chat_session_endpoint(
@@ -475,4 +475,4 @@ def delete_chat_session_endpoint(
     except NotFoundException:
         raise
     except Exception as e:
-        return handle_generic_error(e, logger, "deleting chat session")
+        raise handle_generic_error(e, logger, "deleting chat session")

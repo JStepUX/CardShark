@@ -243,8 +243,8 @@ const WorldBuilderView: React.FC = () => {
         const settingsResponse = await fetch('/api/settings');
         if (!settingsResponse.ok) throw new Error('Failed to load settings');
         const settingsData = await settingsResponse.json();
-        if (settingsData.success && settingsData.settings.character_directory) {
-          dirPath = settingsData.settings.character_directory;
+        if (settingsData.success && settingsData.data && settingsData.data.settings && settingsData.data.settings.character_directory) {
+          dirPath = settingsData.data.settings.character_directory;
           // setCharacterDirectory(dirPath); // Remove unused state update
         } else {
           console.error("Character directory not set in settings.");

@@ -79,7 +79,7 @@ async def get_settings(
     except Exception as e:
         logger.log_error(f"Error getting settings: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to get settings")
+        raise handle_generic_error(e, "Failed to get settings")
 
 @router.post("/settings", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def update_settings(
@@ -116,7 +116,7 @@ async def update_settings(
     except Exception as e:
         logger.log_error(f"Error updating settings: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to update settings")
+        raise handle_generic_error(e, "Failed to update settings")
 
 @router.put("/settings", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def update_settings_put(
@@ -149,7 +149,7 @@ async def update_settings_put(
     except Exception as e:
         logger.log_error(f"Error updating settings via PUT: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to update settings")
+        raise handle_generic_error(e, "Failed to update settings")
 
 # --- Utility Endpoints ---
 
@@ -272,7 +272,7 @@ async def test_api_connection(
             except Exception as e:
                 logger.log_error(f"Error testing Featherless AI stream connection: {str(e)}")
                 logger.log_error(traceback.format_exc())
-                return handle_generic_error(e, "Connection test failed")
+                raise handle_generic_error(e, "Connection test failed")
         else:
             # Generic provider test (remains non-streaming for now)
             endpoint_url = adapter.get_endpoint_url(url)
@@ -344,7 +344,7 @@ async def test_api_connection(
     except Exception as e:
         logger.log_error(f"API connection test error: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Connection test failed")
+        raise handle_generic_error(e, "Connection test failed")
 
 @router.post("/validate-directory", response_model=DataResponse, responses=STANDARD_RESPONSES)
 async def validate_directory(
@@ -402,4 +402,4 @@ async def get_featherless_models_proxy(
     except Exception as e:
         logger.log_error(f"Error proxying Featherless models request: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, "Failed to fetch models")
+        raise handle_generic_error(e, "Failed to fetch models")

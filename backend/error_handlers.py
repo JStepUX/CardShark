@@ -68,6 +68,22 @@ class ExternalServiceException(CardSharkException):
         if status_code:
             self.details["status_code"] = status_code
 
+class ConfigurationException(CardSharkException):
+    """Exception for configuration-related errors."""
+    def __init__(self, message: str, config_key: Optional[str] = None):
+        super().__init__(message, "CONFIGURATION_ERROR")
+        if config_key:
+            self.details["config_key"] = config_key
+
+class APIException(CardSharkException):
+    """Exception for API-related errors."""
+    def __init__(self, message: str, endpoint: Optional[str] = None, status_code: Optional[int] = None):
+        super().__init__(message, "API_ERROR")
+        if endpoint:
+            self.details["endpoint"] = endpoint
+        if status_code:
+            self.details["status_code"] = status_code
+
 def handle_database_error(e: SQLAlchemyError, operation: str = "database operation") -> HTTPException:
     """Handle SQLAlchemy database errors."""
     error_logger.error(f"Database error during {operation}: {str(e)}")
@@ -110,6 +126,8 @@ def handle_cardshark_exception(e: CardSharkException) -> HTTPException:
         "CONFLICT": 409,
         "DATABASE_ERROR": 500,
         "EXTERNAL_SERVICE_ERROR": 502,
+        "CONFIGURATION_ERROR": 500,
+        "API_ERROR": 500,
     }
     
     status_code = status_map.get(e.error_code, 500)
@@ -185,6 +203,8 @@ async def cardshark_exception_handler(request: Request, exc: CardSharkException)
         "CONFLICT": 409,
         "DATABASE_ERROR": 500,
         "EXTERNAL_SERVICE_ERROR": 502,
+        "CONFIGURATION_ERROR": 500,
+        "API_ERROR": 500,
     }
     
     status_code = status_map.get(exc.error_code, 500)
@@ -197,7 +217,8 @@ async def cardshark_exception_handler(request: Request, exc: CardSharkException)
     
     return JSONResponse(
         status_code=status_code,
-        content=response.dict()
+        content=response.model_dump_json(),
+        media_type="application/json"
     )
 
 async def validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
@@ -216,7 +237,8 @@ async def validation_exception_handler(request: Request, exc: ValidationError) -
     
     return JSONResponse(
         status_code=422,
-        content=response.dict()
+        content=response.model_dump_json(),
+        media_type="application/json"
     )
 
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
@@ -233,7 +255,8 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError) -
     
     return JSONResponse(
         status_code=status_code,
-        content=response.dict()
+        content=response.model_dump_json(),
+        media_type="application/json"
     )
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -247,7 +270,8 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     
     return JSONResponse(
         status_code=500,
-        content=response.dict()
+        content=response.model_dump_json(),
+        media_type="application/json"
     )
 
 # Helper functions for common error responses
@@ -274,3 +298,14 @@ def database_error(message: str, operation: Optional[str] = None) -> HTTPExcepti
 def external_service_error(message: str, service: Optional[str] = None, status_code: Optional[int] = None) -> HTTPException:
     """Create a standardized external service error."""
     raise ExternalServiceException(message, service, status_code)
+
+def register_exception_handlers(app):
+    """Register all exception handlers with the FastAPI app."""
+    app.add_exception_handler(CardSharkException, cardshark_exception_handler)
+    app.add_exception_handler(ValidationError, validation_exception_handler)
+    app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
+    app.add_exception_handler(Exception, generic_exception_handler)
+
+def handle_generic_error(e: Exception, operation: str = "operation") -> HTTPException:
+    """Handle generic errors - alias for handle_generic_exception."""
+    return handle_generic_exception(e, operation)

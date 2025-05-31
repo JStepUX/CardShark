@@ -191,8 +191,7 @@ class BackgroundHandler:
                 
             # Delete the file
             file_path.unlink()
-            
-            # Remove from metadata
+              # Remove from metadata
             if filename in self.metadata:
                 del self.metadata[filename]
                 self._save_metadata()
@@ -203,6 +202,19 @@ class BackgroundHandler:
         except Exception as e:
             self.logger.log_error(f"Error deleting background: {str(e)}")
             return False
+    
+    def get_background_path(self, filename: str) -> Optional[Path]:
+        """Get the path to a background file by filename."""
+        try:
+            file_path = self.backgrounds_dir / filename
+            if file_path.exists():
+                return file_path
+            else:
+                self.logger.log_warning(f"Background file not found: {filename}")
+                return None
+        except Exception as e:
+            self.logger.log_error(f"Error getting background path for {filename}: {str(e)}")
+            return None
     
     def initialize_default_backgrounds(self) -> None:
         """Copy default backgrounds from assets directory to backgrounds directory"""

@@ -39,8 +39,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!response.ok) {
         throw new Error(`Failed to fetch settings: ${response.status} ${response.statusText}`);
       }
-      const data = await response.json();
-      if (data.success && data.settings) {        // Merge fetched settings with defaults to ensure all keys exist
+      const data = await response.json();      if (data.success && data.data && data.data.settings) {        // Merge fetched settings with defaults to ensure all keys exist
         // Use deep merge for nested objects like 'apis' and 'syntaxHighlighting'
         const deepMerge = (target: any, source: any): any => {
           Object.keys(source).forEach(key => {
@@ -57,7 +56,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           });
           return target;
         };        // Start with a deep copy of defaults, then merge fetched settings onto it
-        const merged = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), data.settings);        setSettings(merged);
+        const merged = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), data.data.settings);        setSettings(merged);
         console.log("[SettingsContext] Settings loaded successfully");
       } else {
         throw new Error(data.message || 'Failed to parse settings from response');
@@ -108,13 +107,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` }));
         throw new Error(errorData.message || `Failed to update settings: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      if (result.success && result.settings) {
+      }      const result = await response.json();
+      if (result.success && result.data && result.data.settings) {
          // Update state with the *full* settings object returned by the backend
          // This ensures consistency if the backend modifies/merges data
-         const merged = { ...DEFAULT_SETTINGS, ...result.settings }; // Re-merge with defaults
+         const merged = { ...DEFAULT_SETTINGS, ...result.data.settings }; // Re-merge with defaults
          setSettings(merged);
          console.log("[SettingsContext] Settings updated successfully. New models_directory:", merged.models_directory);
       } else {

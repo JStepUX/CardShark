@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import List, Dict, Set
 from asyncio import to_thread
 
+from backend.errors import CardSharkError
+
 from backend.sql_models import Character as CharacterModel
 
 
@@ -171,9 +173,13 @@ class CharacterIndexingService:
                 return
             
             # Read metadata in thread to avoid blocking event loop
-            metadata = await to_thread(
-                self.character_service.png_handler.read_metadata, file_path
-            )
+            try:
+                metadata = await to_thread(
+                    self.character_service.png_handler.read_metadata, file_path
+                )
+            except CardSharkError as e:
+                self.logger.log_error(f"CardSharkError processing PNG file {file_path}: {e}")
+                return # Skip this file and continue processing others
             
             if not metadata or not metadata.get("data"):
                 self.logger.log_warning(f"No valid metadata in {file_path}")

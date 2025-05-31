@@ -52,7 +52,7 @@ def assign_character_to_room(
         )
     except Exception as e:
         logger.log_error(f"Error assigning character {character_uuid} to room {room_id}: {str(e)}")
-        return handle_generic_error(e, logger, "assigning character to room")
+        raise handle_generic_error(e, logger, "assigning character to room")
 
 
 @router.delete("/api/rooms/{room_id}/characters/{character_uuid}", status_code=status.HTTP_204_NO_CONTENT)
@@ -75,7 +75,7 @@ def unassign_character_from_room(
         raise
     except Exception as e:
         logger.log_error(f"Error removing character {character_uuid} from room {room_id}: {str(e)}")
-        return handle_generic_error(e, logger, "removing character from room")
+        raise handle_generic_error(e, logger, "removing character from room")
 
 
 @router.get("/api/rooms/{room_id}/characters", response_model=List[pydantic_models.CharacterInRoomResponse])
@@ -92,7 +92,7 @@ def get_room_characters(
         return npc_room_assignment_service.get_characters_in_room(db=db, room_id=room_id)
     except Exception as e:
         logger.log_error(f"Error getting characters in room {room_id}: {str(e)}")
-        return handle_generic_error(e, logger, "getting characters in room")
+        raise handle_generic_error(e, logger, "getting characters in room")
 
 
 @router.get("/api/characters/{character_uuid}/rooms", response_model=List[pydantic_models.RoomRead])
@@ -109,4 +109,4 @@ def get_character_rooms(
         return npc_room_assignment_service.get_rooms_for_character(db=db, character_uuid=character_uuid)
     except Exception as e:
         logger.log_error(f"Error getting rooms for character {character_uuid}: {str(e)}")
-        return handle_generic_error(e, logger, "getting rooms for character")
+        raise handle_generic_error(e, logger, "getting rooms for character")

@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import uuid
 
 import urllib.parse
 from pathlib import Path
@@ -45,7 +46,8 @@ from backend.dependencies import (
     get_character_service_dependency,
     get_png_handler_dependency,
     get_backyard_handler_dependency,
-    get_settings_manager_dependency
+    get_settings_manager_dependency,
+    get_db_dependency # Import the database session dependency
 )
 
 def get_character_indexing_service(
@@ -96,6 +98,12 @@ class CharacterListResponse(BaseModel):
     success: bool = True
     characters: List[CharacterAPIBase]
     total: int # Add total for pagination
+
+class FileInfo(BaseModel):
+    name: str
+    path: str
+    size: int
+    modified: datetime # This will be handled by BaseResponse's json_encoders
 
 class SimpleSuccessResponse(BaseModel):
     success: bool
@@ -213,7 +221,7 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
 
 # --- Character Endpoints ---
 
-@router.get("/characters", response_model=ListResponse, responses=STANDARD_RESPONSES, summary="List characters from database with directory sync")
+@router.get("/characters", response_model=CharacterListResponse, responses=STANDARD_RESPONSES, summary="List characters from database with directory sync")
 async def list_characters(
     directory: Optional[str] = Query(None, description="Get characters from a specific directory instead of DB"),
     skip: int = Query(0, ge=0),
@@ -266,7 +274,7 @@ async def list_characters(
                             "name": char_path.stem,
                             "path": str(char_path),
                             "size": char_path.stat().st_size,
-                            "modified": char_path.stat().st_mtime
+                            "modified": datetime.fromtimestamp(char_path.stat().st_mtime, tz=timezone.utc)
                         })
                 
                 logger.info(f"Found {len(db_files_in_dir)} characters in database for directory {directory}")
@@ -287,7 +295,7 @@ async def list_characters(
                                 "name": file_path.stem,
                                 "path": str(file_path),
                                 "size": stat_info.st_size,
-                                "modified": stat_info.st_mtime
+                                "modified": datetime.fromtimestamp(stat_info.st_mtime, tz=timezone.utc)
                             })
                         except Exception as e:
                             logger.error(f"Error processing file {file_path}: {e}")
@@ -305,18 +313,33 @@ async def list_characters(
                             "name": file_path.stem,
                             "path": str(file_path),
                             "size": stat_info.st_size,
-                            "modified": stat_info.st_mtime
+                            "modified": datetime.fromtimestamp(stat_info.st_mtime, tz=timezone.utc)
                         })
                     except Exception as e:
                         logger.error(f"Error processing file {file_path}: {e}")
                         
             logger.info(f"Successfully processed {len(files)} characters in directory {directory}")
-            return create_data_response({
-                "success": True, 
-                "exists": True,
-                "directory": str(directory),
-                "files": files
-            })
+            # When directory is provided, return a ListResponse of FileInfo
+            # When directory is provided, return a CharacterListResponse
+            # Convert FileInfo to a CharacterAPIBase-like structure for consistency
+            # This is a simplified representation, as full metadata isn't available from file system scan
+            characters_from_files = []
+            for f_info in files:
+                # Create a minimal CharacterAPIBase from FileInfo
+                # This might not have all fields, but will satisfy the basic structure
+                characters_from_files.append(CharacterAPIBase(
+                    character_uuid=str(uuid.uuid4()), # Generate a dummy UUID for files not in DB
+                    name=f_info["name"],
+                    png_file_path=f_info["path"],
+                    created_at=f_info["modified"],
+                    updated_at=f_info["modified"],
+                    db_metadata_last_synced_at=f_info["modified"],
+                    # Default other optional fields
+                    description="", personality="", scenario="", first_mes="", mes_example="",
+                    creator_comment="", tags=[], spec_version="2.0", extensions_json={},
+                    original_character_id=None
+                ))
+            return CharacterListResponse(characters=characters_from_files, total=len(characters_from_files))
         except Exception as e:
             logger.error(f"Error scanning directory {directory}: {e}")
             return create_error_response(
@@ -343,6 +366,7 @@ async def list_characters(
                 logger.error(f"Error converting character to API model: {e}")
                 continue
         
+        # When no directory is provided, return a ListResponse of CharacterAPIBase
         return CharacterListResponse(characters=characters_api_list, total=total_characters)
 
     except Exception as e:
@@ -369,7 +393,7 @@ async def get_character_by_uuid_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error retrieving character {character_uuid}: {str(e)}")
-        return handle_generic_error(e, logger)
+        raise handle_generic_error(e, logger)
 
 @router.post("/characters/save-card", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Save/Update character card (PNG+DB)")
 async def save_character_card_endpoint(
@@ -409,7 +433,7 @@ async def save_character_card_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error in save_character_card endpoint: {e}")
-        return handle_generic_error(e, logger)
+        raise handle_generic_error(e, logger)
 
 @router.delete("/character/{character_uuid}", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Delete a character by UUID")
 async def delete_character_by_uuid_endpoint(
@@ -437,7 +461,7 @@ async def delete_character_by_uuid_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error deleting character {character_uuid}: {str(e)}")
-        return handle_generic_error(e, logger)
+        raise handle_generic_error(e, logger)
 
 @router.get("/character-image/{character_uuid}", summary="Serve a character's PNG image by UUID")
 async def get_character_image_by_uuid(
@@ -517,7 +541,7 @@ async def trigger_scan_character_directory_endpoint(
         return create_data_response({"success": True, "message": "Character directory synchronization complete"})
     except Exception as e:
         logger.error(f"Error during manual character directory scan: {e}", error=e)
-        return handle_generic_error(e, logger)
+        raise handle_generic_error(e, logger)
 
 # --- Utility Endpoints (Primarily for uploaded files, not interacting with DB characters directly) ---
 
@@ -526,7 +550,8 @@ async def get_character_metadata_by_path(
     path: str,
     png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger_dependency),
+    db: Session = Depends(get_db_dependency)  # Add database session dependency
 ):
     logger.info(f"Request for metadata for character path: {path}")
     
@@ -574,11 +599,11 @@ async def get_character_metadata_by_path(
             db_char = None
             if character_uuid:
                 # Check for character by UUID first
-                db_char = char_service.get_character_by_uuid(character_uuid)
+                db_char = char_service.get_character_by_uuid(character_uuid, db) # Pass db session
             
             if not db_char:
                 # Also check by path in case it was imported without UUID
-                db_char = char_service.get_character_by_path(abs_file_path)
+                db_char = char_service.get_character_by_path(abs_file_path, db) # Pass db session
             
             # If still not found, we need to save it to generate a UUID
             if not db_char:
@@ -601,7 +626,6 @@ async def get_character_metadata_by_path(
                         if "data" not in metadata:
                             metadata["data"] = {}
                         metadata["data"]["character_uuid"] = db_char.character_uuid
-                        
                         logger.info(f"Successfully added character to database with UUID: {db_char.character_uuid}")
                     else:
                         logger.warning(f"Failed to add character to database: {abs_file_path}")
@@ -648,7 +672,7 @@ async def extract_metadata_from_upload_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error extracting metadata from upload: {e}")
-        return handle_generic_error(e, logger)
+        raise handle_generic_error(e, logger)
 
 @router.post("/characters/extract-lore", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Upload PNG and extract lore book")
 async def extract_lore_from_upload_endpoint(
@@ -684,7 +708,7 @@ async def extract_lore_from_upload_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error extracting lore from upload: {e}")
-        return handle_generic_error(e, logger)
+        raise handle_generic_error(e, logger)
 
 @router.post("/characters/import-backyard", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Import character from Backyard.ai URL")
 async def import_from_backyard_endpoint(
@@ -732,7 +756,7 @@ async def import_from_backyard_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error importing from Backyard: {e}")
-        return handle_generic_error(e, logger)
+        raise handle_generic_error(e, logger)
 
 # Deprecated/Old Endpoints to be removed or fully refactored:
 # - /characters/{character_id}/avatar (avatar handling is part of save_card now)

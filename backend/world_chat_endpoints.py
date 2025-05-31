@@ -76,7 +76,7 @@ async def get_latest_world_chat(
     except Exception as e:
         logger.log_error(f"Error getting latest chat for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting latest chat")
+        raise handle_generic_error(e, logger, "getting latest chat")
 
 @router.post("/api/world-chat/{world_name}/save", response_model=DataResponse[dict])
 async def save_world_chat(
@@ -121,7 +121,7 @@ async def save_world_chat(
     except Exception as e:
         logger.log_error(f"Error saving chat for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "saving chat")
+        raise handle_generic_error(e, logger, "saving chat")
 
 @router.get("/api/world-chat/{world_name}/{chat_id}", response_model=DataResponse[dict])
 async def get_world_chat(
@@ -150,7 +150,7 @@ async def get_world_chat(
         raise
     except Exception as e:
         logger.log_error(f"Error getting chat '{chat_id}' for world '{world_name}': {str(e)}")
-        return handle_generic_error(e, logger, "getting chat")
+        raise handle_generic_error(e, logger, "getting chat")
 
 @router.post("/api/world-chat/{world_name}/create", response_model=DataResponse[dict])
 async def create_world_chat(
@@ -183,4 +183,4 @@ async def create_world_chat(
         raise
     except Exception as e:
         logger.log_error(f"Error creating chat for world '{world_name}': {str(e)}")
-        return handle_generic_error(e, logger, "creating chat")
+        raise handle_generic_error(e, logger, "creating chat")

@@ -71,7 +71,7 @@ def create_world_db(
     except Exception as e:
         logger.log_error(f"Error creating world '{world.name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "creating world")
+        raise handle_generic_error(e, logger, "creating world")
 
 @router.get("/worlds/", response_model=ListResponse[pydantic_models.WorldRead])
 def read_worlds_db(
@@ -84,11 +84,11 @@ def read_worlds_db(
         logger.log_step(f"Request to read worlds, skip: {skip}, limit: {limit}")
         worlds = world_service.get_worlds(db, skip=skip, limit=limit)
         logger.log_step(f"Successfully retrieved {len(worlds)} worlds")
-        return create_list_response(worlds)
+        return create_list_response(worlds, total=len(worlds))
     except Exception as e:
         logger.log_error(f"Error reading worlds: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "reading worlds")
+        raise handle_generic_error(e, logger, "reading worlds")
 
 @router.get("/worlds/{world_id}", response_model=DataResponse[pydantic_models.WorldRead])
 def read_world_db(
@@ -109,7 +109,7 @@ def read_world_db(
     except Exception as e:
         logger.log_error(f"Error reading world '{world_id}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "reading world")
+        raise handle_generic_error(e, logger, "reading world")
 
 @router.put("/worlds/{world_id}", response_model=DataResponse[pydantic_models.WorldRead])
 def update_world_db(
@@ -131,7 +131,7 @@ def update_world_db(
     except Exception as e:
         logger.log_error(f"Error updating world '{world_id}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "updating world")
+        raise handle_generic_error(e, logger, "updating world")
 
 @router.delete("/worlds/{world_id}", response_model=DataResponse[pydantic_models.WorldRead])
 def delete_world_db(
@@ -152,7 +152,7 @@ def delete_world_db(
     except Exception as e:
         logger.log_error(f"Error deleting world '{world_id}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "deleting world")
+        raise handle_generic_error(e, logger, "deleting world")
 
 
 # --- World Card Management Endpoints ---
@@ -166,11 +166,11 @@ async def list_worlds_api(
     try:
         worlds = world_state_handler.list_worlds()
         logger.log_step(f"Found {len(worlds)} worlds")
-        return create_list_response(worlds)
+        return create_list_response(worlds, total=len(worlds))
     except Exception as e:
         logger.log_error(f"Error listing worlds: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "listing worlds")
+        raise handle_generic_error(e, logger, "listing worlds")
 
 @router.post("/world-cards/create", response_model=DataResponse[Dict], status_code=201)
 async def create_world_api(
@@ -214,7 +214,7 @@ async def create_world_api(
     except Exception as e:
         logger.log_error(f"Error creating world: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "creating world")
+        raise handle_generic_error(e, logger, "creating world")
 
 @router.delete("/world-cards/{world_name}", response_model=DataResponse[Dict])
 async def delete_world_card_api(
@@ -243,7 +243,7 @@ async def delete_world_card_api(
     except Exception as e:
         logger.log_error(f"Error deleting world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "deleting world")
+        raise handle_generic_error(e, logger, "deleting world")
 
 @router.get("/world-cards/{world_name}/state", response_model=DataResponse[Dict])
 async def get_world_state_api(
@@ -272,7 +272,7 @@ async def get_world_state_api(
     except Exception as e:
         logger.log_error(f"Error getting world state for '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting world state")
+        raise handle_generic_error(e, logger, "getting world state")
 
 @router.post("/world-cards/{world_name}/state", response_model=DataResponse[Dict])
 async def save_world_state_api(
@@ -318,7 +318,7 @@ async def save_world_state_api(
     except Exception as e:
         logger.log_error(f"Error saving world state for '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "saving world state")
+        raise handle_generic_error(e, logger, "saving world state")
 
 @router.get("/worlds/{world_name}/card")
 async def get_world_card_image(
@@ -367,7 +367,7 @@ async def get_world_card_image(
     except Exception as e:
         logger.log_error(f"Error serving world card image for '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "serving world card image")
+        raise handle_generic_error(e, logger, "serving world card image")
 
 @router.post("/worlds/{world_name}/upload-png", response_model=DataResponse[Dict], status_code=201)
 async def upload_world_png(
@@ -412,7 +412,7 @@ async def upload_world_png(
     except Exception as e:
         logger.log_error(f"Error uploading world PNG for '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "uploading world PNG")
+        raise handle_generic_error(e, logger, "uploading world PNG")
 
 
 # --- World Chat Endpoints ---
@@ -446,7 +446,7 @@ async def get_latest_world_chat(
     except Exception as e:
         logger.log_error(f"Error getting latest chat for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting latest chat")
+        raise handle_generic_error(e, logger, "getting latest chat")
 
 @router.post("/world-chat/{world_name}/save", response_model=DataResponse[Dict])
 async def save_world_chat(
@@ -491,7 +491,7 @@ async def save_world_chat(
     except Exception as e:
         logger.log_error(f"Error saving chat for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "saving chat")
+        raise handle_generic_error(e, logger, "saving chat")
 
 @router.get("/world-chat/{world_name}/{chat_id}", response_model=DataResponse[Dict])
 async def get_world_chat(
@@ -525,7 +525,7 @@ async def get_world_chat(
     except Exception as e:
         logger.log_error(f"Error getting chat '{chat_id}' for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting chat")
+        raise handle_generic_error(e, logger, "getting chat")
 
 @router.post("/world-chat/{world_name}/create", response_model=DataResponse[Dict], status_code=201)
 async def create_world_chat(
@@ -557,7 +557,7 @@ async def create_world_chat(
     except Exception as e:
         logger.log_error(f"Error creating new chat for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "creating new chat")
+        raise handle_generic_error(e, logger, "creating new chat")
 
 @router.delete("/world-chat/{world_name}/{chat_id}", response_model=DataResponse[Dict])
 async def delete_world_chat(
@@ -590,7 +590,7 @@ async def delete_world_chat(
     except Exception as e:
         logger.log_error(f"Error deleting chat '{chat_id}' for world '{world_name}': {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "deleting chat")
+        raise handle_generic_error(e, logger, "deleting chat")
 
 # --- Other World Endpoints ---
 
@@ -608,4 +608,4 @@ async def get_world_count(
     except Exception as e:
         logger.log_error(f"Error getting world count: {str(e)}")
         logger.log_error(traceback.format_exc())
-        return handle_generic_error(e, logger, "getting world count")
+        raise handle_generic_error(e, logger, "getting world count")

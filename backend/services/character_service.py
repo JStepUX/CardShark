@@ -57,11 +57,33 @@ def _as_json_str(value):
     return value if isinstance(value, str) else json.dumps(value)
 
 class CharacterService:
-    def __init__(self, db_session: Session, png_handler, settings_manager, logger):
-        self.db = db_session
+    def __init__(self, db_session_generator, png_handler, settings_manager, logger, character_indexing_service=None):
+        self.db_session_generator = db_session_generator
         self.png_handler = png_handler
         self.settings_manager = settings_manager
         self.logger = logger
+
+    def _safe_json_load(self, json_str: Optional[str], default_value: Any, field_name: str, character_uuid: str) -> Any:
+        """
+        Safely loads a JSON string, handling JSONDecodeError.
+        Logs an error and returns a default value if decoding fails.
+        """
+        if not json_str:
+            return default_value
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            self.logger.log_error(
+                f"JSONDecodeError for character {character_uuid}, field '{field_name}': {e}. "
+                f"Malformed data: '{json_str[:100]}...' (truncated). Returning default value."
+            )
+            return default_value
+        except Exception as e:
+            self.logger.log_error(
+                f"Unexpected error loading JSON for character {character_uuid}, field '{field_name}': {e}. "
+                f"Malformed data: '{json_str[:100]}...' (truncated). Returning default value."
+            )
+            return default_value
 
     def _get_character_dirs(self) -> List[str]:
         """Gets character directories from settings or uses a default."""
@@ -168,7 +190,8 @@ class CharacterService:
                 try:
                     file_mod_time = datetime.datetime.fromtimestamp(png_file.stat().st_mtime)
                     
-                    existing_char = self.db.query(CharacterModel).filter(CharacterModel.png_file_path == abs_png_path).first()
+                    with self.db_session_generator() as db:
+                        existing_char = db.query(CharacterModel).filter(CharacterModel.png_file_path == abs_png_path).first()
 
                     if existing_char and existing_char.db_metadata_last_synced_at and existing_char.db_metadata_last_synced_at >= file_mod_time:
                         self.logger.log_info(f"Skipping {abs_png_path}, DB record is up-to-date.")
@@ -228,54 +251,73 @@ class CharacterService:
                         if original_id_for_db and not existing_char.original_character_id:
                              existing_char.original_character_id = original_id_for_db
                         existing_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
-                    else: # Create new
-                        self.logger.log_info(f"Adding new character {final_char_uuid} (Path: {abs_png_path}) to DB.")
-                        new_db_char = CharacterModel(
-                            character_uuid=final_char_uuid,
-                            original_character_id=original_id_for_db,
-                            name=char_name,
-                            png_file_path=abs_png_path,
-                            description=data_section.get("description"),
-                            # ... (populate all other fields) ...
-                            personality = data_section.get("personality"),
-                            scenario = data_section.get("scenario"),
-                            first_mes = data_section.get("first_mes"),
-                            mes_example = data_section.get("mes_example"),
-                            creator_comment = metadata.get("creatorcomment"),
-                            tags = _as_json_str(data_section.get("tags", [])),
-                            spec_version = metadata.get("spec_version"),
-                            extensions_json = _as_json_str(data_section.get("extensions", {})),
-                            db_metadata_last_synced_at = datetime.datetime.utcnow()
-                        )
-                        self.db.add(new_db_char)
-                        # Ensure lore image directory exists for new character
-                        self.db.flush() # <<< ADD THIS LINE HERE
-                        self._ensure_lore_image_directory(final_char_uuid)
-                      # Sync Lore for this character
-                    self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}))
+                    with self.db_session_generator() as db:
+                        if existing_char: # Update existing
+                            self.logger.log_info(f"Updating character {final_char_uuid} (Path: {abs_png_path}) in DB.")
+                            existing_char.character_uuid = final_char_uuid # Ensure UUID is updated if it changed
+                            existing_char.name = char_name
+                            existing_char.description = data_section.get("description")
+                            # ... (update all other fields as in migration script) ...
+                            existing_char.personality = data_section.get("personality")
+                            existing_char.scenario = data_section.get("scenario")
+                            existing_char.first_mes = data_section.get("first_mes")
+                            existing_char.mes_example = data_section.get("mes_example")
+                            existing_char.creator_comment = metadata.get("creatorcomment")
+                            existing_char.tags = _as_json_str(data_section.get("tags", []))
+                            existing_char.spec_version = metadata.get("spec_version")
+                            existing_char.extensions_json = _as_json_str(data_section.get("extensions", {}))
+                            if original_id_for_db and not existing_char.original_character_id:
+                                existing_char.original_character_id = original_id_for_db
+                            existing_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
+                            db.add(existing_char) # Mark as dirty
+                        else: # Create new
+                            self.logger.log_info(f"Adding new character {final_char_uuid} (Path: {abs_png_path}) to DB.")
+                            new_db_char = CharacterModel(
+                                character_uuid=final_char_uuid,
+                                original_character_id=original_id_for_db,
+                                name=char_name,
+                                png_file_path=abs_png_path,
+                                description=data_section.get("description"),
+                                # ... (populate all other fields) ...
+                                personality = data_section.get("personality"),
+                                scenario = data_section.get("scenario"),
+                                first_mes = data_section.get("first_mes"),
+                                mes_example = data_section.get("mes_example"),
+                                creator_comment = metadata.get("creatorcomment"),
+                                tags = _as_json_str(data_section.get("tags", [])),
+                                spec_version = metadata.get("spec_version"),
+                                extensions_json = _as_json_str(data_section.get("extensions", {})),
+                                db_metadata_last_synced_at = datetime.datetime.utcnow()
+                            )
+                            db.add(new_db_char)
+                            db.flush() # Necessary to get ID for new entries
+                            self._ensure_lore_image_directory(final_char_uuid)
+                        # Sync Lore for this character
+                        self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)
+                        db.commit() # Commit changes for this character
 
                 except Exception as e:
                     self.logger.log_error(f"Failed to process/sync PNG {abs_png_path}: {e} - {traceback.format_exc()}")
                     # Rollback any changes for this character to avoid partial state
-                    self.db.rollback()
                     # Continue processing other characters
         
         # Prune characters from DB that no longer exist on disk
         # This is a destructive operation, ensure it's desired.
         # Could be made optional via a setting.
-        for db_char_path_tuple in self.db.query(CharacterModel.png_file_path, CharacterModel.character_uuid).all():
-            db_char_path = db_char_path_tuple[0]
-            db_char_uuid = db_char_path_tuple[1]
-            if db_char_path not in all_png_files_on_disk:
-                self.logger.log_info(f"Character PNG {db_char_path} (UUID: {db_char_uuid}) no longer exists. Removing from DB.")
-                char_to_delete = self.db.query(CharacterModel).filter(CharacterModel.character_uuid == db_char_uuid).first()
-                if char_to_delete:
-                    self.db.delete(char_to_delete) # Cascade should handle related lore if set up
+        with self.db_session_generator() as db:
+            for db_char_path_tuple in db.query(CharacterModel.png_file_path, CharacterModel.character_uuid).all():
+                db_char_path = db_char_path_tuple[0]
+                db_char_uuid = db_char_path_tuple[1]
+                if db_char_path not in all_png_files_on_disk:
+                    self.logger.log_info(f"Character PNG {db_char_path} (UUID: {db_char_uuid}) no longer exists. Removing from DB.")
+                    char_to_delete = db.query(CharacterModel).filter(CharacterModel.character_uuid == db_char_uuid).first()
+                    if char_to_delete:
+                        db.delete(char_to_delete) # Cascade should handle related lore if set up
+            db.commit()
 
-        self.db.commit()
         self.logger.log_info("Character directory synchronization finished.")
 
-    def _sync_character_lore(self, character_uuid: str, character_book_data: Optional[Dict]):
+    def _sync_character_lore(self, character_uuid: str, character_book_data: Optional[Dict], db: Session):
         """
         Synchronizes lore for a given character.
         Creates, updates, or deletes lore book and entries in the DB
@@ -284,7 +326,7 @@ class CharacterService:
         self.logger.log_info(f"Syncing lore for character_uuid: {character_uuid}")
 
         # Ensure the character exists in DB before trying to associate lore
-        character_in_db = self.db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
+        character_in_db = db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
         if not character_in_db:
             self.logger.log_error(f"Cannot sync lore. Character {character_uuid} not found in DB.")
             return
@@ -292,11 +334,11 @@ class CharacterService:
         # Case 1: No character_book_data provided, or it's not a dictionary (e.g., None or empty)
         if not character_book_data or not isinstance(character_book_data, dict):
             self.logger.log_info(f"No valid character_book data for {character_uuid}. Ensuring no lore exists in DB.")
-            existing_lore_book = self.db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
+            existing_lore_book = db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
             if existing_lore_book:
                 self.logger.log_info(f"Deleting existing lore book (ID: {existing_lore_book.id}) and its entries for {character_uuid}.")
                 # Cascade delete should handle LoreEntry items due to relationship in models.py
-                self.db.delete(existing_lore_book)
+                db.delete(existing_lore_book)
             return # Nothing more to do
 
         # Case 2: Valid character_book_data provided
@@ -307,23 +349,23 @@ class CharacterService:
             entries_data = []
 
         # Find or create the LoreBook for this character
-        lore_book = self.db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
+        lore_book = db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
         if not lore_book:
             self.logger.log_info(f"Creating new lore book for {character_uuid} with name '{lore_book_name}'.")
             lore_book = LoreBookModel(character_uuid=character_uuid, name=lore_book_name)
-            self.db.add(lore_book)
-            self.db.flush() # Necessary to get lore_book.id for new entries
+            db.add(lore_book)
+            db.flush() # Necessary to get lore_book.id for new entries
         elif lore_book.name != lore_book_name:
             self.logger.log_info(f"Updating lore book name for {character_uuid} from '{lore_book.name}' to '{lore_book_name}'.")
             lore_book.name = lore_book_name
-            self.db.add(lore_book) # Mark as dirty        # Sync LoreEntries: Clear existing entries and recreate them
+            db.add(lore_book) # Mark as dirty        # Sync LoreEntries: Clear existing entries and recreate them
         # Since JSON IDs are not unique across characters, we need to clear and recreate
         # Delete all existing entries for this lore book
         if lore_book.entries:
             self.logger.log_info(f"Clearing {len(lore_book.entries)} existing lore entries for book {lore_book.id} (Char: {character_uuid})")
             for entry in lore_book.entries:
-                self.db.delete(entry)
-            self.db.flush()  # Ensure deletions are processed before creating new entries        # Create new entries from the character book data
+                db.delete(entry)
+            db.flush()  # Ensure deletions are processed before creating new entries        # Create new entries from the character book data
         for entry_data in entries_data:
             if not isinstance(entry_data, dict):
                 self.logger.log_warning(f"Skipping non-dict lore entry item for {character_uuid}: {entry_data}")
@@ -350,87 +392,90 @@ class CharacterService:
             # Create new entry (let DB auto-generate the primary key)
             self.logger.log_info(f"Creating new lore entry (JSON ID: {original_json_id}) for book {lore_book.id}")
             new_db_entry = LoreEntryModel(**lore_entry_model_data)
-            self.db.add(new_db_entry)
-        # self.db.commit() will be called by the calling function (e.g. sync_character_directories or save_uploaded_character_card)
+            db.add(new_db_entry)
+        # self.db.commit() will be called by the calling function (e.g. sync_character_directories or save_uploaded_character_card)    def get_character_by_uuid(self, character_uuid: str, db: Session) -> Optional[CharacterModel]:
+        return db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
 
+    def get_character_by_path(self, png_file_path: str, db: Session) -> Optional[CharacterModel]:
+        return db.query(CharacterModel).filter(CharacterModel.png_file_path == str(Path(png_file_path).resolve())).first()
 
-    def get_character_by_uuid(self, character_uuid: str) -> Optional[CharacterModel]:
-        return self.db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
-
-    def get_character_by_path(self, png_file_path: str) -> Optional[CharacterModel]:
-        return self.db.query(CharacterModel).filter(CharacterModel.png_file_path == str(Path(png_file_path).resolve())).first()
-
-    def get_all_characters(self, skip: int = 0, limit: int = 100) -> List[CharacterModel]:
-        return self.db.query(CharacterModel).offset(skip).limit(limit).all()
+    def get_all_characters(self, skip: int = 0, limit: Optional[int] = None) -> List[CharacterModel]:
+        with self.db_session_generator() as db:
+            query = db.query(CharacterModel).offset(skip)
+            if limit is not None:
+                query = query.limit(limit)
+            return query.all()
 
     def count_all_characters(self) -> int:
-        return self.db.query(CharacterModel).count()
+        with self.db_session_generator() as db:
+            return db.query(CharacterModel).count()
 
     def update_character(self, character_uuid: str, character_data: Dict[str, Any], write_to_png: bool = True) -> Optional[CharacterModel]:
         """Updates a character in the DB and optionally writes back to PNG."""
-        db_char = self.get_character_by_uuid(character_uuid)
-        if not db_char:
-            return None
+        with self.db_session_generator() as db:
+            db_char = self.get_character_by_uuid(character_uuid, db)
+            if not db_char:
+                return None
 
-        # Update DB fields
-        for key, value in character_data.items():
-            if hasattr(db_char, key):
-                # Special handling for JSON fields
-                if key == "tags":
-                    setattr(db_char, key, _as_json_str(value if value is not None else []))
-                elif key == "extensions_json":
-                    setattr(db_char, key, _as_json_str(value if value is not None else {}))
-                else:
-                    setattr(db_char, key, value)
-        db_char.updated_at = datetime.datetime.utcnow()
-        db_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
+            # Update DB fields
+            for key, value in character_data.items():
+                if hasattr(db_char, key):
+                    # Special handling for JSON fields
+                    if key == "tags":
+                        setattr(db_char, key, _as_json_str(value if value is not None else []))
+                    elif key == "extensions_json":
+                        setattr(db_char, key, _as_json_str(value if value is not None else {}))
+                    else:
+                        setattr(db_char, key, value)
+            db_char.updated_at = datetime.datetime.utcnow()
+            db_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
 
         # Sync lore if provided in character_data
-        if "character_book" in character_data and isinstance(character_data["character_book"], dict):
-            self._sync_character_lore(character_uuid, character_data["character_book"])
+            if "character_book" in character_data and isinstance(character_data["character_book"], dict):
+                self._sync_character_lore(character_uuid, character_data["character_book"], db)
 
-        if write_to_png:
-            # Reconstruct metadata for PNG
-            png_metadata_to_write = {
-                "spec": "chara_card_v2", # Assuming v2
-                "spec_version": db_char.spec_version or "2.0",
-                "data": {
-                    "name": db_char.name,
-                    "description": db_char.description,
-                    "personality": db_char.personality,
-                    "scenario": db_char.scenario,
-                    "first_mes": db_char.first_mes,
-                    "mes_example": db_char.mes_example,
-                    "character_uuid": db_char.character_uuid, # Ensure this is written
-                    "tags": json.loads(db_char.tags) if db_char.tags else [],
-                    "extensions": json.loads(db_char.extensions_json) if db_char.extensions_json else {},
-                    # TODO: Reconstruct character_book for PNG from DB
-                },
-                "creatorcomment": db_char.creator_comment
-            }
-            # Add character_book reconstruction here
-            lore_book = self.db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
-            if lore_book:
-                entries_for_png = []
-                for entry in lore_book.entries:
-                    entry_dict = {
-                        "id": entry.id,
-                        "keys": json.loads(entry.keys_json) if entry.keys_json else [],
-                        "secondary_keys": json.loads(entry.secondary_keys_json) if entry.secondary_keys_json else [],
-                        "content": entry.content,
-                        "comment": entry.comment,
-                        "enabled": entry.enabled,
-                        "position": entry.position,
-                        "selective": entry.selective,
-                        "insertion_order": entry.insertion_order,
-                        "image_uuid": entry.image_uuid,
-                        "extensions": json.loads(entry.extensions_json) if entry.extensions_json else {}
-                    }
-                    entries_for_png.append(entry_dict)
-                png_metadata_to_write["data"]["character_book"] = {
-                    "name": lore_book.name,
-                    "entries": entries_for_png
+            if write_to_png:
+                # Reconstruct metadata for PNG
+                png_metadata_to_write = {
+                    "spec": "chara_card_v2", # Assuming v2
+                    "spec_version": db_char.spec_version or "2.0",
+                    "data": {
+                        "name": db_char.name,
+                        "description": db_char.description,
+                        "personality": db_char.personality,
+                        "scenario": db_char.scenario,
+                        "first_mes": db_char.first_mes,
+                        "mes_example": db_char.mes_example,
+                        "character_uuid": db_char.character_uuid, # Ensure this is written
+                        "tags": self._safe_json_load(db_char.tags, [], "tags", character_uuid),
+                        "extensions": self._safe_json_load(db_char.extensions_json, {}, "extensions_json", character_uuid),
+                        # TODO: Reconstruct character_book for PNG from DB
+                    },
+                    "creatorcomment": db_char.creator_comment
                 }
+                # Add character_book reconstruction here
+                lore_book = db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
+                if lore_book:
+                    entries_for_png = []
+                    for entry in lore_book.entries:
+                        entry_dict = {
+                            "id": entry.id,
+                            "keys": self._safe_json_load(entry.keys_json, [], "keys_json", character_uuid),
+                            "secondary_keys": self._safe_json_load(entry.secondary_keys_json, [], "secondary_keys_json", character_uuid),
+                            "content": entry.content,
+                            "comment": entry.comment,
+                            "enabled": entry.enabled,
+                            "position": entry.position,
+                            "selective": entry.selective,
+                            "insertion_order": entry.insertion_order,
+                            "image_uuid": entry.image_uuid,
+                            "extensions": self._safe_json_load(entry.extensions_json, {}, "lore_entry_extensions_json", character_uuid)
+                        }
+                        entries_for_png.append(entry_dict)
+                    png_metadata_to_write["data"]["character_book"] = {
+                        "name": lore_book.name,
+                        "entries": entries_for_png
+                    }
 
             try:
                 self.png_handler.write_metadata_to_png(db_char.png_file_path, png_metadata_to_write)
@@ -439,41 +484,42 @@ class CharacterService:
                 self.logger.log_error(f"Failed to write metadata to PNG {db_char.png_file_path}: {e}")
                 # Decide if DB commit should proceed if PNG write fails. For now, it will.
 
-        self.db.commit()
-        self.db.refresh(db_char)
-        return db_char
+            db.commit()
+            db.refresh(db_char)
+            return db_char
 
     def create_character(self, character_data: Dict[str, Any], png_file_path_str: str, write_to_png: bool = True) -> CharacterModel:
         """Creates a new character in DB and saves a new PNG."""
-        abs_png_path = str(Path(png_file_path_str).resolve())
-        
-        # Ensure character_uuid is present, generate if not
-        char_uuid = character_data.get("character_uuid", str(uuid.uuid4()))
-        character_data["character_uuid"] = char_uuid # Ensure it's in the data for PNG
-        
-        db_char = CharacterModel(
-            character_uuid=char_uuid,
-            png_file_path=abs_png_path,
-            name=character_data.get("name", Path(abs_png_path).stem),
-            description=character_data.get("description"),
-            personality=character_data.get("personality"),
-            scenario=character_data.get("scenario"),
-            first_mes=character_data.get("first_mes"),
-            mes_example=character_data.get("mes_example"),
-            creator_comment=character_data.get("creatorcomment"),
-            tags=_as_json_str(character_data.get("tags", [])),
-            spec_version=character_data.get("spec_version", "2.0"),
-            extensions_json=_as_json_str(character_data.get("extensions", {})),
-            db_metadata_last_synced_at=datetime.datetime.utcnow(),
-            updated_at=datetime.datetime.utcnow(),
-            created_at=datetime.datetime.utcnow()
-        )
-        self.db.add(db_char)
-        self.db.flush() # Ensure the row is visible to subsequent queries
-        
-        # Handle lore book from character_data if present
-        if "character_book" in character_data and isinstance(character_data["character_book"], dict):
-            self._sync_character_lore(char_uuid, character_data["character_book"])
+        with self.db_session_generator() as db:
+            abs_png_path = str(Path(png_file_path_str).resolve())
+            
+            # Ensure character_uuid is present, generate if not
+            char_uuid = character_data.get("character_uuid", str(uuid.uuid4()))
+            character_data["character_uuid"] = char_uuid # Ensure it's in the data for PNG
+            
+            db_char = CharacterModel(
+                character_uuid=char_uuid,
+                png_file_path=abs_png_path,
+                name=character_data.get("name", Path(abs_png_path).stem),
+                description=character_data.get("description"),
+                personality=character_data.get("personality"),
+                scenario=character_data.get("scenario"),
+                first_mes=character_data.get("first_mes"),
+                mes_example=character_data.get("mes_example"),
+                creator_comment=character_data.get("creatorcomment"),
+                tags=_as_json_str(character_data.get("tags", [])),
+                spec_version=character_data.get("spec_version", "2.0"),
+                extensions_json=_as_json_str(character_data.get("extensions", {})),
+                db_metadata_last_synced_at=datetime.datetime.utcnow(),
+                updated_at=datetime.datetime.utcnow(),
+                created_at=datetime.datetime.utcnow()
+            )
+            db.add(db_char)
+            db.flush() # Ensure the row is visible to subsequent queries
+            
+            # Handle lore book from character_data if present
+            if "character_book" in character_data and isinstance(character_data["character_book"], dict):
+                self._sync_character_lore(char_uuid, character_data["character_book"], db)
 
         if write_to_png:
             # Prepare metadata for PNG (similar to update_character)
@@ -488,8 +534,8 @@ class CharacterService:
                     "first_mes": db_char.first_mes,
                     "mes_example": db_char.mes_example,
                     "character_uuid": db_char.character_uuid,
-                    "tags": json.loads(db_char.tags) if db_char.tags else [],
-                    "extensions": json.loads(db_char.extensions_json) if db_char.extensions_json else {},
+                    "tags": self._safe_json_load(db_char.tags, [], "tags", db_char.character_uuid),
+                    "extensions": self._safe_json_load(db_char.extensions_json, {}, "extensions_json", db_char.character_uuid),
                 },
                 "creatorcomment": db_char.creator_comment
             }
@@ -508,9 +554,9 @@ class CharacterService:
                 self.logger.log_error(f"Failed to create/write PNG {abs_png_path}: {e}")
                 # If PNG write fails, should we roll back DB? For now, DB commit will proceed.
         
-        self.db.commit()
-        self.db.refresh(db_char)
-        return db_char
+            db.commit()
+            db.refresh(db_char)
+            return db_char
 
     def delete_character(self, character_uuid: str, delete_png_file: bool = False) -> bool:
         """Deletes a character from DB and optionally its PNG file."""

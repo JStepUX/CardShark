@@ -365,9 +365,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         
         if (!response.ok) throw new Error('Failed to load settings from server.');
         const data = await response.json();
-        if (data.success && data.settings.character_directory) {
-          await loadFromDirectory(data.settings.character_directory);
-        } else if (data.success && !data.settings.character_directory) {
+        if (data.success && data.data && data.data.settings && data.data.settings.character_directory) {
+          await loadFromDirectory(data.data.settings.character_directory);
+        } else if (data.success && data.data && data.data.settings && !data.data.settings.character_directory) {
           setError("Character directory not set in Settings.");
           setIsLoading(false);
         } else {
