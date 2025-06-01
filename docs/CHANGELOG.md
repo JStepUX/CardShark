@@ -1,16 +1,19 @@
 # Changelog
 
-## [UNRELEASED] / [Version X.Y.Z] - YYYY-MM-DD
-
-### Added
-- New feature X.
-- New endpoint Y.
+## [UNRELEASED] - 2025-05-31
 
 ### Changed
-- Updated behavior of Z.
+- Updated `backend/main.py` to use `0.0.0.0` as the default host, allowing access from the local network.
+- Updated `frontend/vite.config.ts` to set the development server host to `0.0.0.0`, making the frontend accessible on the local network.
+- Updated `start.py` to run the backend Uvicorn server on `0.0.0.0` by default.
+- Enhanced `build.py` to include `aiofiles` and various backend modules/subdirectories (schemas, services, and specific endpoints like npc_room_assignment, room) in PyInstaller's `hidden_imports` for more robust executable bundling.
+- Reorganized `docs/README.md`: moved the image gallery to the top and added/updated links to `docs/cursorrules.md` in "Contribution Workflow" and "Additional Resources".
+
+### Added
+- Placeholder for new features if any.
 
 ### Fixed
-- Resolved bug A in component B.
+- Placeholder for bug fixes if any.
 
 ---
 

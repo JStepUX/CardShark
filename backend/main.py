@@ -14,6 +14,15 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from threading import Timer
 
+# Force import HTTP modules for PyInstaller
+try:
+    import h11
+    import httptools
+    import uvicorn.protocols.http.h11_impl
+    import uvicorn.protocols.http.httptools_impl
+except ImportError as e:
+    print(f"Warning: Failed to import HTTP modules: {e}")
+
 # FastAPI imports
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Query, APIRouter
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse, RedirectResponse, PlainTextResponse
@@ -694,7 +703,7 @@ async def get_uploaded_image(filename: str):
 def main():
     """Main entry point for the application."""
     parser = argparse.ArgumentParser(description="CardShark Character Card Editor")
-    parser.add_argument("-host", "--host", default="127.0.0.1", help="Host to run the server on")
+    parser.add_argument("-host", "--host", default="0.0.0.0", help="Host to run the server on") # Changed default from "127.0.0.1"
     parser.add_argument("-port", "--port", type=int, default=9696, help="Port to run the server on")
     parser.add_argument("--batch", action="store_true", help="Run in batch processing mode (no GUI)")
     args = parser.parse_args()
@@ -703,16 +712,18 @@ def main():
         from backend.batch_converter import run_batch_processing
         run_batch_processing()
         return
-    
-    # Log startup information
+      # Log startup information
     host = os.environ.get("CARDSHARK_HOST", args.host)
     port = int(os.environ.get("CARDSHARK_PORT", args.port))
     logger.log_step(f"Starting CardShark server at http://{host}:{port}")
-    logger.log_step(f"To access the UI, open your browser and go to: http://{host}:{port}")
     
-    # Open the browser after a short delay
+    # Always show localhost URL for local access
+    browser_url = f"http://localhost:{port}"
+    logger.log_step(f"To access the UI, open your browser and go to: {browser_url}")
+    
+    # Open the browser after a short delay - always use localhost for browser
     def open_browser():
-        webbrowser.open(f"http://{host}:{port}")
+        webbrowser.open(browser_url)
     
     Timer(1, open_browser).start()
     

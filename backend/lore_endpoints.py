@@ -6,7 +6,6 @@ import uuid
 from fastapi import APIRouter, Request, Depends, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional
-import aiofiles
 import urllib.parse
 from pathlib import Path
 
@@ -105,9 +104,9 @@ async def save_lore_image(
     
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(file_path, 'wb') as out_file:
-            content = await image_file.read()
-            await out_file.write(content)
+        content = await image_file.read()
+        with open(file_path, 'wb') as out_file:
+            out_file.write(content)
         logger.log_info(f"Lore image saved: {file_path}")
         return image_uuid_val, str(file_path)
     except Exception as e:

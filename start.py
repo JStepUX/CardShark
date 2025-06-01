@@ -159,7 +159,7 @@ def run_backend():
         # Run uvicorn with correct module path
         uvicorn.run(
             "main:app",
-            host="127.0.0.1",
+            host="0.0.0.0",  # Changed from "127.0.0.1"
             port=BACKEND_PORT,
             reload=False
         )

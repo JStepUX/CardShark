@@ -15,7 +15,7 @@ import platform
 from pathlib import Path
 import subprocess
 from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import JSONResponse
 
 from backend.koboldcpp_manager import manager
 
@@ -280,9 +280,11 @@ async def download_progress_generator(request: Request) -> AsyncGenerator[str, N
 
 @router.post("/download")
 async def download_koboldcpp(request: Request):
-    """Download KoboldCPP with streaming progress updates"""
+    """Download KoboldCPP with simple response (streaming removed for PyInstaller compatibility)"""
     try:
-        return EventSourceResponse(download_progress_generator(request))
+        # Simple download without streaming progress
+        # For PyInstaller compatibility, we'll just return a simple status
+        return JSONResponse({"status": "Download functionality temporarily disabled for executable version"})
     except Exception as e:
         logger.error(f"Error in download endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Download error: {str(e)}")

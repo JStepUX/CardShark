@@ -19,6 +19,7 @@ export default defineConfig({
   server: {
     port: 6969,
     strictPort: true,
+    host: '0.0.0.0', // Added to expose on local network
     proxy: {
       '/api': {
         target: 'http://localhost:9696',

@@ -1,3 +1,16 @@
+CardShark is a PNG metadata editor built primarily by AI assistants.
+
+![cs_gallery](https://github.com/user-attachments/assets/4ab24c52-3a9c-4c96-9c30-77ed822f677b)
+![cs_charinfo](https://github.com/user-attachments/assets/79bd551c-ab8f-42e9-a1eb-9a7fddb2eb8b)
+![cs_compare](https://github.com/user-attachments/assets/c757f693-5f27-42c3-a4a3-f54af63bb53d)
+![cs_greetings](https://github.com/user-attachments/assets/3f484ba5-2ac2-4511-a61e-3d7ff08838ec)
+![cs_lore](https://github.com/user-attachments/assets/b83ecf38-52f8-433f-8cb7-392d803385c4)
+![cs_chat](https://github.com/user-attachments/assets/c1f9999d-89c5-420a-9f7d-bb7f9e74dac0)
+![cs_api](https://github.com/user-attachments/assets/3d091e6b-770d-4c8b-881e-b0d2a2a3b121)
+![cs_templates](https://github.com/user-attachments/assets/a54b277d-8a38-4fbc-bc1a-3f23406b1aeb)
+![cs_prompts](https://github.com/user-attachments/assets/60cd72e6-dcf5-4a2f-b821-342d8c5e030e)
+
+
 # CardShark Project Documentation
 
 ## Project Overview
@@ -215,7 +228,7 @@ Key client-side routes defined in [`src/App.tsx`](frontend/src/App.tsx:1) or sim
 ## Contribution Workflow
 1.  Clone the repository and set up the development environment as described above.
 2.  Create a new branch for your feature or bug fix.
-3.  Follow the coding standards and development guidelines.
+3.  Follow the coding standards and development guidelines (for AI agent specific rules, refer to [Cursor Rules](docs/cursorrules.md)).
 4.  Write or update relevant documentation for your changes.
 5.  Test your changes thoroughly (unit tests, integration tests, manual testing).
 6.  Run linters and formatters: `npm run lint` (frontend), `black .` and `isort .` (backend).
@@ -231,18 +244,8 @@ Key client-side routes defined in [`src/App.tsx`](frontend/src/App.tsx:1) or sim
 -   **Templates Guide**: See [`docs/templates_README.md`](docs/templates_README.md).
 -   **User Flows**: See [`docs/# CardShark User Flows.md`](docs/%23%20CardShark%20User%20Flows.md).
 -   **Frontend Code Review (State)**: See [`docs/frontend_code_review_current_state.md`](docs/frontend_code_review_current_state.md).
+-   **Cursor Rules**: See [`docs/cursorrules.md`](docs/cursorrules.md).
 
 ---
 This document serves as a comprehensive guide to the CardShark repository. For further assistance, refer to the linked detailed documentation or contact project maintainers.
 
-CardShark is a PNG metadata editor built primarily by AI assistants.
-
-![cs_gallery](https://github.com/user-attachments/assets/4ab24c52-3a9c-4c96-9c30-77ed822f677b)
-![cs_charinfo](https://github.com/user-attachments/assets/79bd551c-ab8f-42e9-a1eb-9a7fddb2eb8b)
-![cs_compare](https://github.com/user-attachments/assets/c757f693-5f27-42c3-a4a3-f54af63bb53d)
-![cs_greetings](https://github.com/user-attachments/assets/3f484ba5-2ac2-4511-a61e-3d7ff08838ec)
-![cs_lore](https://github.com/user-attachments/assets/b83ecf38-52f8-433f-8cb7-392d803385c4)
-![cs_chat](https://github.com/user-attachments/assets/c1f9999d-89c5-420a-9f7d-bb7f9e74dac0)
-![cs_api](https://github.com/user-attachments/assets/3d091e6b-770d-4c8b-881e-b0d2a2a3b121)
-![cs_templates](https://github.com/user-attachments/assets/a54b277d-8a38-4fbc-bc1a-3f23406b1aeb)
-![cs_prompts](https://github.com/user-attachments/assets/60cd72e6-dcf5-4a2f-b821-342d8c5e030e)

@@ -10,7 +10,24 @@ import zipfile
 import shutil
 import time
 import json
-import psutil
+try:
+    import psutil
+except ImportError as e:
+    print(f"Failed to import psutil: {e}")
+    # Create a minimal mock for psutil for executable mode
+    class MockPsutil:
+        def __init__(self):
+            pass
+        def process_iter(self, *args, **kwargs):
+            return []
+        def pid_exists(self, pid):
+            return False
+        def Process(self, pid=None):
+            raise Exception("psutil not available in executable mode")
+        def Popen(self, *args, **kwargs):
+            import subprocess
+            return subprocess.Popen(*args, **kwargs)
+    psutil = MockPsutil()
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable
 import threading

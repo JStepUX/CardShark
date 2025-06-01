@@ -267,8 +267,7 @@ koboldcpp_dir.mkdir(exist_ok=True)
 all_datas = frontend_datas + backend_datas  # removed koboldcpp_datas
 
 # Verified backend modules that exist in your project
-hidden_imports = [
-    # Core FastAPI and dependencies
+hidden_imports = [    # Core FastAPI and dependencies
     'fastapi',
     'starlette',
     'pydantic',
@@ -282,11 +281,29 @@ hidden_imports = [
     'uvicorn.protocols',
     'uvicorn.protocols.http',
     'uvicorn.protocols.http.auto',
+    'uvicorn.protocols.http.h11_impl',
+    'uvicorn.protocols.http.httptools_impl',
     'uvicorn.lifespan',
     'uvicorn.lifespan.on',
     'uvicorn.protocols.websockets.auto',
     'uvicorn.supervisors',
-    'uvicorn.supervisors.multiprocess',      # Backend modules - only include ones that exist
+    'uvicorn.supervisors.multiprocess',
+    
+    # HTTP libraries
+    'h11',
+    'h11._connection',
+    'h11._events',
+    'h11._state',
+    'h11._util',
+    'httptools',
+    'httptools.parser',
+    'httptools.parser.errors',# Process and file management
+    'psutil',
+    'psutil._psutil_windows',
+    'psutil._pswindows',
+    'psutil._psplatform',
+    
+    # Backend modules - only include ones that exist
     'backend',
     'backend.api_handler',
     'backend.api_provider_adapters',
@@ -295,56 +312,67 @@ hidden_imports = [
     'backend.batch_converter',
     'backend.character_validator',
     'backend.chat_handler',
-    'backend.content_filter_manager',  # Add content filter manager
-    'backend.content_filter_endpoints', # Add content filter endpoints
-    'backend.database',                 # Add database module
-    'backend.database_migrations',      # Add database migration system
+    'backend.content_filter_manager',
+    'backend.content_filter_endpoints',
+    'backend.database',
+    'backend.database_migrations',
     'backend.errors',
     'backend.koboldcpp_manager',
     'backend.koboldcpp_handler',
     'backend.log_manager',
     'backend.lore_handler',
+    'backend.lore_endpoints',
     'backend.network_server',
     'backend.png_handler',
     'backend.png_debug_handler',
     'backend.png_metadata_handler',
     'backend.room_card_endpoint',
     'backend.settings_manager',
-    'backend.sql_models',               # Add SQL models
+    'backend.sql_models',
     'backend.template_handler',
-    'backend.test_module',
-    'backend.test_restructure', # Added missing test module
     'backend.world_state_manager',
+    'backend.schemas', # Added
       # All endpoint files
     'backend.background_endpoints',
     'backend.character_endpoints',
     'backend.chat_endpoints',
-    'backend.content_filter_endpoints',  # Add content filter endpoints
+    'backend.content_filter_endpoints',
     'backend.lore_endpoints',
+    'backend.npc_room_assignment_endpoints', # Added
     'backend.settings_endpoints',
     'backend.template_endpoints',
     'backend.user_endpoints',
     'backend.world_chat_endpoints',
     'backend.world_endpoints',
+    'backend.room_endpoints', # Added based on file listing, was missing
     
     # Handlers subdirectory
     'backend.handlers',
     'backend.handlers.world_card_chat_handler',
     'backend.handlers.world_state_handler',
     'backend.handlers.background_api',
-    'backend.handlers.world_chat_handler', # Added missing chat handler
+    'backend.handlers.world_chat_handler',
+
+    # Services subdirectory
+    'backend.services.character_indexing_service', # Added based on file listing, was missing
+    'backend.services.character_service', # Added based on file listing, was missing
+    'backend.services.chat_service', # Added
+    'backend.services.npc_room_assignment_service', # Added
+    'backend.services.room_service', # Added
+    'backend.services.world_service', # Added
 
     # Models, Utils, and WorldCards subdirectories
     'backend.models',
-    'backend.models.character_data',      # Ensure specific model is included
-    'backend.models.world_state',         # Ensure specific model is included
+    'backend.models.character_data',
+    'backend.models.world_state',
     'backend.utils',
-    'backend.utils.location_extractor',   # Ensure specific util is included
-    'backend.utils.user_dirs',            # Ensure specific util is included
-    'backend.utils.worldcard_location_utils', # Ensure specific util is included
+    'backend.utils.location_extractor',
+    'backend.utils.user_dirs',
+    'backend.utils.worldcard_location_utils',
     'backend.worldcards',
-    'backend.worldcards.errors',          # Ensure specific worldcard module is included
-    'backend.worldcards.storage',         # Ensure specific worldcard module is included    # Important dependencies
+    'backend.worldcards.errors',    'backend.worldcards.storage',    
+    
+    # Other important dependencies
     'email_validator',
     'typing_extensions',
     'packaging',
@@ -360,7 +388,7 @@ hidden_imports = [
 ]
 
 # Add collections using collect_submodules
-for module in ['PIL', 'requests', 'fastapi', 'starlette', 'pydantic', 'uvicorn', 'sqlalchemy']:
+for module in ['PIL', 'requests', 'fastapi', 'starlette', 'pydantic', 'uvicorn', 'sqlalchemy', 'psutil', 'h11', 'httptools']:
     hidden_imports.extend(collect_submodules(module))
 
 a = Analysis(
@@ -369,9 +397,9 @@ a = Analysis(
     binaries=[],
     datas=all_datas,
     hiddenimports=hidden_imports,
-    hookspath=[],
+    hookspath=[os.path.abspath('.')],
     hooksconfig={},
-    runtime_hooks=['hook-clean_old_mei.py'],  # <-- Added runtime hook here
+    runtime_hooks=['hook-clean_old_mei.py', 'rthook_uvicorn_imports.py'],  # <-- Added runtime hooks
     excludes=['tkinter'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
