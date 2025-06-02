@@ -177,19 +177,7 @@ class SettingsManager:
         try:
             # Make a deep copy to avoid modifying the live settings object during processing
             import copy
-            settings_copy = copy.deepcopy(settings_to_save)
-
-            # Convert Python booleans to JSON booleans
-            def convert_booleans(obj):
-                if isinstance(obj, dict):
-                    return {k: convert_booleans(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [convert_booleans(x) for x in obj]
-                elif isinstance(obj, bool):
-                    return bool(obj)  # Ensure it's a Python boolean
-                return obj
-
-            # Convert Python booleans to JSON booleans (can be removed if not strictly needed)
+            settings_copy = copy.deepcopy(settings_to_save)            # Convert Python booleans to JSON booleans
             def convert_booleans(obj):
                 if isinstance(obj, dict):
                     return {k: convert_booleans(v) for k, v in obj.items()}

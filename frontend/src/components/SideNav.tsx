@@ -14,8 +14,8 @@ import {
   Settings as SettingsIcon,
   Globe
 } from 'lucide-react';
+import { useOptionalChat } from '../hooks/useOptionalProviders';
 import { useCharacter } from '../contexts/CharacterContext';
-import { useChat } from '../contexts/ChatContext'; // Import useChat
 // Remove View import if no longer needed elsewhere
 // import { View } from '../types/navigation';
 import DropdownMenu from './DropDownMenu';
@@ -78,12 +78,13 @@ const SideNav: React.FC<SideNavProps> = ({
   onImageChange
 }) => {
 const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter(); // Add setters
-const {
-  availablePreviewImages,
-  currentPreviewImageIndex,
-  navigateToPreviewImage
-} = useChat();
+const chatContext = useOptionalChat();
 const [isCollapsed, setIsCollapsed] = useState(false);
+
+// Extract chat preview image data with fallbacks
+const availablePreviewImages = chatContext?.availablePreviewImages || undefined;
+const currentPreviewImageIndex = chatContext?.currentPreviewImageIndex || 0;
+const navigateToPreviewImage = chatContext?.navigateToPreviewImage || (() => {});
 
 // Determine the image URL to display based on context, prioritizing lore images if available
 const displayImageUrl = availablePreviewImages && availablePreviewImages.length > 0

@@ -162,7 +162,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const isFirstLoad = useRef(true);
 
   // Context hooks
-  const { setCharacterData, setImageUrl, setIsLoading: setPrimaryLoading } = useCharacter();
+  const { 
+    setCharacterData, 
+    setImageUrl, 
+    setIsLoading: setPrimaryLoading,
+    characterCache,
+    setCharacterCache,
+    invalidateCharacterCache
+  } = useCharacter();
   const { setSecondaryCharacterData, setSecondaryImageUrl, setSecondaryIsLoading } = useComparison();
 
   // Ref for the scrollable container div
@@ -239,7 +246,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   }, [loadMore, isLoading, isLoadingMore, displayedCount, filteredCharacters.length]);
 
-  // Load characters with database-first optimization
+  // Load characters with database-first optimization and persistent cache
   const loadFromDirectory = useCallback(async (directory: string) => {
     try {
       setIsLoading(true);
@@ -249,6 +256,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setDisplayedCount(20); // Reset to initial batch size
       
       console.log(`[${componentId.current}] Loading characters (database-first approach)`);
+      
+      // OPTIMIZATION 1: Check persistent cache first
+      if (characterCache && 
+          characterCache.isValid && 
+          characterCache.directory === directory &&
+          characterCache.characters.length > 0) {
+        console.log(`[${componentId.current}] ✓ Using persistent cache: ${characterCache.characters.length} characters`);
+        setCharacters(characterCache.characters);
+        setCurrentDirectory(directory);
+        setIsLoading(false);
+        return; // Instant load from persistent cache!
+      }
 
       // OPTIMIZATION: Try database-first approach for better performance
       let response: Response;
@@ -275,6 +294,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               modified: new Date(char.updated_at).getTime() / 1000
             }));
             
+            // OPTIMIZATION 2: Update persistent cache
+            setCharacterCache({
+              characters: files,
+              directory: directory,
+              timestamp: Date.now(),
+              isValid: true
+            });
+            
             setCharacters(files);
             setCurrentDirectory(directory);
             setIsLoading(false);
@@ -300,8 +327,21 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
          setError(data.message || "Directory not found or inaccessible.");
          setCharacters([]);
          setCurrentDirectory(data.directory || directory);
+         // Clear cache on error
+         setCharacterCache(null);
       } else if (data.exists) {
         console.log(`[${componentId.current}] Directory scan loaded ${data.files.length} characters`);
+        
+        // OPTIMIZATION 3: Update persistent cache with directory scan results
+        if (data.files.length > 0) {
+          setCharacterCache({
+            characters: data.files,
+            directory: directory,
+            timestamp: Date.now(),
+            isValid: true
+          });
+        }
+        
         setCharacters(data.files);
         setCurrentDirectory(data.directory);
         if (data.files.length === 0) {
@@ -314,10 +354,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setError(err instanceof Error ? err.message : 'Error loading characters.');
       setCharacters([]);
       setCurrentDirectory(directory);
+      // Clear cache on error
+      setCharacterCache(null);
     } finally {
       setIsLoading(false);
     }
-  }, []); // Empty dependency array
+  }, [characterCache, setCharacterCache]); // Dependencies for cache access
 
   // Attach scroll handler for lazy loading (external or internal) as fallback
   useEffect(() => {
@@ -357,6 +399,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         // Clear character cache when settings change (directory might have changed)
         if (settingsChangeCount > 0) {
           apiRequestCache.characterListCache.clear();
+          invalidateCharacterCache(); // Also clear persistent cache
           console.log(`[${componentId.current}] Cleared character cache due to settings change`);
         }
 
@@ -380,7 +423,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     };
     
     loadSettings();
-  }, [settingsChangeCount, loadFromDirectory]);
+  }, [settingsChangeCount, loadFromDirectory, invalidateCharacterCache]);
 
   // Reset displayedCount when search term changes
   useEffect(() => {
@@ -496,6 +539,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       
       // Remove character from state AFTER successful API call
       setCharacters(prevCharacters => prevCharacters.filter(char => char.path !== characterToDelete.path));
+      
+      // OPTIMIZATION 4: Invalidate persistent cache when character is deleted
+      invalidateCharacterCache();
       
     } catch (err) {
       console.error(`API Deletion failed for ${characterToDelete.path}:`, err);

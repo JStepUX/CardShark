@@ -78,14 +78,12 @@ const UserSelect: React.FC<UserSelectProps> = ({
       setDeletingFilename(null);
 
       const response = await fetch('/api/users');
-      if (!response.ok) throw new Error('Failed to load users');
-
-      const data = await response.json();
+      if (!response.ok) throw new Error('Failed to load users');      const data = await response.json();
       console.log('Loaded users data:', data); // Debug log
 
-      if (data.success && Array.isArray(data.users)) { // Changed from data.files to data.users
+      if (data.success && Array.isArray(data.data)) { // The backend returns users in the 'data' field
         // Map the fetched data to the imported UserProfile type
-        const mappedUsers: UserProfile[] = data.users.map((user: any): UserProfile => ({ // Changed from data.files to data.users
+        const mappedUsers: UserProfile[] = data.data.map((user: any): UserProfile => ({ // Use data.data instead of data.users
           name: user.name || 'Unnamed User', // Provide default if name is missing
           filename: user.filename || '', // Use user.filename from response (not user.name)
           size: user.size || 0,

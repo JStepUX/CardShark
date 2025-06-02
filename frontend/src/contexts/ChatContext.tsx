@@ -64,6 +64,8 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | null>(null);
 
+export { ChatContext }; // Export the context for optional usage
+
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { characterData } = useCharacter();  const apiConfigContext = useContext(APIConfigContext);
   const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;

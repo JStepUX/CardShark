@@ -8,20 +8,34 @@ from pathlib import Path
 import sys
 
 # Add backend to path
-sys.path.insert(0, str(Path(__file__).parent / "backend"))
+backend_path = Path(__file__).parent / "backend"
+sys.path.insert(0, str(backend_path))
 
-from settings_manager import SettingsManager
+# Import after path modification
+try:
+    from settings_manager import SettingsManager  # type: ignore
+except ImportError as e:
+    print(f"Failed to import SettingsManager: {e}")
+    print(f"Backend path: {backend_path}")
+    print(f"Backend path exists: {backend_path.exists()}")
+    print(f"Settings manager file exists: {(backend_path / 'settings_manager.py').exists()}")
+    sys.exit(1)
 
 def test_directory_validation():
     """Test the directory validation with empty directories"""
     print("Testing directory validation fix...")
-    
-    # Create a temporary empty directory
+      # Create a temporary empty directory
     with tempfile.TemporaryDirectory() as temp_dir:
         print(f"Created temporary directory: {temp_dir}")
         
+        # Create a simple mock logger for testing
+        class MockLogger:
+            def log_step(self, message): print(f"LOG: {message}")
+            def log_warning(self, message): print(f"WARN: {message}")
+            def log_error(self, message): print(f"ERROR: {message}")
+        
         # Initialize settings manager
-        settings_manager = SettingsManager()
+        settings_manager = SettingsManager(MockLogger())
         
         # Test validation of empty directory
         is_valid = settings_manager._validate_directory(temp_dir)

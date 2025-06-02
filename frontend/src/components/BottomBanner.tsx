@@ -8,7 +8,8 @@ interface BottomBannerProps {
   className?: string;
 }
 
-export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '' }) => {  const { 
+export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '' }) => {
+  const { 
     activeApiId, 
     allAPIConfigs, 
     setActiveApiId,

@@ -272,9 +272,9 @@ export class ChatStorage {
       const data = await response.json();
       console.log('New chat created:', data);
       
-      // The API returns the chat session data directly (no wrapper 'success' field)
-      if (data.chat_session_uuid) {
-        return { success: true, ...data };
+      // The API returns the chat session data wrapped in a DataResponse structure
+      if (data.data && data.data.chat_session_uuid) {
+        return { success: true, ...data.data };
       } else {
         console.error('/api/create-new-chat response missing chat_session_uuid:', data);
         return { success: false, error: 'Missing chat_session_uuid in response' };
@@ -497,15 +497,15 @@ export class ChatStorage {
       }
       
       // Check if we have a chat_session_uuid and handle response appropriately
-      if (data.chat_session_uuid) {
+      if (data.data && data.data.chat_session_uuid) {
         // If we have messages from the updated endpoint, return success
-        if (data.success && data.messages) {
-          return { success: true, ...data };
+        if (data.success && data.data.messages) {
+          return { success: true, ...data.data };
         } else {
           // If we only have session metadata (no messages), treat as success but empty
           return { 
             success: true, 
-            ...data, 
+            ...data.data, 
             messages: [] 
           };
         }

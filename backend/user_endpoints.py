@@ -73,7 +73,7 @@ async def list_users(logger: LogManager = Depends(get_logger_dependency)):
             success=True,
             message="User profiles retrieved successfully",
             data=user_files,
-            count=len(user_files)
+            total=len(user_files)
         )
 
     except Exception as e:

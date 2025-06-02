@@ -1,6 +1,22 @@
 import React, { createContext, useContext, useState } from 'react';
 import { CharacterCard } from '../types/schema';
 
+// Add character file interface for gallery
+interface CharacterFile {
+  name: string;
+  path: string;
+  size: number;
+  modified: number;
+}
+
+// Add character gallery cache interface
+interface CharacterGalleryCache {
+  characters: CharacterFile[];
+  directory: string;
+  timestamp: number;
+  isValid: boolean;
+}
+
 interface CharacterContextType {
   characterData: CharacterCard | null;
   setCharacterData: React.Dispatch<React.SetStateAction<CharacterCard | null>>;
@@ -13,6 +29,11 @@ interface CharacterContextType {
   createNewCharacter: (name: string) => void;
   isNewlyCreated: boolean;
   setIsNewlyCreated: React.Dispatch<React.SetStateAction<boolean>>;
+  
+  // New gallery cache properties
+  characterCache: CharacterGalleryCache | null;
+  setCharacterCache: React.Dispatch<React.SetStateAction<CharacterGalleryCache | null>>;
+  invalidateCharacterCache: () => void;
 }
 
 const CharacterContext = createContext<CharacterContextType | null>(null);
@@ -23,6 +44,7 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isNewlyCreated, setIsNewlyCreated] = useState(false);
+  const [characterCache, setCharacterCache] = useState<CharacterGalleryCache | null>(null);
 
   const createNewCharacter = (name: string) => {
     const newCharacter: CharacterCard = {
@@ -77,6 +99,10 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsNewlyCreated(true); // Mark as newly created
   };
 
+  const invalidateCharacterCache = () => {
+    setCharacterCache(null);
+  };
+
   const value = {
     characterData,
     setCharacterData,
@@ -88,7 +114,10 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setError,
     createNewCharacter,
     isNewlyCreated,
-    setIsNewlyCreated
+    setIsNewlyCreated,
+    characterCache,
+    setCharacterCache,
+    invalidateCharacterCache
   };
 
   return (
