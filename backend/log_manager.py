@@ -1,6 +1,7 @@
 import os
 import json
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -39,7 +40,7 @@ class LogManager:
         
     def error(self, message, exc_info=False, error=None):
         """Standard error logging method (alias for log_error)"""
-        self.log_error(message, error=error if error else exc_info if isinstance(exc_info, Exception) else None)
+        self.log_error(message, error=error if error else exc_info if isinstance(exc_info, Exception) else None, exc_info=exc_info)
         
     def warning(self, message):
         """Standard warning logging method (alias for log_warning)"""
@@ -85,7 +86,7 @@ class LogManager:
         """Log a warning message."""
         self.log_step(f"WARNING: {message}")
 
-    def log_error(self, message, error=None):
+    def log_error(self, message, error=None, exc_info=False):
         """Log an error with optional exception details."""
         try:
             timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -93,8 +94,13 @@ class LogManager:
             
             error_message = f"\n{separator}\n"
             error_message += f"[{timestamp}] ERROR: {message}\n"
+            
             if error:
                 error_message += f"Exception: {str(error)}\n"
+            elif exc_info:
+                # Capture current exception traceback
+                error_message += f"Exception: {traceback.format_exc()}\n"
+            
             error_message += f"{separator}\n"
             
             # Write to file

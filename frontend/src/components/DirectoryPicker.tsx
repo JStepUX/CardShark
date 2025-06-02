@@ -43,9 +43,11 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ directory: inputValue.trim() })
-      });
-
-      const data = await response.json();
+      });      const result = await response.json();
+      
+      // Handle standardized response format: {success: true, data: {exists: true, path: "..."}}
+      // or legacy direct format: {exists: true, message: "..."}
+      const data = result.success ? result.data : result;
       
       if (data.exists) {
         setError(null);

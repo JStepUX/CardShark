@@ -254,10 +254,13 @@ class SettingsManager:
                 self.logger.log_warning(f"Path is not a directory: {directory}")
                 return False
                 
-            # Check if directory contains PNG files
-            png_files = list(dir_path.glob("*.png"))
-            if not png_files:
-                self.logger.log_warning(f"No PNG files found in directory: {directory}")
+            # Check if directory is accessible (don't require PNG files to exist)
+            # This allows users to set empty directories where they plan to add characters later
+            try:
+                # Test directory access by attempting to list contents
+                list(dir_path.iterdir())
+            except PermissionError:
+                self.logger.log_warning(f"Permission denied accessing directory: {directory}")
                 return False
                 
             self.logger.log_step(f"Directory validation passed: {directory}")

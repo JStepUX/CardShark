@@ -416,8 +416,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       }
       
       const data = await metadataResponse.json();
-      // Handle both formats: either {success: true, metadata: {...}} or just the raw metadata object
-      const metadata = data.success && data.metadata ? data.metadata : data;
+      // Handle both formats: either {success: true, data: {...}} or just the raw metadata object
+      const metadata = data.success && data.data ? data.data : data;
       
       if (metadata) {
         const newImageUrl = URL.createObjectURL(blob);

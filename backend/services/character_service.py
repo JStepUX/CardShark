@@ -392,8 +392,9 @@ class CharacterService:
             # Create new entry (let DB auto-generate the primary key)
             self.logger.log_info(f"Creating new lore entry (JSON ID: {original_json_id}) for book {lore_book.id}")
             new_db_entry = LoreEntryModel(**lore_entry_model_data)
-            db.add(new_db_entry)
-        # self.db.commit() will be called by the calling function (e.g. sync_character_directories or save_uploaded_character_card)    def get_character_by_uuid(self, character_uuid: str, db: Session) -> Optional[CharacterModel]:
+            db.add(new_db_entry)        # self.db.commit() will be called by the calling function (e.g. sync_character_directories or save_uploaded_character_card)
+        
+    def get_character_by_uuid(self, character_uuid: str, db: Session) -> Optional[CharacterModel]:
         return db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
 
     def get_character_by_path(self, png_file_path: str, db: Session) -> Optional[CharacterModel]:
