@@ -34,7 +34,8 @@ const Layout: React.FC = () => {
     isLoading, 
     setIsLoading, 
     error, 
-    setError 
+    setError,
+    invalidateCharacterCache
   } = useCharacter();
 
   // Detect if we're in the WorldView by checking the URL path
@@ -293,6 +294,9 @@ const Layout: React.FC = () => {
         // Don't reset newImage state - keep our reference to the original file
         // setNewImage(null);
         console.log("Character saved successfully:", saveResult);
+        
+        // IMPORTANT: Invalidate character gallery cache to ensure immediate refresh
+        invalidateCharacterCache();
       } else {
         throw new Error(saveResult.message || "Unknown error during save");
       }

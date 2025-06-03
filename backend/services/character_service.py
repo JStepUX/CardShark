@@ -462,7 +462,7 @@ class CharacterService:
                         entry_dict = {
                             "id": entry.id,
                             "keys": self._safe_json_load(entry.keys_json, [], "keys_json", character_uuid),
-                            "secondary_keys": self._safe_json_load(entry.secondary_keys_json, [], "secondary_keys_json", character_uuid),
+                            "secondary_keys": self._safe_json_load(entry.secondary_keysJson, [], "secondary_keys_json", character_uuid),
                             "content": entry.content,
                             "comment": entry.comment,
                             "enabled": entry.enabled,
@@ -553,7 +553,7 @@ class CharacterService:
                 self.logger.log_info(f"Successfully created/updated PNG: {abs_png_path}")
             except Exception as e:
                 self.logger.log_error(f"Failed to create/write PNG {abs_png_path}: {e}")
-                # If PNG write fails, should we roll back DB? For now, DB commit will proceed.
+            # If PNG write fails, should we roll back DB? For now, DB commit will proceed.
         
             db.commit()
             db.refresh(db_char)
@@ -561,23 +561,24 @@ class CharacterService:
 
     def delete_character(self, character_uuid: str, delete_png_file: bool = False) -> bool:
         """Deletes a character from DB and optionally its PNG file."""
-        db_char = self.get_character_by_uuid(character_uuid)
-        if not db_char:
-            return False
-        
-        png_path_to_delete = db_char.png_file_path
-        
-        self.db.delete(db_char) # Cascade should handle lore_books and related lore_entries
+        with self.db_session_generator() as db:
+            db_char = self.get_character_by_uuid(character_uuid, db)
+            if not db_char:
+                return False
+            
+            png_path_to_delete = db_char.png_file_path
+            
+            db.delete(db_char) # Cascade should handle lore_books and related lore_entries
 
-        if delete_png_file:
-            try:
-                Path(png_path_to_delete).unlink(missing_ok=True)
-                self.logger.log_info(f"Deleted PNG file: {png_path_to_delete}")
-            except Exception as e:
-                self.logger.log_error(f"Failed to delete PNG file {png_path_to_delete}: {e}")
-        
-        self.db.commit()
-        return True
+            if delete_png_file:
+                try:
+                    Path(png_path_to_delete).unlink(missing_ok=True)
+                    self.logger.log_info(f"Deleted PNG file: {png_path_to_delete}")
+                except Exception as e:
+                    self.logger.log_error(f"Failed to delete PNG file {png_path_to_delete}: {e}")
+            
+            db.commit()
+            return True
 
     def save_uploaded_character_card(
         self,
@@ -613,7 +614,9 @@ class CharacterService:
                 try:
                     uuid.UUID(str(provided_uuid_str)) # Validate format
                     final_uuid_str = str(provided_uuid_str)
-                    existing_db_char = self.get_character_by_uuid(final_uuid_str)
+                    # Check if character exists in DB using proper session context
+                    with self.db_session_generator() as db:
+                        existing_db_char = self.get_character_by_uuid(final_uuid_str, db)
                     if existing_db_char:
                         is_update = True
                         self.logger.log_info(f"Service: Will update existing character UUID: {final_uuid_str}")
@@ -685,9 +688,7 @@ class CharacterService:
                 self.logger.log_info(f"Service: Successfully saved character PNG to: {abs_save_png_path}")
             except IOError as e:
                 self.logger.log_error(f"Service: Failed to save character PNG to disk at {abs_save_png_path}: {e}", exc_info=True)
-                raise # Re-raise
-
-            # 6. Create or Update DB Record
+                raise # Re-raise            # 6. Create or Update DB Record using proper session context
             # Ensure all fields for CharacterModel are extracted from raw_character_card_data
             db_data = {
                 "name": char_name_from_meta, # Use the determined name
@@ -705,40 +706,111 @@ class CharacterService:
                 "updated_at": datetime.datetime.utcnow()
             }
 
-            saved_db_model: CharacterModel
-            if is_update and existing_db_char:
-                self.logger.log_info(f"Service: Updating DB for character UUID: {final_uuid_str}")
-                # Update existing_db_char instance
-                for key, value in db_data.items():
-                    setattr(existing_db_char, key, value)
-                # original_character_id should not change on update typically
-                self.db.add(existing_db_char) # Add to session to mark as dirty
-                saved_db_model = existing_db_char
-            else: # Create new
-                self.logger.log_info(f"Service: Creating new DB record for character UUID: {final_uuid_str}")
-                db_data["character_uuid"] = final_uuid_str
-                db_data["created_at"] = datetime.datetime.utcnow()
-                # original_character_id could be the initial file path if it's a first-time import of an external file
-                # For cards created *within* CardShark, original_character_id might be null or same as png_file_path.
-                db_data["original_character_id"] = data_section.get("original_character_id", abs_save_png_path if not is_update else None)
+            # Use proper database session context
+            with self.db_session_generator() as db:
+                saved_db_model: CharacterModel
+                if is_update and existing_db_char:
+                    self.logger.log_info(f"Service: Updating DB for character UUID: {final_uuid_str}")
+                    # Update existing_db_char instance
+                    for key, value in db_data.items():
+                        setattr(existing_db_char, key, value)
+                    # original_character_id should not change on update typically
+                    db.add(existing_db_char) # Add to session to mark as dirty
+                    saved_db_model = existing_db_char
+                else: # Create new
+                    self.logger.log_info(f"Service: Creating new DB record for character UUID: {final_uuid_str}")
+                    db_data["character_uuid"] = final_uuid_str
+                    db_data["created_at"] = datetime.datetime.utcnow()
+                    # original_character_id could be the initial file path if it's a first-time import of an external file
+                    # For cards created *within* CardShark, original_character_id might be null or same as png_file_path.
+                    db_data["original_character_id"] = data_section.get("original_character_id", abs_save_png_path if not is_update else None)
 
-                new_char_model = CharacterModel(**db_data)
-                self.db.add(new_char_model)
-                saved_db_model = new_char_model
-            
-            self.db.flush() # Ensure IDs are available for lore sync, and model is populated
+                    new_char_model = CharacterModel(**db_data)
+                    db.add(new_char_model)
+                    saved_db_model = new_char_model
+                
+                db.flush() # Ensure IDs are available for lore sync, and model is populated
 
-            # 7. Sync Lore
-            self._sync_character_lore(final_uuid_str, data_section.get("character_book", {}))
+                # 7. Sync Lore
+                self._sync_character_lore(final_uuid_str, data_section.get("character_book", {}), db)
 
-            self.db.commit()
-            self.db.refresh(saved_db_model) # Get any DB-generated values like auto-increments (not used here but good practice)
-            self.logger.log_info(f"Service: Character {'updated' if is_update else 'created'} in DB: {final_uuid_str}")
-            return saved_db_model
+                db.commit()
+                db.refresh(saved_db_model) # Get any DB-generated values like auto-increments (not used here but good practice)
+                self.logger.log_info(f"Service: Character {'updated' if is_update else 'created'} in DB: {final_uuid_str}")
+                return saved_db_model
 
         except Exception as e:
             self.logger.log_error(f"Service: General error in save_uploaded_character_card: {e}", exc_info=True)
-            self.db.rollback()
+            return None
+
+    def duplicate_character(self, character_uuid: str, new_name: Optional[str] = None) -> Optional[CharacterModel]:
+        """
+        Duplicates a character by creating a copy with a new UUID and filename.
+        
+        Args:
+            character_uuid: UUID of the character to duplicate
+            new_name: Optional new name for the duplicated character
+            
+        Returns:
+            The duplicated CharacterModel or None if the original character wasn't found
+        """
+        self.logger.log_info(f"Duplicating character {character_uuid} with new_name: {new_name}")
+        
+        try:
+            # Get the original character
+            with self.db_session_generator() as db:
+                original_char = self.get_character_by_uuid(character_uuid, db)
+                if not original_char:
+                    self.logger.log_warning(f"Character {character_uuid} not found for duplication")
+                    return None
+                
+                # Read the original PNG metadata
+                if not original_char.png_file_path or not Path(original_char.png_file_path).exists():
+                    self.logger.log_error(f"Original character PNG file not found: {original_char.png_file_path}")
+                    return None
+                
+                # Read the original PNG file
+                with open(original_char.png_file_path, 'rb') as f:
+                    original_image_bytes = f.read()
+                
+                # Read metadata from the original PNG
+                original_metadata = self.png_handler.read_metadata(original_char.png_file_path)
+                if not original_metadata:
+                    original_metadata = {}
+                
+                # Generate new UUID for the duplicate
+                new_uuid = str(uuid.uuid4())
+                
+                # Determine new name
+                if new_name:
+                    duplicate_name = new_name
+                else:
+                    duplicate_name = f"{original_char.name}_copy"
+                
+                # Update metadata with new UUID and name
+                if "data" not in original_metadata:
+                    original_metadata["data"] = {}
+                
+                original_metadata["data"]["character_uuid"] = new_uuid
+                original_metadata["data"]["name"] = duplicate_name
+                
+                # Create the duplicate using save_uploaded_character_card
+                # which handles all the PNG saving and DB creation logic
+                duplicated_char = self.save_uploaded_character_card(
+                    raw_character_card_data=original_metadata,
+                    image_bytes=original_image_bytes,
+                    original_filename=f"{duplicate_name}.png"
+                )
+                
+                if duplicated_char:
+                    self.logger.log_info(f"Successfully duplicated character {character_uuid} as {new_uuid}")
+                    return duplicated_char
+                else:
+                    self.logger.log_error(f"Failed to save duplicated character")
+                    return None
+                    
+        except Exception as e:
+            self.logger.log_error(f"Error duplicating character {character_uuid}: {e}")
             return None
 
 # FastAPI Dependency for CharacterService

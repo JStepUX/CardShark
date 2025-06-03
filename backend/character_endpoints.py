@@ -463,6 +463,37 @@ async def delete_character_by_uuid_endpoint(
         logger.error(f"Error deleting character {character_uuid}: {str(e)}")
         raise handle_generic_error(e, logger)
 
+@router.post("/character/{character_uuid}/duplicate", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Duplicate a character by UUID")
+async def duplicate_character_endpoint(
+    character_uuid: str,
+    new_name: Optional[str] = Body(None, description="Optional new name for the duplicated character"),
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Duplicate a character by UUID, creating a copy with a new UUID and filename."""
+    try:
+        logger.info(f"POST /api/character/{character_uuid}/duplicate with new_name: {new_name}")
+        
+        # Duplicate the character using the service
+        duplicated_character = char_service.duplicate_character(character_uuid, new_name)
+        if not duplicated_character:
+            raise NotFoundException(f"Character with UUID {character_uuid} not found or could not be duplicated")
+        
+        # Convert to API response format
+        api_char_response = to_api_model(duplicated_character, logger)
+        return create_data_response({
+            "character": api_char_response,
+            "message": f"Character duplicated successfully as '{duplicated_character.name}'"
+        })
+        
+    except NotFoundException:
+        raise
+    except ValidationException:
+        raise
+    except Exception as e:
+        logger.error(f"Error duplicating character {character_uuid}: {str(e)}")
+        raise handle_generic_error(e, logger)
+
 @router.get("/character-image/{character_uuid}", summary="Serve a character's PNG image by UUID")
 async def get_character_image_by_uuid(
     character_uuid: str,
