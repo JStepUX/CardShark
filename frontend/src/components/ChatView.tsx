@@ -428,11 +428,32 @@ const ChatView: React.FC = () => {
     if (!characterData) return;
     loadExistingChat(chatId);
     setShowChatSelector(false);
-  };
-  // Scroll when messages change, generation status changes, or on sidenav toggling
+  };  // Track previous message count and generation status for smarter scrolling
+  const prevMessageCountRef = useRef(messages.length);
+  const prevGeneratingRef = useRef(isGenerating);
+  
+  // Only scroll on specific conditions to avoid jumping during edits
   useEffect(() => {
-    scrollToBottomUnified();
-  }, [messages, isGenerating, scrollToBottomUnified]);
+    const currentMessageCount = messages.length;
+    const wasGenerating = prevGeneratingRef.current;
+    
+    // Scroll only when:
+    // 1. New messages are added (message count increased)
+    // 2. Generation just started (isGenerating became true)
+    // 3. Last message is being streamed (content updated during generation)
+    const shouldScroll = 
+      currentMessageCount > prevMessageCountRef.current || // New message added
+      (!wasGenerating && isGenerating) || // Generation just started
+      (isGenerating && generatingId && messages.some(msg => msg.id === generatingId && msg.status === 'streaming')); // Streaming update
+    
+    if (shouldScroll) {
+      scrollToBottomUnified();
+    }
+    
+    // Update refs for next comparison
+    prevMessageCountRef.current = currentMessageCount;
+    prevGeneratingRef.current = isGenerating;
+  }, [messages, isGenerating, generatingId, scrollToBottomUnified]);
 
   // Handle message continuation
   const handleContinueResponse = (message: Message) => {

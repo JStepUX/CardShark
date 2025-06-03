@@ -334,6 +334,10 @@ const WorldCardsPlayView: React.FC = () => {
   useEnhancedGenerationTimeout(isGenerating, stopGeneration);
   useStallDetection(isGenerating, messages[messages.length - 1]?.content || '', stopGeneration);
 
+  // Track previous message count and generation status for smarter scrolling
+  const prevMessageCountRef = useRef(messages.length);
+  const prevGeneratingRef = useRef(isGenerating);
+
   useEffect(() => {
     return () => {
       if (isGenerating) {
@@ -343,11 +347,30 @@ const WorldCardsPlayView: React.FC = () => {
     };
   }, [isGenerating, stopGeneration]);
 
+  // Only scroll on specific conditions to avoid jumping during edits
   useEffect(() => {
-    scrollToBottom();
-    const timer = setTimeout(scrollToBottom, 100);
-    return () => clearTimeout(timer);
-  }, [messages, isGenerating, scrollToBottom]);
+    const currentMessageCount = messages.length;
+    const wasGenerating = prevGeneratingRef.current;
+    
+    // Scroll only when:
+    // 1. New messages are added (message count increased)
+    // 2. Generation just started (isGenerating became true)
+    // 3. Last message is being streamed (content updated during generation)
+    const shouldScroll = 
+      currentMessageCount > prevMessageCountRef.current || // New message added
+      (!wasGenerating && isGenerating) || // Generation just started
+      (isGenerating && generatingId && messages.some(msg => msg.id === generatingId && msg.status === 'streaming')); // Streaming update
+    
+    if (shouldScroll) {
+      scrollToBottom();
+      const timer = setTimeout(scrollToBottom, 100);
+      setTimeout(() => clearTimeout(timer), 200);
+    }
+    
+    // Update refs for next comparison
+    prevMessageCountRef.current = currentMessageCount;
+    prevGeneratingRef.current = isGenerating;
+  }, [messages, isGenerating, generatingId, scrollToBottom]);
 
   const handleRoomSelect = useCallback(async (position: string) => {
     if (!worldId) return;
