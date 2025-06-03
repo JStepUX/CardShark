@@ -8,11 +8,9 @@ import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from './KoboldCPPDrawerManager';
 
-// Track API calls across component instances with enhanced caching
+// Track API calls across component instances - simplified
 const apiRequestCache = {
-  pendingRequests: new Map<string, Promise<any>>(),
-  lastRequestTime: 0,
-  characterListCache: new Map<string, { data: any; timestamp: number; ttl: number }>()
+  pendingRequests: new Map<string, Promise<any>>()
 };
 
 // Interface for character file data received from the backend
@@ -55,77 +53,32 @@ const encodeFilePath = (path: string): string => {
 };
 
 /**
- * Creates a cached fetch request to prevent duplicate API calls with TTL support
+ * Simple fetch wrapper to prevent rapid duplicate requests
  * @param url The URL to fetch
- * @param options Fetch options
- * @param ttl Time to live for cached responses (default: 30 seconds)
+ * @param options Fetch options 
  * @returns Promise with the fetch response
  */
-const cachedFetch = (url: string, options?: RequestInit, ttl: number = 30000): Promise<Response> => {
+const cachedFetch = (url: string, options?: RequestInit): Promise<Response> => {
   const cacheKey = `${url}`;
-  
-  // Check for cached response (TTL-based caching for character lists)
-  if (url.includes('/api/characters') && apiRequestCache.characterListCache) {
-    const cached = apiRequestCache.characterListCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < cached.ttl) {
-      console.log(`[Cache] Using cached response for: ${url}`);
-      return Promise.resolve(new Response(JSON.stringify(cached.data), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      }));
-    }
-  }
   
   // If we have a pending request for this URL, return it
   const existingRequest = apiRequestCache.pendingRequests.get(cacheKey);
   if (existingRequest) {
-    console.log(`Using cached request for: ${url}`);
+    console.log(`Using existing request for: ${url}`);
     return existingRequest;
   }
   
-  // If the last request was less than 300ms ago, add a small delay
-  const now = Date.now();
-  const timeSinceLastRequest = now - apiRequestCache.lastRequestTime;
-  const delay = timeSinceLastRequest < 300 ? 300 - timeSinceLastRequest : 0;
+  // Create a new request
+  const newRequest = fetch(url, options);
   
-  // Create a new request with optional delay
-  const newRequest = new Promise<Response>((resolve) => {
-    setTimeout(async () => {
-      apiRequestCache.lastRequestTime = Date.now();
-      const response = await fetch(url, options);
-      
-      // Cache successful character list responses
-      if (response.ok && url.includes('/api/characters')) {
-        try {
-          const clonedResponse = response.clone();
-          const data = await clonedResponse.json();
-          
-          // Initialize cache if needed
-          if (!apiRequestCache.characterListCache) {
-            apiRequestCache.characterListCache = new Map();
-          }
-          
-          apiRequestCache.characterListCache.set(cacheKey, {
-            data,
-            timestamp: Date.now(),
-            ttl
-          });
-        } catch (cacheError) {
-          console.warn('Failed to cache response:', cacheError);
-        }
-      }
-      
-      resolve(response);
-    }, delay);
-  }).finally(() => {
-    // Clean up the cache after the request is completed
-    setTimeout(() => {
-      apiRequestCache.pendingRequests.delete(cacheKey);
-    }, 500);
+  // Store it as pending
+  apiRequestCache.pendingRequests.set(cacheKey, newRequest);
+  
+  // Clean up when done
+  newRequest.finally(() => {
+    apiRequestCache.pendingRequests.delete(cacheKey);
   });
   
-  // Store the request in the cache
-  apiRequestCache.pendingRequests.set(cacheKey, newRequest);
   return newRequest;
 };
 
@@ -159,7 +112,15 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   
   // Track component instance
   const componentId = useRef(`gallery-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
-  const isFirstLoad = useRef(true);
+  
+  // Simple duplicate prevention for StrictMode
+  const loadingRef = useRef<{
+    currentSettingsCount: number;
+    isLoading: boolean;
+  }>({
+    currentSettingsCount: -1,
+    isLoading: false
+  });
 
   // Context hooks
   const { 
@@ -378,17 +339,21 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
   // useEffect for loading settings
   useEffect(() => {
-    // Skip if this is not the first load (prevents duplicate API calls)
-    if (!isFirstLoad.current && settingsChangeCount === 0) {
-      console.log(`[${componentId.current}] Skipping initial load to prevent duplication`);
+    // Simple duplicate prevention - skip if already loading this settings change
+    if (loadingRef.current.isLoading && 
+        loadingRef.current.currentSettingsCount === settingsChangeCount) {
+      console.log(`[${componentId.current}] Skipping duplicate load (already in progress)`);
       return;
     }
     
-    isFirstLoad.current = false;
+    // Mark as loading this settings change
+    loadingRef.current.isLoading = true;
+    loadingRef.current.currentSettingsCount = settingsChangeCount;
     
     const loadSettings = async () => {
       try {
-        console.log(`[${componentId.current}] Loading settings and characters`);
+        console.log(`[${componentId.current}] Loading settings and characters (count: ${settingsChangeCount})`);
+        
         setIsLoading(true);
         setError(null);
         setDeleteError(null);
@@ -398,7 +363,6 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
         // Clear character cache when settings change (directory might have changed)
         if (settingsChangeCount > 0) {
-          apiRequestCache.characterListCache.clear();
           invalidateCharacterCache(); // Also clear persistent cache
           console.log(`[${componentId.current}] Cleared character cache due to settings change`);
         }
@@ -419,6 +383,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error loading settings.');
         setIsLoading(false);
+      } finally {
+        // Clear loading state
+        loadingRef.current.isLoading = false;
       }
     };
     

@@ -171,8 +171,7 @@ class CharacterIndexingService:
             png_file = Path(file_path)
             if not png_file.exists():
                 return
-            
-            # Read metadata in thread to avoid blocking event loop
+              # Read metadata in thread to avoid blocking event loop
             try:
                 metadata = await to_thread(
                     self.character_service.png_handler.read_metadata, file_path
@@ -186,14 +185,8 @@ class CharacterIndexingService:
                 return
             
             if is_new:
-                # Create new character
-                image_bytes = await to_thread(png_file.read_bytes)
-                await to_thread(
-                    self.character_service.save_uploaded_character_card,
-                    metadata,  # raw_character_card_data
-                    image_bytes,
-                    png_file.name  # original_filename
-                )
+                # Create database record pointing to the existing file (avoid filename collision logic)
+                await self._create_database_record_for_existing_file(file_path, metadata)
                 self.logger.log_info(f"Added new character: {file_path}")
             else:
                 # Update existing character
@@ -251,3 +244,81 @@ class CharacterIndexingService:
             "character_directories": character_dirs,
             "description": "Characters loaded from database, patched with directory changes on page load"
         }
+    
+    async def _create_database_record_for_existing_file(self, file_path: str, metadata: Dict):
+        """Create database record pointing to existing PNG file without creating new PNG files"""
+        try:
+            from backend.sql_models import Character as CharacterModel
+            import datetime
+            import uuid
+            import json
+            
+            data_section = metadata.get("data", {})
+            char_name = data_section.get("name")
+            if not char_name:
+                # Extract name from filename, removing trailing _\d+ if present
+                import re
+                stem_name = Path(file_path).stem
+                match = re.match(r"^(.*?)(_\d+)?$", stem_name)
+                if match:
+                    char_name = match.group(1)
+                else:
+                    char_name = stem_name
+            
+            # Get or generate UUID
+            char_uuid = data_section.get("character_uuid")
+            if not char_uuid:
+                char_uuid = str(uuid.uuid4())
+                self.logger.log_info(f"Generated new UUID {char_uuid} for character: {char_name}")
+            
+            # Create database record pointing to the existing file
+            abs_file_path = str(Path(file_path).resolve())
+            
+            def _as_json_str(data):
+                """Helper to safely convert data to JSON string"""
+                if data is None:
+                    return None
+                if isinstance(data, str):
+                    return data
+                try:
+                    return json.dumps(data)
+                except (TypeError, ValueError):
+                    return str(data)
+            
+            db_char = CharacterModel(
+                character_uuid=char_uuid,
+                name=char_name,
+                png_file_path=abs_file_path,
+                description=data_section.get("description"),
+                personality=data_section.get("personality"),
+                scenario=data_section.get("scenario"),
+                first_mes=data_section.get("first_mes"),
+                mes_example=data_section.get("mes_example"),
+                creator_comment=metadata.get("creatorcomment"),
+                tags=_as_json_str(data_section.get("tags", [])),
+                spec_version=metadata.get("spec_version", "2.0"),
+                extensions_json=_as_json_str(data_section.get("extensions", {})),
+                db_metadata_last_synced_at=datetime.datetime.utcnow(),
+                updated_at=datetime.datetime.utcnow(),
+                created_at=datetime.datetime.utcnow()
+            )
+            
+            # Add to database using the character service's session
+            await to_thread(self._add_character_to_db, db_char)
+            
+            self.logger.log_info(f"Successfully added existing character to database with UUID: {char_uuid}")
+            
+        except Exception as e:
+            self.logger.log_error(f"Failed to create database record for {file_path}: {e}")
+
+    def _add_character_to_db(self, db_char):
+        """Helper method to add character to database in sync context"""
+        try:
+            # Use the character service's database session
+            with self.character_service.db_session_generator() as db:
+                db.add(db_char)
+                db.commit()
+                db.refresh(db_char)
+        except Exception as e:
+            self.logger.log_error(f"Failed to add character to database: {e}")
+            raise

@@ -605,28 +605,63 @@ async def get_character_metadata_by_path(
                 # Also check by path in case it was imported without UUID
                 db_char = char_service.get_character_by_path(abs_file_path, db) # Pass db session
             
-            # If still not found, we need to save it to generate a UUID
+            # If still not found, we need to add it to database WITHOUT creating new PNG files
             if not db_char:
-                logger.info(f"Character not found in database. Adding {file_path} to ensure UUID assignment.")
+                logger.info(f"Character not found in database. Adding existing file {file_path} to database.")
                 try:
-                    # Use the service's upload method to properly save the character
-                    # We need to read the file again as bytes for the upload method
-                    with open(abs_file_path, "rb") as img_file:
-                        image_bytes = img_file.read()
+                    # Add the existing character to the database without creating new PNG files
+                    # We'll use the sync_character_directories method approach instead
+                    data_section = metadata.get("data", {})
+                    char_name = data_section.get("name", file_path.stem)
                     
-                    # Save to database with existing metadata and image bytes
-                    db_char = char_service.save_uploaded_character_card(
-                        raw_character_card_data=metadata,
-                        image_bytes=image_bytes,
-                        original_filename=file_path.name
+                    # Generate UUID if not present
+                    char_uuid = data_section.get("character_uuid")
+                    if not char_uuid:
+                        import uuid
+                        char_uuid = str(uuid.uuid4())
+                        # Update metadata with new UUID
+                        if "data" not in metadata:
+                            metadata["data"] = {}
+                        metadata["data"]["character_uuid"] = char_uuid
+                        
+                        # Write UUID back to the existing PNG file
+                        try:
+                            char_service.png_handler.write_metadata_to_png(abs_file_path, metadata)
+                            logger.info(f"Added UUID {char_uuid} to existing PNG: {abs_file_path}")
+                        except Exception as png_error:
+                            logger.warning(f"Could not write UUID to PNG {abs_file_path}: {png_error}")
+                    
+                    # Create database record pointing to the existing file
+                    from backend.sql_models import Character as CharacterModel
+                    import datetime
+                    
+                    db_char = CharacterModel(
+                        character_uuid=char_uuid,
+                        name=char_name,
+                        png_file_path=abs_file_path,
+                        description=data_section.get("description"),
+                        personality=data_section.get("personality"),
+                        scenario=data_section.get("scenario"),
+                        first_mes=data_section.get("first_mes"),
+                        mes_example=data_section.get("mes_example"),
+                        creator_comment=metadata.get("creatorcomment"),
+                        tags=json.dumps(data_section.get("tags", [])),
+                        spec_version=metadata.get("spec_version", "2.0"),
+                        extensions_json=json.dumps(data_section.get("extensions", {})),
+                        db_metadata_last_synced_at=datetime.datetime.utcnow(),
+                        updated_at=datetime.datetime.utcnow(),
+                        created_at=datetime.datetime.utcnow()
                     )
+                    db.add(db_char)
+                    db.commit()
+                    db.refresh(db_char)
                     
                     if db_char and db_char.character_uuid:
                         # Update our metadata copy with the new UUID
                         if "data" not in metadata:
                             metadata["data"] = {}
                         metadata["data"]["character_uuid"] = db_char.character_uuid
-                        logger.info(f"Successfully added character to database with UUID: {db_char.character_uuid}")
+                        logger.info(f"Successfully added existing character to database with UUID: {db_char.character_uuid}")
                     else:
                         logger.warning(f"Failed to add character to database: {abs_file_path}")
                 except Exception as save_error:
