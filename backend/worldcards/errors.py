@@ -1,4 +1,4 @@
-# backend/worldcards/errors.py
+# backend/worldcards/errors.py testing Git webhook
 from backend.errors import CardSharkError, ErrorType, ErrorMessages
 
 class WorldCardError(CardSharkError):
