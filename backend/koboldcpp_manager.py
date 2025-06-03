@@ -403,26 +403,25 @@ class KoboldCPPManager:
                     logger.error(f"Model file does not exist: {model}")
                     return {'status': 'error', 'message': f"Model file not found: {model}"}
                 command += ["--model", model]
-            
-            # Add any additional parameters
+              # Add any additional parameters
             if additional_params:
                 command += additional_params
             
             logger.info(f"Launching KoboldCPP with command: {' '.join(command)}")
             logger.info(f"Working directory: {kobold_dir}")
-              # Platform-specific launch configuration
+            
+            # Platform-specific launch configuration
             try:
                 if platform.system() == 'Windows':
                     # On Windows, use subprocess.Popen with CREATE_NEW_CONSOLE flag to show the console
-                    # but don't capture output which can cause the process to hang
+                    # Don't capture output to avoid process hanging due to full buffers
                     self.process = subprocess.Popen(
                         command, 
                         creationflags=subprocess.CREATE_NEW_CONSOLE,
                         cwd=kobold_dir,  # Set working directory to KoboldCPP directory
                         shell=False,  # Don't use shell for security reasons
-                        stderr=subprocess.PIPE,  # Capture stderr for diagnostics
-                        stdout=subprocess.PIPE,  # Capture stdout for diagnostics
-                        env=os.environ.copy()  # Use current environment variables
+                        stderr=None,  # Let stderr go to console - don't capture
+                        stdout=None,  # Let stdout go to console - don't capture                        env=os.environ.copy()  # Use current environment variables
                     )
                 else:
                     # For non-Windows platforms (Linux, MacOS)
@@ -430,28 +429,21 @@ class KoboldCPPManager:
                         command,
                         cwd=kobold_dir,  # Set working directory to KoboldCPP directory
                         shell=False,
-                        stderr=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
+                        stderr=None,  # Don't capture to avoid hanging
+                        stdout=None,  # Don't capture to avoid hanging
                         env=os.environ.copy()  # Use current environment variables
                     )
                 
                 # Check if process started correctly and is still running
-                time.sleep(1)
+                time.sleep(2)  # Give it more time to start up
                 if self.process.poll() is None:
-                    # Process is still running after 1 second
+                    # Process is still running after 2 seconds
                     logger.info(f"KoboldCPP process started with PID: {self.process.pid}")
                     return {'status': 'success', 'message': 'KoboldCPP started successfully'}
                 else:
-                    # Process exited immediately
-                    try:
-                        stderr = self.process.stderr.read().decode('utf-8', errors='replace')
-                        stdout = self.process.stdout.read().decode('utf-8', errors='replace')
-                        logger.error(f"KoboldCPP process exited immediately with code: {self.process.returncode}")
-                        logger.error(f"STDOUT: {stdout}")
-                        logger.error(f"STDERR: {stderr}")
-                        return {'status': 'error', 'message': f"KoboldCPP process exited immediately. Stderr: {stderr.splitlines()[0] if stderr else 'No error output'}"}
-                    except Exception as err:
-                        return {'status': 'error', 'message': f"KoboldCPP process exited immediately with code {self.process.returncode}. Could not capture output: {str(err)}"}
+                    # Process exited immediately - since we're not capturing output, provide generic error
+                    logger.error(f"KoboldCPP process exited immediately with code: {self.process.returncode}")
+                    return {'status': 'error', 'message': f"KoboldCPP process exited immediately with code {self.process.returncode}. Check the KoboldCPP console window for error details."}
                 
                     
             except Exception as e:

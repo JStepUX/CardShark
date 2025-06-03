@@ -34,16 +34,24 @@ class ChatHandler:
         self._session_metadata = {}  # Cache of chat session metadata
 
     # --- New Atomic File Operation Helpers ---
-
+    
     def _atomic_write_file(self, target_path: Path, content_writer, create_backup: bool = True) -> bool:
         """Atomically write to a file using a temporary file and rename operation."""
+        tmp_path = None
         try:
             target_dir = target_path.parent
+            
+            # Create backup if requested and file exists
             if create_backup and target_path.exists():
                 backup_path = target_path.with_suffix(f"{target_path.suffix}.bak")
                 self.logger.log_step(f"Creating backup at {backup_path}")
-                shutil.copy2(target_path, backup_path)
+                try:
+                    shutil.copy2(target_path, backup_path)
+                except Exception as backup_error:
+                    self.logger.log_error(f"Failed to create backup: {backup_error}")
+                    # Continue without backup rather than failing
             
+            # Write to temporary file
             with tempfile.NamedTemporaryFile(
                 mode='w', 
                 encoding='utf-8',
@@ -55,23 +63,27 @@ class ChatHandler:
                 self.logger.log_step(f"Writing to temporary file: {tmp_path}")
                 content_writer(tmp_file)
                 
+            # Verify file integrity
             if not self._verify_file_integrity(tmp_path):
                 self.logger.log_error(f"Integrity check failed for {tmp_path}")
-                if tmp_path.exists():
+                if tmp_path and tmp_path.exists():
                     tmp_path.unlink()
                 return False
                 
-            if os.name == 'nt':  # Windows
-                target_path_old = target_path.with_suffix(f"{target_path.suffix}.old")
-                if target_path.exists():
-                    if target_path_old.exists():
-                        target_path_old.unlink()
-                    os.replace(str(target_path), str(target_path_old))
+            # Atomic replacement - simplified for Windows compatibility
+            try:
+                # On Windows, we need to handle the case where target file exists
+                if os.name == 'nt' and target_path.exists():
+                    # Remove target file first on Windows (it will be recreated by replace)
+                    target_path.unlink()
+                
+                # Atomic move operation (works on both Windows and Unix)
                 os.replace(str(tmp_path), str(target_path))
-                if target_path_old.exists():
-                    target_path_old.unlink()
-            else:  # Unix/Linux/macOS
-                os.replace(str(tmp_path), str(target_path))
+                tmp_path = None  # Successfully moved, don't try to clean up
+                
+            except Exception as replace_error:
+                self.logger.log_error(f"Failed to replace target file: {replace_error}")
+                raise
                 
             self.logger.log_step(f"Successfully wrote file: {target_path}")
             return True
@@ -79,11 +91,14 @@ class ChatHandler:
         except Exception as e:
             self.logger.log_error(f"Error in atomic file write: {str(e)}")
             self.logger.log_error(traceback.format_exc())
-            try:
-                if 'tmp_path' in locals() and Path(tmp_path).exists():
-                    Path(tmp_path).unlink()
-            except Exception as cleanup_error:
-                self.logger.log_error(f"Error cleaning up temp file: {str(cleanup_error)}")
+            
+            # Clean up temporary file if it still exists
+            if tmp_path and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception as cleanup_error:
+                    self.logger.log_error(f"Error cleaning up temp file: {str(cleanup_error)}")
+            
             return False
 
     def _verify_file_integrity(self, file_path: Path) -> bool:
