@@ -231,26 +231,8 @@ class CharacterService:
                         final_char_uuid = str(uuid.uuid4())
                         self.logger.log_info(f"Generated new UUID {final_char_uuid} for {abs_png_path}")
                         # Ensure lore image directory exists for new UUID
-                        self._ensure_lore_image_directory(final_char_uuid)
-                        # TODO: Consider a mechanism to write this new UUID back to the PNG.
+                        self._ensure_lore_image_directory(final_char_uuid)                        # TODO: Consider a mechanism to write this new UUID back to the PNG.
 
-                    if existing_char: # Update existing
-                        self.logger.log_info(f"Updating character {final_char_uuid} (Path: {abs_png_path}) in DB.")
-                        existing_char.character_uuid = final_char_uuid # Ensure UUID is updated if it changed
-                        existing_char.name = char_name
-                        existing_char.description = data_section.get("description")
-                        # ... (update all other fields as in migration script) ...
-                        existing_char.personality = data_section.get("personality")
-                        existing_char.scenario = data_section.get("scenario")
-                        existing_char.first_mes = data_section.get("first_mes")
-                        existing_char.mes_example = data_section.get("mes_example")
-                        existing_char.creator_comment = metadata.get("creatorcomment")
-                        existing_char.tags = _as_json_str(data_section.get("tags", []))
-                        existing_char.spec_version = metadata.get("spec_version")
-                        existing_char.extensions_json = _as_json_str(data_section.get("extensions", {}))
-                        if original_id_for_db and not existing_char.original_character_id:
-                             existing_char.original_character_id = original_id_for_db
-                        existing_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
                     with self.db_session_generator() as db:
                         if existing_char: # Update existing
                             self.logger.log_info(f"Updating character {final_char_uuid} (Path: {abs_png_path}) in DB.")
@@ -462,7 +444,7 @@ class CharacterService:
                         entry_dict = {
                             "id": entry.id,
                             "keys": self._safe_json_load(entry.keys_json, [], "keys_json", character_uuid),
-                            "secondary_keys": self._safe_json_load(entry.secondary_keysJson, [], "secondary_keys_json", character_uuid),
+                            "secondary_keys": self._safe_json_load(entry.secondary_keys_json, [], "secondary_keys_json", character_uuid),
                             "content": entry.content,
                             "comment": entry.comment,
                             "enabled": entry.enabled,
