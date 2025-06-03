@@ -218,55 +218,102 @@ class KoboldCppAdapter(ApiProviderAdapter):
         """Prepare headers for KoboldCPP"""
         headers = {
             'Content-Type': 'application/json',
-            'Accept': 'text/event-stream'
-        }
+            'Accept': 'text/event-stream'        }
         if api_key:
             headers['Authorization'] = f'Bearer {api_key}'
         return headers
-        
+
     def prepare_request_data(self,
                              prompt: str,
                              memory: Optional[str],
                              stop_sequence: List[str],
                              generation_settings: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare the request data for KoboldCPP"""
-        # Extract KoboldCPP-specific settings or use defaults
-        max_tokens = generation_settings.get('max_length', 220)
+        """Prepare the request data for KoboldCPP in native format"""
+        
+        # Extract KoboldCPP-specific settings with proper parameter names
+        max_length = generation_settings.get('max_length', 240)
+        max_context_length = generation_settings.get('max_context_length', 6144)
         temperature = generation_settings.get('temperature', 0.7)
         top_p = generation_settings.get('top_p', 0.9)
-        top_k = generation_settings.get('top_k', 40)
-        typical_p = generation_settings.get('typical_p', 1.0)
-        repetition_penalty = generation_settings.get('repetition_penalty', 1.1)
+        top_k = generation_settings.get('top_k', 100)
+        top_a = generation_settings.get('top_a', 0)
+        typical = generation_settings.get('typical', 1.0)  # Note: typical not typical_p
+        tfs = generation_settings.get('tfs', 1)
+        min_p = generation_settings.get('min_p', 0)
+        rep_pen = generation_settings.get('rep_pen', 1.07)
+        rep_pen_range = generation_settings.get('rep_pen_range', 360)
+        rep_pen_slope = generation_settings.get('rep_pen_slope', 0.7)
+        sampler_order = generation_settings.get('sampler_order', [6, 0, 1, 3, 4, 2, 5])
+        
+        # DynaTemp settings
+        dynatemp_range = generation_settings.get('dynatemp_range', 0)
+        dynatemp_exponent = generation_settings.get('dynatemp_exponent', 1)
+        
+        # Advanced settings
+        presence_penalty = generation_settings.get('presence_penalty', 0)
+        smoothing_factor = generation_settings.get('smoothing_factor', 0)
         
         # Extract word filtering settings if available
         banned_tokens = generation_settings.get('banned_tokens', [])
         
         # Log the preparation
-        self.logger.log_step(f"Preparing KoboldCPP request data with max_tokens={max_tokens}")
+        self.logger.log_step(f"Preparing KoboldCPP native format with max_length={max_length}")
         
-        # Create full prompt including memory if provided
-        full_prompt = ""
-        if memory:
-            full_prompt = memory + "\n\n" + prompt
-        else:
-            full_prompt = prompt
-            
-        # Create the KoboldCPP request format
+        # Create the KoboldCPP native request format
         data = {
-            "prompt": full_prompt,
-            "max_tokens": max_tokens,
+            # Core generation parameters - use KoboldCPP native names
+            "n": 1,
+            "max_context_length": max_context_length,
+            "max_length": max_length,
+            "rep_pen": rep_pen,
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,
-            "typical_p": typical_p,
-            "rep_pen": repetition_penalty,
-            "stopping_strings": stop_sequence
+            "top_a": top_a,
+            "typical": typical,  # KoboldCPP uses 'typical' not 'typical_p'
+            "tfs": tfs,
+            "rep_pen_range": rep_pen_range,
+            "rep_pen_slope": rep_pen_slope,
+            "sampler_order": sampler_order,
+            
+            # Memory and prompt separation (KoboldCPP native format)
+            "memory": memory if memory else "",
+            "prompt": prompt,
+            
+            # Control parameters
+            "trim_stop": True,
+            "quiet": True,
+            "use_default_badwordsids": False,
+            "bypass_eos": False,
+            
+            # Advanced sampling
+            "min_p": min_p,
+            "dynatemp_range": dynatemp_range,
+            "dynatemp_exponent": dynatemp_exponent,
+            "smoothing_factor": smoothing_factor,
+            "presence_penalty": presence_penalty,
+            
+            # Additional metadata fields
+            "banned_tokens": banned_tokens,
+            "render_special": False,
+            "logprobs": False,
+            "replace_instruct_placeholders": True,
+            "logit_bias": {},
+            
+            # Stop sequences
+            "stop_sequence": stop_sequence,
         }
         
-        # Add banned tokens if present
-        if banned_tokens:
-            data["banned_tokens"] = banned_tokens
-            self.logger.log_step(f"Adding {len(banned_tokens)} banned tokens to KoboldCPP request")
+        # Add generation key if available (KoboldCPP uses this for tracking)
+        genkey = generation_settings.get('genkey')
+        if genkey:
+            data["genkey"] = genkey
+        
+        # Add nsigma if available
+        nsigma = generation_settings.get('nsigma', 0)
+        data["nsigma"] = nsigma
+        
+        self.logger.log_step(f"KoboldCPP native payload prepared with {len(data)} parameters")
         
         return data
         
