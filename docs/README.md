@@ -10,6 +10,7 @@ CardShark is a PNG metadata editor built primarily by AI assistants.
 ![cs_templates](https://github.com/user-attachments/assets/a54b277d-8a38-4fbc-bc1a-3f23406b1aeb)
 ![cs_prompts](https://github.com/user-attachments/assets/60cd72e6-dcf5-4a2f-b821-342d8c5e030e)
 
+Feedback, issues, or gripes? Just want to hang out? Hit us up on the [CardShark Discord](https://discord.gg/RfVts3hYsd).
 
 # CardShark Project Documentation
 

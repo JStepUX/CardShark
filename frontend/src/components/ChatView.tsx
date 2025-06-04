@@ -13,7 +13,6 @@ import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSett
 import MoodBackground from './MoodBackground';
 import MoodIndicator from './MoodIndicator';
 import VirtualChatList, { VirtualChatListRef } from './VirtualChatList';
-import { useChatMessages } from '../hooks/useChatMessages';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
 import { useChatContinuation } from '../hooks/useChatContinuation';
 import { usePerformance } from '../contexts/PerformanceContext';
@@ -25,7 +24,6 @@ import ErrorMessage from './ErrorMessage';
 import { ChatStorage } from '../services/chatStorage';
 import { useScrollToBottom } from '../hooks/useScrollToBottom';
 import { useChat } from '../contexts/ChatContext'; // Import useChat
-// Removed APIConfig import as it's not directly used here anymore
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -136,11 +134,12 @@ const InputArea: React.FC<InputAreaProps> = ({
       }
     }
   };
-
   // Reset image error state when user changes
   useEffect(() => {
     setImageError(false);
-  }, [currentUser?.filename]);  return (
+  }, [currentUser?.filename]);
+
+  return (
     <div className="flex-none p-4 border-t border-stone-800 performance-contain">
       <div className="flex items-end gap-4 performance-contain">
         {/* User Image */}
@@ -214,7 +213,7 @@ const ChatView: React.FC = () => {
   const [localError, setLocalError] = useState<string | null>(null); // Local error state for UI feedback  // Use the custom scroll hook with our shared implementation
   const { endRef: messagesEndRef, containerRef: messagesContainerRef, scrollToBottom } = useScrollToBottom();
   const virtualChatListRef = useRef<VirtualChatListRef>(null);
-
+  // Use ChatContext instead of useChatMessages hook
   const {
     messages,
     isGenerating,
@@ -231,10 +230,11 @@ const ChatView: React.FC = () => {
     updateMessage,
     setCurrentUser,
     loadExistingChat,
+    createNewChat: handleNewChat,
     updateReasoningSettings,
-    clearError: clearHookError, // Rename hook clearError
-    handleNewChat // Get handleNewChat from the hook
-  } = useChatMessages(characterData);
+    clearError: clearHookError,
+    currentChatId // Get currentChatId directly from ChatContext
+  } = useChat();
 
   // Create a unified scroll function that works for both virtual and regular chat lists
   const scrollToBottomUnified = useCallback(() => {
@@ -246,12 +246,6 @@ const ChatView: React.FC = () => {
       scrollToBottom();
     }
   }, [performanceConfig.virtualScrolling.enabled, performanceConfig.virtualScrolling.threshold, messages.length, scrollToBottom]);
-  // Get lore image preview state from ChatContext
-  const { } = useChat(); // Connect to ChatContext without destructuring unused variables
-
-  // Get current chat ID from the last context window
-  const currentChatId = lastContextWindow?.chatId ||
-                       (lastContextWindow?.type === 'chat_loaded' ? lastContextWindow.chatId : null);
 
   // Load background settings from localStorage
   useEffect(() => {
@@ -267,10 +261,8 @@ const ChatView: React.FC = () => {
 
   // Save background settings when they change
   useEffect(() => {
-    localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));
-
-    // Also update background settings in current chat metadata
-    if (characterData && messages.length > 0 && !isGenerating) { // Avoid saving during generation
+    localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));    // Also update background settings in current chat metadata
+    if (characterData && messages.length > 0 && !isGenerating && currentChatId) { // Avoid saving during generation
       try {        // Pass current background settings when saving the chat
         ChatStorage.saveChat(
           characterData,
@@ -297,7 +289,6 @@ const ChatView: React.FC = () => {
       }
     }
   }, [lastContextWindow]);
-
   // Use the chat continuation hook
   const {
     continueResponse,
@@ -306,10 +297,10 @@ const ChatView: React.FC = () => {
     clearError: clearContinuationError  } = useChatContinuation(
     messages,
     characterData,
-    currentChatId,
+    currentChatId || '', // Provide empty string fallback
     (updatedMessages) => {      // This is the saveMessages function passed to useChatContinuation
       // Use ChatStorage directly as apiService.saveChat might not exist or be correct
-      if (characterData) {
+      if (characterData && currentChatId) {
           ChatStorage.saveChat(characterData, currentChatId, updatedMessages, currentUser, null, backgroundSettings);
       }
     },
@@ -320,8 +311,8 @@ const ChatView: React.FC = () => {
       );
 
       messagesToUpdate.forEach(msg => {
-        // Pass true for isStreamingUpdate to prevent immediate saves during continuation
-        updateMessage(msg.id, msg.content, true);
+        // Remove the third parameter for isStreamingUpdate 
+        updateMessage(msg.id, msg.content);
       });
     },
     // Now we properly set isGenerating state to show the stop button during continuation

@@ -54,7 +54,7 @@ interface ChatContextType {
   stopGeneration: () => void;
   setCurrentUser: (user: UserProfile | null) => void;
   loadExistingChat: (chatId: string) => Promise<void>;
-  createNewChat: () => Promise<void>;
+  createNewChat: () => Promise<string | null>;
   updateReasoningSettings: (settings: ReasoningSettings) => void;
   navigateToPreviewImage: (index: number) => void;
   trackLoreImages: (matchedEntries: LoreEntry[], characterUuid: string) => void;
@@ -101,7 +101,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentGenerationRef = useRef<AbortController | null>(null);
   const lastCharacterId = useRef<string | null>(null); // Stores character_id for file system comparison
   const autoSaveEnabled = useRef(true);
-  const createNewChatRef = useRef<(() => Promise<void>) | null>(null);
+  const createNewChatRef = useRef<(() => Promise<string | null>) | null>(null);
   const isCreatingChatRef = useRef(false); // Prevent concurrent chat creation
 
   useEffect(() => {
@@ -406,14 +406,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return msg;
     }));
     setMessages(currentMsgs => { saveChat(currentMsgs); return currentMsgs; });
-  }, [saveChat]);
-    const createNewChat = useCallback(async () => {
-    if (!characterData) return;
+  }, [saveChat]);    const createNewChat = useCallback(async (): Promise<string | null> => {
+    if (!characterData) return null;
     
     // Prevent concurrent chat creation
     if (isCreatingChatRef.current) {
       console.log('Chat creation already in progress, skipping duplicate request');
-      return;
+      return null;
     }
     
     isCreatingChatRef.current = true;
@@ -427,7 +426,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(newChatResp.error || 'Failed to create new chat session.');
         setIsLoading(false); 
         isCreatingChatRef.current = false; // Reset flag on early return
-        return;
+        return null;
       }
       const newCId = newChatResp.chat_session_uuid;
       setCurrentChatId(newCId); 
@@ -452,7 +451,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setMessages(initMsgs);
       const saveOk = await saveChat(initMsgs);
-      if (!saveOk) console.warn(`Initial save for new chat ${newCId} failed.`);    } catch (err) {
+      if (!saveOk) console.warn(`Initial save for new chat ${newCId} failed.`);
+      
+      return newCId; // Return the new chat ID
+    } catch (err) {
       console.error('Error creating new chat:', err);
       setError(err instanceof Error ? err.message : 'Failed to create new chat');
       setLastContextWindow({
@@ -460,6 +462,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         characterName: characterData?.data?.name || 'Unknown',
         error: err instanceof Error ? err.message : 'Failed to create new chat'
       });
+      return null;
     } finally { 
       setIsLoading(false); 
       isCreatingChatRef.current = false; // Reset the creation flag
@@ -468,7 +471,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   useEffect(() => { createNewChatRef.current = createNewChat; }, [createNewChat]);
   
-
   const generateResponse = useCallback(async (prompt: string) => {
     if (!characterData) { setError('No character data for response.'); return; }
     
@@ -476,8 +478,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!effectiveChatId) {
       console.log("No currentChatId, creating new chat for response.");
       if (createNewChatRef.current) {
-        await createNewChatRef.current(); // This will set currentChatId
-        effectiveChatId = currentChatId; // Re-fetch after creation
+        effectiveChatId = await createNewChatRef.current(); // Get the chat ID directly from the function
         if (!effectiveChatId && !messagesRef.current.find(m => m.role === 'assistant')) { // Still no ID and no initial message
            console.error("Failed to establish chat session for response.");
            setError("Failed to establish chat. Try creating a new chat.");

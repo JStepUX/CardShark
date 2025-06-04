@@ -388,6 +388,49 @@ async def generate_chat_response_endpoint( # Made async to accommodate potential
     except Exception as e:
         raise handle_generic_error(e, "generating chat response")
 
+@router.post("/list-character-chats", response_model=DataResponse[List[Dict]])
+def list_character_chats_endpoint(
+    payload: dict,  # Accept the payload structure from frontend
+    db: Session = Depends(get_db),
+    chat_handler: ChatHandler = Depends(get_chat_handler),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """List all chats for a specific character"""
+    try:
+        character_data = payload.get("character_data")
+        if not character_data:
+            raise ValidationException("character_data is required")
+            
+        character_uuid = character_data.get("data", {}).get("character_uuid")
+        if not character_uuid:
+            raise ValidationException("character_uuid is required in character_data")
+        
+        # Get all chat sessions for this character from database
+        chat_sessions = chat_service.get_chat_sessions_by_character(db, character_uuid)
+        
+        # Convert to the format expected by frontend
+        chats = []
+        for session in chat_sessions:
+            chat_info = {
+                "id": session.chat_session_uuid,
+                "title": session.title or f"Chat {session.chat_session_uuid[:8]}",
+                "last_message_time": session.last_message_time.isoformat() if session.last_message_time else session.start_time.isoformat(),
+                "message_count": session.message_count,
+                "start_time": session.start_time.isoformat()
+            }
+            chats.append(chat_info)
+        
+        # Sort by last message time (most recent first)
+        chats.sort(key=lambda x: x["last_message_time"], reverse=True)
+        
+        return create_data_response(chats)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        raise handle_generic_error(e, "listing character chats")
+
 # --- Existing ChatSession CRUD ---
 # These routes use /chat_sessions/ prefix and are kept as is.
 
@@ -470,3 +513,45 @@ def delete_chat_session_endpoint(
         raise
     except Exception as e:
         raise handle_generic_error(e, "deleting chat session")
+
+@router.post("/delete-chat", response_model=DataResponse[bool])
+def delete_chat_endpoint(
+    payload: dict,  # Accept the payload structure from frontend
+    db: Session = Depends(get_db),
+    chat_handler: ChatHandler = Depends(get_chat_handler),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Delete a specific chat session and its associated files"""
+    try:
+        chat_id = payload.get("chat_id")
+        if not chat_id:
+            raise ValidationException("chat_id is required")
+        
+        # Get the chat session from database to get file path
+        db_chat_session = chat_service.get_chat_session(db, chat_session_uuid=chat_id)
+        if not db_chat_session:
+            raise NotFoundException(f"ChatSession not found: {chat_id}")
+        
+        # Delete the chat log file if it exists
+        if db_chat_session.chat_log_path:
+            chat_log_file = Path(db_chat_session.chat_log_path)
+            if chat_log_file.exists():
+                try:
+                    chat_log_file.unlink()
+                    logger.log_info(f"Deleted chat log file: {chat_log_file}")
+                except Exception as e:
+                    logger.log_error(f"Failed to delete chat log file {chat_log_file}: {e}")
+                    # Continue with database deletion even if file deletion fails
+        
+        # Delete the chat session from database
+        deleted_session = chat_service.delete_chat_session(db, chat_session_uuid=chat_id)
+        if not deleted_session:
+            raise ValidationException("Failed to delete chat session from database")
+        
+        return create_data_response(True)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        raise handle_generic_error(e, "deleting chat")

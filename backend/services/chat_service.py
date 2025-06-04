@@ -43,6 +43,15 @@ def get_chat_sessions(
         query = query.filter(sql_models.ChatSession.user_uuid == user_uuid)
     return query.offset(skip).limit(limit).all()
 
+def get_chat_sessions_by_character(db: Session, character_uuid: str) -> List[sql_models.ChatSession]:
+    """
+    Get all chat sessions for a specific character, ordered by last_message_time descending.
+    """
+    return db.query(sql_models.ChatSession)\
+        .filter(sql_models.ChatSession.character_uuid == character_uuid)\
+        .order_by(sql_models.ChatSession.last_message_time.desc().nulls_last())\
+        .all()
+
 def get_latest_chat_session_for_character(db: Session, character_uuid: str) -> Optional[sql_models.ChatSession]:
     """
     Retrieves the most recent chat session for a given character,
@@ -72,13 +81,18 @@ def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydant
     return db_chat_session
 
 def delete_chat_session(db: Session, chat_session_uuid: str) -> Optional[sql_models.ChatSession]:
-    db_chat_session = get_chat_session(db, chat_session_uuid)
-    if db_chat_session:
-        # Here, you might also want to handle the deletion or archiving of the chat_log_path file.
-        # For now, we just delete the metadata record.
+    """Delete a chat session from the database"""
+    try:
+        db_chat_session = db.query(sql_models.ChatSession).filter(sql_models.ChatSession.chat_session_uuid == chat_session_uuid).first()
+        if not db_chat_session:
+            return None
+        
         db.delete(db_chat_session)
         db.commit()
-    return db_chat_session
+        return db_chat_session
+    except Exception as e:
+        db.rollback()
+        raise e
 
 def append_message_to_chat_session(db: Session, chat_session_uuid: str, message_payload: dict) -> Optional[sql_models.ChatSession]:
     """

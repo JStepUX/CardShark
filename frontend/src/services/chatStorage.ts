@@ -175,7 +175,7 @@ export class ChatStorage {
 
       const data = await response.json();
       console.log('Chat list received:', data);
-      return data.chats || [];
+      return data.data || [];
     } catch (error) {
       console.error('Error listing chats:', error);
       return [];

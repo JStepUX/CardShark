@@ -27,7 +27,10 @@ export interface WordSwapRule {
  * @returns The text content with any incomplete sentence at the end removed
  */
 export function removeIncompleteSentences(text: string): string {
+  console.log('[removeIncompleteSentences] Input:', text);
+  
   if (!text || typeof text !== 'string') {
+    console.log('[removeIncompleteSentences] Empty or invalid input, returning as-is');
     return text;
   }
   
@@ -36,30 +39,37 @@ export function removeIncompleteSentences(text: string): string {
   
   // If the text is empty after trimming, return it
   if (trimmedText.length === 0) {
+    console.log('[removeIncompleteSentences] Empty after trimming');
     return trimmedText;
   }
   
   // Check if the text already ends with a sentence ending
   const endsWithSentence = /[.!?]['"""'']?[)\]"'"""'\s]*$/.test(trimmedText);
+  console.log('[removeIncompleteSentences] Already ends with sentence:', endsWithSentence);
   if (endsWithSentence) {
     return trimmedText;
   }
   
   // Find the last sentence ending anywhere in the text
   const sentenceEndingRegex = /[.!?]['"""'']?/g;
-  let lastIndex = -1;  let match;
+  let lastIndex = -1;
+  let match;
   
   while ((match = sentenceEndingRegex.exec(trimmedText)) !== null) {
     lastIndex = match.index + match[0].length;
   }
   
+  console.log('[removeIncompleteSentences] Last sentence ending found at index:', lastIndex);
+  
   // If we found a sentence ending, trim the text to that point
   if (lastIndex > 0) {
     const result = trimmedText.substring(0, lastIndex);
+    console.log('[removeIncompleteSentences] Trimmed result:', result);
     return result;
   }
   
   // If no sentence ending is found, return the original text (might be just one incomplete sentence)
+  console.log('[removeIncompleteSentences] No sentence ending found, returning original');
   return trimmedText;
 }
 
