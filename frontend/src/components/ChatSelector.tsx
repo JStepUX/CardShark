@@ -290,10 +290,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             title="Refresh chats"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button 
+          </button>          <button 
             onClick={handleCreateNewChat}
-            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors"
+            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
             title="New chat"
           >
@@ -337,10 +336,10 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             {currentChatId ? 
               "No other chats found for this character" : 
               "No previous chats found"}
-          </p>
-          <button 
+          </p>          <button 
             onClick={handleCreateNewChat}
-            className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors"
+            className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading}
           >
             <Plus size={16} /> Start New Chat
           </button>

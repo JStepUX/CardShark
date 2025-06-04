@@ -377,12 +377,13 @@ async def list_characters(
 async def get_character_by_uuid_endpoint(
     character_uuid: str,
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger_dependency),
+    db: Session = Depends(get_db_dependency)
 ):
     """Get a specific character by UUID with standardized response."""
     try:
         logger.info(f"GET /api/character/{character_uuid}")
-        db_char = char_service.get_character_by_uuid(character_uuid)
+        db_char = char_service.get_character_by_uuid(character_uuid, db)
         if not db_char:
             raise NotFoundException(f"Character with UUID {character_uuid} not found")
         
@@ -393,7 +394,7 @@ async def get_character_by_uuid_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error retrieving character {character_uuid}: {str(e)}")
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "retrieving character")
 
 @router.post("/characters/save-card", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Save/Update character card (PNG+DB)")
 async def save_character_card_endpoint(
@@ -433,14 +434,15 @@ async def save_character_card_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error in save_character_card endpoint: {e}")
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "saving character card")
 
 @router.delete("/character/{character_uuid}", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Delete a character by UUID")
 async def delete_character_by_uuid_endpoint(
     character_uuid: str,
     delete_png: bool = Query(False, description="Whether to also delete the character's PNG file from disk."),
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger_dependency),
+    db: Session = Depends(get_db_dependency)
 ):
     """Delete a character by UUID with standardized response."""
     try:
@@ -448,7 +450,7 @@ async def delete_character_by_uuid_endpoint(
         success = char_service.delete_character(character_uuid, delete_png_file=delete_png)
         if not success:
             # Check if it was not found vs other error
-            db_char_check = char_service.get_character_by_uuid(character_uuid)
+            db_char_check = char_service.get_character_by_uuid(character_uuid, db)
             if not db_char_check:
                 raise NotFoundException(f"Character with UUID {character_uuid} not found")
             raise ValidationException("Failed to delete character")
@@ -461,7 +463,7 @@ async def delete_character_by_uuid_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error deleting character {character_uuid}: {str(e)}")
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "deleting character")
 
 @router.post("/character/{character_uuid}/duplicate", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Duplicate a character by UUID")
 async def duplicate_character_endpoint(
@@ -492,13 +494,14 @@ async def duplicate_character_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error duplicating character {character_uuid}: {str(e)}")
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "duplicating character")
 
 @router.get("/character-image/{character_uuid}", summary="Serve a character's PNG image by UUID")
 async def get_character_image_by_uuid(
     character_uuid: str,
     char_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger_dependency),
+    db: Session = Depends(get_db_dependency)
 ):
     logger.info(f"Request for image for character UUID: {character_uuid}")
     
@@ -507,7 +510,7 @@ async def get_character_image_by_uuid(
         character_uuid = character_uuid[:-4]  # Remove .png extension
         logger.info(f"Removed .png extension from UUID parameter, using: {character_uuid}")
     
-    db_char = char_service.get_character_by_uuid(character_uuid)
+    db_char = char_service.get_character_by_uuid(character_uuid, db)
     if not db_char or not db_char.png_file_path:
         raise HTTPException(status_code=404, detail="Character or character image path not found.")
     
@@ -572,7 +575,7 @@ async def trigger_scan_character_directory_endpoint(
         return create_data_response({"success": True, "message": "Character directory synchronization complete"})
     except Exception as e:
         logger.error(f"Error during manual character directory scan: {e}", error=e)
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "character directory scan")
 
 # --- Utility Endpoints (Primarily for uploaded files, not interacting with DB characters directly) ---
 
@@ -738,7 +741,7 @@ async def extract_metadata_from_upload_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error extracting metadata from upload: {e}")
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "extracting metadata")
 
 @router.post("/characters/extract-lore", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Upload PNG and extract lore book")
 async def extract_lore_from_upload_endpoint(
@@ -774,55 +777,136 @@ async def extract_lore_from_upload_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error extracting lore from upload: {e}")
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "extracting lore")
+
+class BackyardImportRequest(BaseModel):
+    url: str
 
 @router.post("/characters/import-backyard", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Import character from Backyard.ai URL")
 async def import_from_backyard_endpoint(
     request: Request,
-    backyard_url_param: str = Query(..., alias="backyardUrl", description="The Backyard.ai character URL"),
+    backyard_request: BackyardImportRequest,
     char_service: CharacterService = Depends(get_character_service_dependency),
     backyard_handler: BackyardHandler = Depends(get_backyard_handler_dependency),
     png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Import character from Backyard.ai URL with standardized response."""
     try:
-        logger.info(f"POST /api/characters/import-backyard for URL: {backyard_url_param}")
+        backyard_url = backyard_request.url
+        logger.info(f"POST /api/characters/import-backyard for URL: {backyard_url}")
         
-        image_bytes = await backyard_handler.download_character_bytes(backyard_url_param)
+        # Import character data using existing method - this returns V2 format
+        character_data, preview_url = backyard_handler.import_character(backyard_url)
+        if not character_data:
+            raise ValidationException("Failed to import character data from Backyard URL")
+        
+        # Generate UUID for the character
+        character_uuid = str(uuid.uuid4())
+        
+        # Add UUID to the character data
+        if 'data' not in character_data:
+            character_data['data'] = {}
+        character_data['data']['character_uuid'] = character_uuid
+        character_data['character_uuid'] = character_uuid  # Also at top level for compatibility
+        
+        # Download character image from preview URL
+        image_bytes = None
+        if preview_url:
+            try:
+                import requests
+                response = requests.get(preview_url, timeout=30)
+                response.raise_for_status()
+                image_bytes = response.content
+                
+                if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                    logger.warning("Downloaded image is not a PNG, attempting to use anyway")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to download preview image: {e}")
+                # Continue without image - we'll create a default PNG
+                
+        # If no image downloaded, create a simple default PNG
         if not image_bytes:
-            raise ValidationException("Failed to download character from Backyard URL")
+            from PIL import Image
+            import io
+            # Create a simple 512x512 default image
+            default_img = Image.new('RGB', (512, 512), color='lightgray')
+            img_buffer = io.BytesIO()
+            default_img.save(img_buffer, format='PNG')
+            image_bytes = img_buffer.getvalue()
+            logger.info("Created default PNG image for Backyard import")
         
-        if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
-            raise ValidationException("Downloaded file is not a valid PNG")
-
-        raw_metadata = png_handler.read_metadata(image_bytes)
-        if not raw_metadata:
-            raw_metadata = {}
-            logger.warning("No metadata found in downloaded Backyard card, will save with minimal data")
+        # Generate filename from character name
+        character_name = character_data.get('data', {}).get('name', 'imported_backyard_char')
+        # Sanitize filename
+        import re
+        sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name)
+        sanitized_name = sanitized_name[:100] if sanitized_name else f"backyard_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
-        original_filename = Path(urllib.parse.urlparse(backyard_url_param).path).name or "imported_backyard_char.png"
-
-        saved_db_character = char_service.save_uploaded_character_card(
-            raw_character_card_data=raw_metadata,
-            image_bytes=image_bytes,
-            original_filename=original_filename
-        )
-
-        if not saved_db_character:
-            raise ValidationException("Failed to save imported Backyard character")
-
-        api_char_response = to_api_model(saved_db_character, logger)
-        return create_data_response({
-            "character": api_char_response,
-            "message": "Character imported successfully"
-        })
+        # Get character directory from settings
+        character_dir_setting = settings_manager.get_setting("character_directory")
+        if not character_dir_setting:
+            # Use default characters directory
+            character_dir = Path(__file__).resolve().parent.parent / "characters"
+        else:
+            character_dir = Path(character_dir_setting)
+        
+        # Ensure directory exists
+        character_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename to avoid collisions
+        base_filename = f"{sanitized_name}.png"
+        png_path = character_dir / base_filename
+        counter = 1
+        while png_path.exists():
+            png_path = character_dir / f"{sanitized_name}_{counter}.png"
+            counter += 1
+        
+        # Embed V2 metadata into PNG using the metadata handler
+        try:
+            final_image_bytes = png_handler.write_metadata(image_bytes, character_data)
+            logger.info("Successfully embedded V2 metadata into PNG")
+        except Exception as e:
+            logger.error(f"Failed to embed metadata into PNG: {e}")
+            raise ValidationException(f"Failed to embed character metadata: {str(e)}")
+        
+        # Save PNG file to characters directory
+        try:
+            with open(png_path, "wb") as f:
+                f.write(final_image_bytes)
+            logger.info(f"Saved character PNG to: {png_path}")
+        except Exception as e:
+            logger.error(f"Failed to save PNG file: {e}")
+            raise ValidationException(f"Failed to save character file: {str(e)}")
+        
+        # Trigger directory sync to ensure the new character is immediately available in the database
+        # This enables UUID-based image lookups and gallery refresh
+        try:
+            logger.info("Syncing character directories after Backyard import")
+            char_service.sync_character_directories()
+            logger.info("Character directory sync completed successfully")
+        except Exception as e:
+            logger.warning(f"Directory sync failed after import, but PNG was saved: {e}")
+            # Don't fail the import if sync fails - the PNG exists and will be picked up later
+        
+        # Return V2 format directly for immediate frontend use
+        # This matches what the character-metadata endpoint returns
+        response_data = {
+            "character": character_data,  # V2 format with characterData.data structure
+            "message": "Character imported successfully",
+            "file_path": str(png_path)
+        }
+        
+        logger.info(f"Successfully imported Backyard character: {character_name}")
+        return create_data_response(response_data)
         
     except ValidationException:
         raise
     except Exception as e:
         logger.error(f"Error importing from Backyard: {e}")
-        raise handle_generic_error(e, logger)
+        raise handle_generic_error(e, "importing from Backyard")
 
 # Deprecated/Old Endpoints to be removed or fully refactored:
 # - /characters/{character_id}/avatar (avatar handling is part of save_card now)

@@ -328,13 +328,20 @@ const Layout: React.FC = () => {
       }
   
       const data = await response.json();
-      if (data.success && data.metadata) {
-        setCharacterData(data.metadata);
-        if (data.imageUrl) {
-          setImageUrl(data.imageUrl);
+      if (data.success && data.data && data.data.character) {
+        // Extract character data from the API response
+        const characterData = data.data.character;
+        setCharacterData(characterData);
+        
+        // For imported characters, use the character UUID to construct image URL
+        if (characterData.character_uuid) {
+          setImageUrl(`/api/character-image/${characterData.character_uuid}.png`);
         }
+        
+        // Show success message
+        console.log("Backyard character imported successfully:", characterData.name || 'Unknown Character');
       } else {
-        throw new Error(data.message || "Failed to process character data");
+        throw new Error(data.message || data.data?.message || "Failed to process character data");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import character");

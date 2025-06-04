@@ -1,5 +1,6 @@
 import re
 import json
+import re
 import requests # type: ignore
 from typing import Tuple, Dict, Optional
 from backend.character_validator import CharacterValidator
@@ -38,11 +39,10 @@ class BackyardHandler:
 
                 character = queries[0].get('state', {}).get('data', {}).get('character', {})
                 if not character:
-                    raise ValueError("No character found in query data")
-
-                # Convert to V2 format
+                    raise ValueError("No character found in query data")                # Convert to V2 format
                 v2_data = self._convert_to_v2(character)
-                validated_data = self.validator.normalize(v2_data)
+                # Skip normalize since we already have proper V2 format
+                validated_data = v2_data
 
                 # Get preview image URL
                 preview_url = None
@@ -85,8 +85,7 @@ class BackyardHandler:
         for old, new in replacements:
             if old in result:
                 result = result.replace(old, new)
-                self.logger.log_step(f"Converting variable: {old} → {new}")
-                
+                self.logger.log_step(f"Converting variable: {old} → {new}")                
         return result
 
     def _convert_to_v2(self, char_data: Dict) -> Dict:
@@ -106,15 +105,14 @@ class BackyardHandler:
             for field in text_fields:
                 if field in char_data:
                     converted_data[field] = self._convert_text_fields(char_data[field])
-                    
-            # Create V2 structure
+                      # Create V2 structure
             v2_data = {
                 "spec": "chara_card_v2",
                 "spec_version": "2.0",
                 "data": {
                     "name": char_data.get('aiName', ''),
                     "description": converted_data.get('aiPersona', ''),
-                    "personality": "",
+                    "personality": converted_data.get('aiPersona', ''),  # Use aiPersona for personality too
                     "first_mes": converted_data.get('firstMessage', ''),
                     "mes_example": converted_data.get('customDialogue', ''),
                     "scenario": converted_data.get('scenario', ''),

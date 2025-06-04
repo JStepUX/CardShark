@@ -98,11 +98,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [availablePreviewImages, setAvailablePreviewImages] = useState<AvailablePreviewImage[]>([]);
   const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState<number>(0);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-
   const currentGenerationRef = useRef<AbortController | null>(null);
   const lastCharacterId = useRef<string | null>(null); // Stores character_id for file system comparison
   const autoSaveEnabled = useRef(true);
   const createNewChatRef = useRef<(() => Promise<void>) | null>(null);
+  const isCreatingChatRef = useRef(false); // Prevent concurrent chat creation
 
   useEffect(() => {
     const loadCtxWindow = async () => {
@@ -407,19 +407,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
     setMessages(currentMsgs => { saveChat(currentMsgs); return currentMsgs; });
   }, [saveChat]);
-  
-  const createNewChat = useCallback(async () => {
+    const createNewChat = useCallback(async () => {
     if (!characterData) return;
+    
+    // Prevent concurrent chat creation
+    if (isCreatingChatRef.current) {
+      console.log('Chat creation already in progress, skipping duplicate request');
+      return;
+    }
+    
+    isCreatingChatRef.current = true;
     console.log('Creating new chat');
     setIsLoading(true); setError(null); setCurrentChatId(null); 
 
     try {
-      await ChatStorage.clearContextWindow(); 
-      const newChatResp = await ChatStorage.createNewChat(characterData);
+      await ChatStorage.clearContextWindow();      const newChatResp = await ChatStorage.createNewChat(characterData);
       if (!newChatResp.success || !newChatResp.chat_session_uuid) {
         console.error('Failed to create new chat session backend:', newChatResp.error);
         setError(newChatResp.error || 'Failed to create new chat session.');
-        setIsLoading(false); return;
+        setIsLoading(false); 
+        isCreatingChatRef.current = false; // Reset flag on early return
+        return;
       }
       const newCId = newChatResp.chat_session_uuid;
       setCurrentChatId(newCId); 
@@ -444,8 +452,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setMessages(initMsgs);
       const saveOk = await saveChat(initMsgs);
-      if (!saveOk) console.warn(`Initial save for new chat ${newCId} failed.`);
-    } catch (err) {
+      if (!saveOk) console.warn(`Initial save for new chat ${newCId} failed.`);    } catch (err) {
       console.error('Error creating new chat:', err);
       setError(err instanceof Error ? err.message : 'Failed to create new chat');
       setLastContextWindow({
@@ -453,7 +460,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         characterName: characterData?.data?.name || 'Unknown',
         error: err instanceof Error ? err.message : 'Failed to create new chat'
       });
-    } finally { setIsLoading(false); }
+    } finally { 
+      setIsLoading(false); 
+      isCreatingChatRef.current = false; // Reset the creation flag
+    }
   }, [characterData, currentUser, saveChat]);
   
   useEffect(() => { createNewChatRef.current = createNewChat; }, [createNewChat]);
