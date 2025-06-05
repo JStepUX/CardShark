@@ -3,6 +3,7 @@ import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import CharacterPreview from './CharacterPreview';
 import { NewCharacterDialog } from './NewCharacterDialog';
+import { CharacterCard, createEmptyCharacterCard } from '../types/schema';
 import { generateUUID } from '../utils/uuidUtils';
 
 export interface NewCharacterDialogProps {
@@ -15,7 +16,7 @@ const PngUpload: React.FC = () => {
   const [status, setStatus] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [filename, setFilename] = useState<string>('');
-  const [characterData, setCharacterData] = useState<any>(null);
+  const [characterData, setCharacterData] = useState<CharacterCard | null>(null);
   const [showNewCharacterDialog, setShowNewCharacterDialog] = useState<boolean>(false);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   
@@ -81,30 +82,12 @@ const PngUpload: React.FC = () => {
     setShowNewCharacterDialog(false);
     setCurrentFile(null);
     setStatus('Operation cancelled');
-  };
-  const handleNewCharacter = () => {
-    // Create new empty character with UUID
-    const emptyCharacter = {
-      spec: "chara_card_v2",
-      spec_version: "2.0",
-      data: {
-        name: "",
-        description: "",
-        personality: "",
-        first_mes: "",
-        mes_example: "",
-        scenario: "",
-        creator_notes: "",
-        system_prompt: "",
-        post_history_instructions: "",
-        alternate_greetings: [],
-        tags: [],
-        creator: "",
-        character_version: "",
-        character_uuid: generateUUID(), // Generate UUID for new character
-        extensions: {}
-      }
-    };
+  };  const handleNewCharacter = () => {
+    // Create new empty character using the helper function
+    const emptyCharacter = createEmptyCharacterCard();
+    
+    // Add UUID for new character
+    emptyCharacter.data.character_uuid = generateUUID();
 
     setCharacterData(emptyCharacter);
     setStatus('New character template created. Fill in details and save.');

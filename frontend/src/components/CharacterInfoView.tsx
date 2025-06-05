@@ -90,13 +90,12 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   const { imageUrl } = primaryContext;
     const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
-
   // Smart change tracking state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
   const [originalCharacterData, setOriginalCharacterData] = useState<CharacterCard | null>(null);
-  const changeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const changeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track original character data when it changes
   useEffect(() => {
@@ -127,8 +126,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
         clearTimeout(changeTimeoutRef.current);
       }
     };  }, [characterData, originalCharacterData]);
-
-  // Custom navigation blocking using beforeunload event
+  // Navigation blocking using beforeunload and improved popstate handling
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
@@ -138,14 +136,18 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
       }
     };
 
-    const handlePopState = (e: PopStateEvent) => {
+    const handlePopState = (_e: PopStateEvent) => {
       if (hasUnsavedChanges) {
-        e.preventDefault();
-        const confirmLeave = window.confirm('You have unsaved changes. Are you sure you want to leave?');
-        if (!confirmLeave) {
-          // Push the current state back to cancel the navigation
-          window.history.pushState(null, '', window.location.href);
-        }
+        // Since preventDefault() doesn't work on popstate, we need to handle this differently
+        // Use setTimeout to avoid blocking the current event handling
+        setTimeout(() => {
+          const confirmLeave = window.confirm('You have unsaved changes. Are you sure you want to leave?');
+          if (!confirmLeave) {
+            // Use history.go(1) to move forward one step instead of pushState
+            // This reverses the back navigation that just occurred
+            window.history.go(1);
+          }
+        }, 0);
       }
     };
 
@@ -158,7 +160,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [hasUnsavedChanges]);  // Save function
+  }, [hasUnsavedChanges]);// Save function
   const handleSave = async () => {
     if (!characterData) return;
     
