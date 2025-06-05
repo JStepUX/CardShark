@@ -3,6 +3,7 @@ import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import CharacterPreview from './CharacterPreview';
 import { NewCharacterDialog } from './NewCharacterDialog';
+import { generateUUID } from '../utils/uuidUtils';
 
 export interface NewCharacterDialogProps {
   isOpen: boolean;
@@ -13,10 +14,9 @@ export interface NewCharacterDialogProps {
 const PngUpload: React.FC = () => {
   const [status, setStatus] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [filename, setFilename] = useState<string>('');
-  const [characterData, setCharacterData] = useState<any>(null);
+  const [filename, setFilename] = useState<string>('');  const [characterData, setCharacterData] = useState<any>(null);
   const [showNewCharacterDialog, setShowNewCharacterDialog] = useState<boolean>(false);
-  const [, setCurrentFile] = useState<File | null>(null);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
   
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -38,17 +38,28 @@ const PngUpload: React.FC = () => {
         method: 'POST',
         body: formData,
       });
-      
-      const data = await response.json();
+        const data = await response.json();
       
       if (response.ok) {
-        setCharacterData(data.metadata);
-        if (data.is_new) {
-          setStatus('Created new character from image');
-          toast.success(data.is_new ? 'Created new character from image!' : 'Loaded existing character data from image!');
+        const metadata = data.metadata;
+        
+        // Check if the PNG contains character metadata
+        if (!metadata || Object.keys(metadata).length === 0 || !metadata.data) {
+          // No character metadata found - offer to create new character
+          setStatus('No character data found in PNG. Would you like to create a new character?');
+          setCurrentFile(file);
+          setShowNewCharacterDialog(true);
+          toast.info('No character metadata found in this PNG. You can create a new character instead.');
         } else {
-          setStatus('Loaded existing character data');
-          toast.success('Loaded existing character data from image!');
+          // Character metadata found - process normally
+          setCharacterData(metadata);
+          if (data.is_new) {
+            setStatus('Created new character from image');
+            toast.success('Created new character from image!');
+          } else {
+            setStatus('Loaded existing character data');
+            toast.success('Loaded existing character data from image!');
+          }
         }
       } else {
         const errorMsg = data.message || 'Upload failed';
@@ -70,9 +81,8 @@ const PngUpload: React.FC = () => {
     setCurrentFile(null);
     setStatus('Operation cancelled');
   };
-
   const handleNewCharacter = () => {
-    // Create new empty character
+    // Create new empty character with UUID
     const emptyCharacter = {
       spec: "chara_card_v2",
       spec_version: "2.0",
@@ -90,12 +100,13 @@ const PngUpload: React.FC = () => {
         tags: [],
         creator: "",
         character_version: "",
+        character_uuid: generateUUID(), // Generate UUID for new character
         extensions: {}
       }
     };
 
     setCharacterData(emptyCharacter);
-    setStatus('New character template created. Fill in details and save.'); // Updated status
+    setStatus('New character template created. Fill in details and save.');
     toast.success('New character template created. Please fill in the details.');
     setShowNewCharacterDialog(false);
   };
@@ -140,7 +151,7 @@ const PngUpload: React.FC = () => {
         )}
       </div>
 
-      <CharacterPreview data={characterData} />
+      <CharacterPreview data={characterData} imageFile={currentFile} />
 
       <NewCharacterDialog 
         isOpen={showNewCharacterDialog}

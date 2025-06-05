@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import { CharacterCard } from '../types/schema';
+import { generateUUID } from '../utils/uuidUtils';
 
 // Add character file interface for gallery
 interface CharacterFile {
@@ -45,7 +46,6 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [error, setError] = useState<string | null>(null);
   const [isNewlyCreated, setIsNewlyCreated] = useState(false);
   const [characterCache, setCharacterCache] = useState<CharacterGalleryCache | null>(null);
-
   const createNewCharacter = (name: string) => {
     const newCharacter: CharacterCard = {
       name: "",
@@ -76,6 +76,7 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         creator: "",
         character_version: "",
         alternate_greetings: [],
+        character_uuid: generateUUID(), // Generate UUID for new character
         extensions: {
           talkativeness: "0.5",
           fav: false,

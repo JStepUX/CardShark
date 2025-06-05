@@ -26,13 +26,19 @@ export interface WordSwapRule {
  * @param text The text content to process
  * @returns The text content with any incomplete sentence at the end removed
  */
-export function removeIncompleteSentences(text: string): string {
-  console.log('[removeIncompleteSentences] Input:', text);
-  
-  if (!text || typeof text !== 'string') {
-    console.log('[removeIncompleteSentences] Empty or invalid input, returning as-is');
-    return text;
+const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
+
+ export function removeIncompleteSentences(text: string): string {
+  if (DEBUG_CONTENT_PROCESSING) {
+    console.debug('[removeIncompleteSentences] Input:', text);
   }
+   
+   if (!text || typeof text !== 'string') {
+    if (DEBUG_CONTENT_PROCESSING) {
+      console.debug('[removeIncompleteSentences] Empty or invalid input, returning as-is');
+    }
+     return text;
+   }
   
   // Trim the text first to remove trailing whitespace
   const trimmedText = text.trim();

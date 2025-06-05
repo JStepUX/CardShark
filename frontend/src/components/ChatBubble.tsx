@@ -72,10 +72,16 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     if (!isGenerating && previousContent.current !== message.content) {
       // Only apply incomplete sentence removal when configured in settings
       // and only for assistant messages being generated
-      if (message.role === 'assistant' && settings.remove_incomplete_sentences && message.content) {
-        console.log('[ChatBubble] Applying incomplete sentence removal to:', message.content);
-        const processedContent = removeIncompleteSentences(message.content);
-        console.log('[ChatBubble] Processed content:', processedContent);
+const DEBUG_CHAT_PROCESSING = process.env.NODE_ENV === 'development';
+
+   if (message.role === 'assistant' && settings.remove_incomplete_sentences && message.content) {
+    if (DEBUG_CHAT_PROCESSING) {
+      console.debug('[ChatBubble] Applying incomplete sentence removal to:', message.content);
+    }
+     const processedContent = removeIncompleteSentences(message.content);
+    if (DEBUG_CHAT_PROCESSING) {
+      console.debug('[ChatBubble] Processed content:', processedContent);
+    }
         if (processedContent !== message.content) {
           console.log('[ChatBubble] Content changed, calling onContentChange');
           onContentChange(processedContent);

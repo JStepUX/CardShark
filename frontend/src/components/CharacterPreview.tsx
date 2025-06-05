@@ -9,7 +9,12 @@ interface CharacterData {
   };
 }
 
-const CharacterPreview: React.FC<{ data: CharacterData | null }> = ({ data }) => {
+interface CharacterPreviewProps {
+  data: CharacterData | null;
+  imageFile?: File | null;
+}
+
+const CharacterPreview: React.FC<CharacterPreviewProps> = ({ data, imageFile }) => {
   if (!data || !data.data) {
     return null;
   }
@@ -19,6 +24,17 @@ const CharacterPreview: React.FC<{ data: CharacterData | null }> = ({ data }) =>
   return (
     <div className="mt-6 p-4 bg-white rounded-lg shadow">
       <h2 className="text-xl font-bold mb-4">Character Preview</h2>
+      
+      {imageFile && (
+        <div className="mb-4">
+          <h3 className="font-semibold text-gray-700">Image</h3>
+          <img 
+            src={URL.createObjectURL(imageFile)} 
+            alt="Character"
+            className="max-w-xs max-h-48 object-cover rounded-lg border"
+          />
+        </div>
+      )}
       
       {name && (
         <div className="mb-4">

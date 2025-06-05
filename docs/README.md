@@ -1,4 +1,6 @@
-CardShark is a PNG metadata editor built primarily by AI assistants.
+Feedback, issues, or gripes? Just want to hang out? Hit us up on the [CardShark Discord](https://discord.gg/RfVts3hYsd).
+
+CardShark is a PNG metadata editor and AI Chatbot front end built exclusively by AI assistants.
 
 ![cs_gallery](https://github.com/user-attachments/assets/4ab24c52-3a9c-4c96-9c30-77ed822f677b)
 ![cs_charinfo](https://github.com/user-attachments/assets/79bd551c-ab8f-42e9-a1eb-9a7fddb2eb8b)
@@ -9,8 +11,6 @@ CardShark is a PNG metadata editor built primarily by AI assistants.
 ![cs_api](https://github.com/user-attachments/assets/3d091e6b-770d-4c8b-881e-b0d2a2a3b121)
 ![cs_templates](https://github.com/user-attachments/assets/a54b277d-8a38-4fbc-bc1a-3f23406b1aeb)
 ![cs_prompts](https://github.com/user-attachments/assets/60cd72e6-dcf5-4a2f-b821-342d8c5e030e)
-
-Feedback, issues, or gripes? Just want to hang out? Hit us up on the [CardShark Discord](https://discord.gg/RfVts3hYsd).
 
 # CardShark Project Documentation
 
