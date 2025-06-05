@@ -170,7 +170,9 @@ Key client-side routes defined in [`src/App.tsx`](frontend/src/App.tsx:1) or sim
 -   **HTTP & Streaming**: `requests`, `sse-starlette`
 -   **Packaging**: `pyinstaller` (for creating executables)
 
-## Development Workflow
+## ========================== DEV ONLY =====================================
+## Development Workflow (Not for users - Users should use the .EXE releases)
+## ========================== DEV ONLY =====================================
 
 ### Prerequisites
 1.  Install **Node.js** (v16 or later) and **npm**.
