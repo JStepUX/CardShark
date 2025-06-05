@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, FileJson, SplitSquareVertical } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
 import { CharacterCard } from '../types/schema';
@@ -7,6 +7,7 @@ import RichTextEditor from './RichTextEditor';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { Dialog } from './Dialog';
 import MessagesView from './MessagesView';
+import { saveCharacterCardToPng } from '../handlers/exportHandlers';
 
 // Dedicated modal version of JsonViewer without redundant title
 const JsonViewerModal: React.FC<{
@@ -76,8 +77,7 @@ interface CharacterInfoViewProps {
   isSecondary?: boolean;
 }
 
-const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = false }) => {
-  // Use the appropriate context based on the mode
+const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = false }) => {  // Use the appropriate context based on the mode
   const primaryContext = useCharacter();
   const { isCompareMode, setCompareMode, secondaryCharacterData, setSecondaryCharacterData } = useComparison();
   
@@ -85,52 +85,152 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   const { characterData, setCharacterData } = isSecondary 
     ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
     : primaryContext;
-    
-  const [showFindReplace, setShowFindReplace] = useState(false);
+  
+  // Always get imageUrl from primary context (not used in secondary/compare mode)
+  const { imageUrl } = primaryContext;
+    const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
 
-  // State for managing name input when creating a new character
-  const [nameInput, setNameInput] = useState('');
-  
-  // Create a stateful flag to track if we're creating a new character
-  const [isCreatingNewCharacter, setIsCreatingNewCharacter] = useState(false);
+  // Smart change tracking state
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const [originalCharacterData, setOriginalCharacterData] = useState<CharacterCard | null>(null);
+  const changeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Track original character data when it changes
+  useEffect(() => {
+    if (characterData && JSON.stringify(characterData) !== JSON.stringify(originalCharacterData)) {
+      setOriginalCharacterData(JSON.parse(JSON.stringify(characterData)));
+      setHasUnsavedChanges(false);
+    }
+  }, [characterData?.data?.character_uuid]); // Only reset when character actually changes
+
+  // Debounced change detection - only detect real changes after user stops typing
+  useEffect(() => {
+    if (!originalCharacterData || !characterData) return;
+
+    // Clear existing timeout
+    if (changeTimeoutRef.current) {
+      clearTimeout(changeTimeoutRef.current);
+    }
+
+    // Set a debounced check for changes
+    changeTimeoutRef.current = setTimeout(() => {
+      const hasChanges = JSON.stringify(characterData) !== JSON.stringify(originalCharacterData);
+      setHasUnsavedChanges(hasChanges);
+    }, 1000); // 1 second delay to avoid flagging temporary typing
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (changeTimeoutRef.current) {
+        clearTimeout(changeTimeoutRef.current);
+      }
+    };  }, [characterData, originalCharacterData]);
+
+  // Custom navigation blocking using beforeunload event
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        const confirmLeave = window.confirm('You have unsaved changes. Are you sure you want to leave?');
+        if (!confirmLeave) {
+          // Push the current state back to cancel the navigation
+          window.history.pushState(null, '', window.location.href);
+        }
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [hasUnsavedChanges]);  // Save function
+  const handleSave = async () => {
+    if (!characterData) return;
+    
+    try {
+      // Create a simple image blob for saving (we could enhance this later with actual image)
+      const response = await fetch(imageUrl || '/api/placeholder-image');
+      const imageBlob = await response.blob();
+      
+      await saveCharacterCardToPng(characterData, imageBlob);
+      setOriginalCharacterData(JSON.parse(JSON.stringify(characterData)));
+      setHasUnsavedChanges(false);
+      setShowUnsavedModal(false);
+      
+      // Execute pending navigation if any
+      if (pendingNavigation) {
+        pendingNavigation();
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      console.error('Failed to save character:', error);
+    }
+  };
+
+  // Handle modal actions
+  const handleCancelNavigation = () => {
+    setShowUnsavedModal(false);
+    setPendingNavigation(null);
+  };
+
+  const handleDiscardChanges = () => {
+    if (originalCharacterData) {
+      setCharacterData(JSON.parse(JSON.stringify(originalCharacterData)));
+      setHasUnsavedChanges(false);
+    }
+    setShowUnsavedModal(false);
+    
+    // Execute pending navigation if any
+    if (pendingNavigation) {
+      pendingNavigation();
+      setPendingNavigation(null);
+    }
+  };
   const handleFieldChange = (field: keyof CharacterCard['data'], value: string | string[]): void => {
     try {
-      // Special handling for the name field when there's no character data yet
-      if (field === 'name' && !characterData?.data) {
-        // Just update local state without creating character
-        setNameInput(value as string);
-        setIsCreatingNewCharacter(true);
-        return;
-      } else if (field === 'name' && isCreatingNewCharacter) {
-        // We already have a character in progress, just update name
-        setNameInput(value as string);
-      }
-      
-      // For other fields or when character data exists
+      // If there's no character data yet, auto-create a new character
       if (!characterData?.data) {
-        console.error("Cannot update field when no character is selected");
-        return;
-      }
-
-      // Create new data object preserving all existing properties
-      const newData: CharacterCard = {
-        ...characterData,
-        data: {
-          ...characterData.data,
-          [field]: value
+        if (primaryContext.createNewCharacter) {
+          // Create with the field value as name, or empty name if it's not the name field
+          const newName = field === 'name' ? (value as string) : '';
+          primaryContext.createNewCharacter(newName);
+          // The useEffect will handle setting this as the original data
+          // Don't return here - continue to update the field after creation
+        } else {
+          console.error("Cannot create character: createNewCharacter function not available");
+          return;
         }
-      };
-
-      if (newData.spec !== "chara_card_v2" || !newData.spec_version) {
-        console.error("Invalid character data structure");
-        return;
       }
 
-      setCharacterData(newData);
+      // Update the character data (this will work for both existing and newly created characters)
+      setCharacterData((prev: CharacterCard | null) => {
+        if (!prev?.data) return prev;
+
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            [field]: value,
+          },
+        };
+      });
     } catch (error) {
-      console.error(`Error updating ${field}:`, error);
+      console.error("Error updating character field:", error);
     }
   };
 
@@ -189,43 +289,38 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             <FileJson className="w-5 h-5" />
           </button>
         </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
+      </div>      <div className="flex-1 overflow-y-auto">
         <div className="px-8 pb-8">
-          {/* Show Create Character button when there's a name but no character data */}
-          {isCreatingNewCharacter && nameInput && !characterData && (
-            <div className="mb-6 p-4 bg-stone-800 border border-stone-600 rounded-lg">
+          {/* Show unsaved changes notification */}
+          {hasUnsavedChanges && (
+            <div className="mb-6 p-4 bg-yellow-900/50 border border-yellow-600 rounded-lg">
               <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="text-md font-medium">New Character: {nameInput}</h3>
-                  <p className="text-sm text-gray-400">Click Create to initialize this character</p>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-300" />
+                  <div>
+                    <h3 className="text-md font-medium text-yellow-200">You have unsaved changes</h3>
+                    <p className="text-sm text-yellow-300">Remember to save your character to a PNG file</p>
+                  </div>
                 </div>
                 <button
-                  onClick={() => {
-                    if (primaryContext.createNewCharacter) {
-                      primaryContext.createNewCharacter(nameInput);
-                      setIsCreatingNewCharacter(false);
-                      setNameInput('');
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+                  onClick={handleSave}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
                 >
-                  Create Character
+                  <Save className="w-4 h-4" />
+                  Save Now
                 </button>
               </div>
             </div>
           )}
           
           <div className="space-y-6">
-            {/* Name Field */}
-            <div>
+            {/* Name Field */}            <div>
               <label className="block text-sm font-medium mb-2">Name</label>
               <input
                 type="text"
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} rounded-lg px-3 py-2`}
                 placeholder="Character name"
-                value={characterData?.data?.name || nameInput}
+                value={characterData?.data?.name || ''}
                 onChange={(e) => handleFieldChange('name', e.target.value)}
               />
             </div>
@@ -318,9 +413,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
         onClose={() => setShowFindReplace(false)}
         characterData={characterData}
         onReplace={setCharacterData}
-      />
-
-      {/* JSON Modal Dialog */}
+      />      {/* JSON Modal Dialog */}
       {showJsonModal && (
         <Dialog
           isOpen={showJsonModal}
@@ -334,6 +427,49 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               characterData={characterData} 
               setCharacterData={setCharacterData} 
             />
+          </div>
+        </Dialog>
+      )}
+
+      {/* Unsaved Changes Modal */}
+      {showUnsavedModal && (
+        <Dialog
+          isOpen={showUnsavedModal}
+          onClose={handleCancelNavigation}
+          title="Unsaved Changes"
+          showCloseButton={false}
+          className="max-w-md"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-yellow-500" />
+              <div>
+                <p className="text-white">You have unsaved changes that will be lost.</p>
+                <p className="text-gray-400 text-sm">Would you like to save before continuing?</p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCancelNavigation}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDiscardChanges}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Discard Changes
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                Save
+              </button>
+            </div>
           </div>
         </Dialog>
       )}

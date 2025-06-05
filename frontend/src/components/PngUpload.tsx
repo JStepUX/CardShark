@@ -14,7 +14,8 @@ export interface NewCharacterDialogProps {
 const PngUpload: React.FC = () => {
   const [status, setStatus] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [filename, setFilename] = useState<string>('');  const [characterData, setCharacterData] = useState<any>(null);
+  const [filename, setFilename] = useState<string>('');
+  const [characterData, setCharacterData] = useState<any>(null);
   const [showNewCharacterDialog, setShowNewCharacterDialog] = useState<boolean>(false);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   
