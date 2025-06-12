@@ -138,7 +138,7 @@ interface UseChatMessagesReturn extends SimplifiedChatState {
   stopGeneration: () => void;
   setCurrentUser: (user: UserProfile | null) => void;
   loadExistingChat: (chatId: string) => Promise<void>;
-  updateReasoningSettings: (settings: Partial<ReasoningSettings>) => void;
+  updateReasoningSettings: (settings: ReasoningSettings) => void;
   deleteMessage: (messageId: string) => void;
   updateMessage: (messageId: string, newContent: string, isStreamingUpdate?: boolean) => void;
   handleNewChat: () => Promise<void>;

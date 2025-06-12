@@ -1245,21 +1245,22 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     } finally {
       hasInitializedChat.current = true;
     }
-  }, [effectiveCharacterData, isGenericAssistant]);
-
-
-   const updateReasoningSettings = useCallback((settings: ReasoningSettings) => {
-    // Ensure that reasoning remains disabled and not visible, regardless of what is passed.
-    const forcedSettings = { ...settings, enabled: false, visible: false };
-    setState(prevState => ({
-      ...prevState,
-      reasoningSettings: forcedSettings
-    }));
-    try {
-      localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(forcedSettings));
-    } catch (error) {
-      console.error('Failed to save reasoning settings to localStorage:', error);
-    }
+  }, [effectiveCharacterData, isGenericAssistant]);  const updateReasoningSettings = useCallback((settings: ReasoningSettings) => {
+    setState(prevState => {
+      // Merge settings with current settings, but ensure reasoning remains disabled and not visible
+      const mergedSettings = { ...prevState.reasoningSettings, ...settings, enabled: false, visible: false };
+      
+      try {
+        localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(mergedSettings));
+      } catch (error) {
+        console.error('Failed to save reasoning settings to localStorage:', error);
+      }
+      
+      return {
+        ...prevState,
+        reasoningSettings: mergedSettings
+      };
+    });
   }, []);
 
   // Initialize reasoning settings in localStorage if not already set, ensuring it's disabled.
