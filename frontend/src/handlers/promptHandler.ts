@@ -243,7 +243,6 @@ ${character.data.mes_example || ''}
         .join('\n\n');
     }
   }
-
   /**
    * Generates a chat response using the provided parameters.
    * Routes to the working /api/generate endpoint with proper payload structure.
@@ -264,42 +263,30 @@ ${character.data.mes_example || ''}
     }
     
     try {
-      // Build the prompt from context messages and character data
-      let prompt = '';
-      let memory = '';
-      
-      // Extract character information for prompt building
-      if (characterCard?.data) {
-        const characterName = characterCard.data.name || 'Character';
-        const characterDescription = characterCard.data.description || '';
-        const personality = characterCard.data.personality || '';
-        const scenario = characterCard.data.scenario || '';
-        const systemPrompt = characterCard.data.system_prompt || '';
-        
-        // Build memory/system context
-        memory = `Character: ${characterName}\n`;
-        if (characterDescription) memory += `Description: ${characterDescription}\n`;
-        if (personality) memory += `Personality: ${personality}\n`;
-        if (scenario) memory += `Scenario: ${scenario}\n`;
-        if (systemPrompt) memory += `${systemPrompt}\n`;
-      }
-      
-      // Build conversation history into prompt
-      const conversationHistory = contextMessages.map(msg => {
-        const role = msg.role === 'user' ? 'User' : 
-                    msg.role === 'assistant' ? (characterCard?.data?.name || 'Assistant') : 
-                    'System';
-        return `${role}: ${msg.content}`;
-      }).join('\n');
-      
-      prompt = conversationHistory;
-      
-      // Get stop sequences from template or use defaults
+      // Get template and character info
       const templateId = apiConfig?.templateId;
       const template = this.getTemplate(templateId);
       const characterName = characterCard?.data?.name || 'Character';
+      
+      // Create memory context using the template system
+      let memory = '';
+      if (characterCard?.data) {
+        memory = this.createMemoryContext(characterCard, template, 'User');
+      }
+      
+      // Format conversation history using the template system
+      const prompt = this.formatChatHistory(
+        contextMessages.map(msg => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content
+        })),
+        characterName,
+        templateId
+      );
+        // Get stop sequences from template or use defaults
       const stopSequences = this.getStopSequences(template, characterName);
-        // Build the payload for /api/generate endpoint
+        
+      // Build the payload for /api/generate endpoint
       // Extract only essential character data without lore book to avoid sending unnecessary data
       const essentialCharacterData = characterCard ? {
         spec: characterCard.spec,
