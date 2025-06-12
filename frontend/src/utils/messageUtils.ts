@@ -56,29 +56,24 @@ export const MessageUtils = {
       timestamp: Date.now()
     };
   },
-  
   /**
    * Create an assistant message with variable substitution
    * @param content Optional initial content
-   * @param userName User name for substitution
-   * @param characterName Character name for substitution
+   * @param id Optional message ID
    * @returns Message object
    */
   createAssistantMessage: (
     content: string = '', 
-    userName?: string | null,
-    characterName?: string | null
+    id?: string
   ): Message => {
-    // Apply variable substitution if userName or characterName are provided
-    const processedContent = substituteVariables(content, userName, characterName);
-    
     return {
-      id: generateUUID(),
+      id: id || generateUUID(),
       role: 'assistant',
-      content: processedContent,
+      content,
       timestamp: Date.now(),
-      variations: processedContent ? [processedContent] : [],
-      currentVariation: 0
+      variations: content ? [content] : [],
+      currentVariation: 0,
+      status: content ? 'complete' : 'streaming'
     };
   },
   

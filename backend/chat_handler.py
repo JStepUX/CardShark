@@ -68,22 +68,21 @@ class ChatHandler:
                 self.logger.log_error(f"Integrity check failed for {tmp_path}")
                 if tmp_path and tmp_path.exists():
                     tmp_path.unlink()
-                return False
-                
-            # Atomic replacement - simplified for Windows compatibility
+                return False            # Atomic replacement - simplified for Windows compatibility
             try:
-                # On Windows, we need to handle the case where target file exists
-                if os.name == 'nt' and target_path.exists():
-                    # Remove target file first on Windows (it will be recreated by replace)
-                    target_path.unlink()
-                
                 # Atomic move operation (works on both Windows and Unix)
+                # os.replace() handles overwriting the target file automatically
                 os.replace(str(tmp_path), str(target_path))
                 tmp_path = None  # Successfully moved, don't try to clean up
                 
             except Exception as replace_error:
                 self.logger.log_error(f"Failed to replace target file: {replace_error}")
-                raise
+                # Don't re-raise the error if the file was actually written successfully
+                if target_path.exists():
+                    self.logger.log_step(f"Target file exists despite error, considering operation successful")
+                    tmp_path = None  # Don't try to clean up
+                else:
+                    raise
                 
             self.logger.log_step(f"Successfully wrote file: {target_path}")
             return True

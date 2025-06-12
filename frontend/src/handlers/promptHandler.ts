@@ -441,10 +441,10 @@ ${character.data.mes_example || ''}
               console.log('Stream complete marker received');
               continue;
             }
-            
-            try {
+              try {
               // Parse the JSON data
               const parsed = JSON.parse(data);
+              console.log(`[PromptHandler.streamResponse] Parsed data:`, parsed);
               
               // Log first chunk for debugging (optional)
               if (parsed.delta_type === 'role' && parsed.role === 'assistant') {
@@ -454,6 +454,7 @@ ${character.data.mes_example || ''}
               
               // Handle OpenRouter-specific token format from our improved adapter
               if (parsed.token !== undefined) {
+                console.log(`[PromptHandler.streamResponse] Yielding token: "${parsed.token}"`);
                 yield parsed.token;
                 continue;
               }
@@ -495,27 +496,31 @@ ${character.data.mes_example || ''}
                 }
                 continue;
               }
-              
-              // Handle different response formats
+                // Handle different response formats
               // OpenAI and OpenRouter format: choices[0].delta.content
               if (parsed.choices && parsed.choices[0]?.delta?.content) {
                 yield parsed.choices[0].delta.content;
                 continue;
               }
-              
-              // KoboldCPP and other formats
-              if (parsed.content) {
+                // KoboldCPP and other formats - check for content field
+              if (parsed.hasOwnProperty('content')) {
+                // Even if content is empty string, yield it (it's valid)
+                console.log(`[PromptHandler.streamResponse] Yielding content: "${parsed.content}"`);
                 yield parsed.content;
                 continue;
               }
               
               // Handle special formats with empty content that should be skipped
               if (parsed.delta_type === 'empty_delta' || parsed.delta_type === 'processing') {
+                console.log(`[PromptHandler.streamResponse] Skipping empty delta: ${parsed.delta_type}`);
                 continue;
               }
               
-              // If we can't extract content in a standard way, log the format
-              console.log('Unrecognized response format:', parsed);
+              // If we can't extract content in a standard way, log the format for debugging
+              console.warn('Unrecognized response format:', parsed);
+              console.warn('Parsed content:', parsed.content);
+              console.warn('Has content property:', parsed.hasOwnProperty('content'));
+              console.warn('Has token property:', parsed.hasOwnProperty('token'));
             } catch (error) {
               console.warn('Failed to parse SSE data:', error);
               // Just yield the raw data if parsing fails

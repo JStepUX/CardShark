@@ -152,16 +152,28 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
   const [state, setState] = useState<EnhancedChatState>(() => {
     let storedUser = ChatStorage.getCurrentUser();
     let persistedContextWindow = null;
-    let reasoningSettings = DEFAULT_REASONING_SETTINGS;
+    let reasoningSettings: ReasoningSettings;
 
     try {
-      const storedContextWindowStr = localStorage.getItem(CONTEXT_WINDOW_KEY);
-      if (storedContextWindowStr) persistedContextWindow = JSON.parse(storedContextWindowStr);
+      const storedContext = localStorage.getItem(CONTEXT_WINDOW_KEY);
+      if (storedContext) {
+        persistedContextWindow = JSON.parse(storedContext);
+      }
 
-      const savedReasoningSettingsStr = localStorage.getItem(REASONING_SETTINGS_KEY);
-      if (savedReasoningSettingsStr) reasoningSettings = { ...DEFAULT_REASONING_SETTINGS, ...JSON.parse(savedReasoningSettingsStr) };
+      // Attempt to load stored reasoning settings but always ensure 'enabled' and 'visible' are false.
+      const storedReasoningSettings = localStorage.getItem(REASONING_SETTINGS_KEY);
+      if (storedReasoningSettings) {
+        const parsedStoredSettings = JSON.parse(storedReasoningSettings);
+        // Override stored settings to ensure reasoning is disabled and not visible
+        reasoningSettings = { ...parsedStoredSettings, enabled: false, visible: false };
+      } else {
+        // If no stored settings, ensure it's off and not visible by default.
+        reasoningSettings = { ...DEFAULT_REASONING_SETTINGS, enabled: false, visible: false };
+      }
     } catch (err) {
-      console.error('Error loading settings from localStorage:', err);
+      console.error("Error initializing state from localStorage:", err);
+      // Fallback to defaults, ensuring reasoning is off and not visible.
+      reasoningSettings = { ...DEFAULT_REASONING_SETTINGS, enabled: false, visible: false };
     }
 
     return {
@@ -172,7 +184,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       currentUser: storedUser,
       lastContextWindow: persistedContextWindow,
       generatingId: null,
-      reasoningSettings,
+      reasoningSettings, // This will now always have enabled: false, visible: false
       chatSessionUuid: null, 
     };
   });
@@ -196,18 +208,20 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     fullConfig.generation_settings = { ...defaultConfig.generation_settings, ...(fullConfig.generation_settings || {}) };
     return { ...defaultConfig, ...fullConfig };
   }, []);
-
   const setGeneratingStart = (userMessage: Message | null, assistantMessage: Message) => {
+    console.log(`[setGeneratingStart] Setting generation for assistant message ID: ${assistantMessage.id}`);
     setState(prev => ({
       ...prev,
       messages: userMessage ? [...prev.messages, userMessage, assistantMessage] : [...prev.messages, assistantMessage],
       isGenerating: true, generatingId: assistantMessage.id, error: null
     }));
-  };
-
-  const updateGeneratingMessageContent = (messageId: string, chunk: string) => {
+    console.log(`[setGeneratingStart] State updated with generatingId: ${assistantMessage.id}`);
+  };const updateGeneratingMessageContent = (messageId: string, chunk: string) => {
+    console.log(`[updateGeneratingMessageContent] Updating message ${messageId} with chunk: "${chunk}"`);
     setState(prev => {
+      console.log(`[updateGeneratingMessageContent] State check - isGenerating: ${prev.isGenerating}, generatingId: "${prev.generatingId}", messageId: "${messageId}"`);
       if (!prev.isGenerating || prev.generatingId !== messageId) {
+        console.log(`[updateGeneratingMessageContent] Skipping update - not generating or wrong ID. isGenerating: ${prev.isGenerating}, generatingId: ${prev.generatingId}, messageId: ${messageId}`);
           return prev;
       }
       let found = false;
@@ -215,6 +229,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         if (msg.id === messageId) {
           found = true;
           const newContent = msg.content + chunk;
+          console.log(`[updateGeneratingMessageContent] Found message, updating content from "${msg.content}" to "${newContent}"`);
           return { ...msg, content: newContent, status: 'streaming' as Message['status'] };
         }
         return msg;
@@ -414,35 +429,35 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
   );
 
   const processStream = useCallback(async (
-    response: Response, messageId: string, isThinking: boolean,
-    onComplete: (finalContent: string, receivedChunks: number) => void,
-    onError: (error: Error) => void
+    response: Response, messageId: string, isThinking: boolean, onComplete: (content: string, chunks: number) => void, onError: (error: any) => void
   ) => {
-    if (!response.ok) { 
-        const errorText = await response.text().catch(() => `HTTP error ${response.status}`);
-        onError(new Error(`API request failed: ${response.status} ${errorText}`));
-        return;
-    }
-    if (!response.body) { onError(new Error("Response body is missing")); return; }
-
+    console.log(`[processStream] Starting stream processing for message ${messageId}, isThinking: ${isThinking}`);
+    console.log(`[processStream] Current state.isGenerating: ${state.isGenerating}, state.generatingId: ${state.generatingId}`);
+    let accumulatedContent = '';
+    let receivedChunks = 0;
+    
     try {
-        let accumulatedContent = '';
-        let receivedChunks = 0;
         for await (const chunk of PromptHandler.streamResponse(response)) {
-            if (!currentGenerationRef.current || currentGenerationRef.current.signal.aborted) {
+            console.log(`[processStream] Received chunk ${receivedChunks + 1}: "${chunk}" (length: ${chunk.length})`);
+            console.log(`[processStream] About to call ${isThinking ? 'updateThinkingMessageContent' : 'updateGeneratingMessageContent'} with messageId: ${messageId}`);
+            if (currentGenerationRef.current?.signal.aborted) {
+              console.log(`[processStream] Stream aborted for message ${messageId}`);
               throw new DOMException('Aborted by user', 'AbortError');
             }
             resetStreamTimeout(); 
             accumulatedContent += chunk;
             receivedChunks++;
+            console.log(`[processStream] Accumulated content so far: "${accumulatedContent}" (total length: ${accumulatedContent.length})`);
             if (isThinking) {
                 updateThinkingMessageContent(messageId, chunk);
             } else {
                 updateGeneratingMessageContent(messageId, chunk);
             }
         }
+        console.log(`[processStream] Stream complete for message ${messageId}. Final content: "${accumulatedContent}", chunks: ${receivedChunks}`);
         onComplete(accumulatedContent, receivedChunks);
     } catch (err) {
+        console.error(`[processStream] Stream error for message ${messageId}:`, err);
         onError(err instanceof Error ? err : new Error('Unknown stream processing error'));
     }
   }, [resetStreamTimeout, updateGeneratingMessageContent, updateThinkingMessageContent]); 
@@ -637,7 +652,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
              setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
              return;
         }
-         setState(prev => ({ ...prev, generatingId: assistantMessage.id }));
+         setState(prev => ({ ...prev, isGenerating: true, generatingId: assistantMessage.id }));
       }
 
       let apiContextMessages = getContextMessages(state, assistantMessage.id)
@@ -660,57 +675,41 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         reasoningUsed: reasoningText
       };
       setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
-      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow)); 
+      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));      console.log(`[generateResponse] About to call PromptHandler.generateChatResponse with:`, {
+        currentChatSessionUuid,
+        apiContextMessagesLength: apiContextMessages.length,
+        preparedApiConfig: preparedApiConfig?.provider,
+        effectiveCharacterName: effectiveCharacterData?.data?.name
+      });
+      
+      // Log state immediately before calling processStream for the main response
+      console.log(`[generateResponse] PRE-STREAM state check for assistantMessage.id: ${assistantMessage.id}. isGenerating: ${state.isGenerating}, generatingId: ${state.generatingId}`);
 
       const response = await PromptHandler.generateChatResponse(
-          currentChatSessionUuid, 
-          apiContextMessages, 
-          preparedApiConfig, 
-          signal, 
-          effectiveCharacterData
+        currentChatSessionUuid,
+        apiContextMessages, // This context needs to be correct
+        preparedApiConfig,
+        signal,
+        effectiveCharacterData
       );
+      
+      // Log state immediately before calling processStream for the main response
+      console.log(`[generateResponse] PRE-STREAM state check for assistantMessage.id: ${assistantMessage.id}. isGenerating: ${state.isGenerating}, generatingId: ${state.generatingId}`);
 
       await processStream(
-        response, assistantMessage.id, false, 
+        response, // This was the source of the error, it should be defined now
+        assistantMessage.id,
+        false, // isThinking
         (finalContent, receivedChunks) => {
-          setGenerationComplete(assistantMessage.id, finalContent, 'generation_complete', receivedChunks);
-          if (!isGenericAssistant) {
-            setState(prev => {
-              const finalStateMessages = prev.messages;
-              saveChat(currentChatSessionUuid, finalStateMessages, prev.currentUser); 
-              const finalAssistantMsg = finalStateMessages.find(m => m.id === assistantMessage.id);
-              if (finalAssistantMsg) appendMessage(currentChatSessionUuid, finalAssistantMsg); 
-              return prev; 
-            });
-          }
+          setGenerationComplete(assistantMessage.id, finalContent, 'generate_response_complete', receivedChunks);
         },
         (error) => {
-          handleGenerationError(error, assistantMessage.id);
-          if (!isGenericAssistant) {
-             setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages, prev.currentUser);
-                const errorMsg = prev.messages.find(m => m.id === assistantMessage.id);
-                if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
-                return prev;
-             });
-          }
+          handleGenerationError(error, assistantMessage.id, 'generate_response_stream');
         }
       );
+
     } catch (err) {
-      if (signal.aborted && err instanceof DOMException && err.name === 'AbortError') {
-        console.log('Generation aborted by user (caught in outer try-catch).');
-        handleGenerationError(err, assistantMessage.id, 'generation_setup_aborted');
-      } else {
-        handleGenerationError(err, assistantMessage.id, 'generation_setup_error');
-      }
-       if (!isGenericAssistant) {
-             setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages, prev.currentUser);
-                const errorMsg = prev.messages.find(m => m.id === assistantMessage.id);
-                if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
-                return prev;
-             });
-        }
+      handleGenerationError(err, assistantMessage.id, 'generation_setup_error');
     }
   }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, generateReasoning, clearError, appendMessage, appendMessageDirect, resetStreamTimeout, stopGeneration, isGenericAssistant, processStream, ensureChatSession]);
 
@@ -860,7 +859,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
              });
         }
     }
-  }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, clearError, appendMessage, stopGeneration, generateReasoning, isGenericAssistant, processStream, ensureChatSession, trackLoreImages]);
+  }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, clearError, appendMessage, appendMessageDirect, resetStreamTimeout, stopGeneration, isGenericAssistant, processStream, ensureChatSession, trackLoreImages]);
 
   const generateVariation = useCallback(async (messageToVary: Message) => {
     if (state.isGenerating) {
@@ -1241,15 +1240,45 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
   }, [effectiveCharacterData, isGenericAssistant]);
 
 
-   const updateReasoningSettings = (settingsUpdate: Partial<ReasoningSettings>) => {
-     setState(prev => {
-       const newSettings = { ...prev.reasoningSettings, ...settingsUpdate };
-       localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(newSettings));
-       return { ...prev, reasoningSettings: newSettings };
-     });
-   };
+   const updateReasoningSettings = useCallback((settings: ReasoningSettings) => {
+    // Ensure that reasoning remains disabled and not visible, regardless of what is passed.
+    const forcedSettings = { ...settings, enabled: false, visible: false };
+    setState(prevState => ({
+      ...prevState,
+      reasoningSettings: forcedSettings
+    }));
+    try {
+      localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(forcedSettings));
+    } catch (error) {
+      console.error('Failed to save reasoning settings to localStorage:', error);
+    }
+  }, []);
 
-   const deleteMessage = (messageId: string) => {
+  // Initialize reasoning settings in localStorage if not already set, ensuring it's disabled.
+  useEffect(() => {
+    const storedSettings = localStorage.getItem(REASONING_SETTINGS_KEY);
+    if (!storedSettings) {
+      try {
+        localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify({ ...DEFAULT_REASONING_SETTINGS, enabled: false, visible: false }));
+      } catch (error) {
+        console.error('Failed to initialize reasoning settings in localStorage:', error);
+      }
+    } else {
+      // If settings are stored, ensure they reflect the disabled state
+      try {
+        const parsed = JSON.parse(storedSettings);
+        if (parsed.enabled || parsed.visible) {
+          localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify({ ...parsed, enabled: false, visible: false }));
+        }
+      } catch (error) {
+        console.error('Failed to update stored reasoning settings to disabled state:', error);
+      }
+    }
+  }, []);
+
+
+
+  const deleteMessage = (messageId: string) => {
      setState(prev => {
        const newMessages = prev.messages.filter(msg => msg.id !== messageId);
        if (!isGenericAssistant && autoSaveEnabled.current && prev.chatSessionUuid) {

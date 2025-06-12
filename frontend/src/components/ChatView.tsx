@@ -12,10 +12,8 @@ import ContextWindowModal from './ContextWindowModal';
 import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSettings';
 import MoodBackground from './MoodBackground';
 import MoodIndicator from './MoodIndicator';
-import VirtualChatList, { VirtualChatListRef } from './VirtualChatList';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
 import { useChatContinuation } from '../hooks/useChatContinuation';
-import { usePerformance } from '../contexts/PerformanceContext';
 import { Message, UserProfile } from '../types/messages';
 import { EmotionState } from '../hooks/useEmotionDetection';
 import RichTextEditor from './RichTextEditor';
@@ -138,14 +136,13 @@ const InputArea: React.FC<InputAreaProps> = ({
   useEffect(() => {
     setImageError(false);
   }, [currentUser?.filename]);
-
   return (
-    <div className="flex-none p-4 border-t border-stone-800 performance-contain">
-      <div className="flex items-end gap-4 performance-contain">
+    <div className="flex-none p-4 border-t border-stone-800">
+      <div className="flex items-end gap-4">
         {/* User Image */}
         <div
           onClick={onUserSelect}
-          className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden flex-shrink-0 performance-transform performance-contain"
+          className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden flex-shrink-0"
         >
           {currentUser && !imageError ? (
             <img
@@ -163,11 +160,11 @@ const InputArea: React.FC<InputAreaProps> = ({
             </div>
           )}
         </div>        {/* Text Input Area */}
-        <div className="flex-1 h-32 flex flex-col overflow-hidden performance-contain">
+        <div className="flex-1 h-32 flex flex-col overflow-hidden">
           <RichTextEditor
             content={inputValue}
             onChange={setInputValue}
-            className="bg-stone-950 border border-stone-800 rounded-lg flex-1 overflow-y-auto performance-contain performance-transform"
+            className="bg-stone-950 border border-stone-800 rounded-lg flex-1 overflow-y-auto"
             placeholder="Type your message..."
             onKeyDown={handleKeyPress}
             preserveWhitespace={true}
@@ -176,7 +173,7 @@ const InputArea: React.FC<InputAreaProps> = ({
         </div>
 
         {/* Send Button & Mood Indicator */}
-        <div className="flex flex-col items-center gap-2 flex-shrink-0 performance-contain performance-transform">
+        <div className="flex flex-col items-center gap-2 flex-shrink-0">
           <MoodIndicator emotion={emotion} size={24} showLabel={false} />
           <button
             onClick={() => {
@@ -201,7 +198,6 @@ const InputArea: React.FC<InputAreaProps> = ({
 const ChatView: React.FC = () => {
   const { characterData, setCharacterData } = useCharacter();
   const { apiConfig } = useAPIConfig(); // Get the globally active config
-  const { config: performanceConfig } = usePerformance();
 
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
@@ -212,7 +208,6 @@ const ChatView: React.FC = () => {
   // Removed selectedApiIdForNextMessage state
   const [localError, setLocalError] = useState<string | null>(null); // Local error state for UI feedback  // Use the custom scroll hook with our shared implementation
   const { endRef: messagesEndRef, containerRef: messagesContainerRef, scrollToBottom } = useScrollToBottom();
-  const virtualChatListRef = useRef<VirtualChatListRef>(null);
   // Use ChatContext instead of useChatMessages hook
   const {
     messages,
@@ -235,17 +230,11 @@ const ChatView: React.FC = () => {
     clearError: clearHookError,
     currentChatId // Get currentChatId directly from ChatContext
   } = useChat();
-
   // Create a unified scroll function that works for both virtual and regular chat lists
   const scrollToBottomUnified = useCallback(() => {
-    if (performanceConfig.virtualScrolling.enabled && messages.length > performanceConfig.virtualScrolling.threshold) {
-      // Use virtual list scrolling
-      virtualChatListRef.current?.scrollToBottom();
-    } else {
-      // Use regular scrolling
-      scrollToBottom();
-    }
-  }, [performanceConfig.virtualScrolling.enabled, performanceConfig.virtualScrolling.threshold, messages.length, scrollToBottom]);
+    // Use regular scrolling (virtual scrolling has been removed)
+    scrollToBottom();
+  }, [scrollToBottom]);
 
   // Load background settings from localStorage
   useEffect(() => {
@@ -625,64 +614,42 @@ const ChatView: React.FC = () => {
           onDismiss={handleDismissError}
         />
       </div>      {/* Messages Area */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-hidden relative z-10 performance-contain">        {performanceConfig.virtualScrolling.enabled && messages.length > performanceConfig.virtualScrolling.threshold ? (
-          <VirtualChatList
-            ref={virtualChatListRef}
-            messages={messages}
-            characterName={characterData.data.name || 'Character'}
-            currentUser={currentUser || undefined}
-            isGenerating={isGenerating}
-            generatingId={generatingId}
-            reasoningSettings={reasoningSettings}
-            onTryAgain={regenerateMessage}
-            onContinue={handleContinueResponse}
-            onDelete={deleteMessage}
-            onContentChange={updateMessage}
-            onStop={getStopHandler}
-            isFirstMessage={isFirstAssistantMessage}
-            onRegenerateGreeting={handleRegenerateGreeting}
-            isRegeneratingGreeting={isRegeneratingGreeting}
-            onNextVariation={(messageId: string) => cycleVariation(messageId, 'next')}
-            onPrevVariation={(messageId: string) => cycleVariation(messageId, 'prev')}
-            height={600} // Will be dynamic in production
-          />
-        ) : (
-          <div className="h-full overflow-y-auto p-4 space-y-4 performance-scroll">
-            {messages.map((message) => (
-              <React.Fragment key={message.id}>
-                {message.role === 'thinking' && reasoningSettings.visible ? (
-                  <ThoughtBubble
-                    message={message} // Pass the full message object
-                    isGenerating={message.status === 'streaming'}
-                    // Provide dummy handlers as editing/deleting thoughts isn't implemented here
-                    onContentChange={(newContent) => console.log('Thought changed (not implemented):', newContent)}
-                    onDelete={() => console.log('Delete thought (not implemented)')}
-                    characterName={characterData.data.name}
-                  />
-                ) : null}
-                {message.role !== 'thinking' && (
-                  <ChatBubble
-                    message={message}
-                    characterName={characterData.data.name || 'Character'}
-                    currentUser={currentUser || undefined} // Convert null to undefined for type compatibility
-                    isGenerating={isGenerating && generatingId === message.id}
-                    onTryAgain={() => regenerateMessage(message)} // Use onTryAgain and wrap handler
-                    onContinue={() => handleContinueResponse(message)} // Wrap handler
-                    onDelete={() => deleteMessage(message.id)} // Wrap handler
-                    onContentChange={(newContent) => updateMessage(message.id, newContent)} // Use onContentChange for edits
-                    onStop={getStopHandler(message)} // Correct prop name
-                    isFirstMessage={isFirstAssistantMessage(message.id)} // Corrected prop name
-                    onRegenerateGreeting={handleRegenerateGreeting}
-                    isRegeneratingGreeting={isRegeneratingGreeting && isFirstAssistantMessage(message.id)}
-                    onNextVariation={() => cycleVariation(message.id, 'next')} // Add variation handlers
-                    onPrevVariation={() => cycleVariation(message.id, 'prev')} // Add variation handlers
-                  />
-                )}
-              </React.Fragment>
-            ))}
-            <div ref={messagesEndRef} /> {/* Scroll target */}
-          </div>
-        )}
+      <div ref={messagesContainerRef} className="flex-1 overflow-hidden relative z-10">
+        <div className="h-full overflow-y-auto p-4 space-y-4">
+          {messages.map((message) => (
+            <React.Fragment key={message.id}>
+              {message.role === 'thinking' && reasoningSettings.visible ? (
+                <ThoughtBubble
+                  message={message} // Pass the full message object
+                  isGenerating={message.status === 'streaming'}
+                  // Provide dummy handlers as editing/deleting thoughts isn't implemented here
+                  onContentChange={(newContent) => console.log('Thought changed (not implemented):', newContent)}
+                  onDelete={() => console.log('Delete thought (not implemented)')}
+                  characterName={characterData.data.name}
+                />
+              ) : null}
+              {message.role !== 'thinking' && (
+                <ChatBubble
+                  message={message}
+                  characterName={characterData.data.name || 'Character'}
+                  currentUser={currentUser || undefined} // Convert null to undefined for type compatibility
+                  isGenerating={isGenerating && generatingId === message.id}
+                  onTryAgain={() => regenerateMessage(message)} // Use onTryAgain and wrap handler
+                  onContinue={() => handleContinueResponse(message)} // Wrap handler
+                  onDelete={() => deleteMessage(message.id)} // Wrap handler
+                  onContentChange={(newContent) => updateMessage(message.id, newContent)} // Use onContentChange for edits
+                  onStop={getStopHandler(message)} // Correct prop name
+                  isFirstMessage={isFirstAssistantMessage(message.id)} // Corrected prop name
+                  onRegenerateGreeting={handleRegenerateGreeting}
+                  isRegeneratingGreeting={isRegeneratingGreeting && isFirstAssistantMessage(message.id)}
+                  onNextVariation={() => cycleVariation(message.id, 'next')} // Add variation handlers
+                  onPrevVariation={() => cycleVariation(message.id, 'prev')} // Add variation handlers
+                />
+              )}
+            </React.Fragment>
+          ))}
+          <div ref={messagesEndRef} /> {/* Scroll target */}
+        </div>
       </div>
 
       {/* Input Area - Reverted */}

@@ -67,9 +67,12 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       generationStartTime.current = null;
     }
   }, [isGenerating]);
-    // Process incomplete sentences when generation completes
+  // Process incomplete sentences when generation completes
   useEffect(() => {
-    if (!isGenerating && previousContent.current !== message.content) {
+    if (!isGenerating && 
+        !isRegeneratingGreeting && 
+        previousContent.current !== message.content &&
+        message.status !== 'streaming') {
       // Only apply incomplete sentence removal when configured in settings
       // and only for assistant messages being generated
 const DEBUG_CHAT_PROCESSING = process.env.NODE_ENV === 'development';
@@ -81,23 +84,13 @@ const DEBUG_CHAT_PROCESSING = process.env.NODE_ENV === 'development';
      const processedContent = removeIncompleteSentences(message.content);
     if (DEBUG_CHAT_PROCESSING) {
       console.debug('[ChatBubble] Processed content:', processedContent);
-    }
-        if (processedContent !== message.content) {
-          console.log('[ChatBubble] Content changed, calling onContentChange');
+    }        if (processedContent !== message.content) {
           onContentChange(processedContent);
-        } else {
-          console.log('[ChatBubble] No changes needed after processing');
         }
-      } else {
-        console.log('[ChatBubble] Skipping incomplete sentence removal:', {
-          role: message.role,
-          setting: settings.remove_incomplete_sentences,
-          hasContent: !!message.content
-        });
       }
       previousContent.current = message.content;
     }
-  }, [isGenerating, message.content, message.role, onContentChange, settings.remove_incomplete_sentences]);
+  }, [isGenerating, isRegeneratingGreeting, message.content, message.role, message.status, onContentChange, settings.remove_incomplete_sentences]);
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
@@ -193,22 +186,22 @@ const DEBUG_CHAT_PROCESSING = process.env.NODE_ENV === 'development';
     }
     if (characterName) {
       processedText = processedText.replace(/\{\{char\}\}/gi, characterName);
-    }
-
-    // Apply the removeIncompleteSentences feature when:
+    }    // Apply the removeIncompleteSentences feature when:
     // 1. The message is from the assistant
     // 2. The message is not currently generating
     // 3. The feature is enabled in settings
-    if (message.role === 'assistant' && !isGenerating && settings.remove_incomplete_sentences) {
+    // 4. The message status is 'complete' (not 'streaming')
+    if (message.role === 'assistant' && 
+        !isGenerating && 
+        settings.remove_incomplete_sentences && 
+        message.status !== 'streaming') {
       processedText = removeIncompleteSentences(processedText);
     }
 
     // Cache the result
     highlightCache.current.set(cacheKey, processedText);    
     return processedText;
-  }, [currentUser, characterName, isGenerating, message.role, streamingStarted, trimLeadingNewlines, sanitizeChatOutput, settings.remove_incomplete_sentences]);
-
-  // Process the message content with variables replaced
+  }, [currentUser, characterName, isGenerating, message.role, streamingStarted, trimLeadingNewlines, sanitizeChatOutput, settings.remove_incomplete_sentences]);  // Process the message content with variables replaced
   useEffect(() => {
     const processedContent = processContent(message.content);
     
@@ -241,12 +234,14 @@ const DEBUG_CHAT_PROCESSING = process.env.NODE_ENV === 'development';
   const variationCount = message.variations ? message.variations.length : 0;
   // Helper to get user name display - already using formatUserName function which handles both string and UserProfile objects
   const formattedUserName = currentUser ? formatUserName(currentUser) : 'User';
-  
-  // Debug log for empty messages
-  if (!message.content && !isGenerating) {
+    // Debug log for empty messages - only warn for non-assistant messages or completed assistant messages
+  if (!message.content && !isGenerating && message.role !== 'assistant') {
     console.warn(`[ChatBubble] Rendering bubble with empty content: ID=${message.id}, Role=${message.role}`);
   }
-  // Use original styling with performance optimizations
+  // For assistant messages, only warn if they're marked as complete but still empty
+  if (!message.content && message.role === 'assistant' && message.status === 'complete') {
+    console.warn(`[ChatBubble] Rendering completed assistant message with empty content: ID=${message.id}`);
+  }  // Use original styling with performance optimizations
   return (
     <div className="w-full rounded-lg transition-colors bg-stone-800 text-white performance-contain performance-transform">
       {/* Message header - shows name and buttons */}

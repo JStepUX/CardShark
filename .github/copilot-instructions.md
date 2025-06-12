@@ -128,8 +128,6 @@ globs: **/*.tsx, **/*.jsx, components/**/*
 - Use proper imports/exports
 - Document complex component logic 
 
-ASK YOURSELF - DID I PROVIDE AN OVERLY COMPLICATED SOLUTION? COULD I DO THIS LESS INTRUSIVELY AND MORE EFFICIENTLY?
-
 ## CardShark-Specific AI Development Guidelines
 
 ### Architectural Patterns
@@ -270,3 +268,6 @@ Before modifying build configuration:
 2. Should this go in `hidden_imports`, `backend_datas`, or `frontend_datas`?
 3. Have I tested the change by running the complete build process?
 4. Does the EXE work correctly with fresh installations and existing data?
+
+IMPORTANT: ASK YOURSELF - DID I PROVIDE AN OVERLY COMPLICATED SOLUTION? COULD I DO THIS LESS INTRUSIVELY AND MORE EFFICIENTLY?
+TRY TO KEEP IT SIMPLE! DO NOT OVERCOMPLICATE! TRY TO KEEP FILES SMALL AND FOCUSED - THIS MAY REQUIRE A HIGH AMOUNT OF FEATURE MODULARIZATION.

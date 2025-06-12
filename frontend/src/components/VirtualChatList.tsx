@@ -93,9 +93,8 @@ const VirtualChatList = forwardRef<VirtualChatListRef, VirtualChatListProps>(({
 
   const Row = useMemo(() => {
     return ({ index, style }: { index: number; style: React.CSSProperties }) => {      const message = messages[index];
-      return (
-        <div style={style} className="px-4 performance-contain performance-transform">
-          <React.Fragment key={message.id}>            {message.role === 'thinking' && reasoningSettings.visible ? (
+      return (        <div style={style} className="px-4">
+          <React.Fragment key={message.id}>{message.role === 'thinking' && reasoningSettings.visible ? (
               <ThoughtBubble
                 message={message}
                 isGenerating={message.status === 'streaming'}
@@ -149,9 +148,8 @@ const VirtualChatList = forwardRef<VirtualChatListRef, VirtualChatListProps>(({
       height={height}
       width="100%"
       itemCount={messages.length}
-      itemSize={getItemSize} // Use dynamic sizing for better performance
-      overscanCount={3} // Reduced for better 60fps performance
-      className="performance-scroll performance-contain"
+      itemSize={getItemSize} // Use dynamic sizing for better performance      overscanCount={3} // Reduced for better performance
+      className=""
     >
       {Row}
     </List>

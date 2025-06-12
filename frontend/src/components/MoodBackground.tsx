@@ -133,15 +133,7 @@ const MoodBackground: React.FC<MoodBackgroundProps> = ({
           backgroundColor: `rgba(28, 25, 23, ${1 - transparency / 100})`,
           // backdropFilter: `blur(${fadeLevel / 3}px)`, // Removed backdropFilter from UI overlay
           zIndex: 5 // Ensure this is above the color layer but below content
-        }}
-      />
-      
-      {/* Always show the debug indicator with more info */}
-      <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-3 py-2 rounded z-50">
-        <div>Mood: {emotion.primary} ({Math.round(emotion.intensity)}%)</div>
-        <div>Color: {currentColor}</div>
-        <div>Valence: {Math.round(emotion.valence)}</div>
-      </div>
+        }}      />
       
       {/* Content - ensure highest z-index */}
       <div className="relative z-10 h-full">{children}</div>

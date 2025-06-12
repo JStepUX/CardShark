@@ -8,8 +8,6 @@ import { PromptHandler } from '../handlers/promptHandler';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
 import { useContentFilter } from '../hooks/useContentFilter';
-import { usePerformanceAware } from './PerformanceContext';
-import { PerformanceMonitor } from '../utils/performance';
 import {
   TriggeredLoreImage,
   AvailablePreviewImage,
@@ -69,8 +67,6 @@ export { ChatContext }; // Export the context for optional usage
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { characterData } = useCharacter();  const apiConfigContext = useContext(APIConfigContext);
   const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
-  const performanceAware = usePerformanceAware();
-  const performanceMonitor = useRef(PerformanceMonitor.getInstance());
   
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesRef = useRef<Message[]>(messages);
@@ -495,16 +491,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMessages((prev: Message[]) => [...prev, assistantMsg]);
     setIsGenerating(true); setGeneratingId(assistantMsgId); setError(null);
 
-    const abortCtrl = new AbortController();
-    currentGenerationRef.current = abortCtrl;    try {      // Start performance measurement for streaming
-      const streamStartTime = performance.now();
-      let chunkCount = 0;
-      let lastUpdateTime = streamStartTime;
-      
-      // Record streaming start metric
-      performanceMonitor.current.recordMetric('stream_start', streamStartTime);
-      
-      const ctxMsgs = messagesRef.current.filter(msg => msg.id !== assistantMsgId && msg.role !== 'thinking')
+    const abortCtrl = new AbortController();    currentGenerationRef.current = abortCtrl;    try {      const ctxMsgs = messagesRef.current.filter(msg => msg.id !== assistantMsgId && msg.role !== 'thinking')
         .map(({ role, content }) => ({ role: (role === 'user' || role === 'assistant' || role === 'system' ? role : 'system') as 'user' | 'assistant' | 'system', content }));
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const response = await PromptHandler.generateChatResponse(
@@ -513,70 +500,56 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       let fullContent = ''; 
       let buffer = '';
-      // Use performance-aware streaming config
-      const streamingConfig = performanceAware.getStreamingConfig();
-      const bufferInt = streamingConfig.flushInterval;
+      // Use a fixed buffer interval for consistent streaming
+      const bufferInterval = 50; // 50ms buffer for smooth streaming
 
       let bufTimer: NodeJS.Timeout | null = null;      const updateAssistantMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
         
-        // Performance monitoring for streaming updates
-        const now = performance.now();
-        
         if (!bufTimer || isFinal) {
           if (bufTimer) clearTimeout(bufTimer);          
           bufTimer = setTimeout(() => {
-            const renderStartTime = performance.now();
             const curBuf = buffer; 
             buffer = ''; 
             fullContent += curBuf;
-            const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
-            
-            // Check if we should throttle updates based on performance
-            if (!performanceAware.isPerformanceCritical() || isFinal) {
-              setMessages((prevMsgs: Message[]) => prevMsgs.map((msg: Message) =>
-                msg.id === assistantMsgId ? { ...msg, content: filtContent, variations: [filtContent], currentVariation: 0 } : msg
-              ));
-            }
-            
-            const renderTime = performance.now() - renderStartTime;
-              // Track performance metrics
-            const timeSinceLastUpdate = now - lastUpdateTime;
-            performanceMonitor.current.recordMetric('update_interval', timeSinceLastUpdate);
-            
-            if (renderTime > 16.67) { // Over 60fps threshold
-              console.debug(`Slow streaming update: ${renderTime.toFixed(2)}ms`);
-              performanceMonitor.current.recordMetric('slow_render', renderTime);
-            }
+            const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            // Update the UI with the new content
+            setMessages((prevMsgs: Message[]) => {
+              const updatedMsgs = prevMsgs.map((msg: Message) =>
+                msg.id === assistantMsgId ? { 
+                  ...msg, 
+                  content: filtContent, 
+                  variations: [filtContent], 
+                  currentVariation: 0,
+                  status: 'streaming' as const                } : msg
+              );
+              return updatedMsgs;
+            });
             
             if (isFinal) {
-              const totalStreamTime = performance.now() - streamStartTime;
-              console.debug(`Stream completed: ${chunkCount} chunks in ${totalStreamTime.toFixed(2)}ms`);
-              performanceMonitor.current.recordMetric('stream_total_time', totalStreamTime);
               setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
             }
-            
-            lastUpdateTime = now;
-          }, bufferInt);
+          }, bufferInterval);
         }
-      };
-
-      for await (const chunk of PromptHandler.streamResponse(response)) {
+      };      for await (const chunk of PromptHandler.streamResponse(response)) {
         if (abortCtrl.signal.aborted) {
           console.log('Gen aborted by user.');
           if (bufTimer) clearTimeout(bufTimer);
           if (buffer.length > 0) updateAssistantMsgContent('', true);
           break;
         }
-        chunkCount++;
         updateAssistantMsgContent(chunk);
-      }      
+      }
+        if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
       
-      if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
-      
-      const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? { ...msg, content: shouldUseClientFiltering ? filterText(fullContent) : fullContent } : msg);
+      // Update the message status to complete and apply to React state
+      const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? { 
+        ...msg, 
+        content: shouldUseClientFiltering ? filterText(fullContent) : fullContent,
+        status: 'complete' as const
+      } : msg);
+      setMessages(finalMsgs); // Apply the final status update to React state
       saveChat(finalMsgs);
-      setLastContextWindow((curWin: any) => ({ ...curWin, type: 'response_generated', lastPrompt: prompt, responseLength: fullContent.length }));    } catch (err) {
+      setLastContextWindow((curWin: any) => ({ ...curWin, type: 'response_generated', lastPrompt: prompt, responseLength: fullContent.length }));} catch (err) {
       if (!abortCtrl.signal.aborted) handleGenerationError(err, assistantMsgId);      else {
         console.log("Gen aborted, error handling skipped.");
         const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? { ...msg, content: shouldUseClientFiltering ? filterText(msg.content) : msg.content } : msg);
@@ -622,10 +595,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!bufTimer || isFinal) {
           if (bufTimer) clearTimeout(bufTimer);          bufTimer = setTimeout(() => {
             const curBuf = buffer; buffer = ''; fullContent += curBuf;
-            const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
-            setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {if (msg.id === message.id) {
+            const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {if (msg.id === message.id) {
                 const newVars = [...origVariations, filtContent];
-                return { ...msg, content: filtContent, variations: newVars, currentVariation: newVars.length - 1, role: 'assistant' as const };
+                return { 
+                  ...msg, 
+                  content: filtContent, 
+                  variations: newVars, 
+                  currentVariation: newVars.length - 1, 
+                  role: 'assistant' as const,
+                  status: isFinal ? 'complete' as const : 'streaming' as const
+                };
               } return msg;
             }));
             if (isFinal) setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
@@ -638,11 +617,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateRegenMsgContent(chunk);
       }
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateRegenMsgContent('', true);
-      
-      const finalMsgs = messagesRef.current.map(msg => {        if (msg.id === message.id) {
+        const finalMsgs = messagesRef.current.map(msg => {        if (msg.id === message.id) {
           const finalFiltContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
           const newVars = [...origVariations, finalFiltContent];
-          return { ...msg, content: finalFiltContent, variations: newVars, currentVariation: newVars.length - 1, role: 'assistant' as const };
+          return { 
+            ...msg, 
+            content: finalFiltContent, 
+            variations: newVars, 
+            currentVariation: newVars.length - 1, 
+            role: 'assistant' as const,
+            status: 'complete' as const
+          };
         } return msg;
       });
       saveChat(finalMsgs);

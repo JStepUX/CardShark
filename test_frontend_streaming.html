@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Streaming Test</title>
+</head>
+<body>
+    <h1>Frontend Streaming Debug Test</h1>
+    <div id="output"></div>
+    <button onclick="testStreaming()">Test Streaming</button>
+
+    <script>
+    async function testStreaming() {
+        const output = document.getElementById('output');
+        output.innerHTML = '<p>Starting streaming test...</p>';
+        
+        try {
+            const response = await fetch('http://localhost:9696/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_config: {
+                        provider: 'KoboldCPP',
+                        url: 'http://localhost:5001',
+                        enabled: true,
+                        templateId: 'mistral',
+                        generation_settings: {
+                            max_length: 50,
+                            temperature: 0.7,
+                            top_p: 0.9,
+                            top_k: 100
+                        }
+                    },
+                    generation_params: {
+                        prompt: 'Hello! How are you?',
+                        memory: 'You are a helpful assistant.',
+                        stop_sequence: ['User:', 'Assistant:', '</s>'],
+                        quiet: true
+                    }
+                })
+            });
+
+            console.log('Response status:', response.status);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+            if (!response.ok) {
+                throw new Error(`API responded with status ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let chunkCount = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                    console.log('Stream completed');
+                    break;
+                }
+
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+                
+                let lineEnd;
+                while ((lineEnd = buffer.indexOf('\n')) !== -1) {
+                    const line = buffer.substring(0, lineEnd).trim();
+                    buffer = buffer.substring(lineEnd + 1);
+                    
+                    if (!line) continue;
+                    
+                    console.log('Raw line:', line);
+                    
+                    if (line.startsWith('data: ')) {
+                        const data = line.substring(6);
+                        console.log('SSE data:', data);
+                        
+                        if (data === '[DONE]') {
+                            console.log('Completion marker received');
+                            continue;
+                        }
+                        
+                        try {
+                            const parsed = JSON.parse(data);
+                            console.log('Parsed JSON:', parsed);
+                            
+                            if (parsed.content) {
+                                chunkCount++;
+                                console.log(`Chunk ${chunkCount}:`, parsed.content);
+                                output.innerHTML += `<span>${parsed.content}</span>`;
+                            } else {
+                                console.log('No content field in parsed data');
+                            }
+                        } catch (error) {
+                            console.error('Failed to parse JSON:', error, 'Data:', data);
+                        }
+                    }
+                }
+            }
+            
+            output.innerHTML += `<p><strong>Test completed. Total chunks: ${chunkCount}</strong></p>`;
+            
+        } catch (error) {
+            console.error('Streaming test error:', error);
+            output.innerHTML += `<p style="color: red;">Error: ${error.message}</p>`;
+        }
+    }
+    </script>
+</body>
+</html>
