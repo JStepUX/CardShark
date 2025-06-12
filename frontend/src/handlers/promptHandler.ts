@@ -299,8 +299,29 @@ ${character.data.mes_example || ''}
       const template = this.getTemplate(templateId);
       const characterName = characterCard?.data?.name || 'Character';
       const stopSequences = this.getStopSequences(template, characterName);
-      
-      // Build the payload for /api/generate endpoint
+        // Build the payload for /api/generate endpoint
+      // Extract only essential character data without lore book to avoid sending unnecessary data
+      const essentialCharacterData = characterCard ? {
+        spec: characterCard.spec,
+        spec_version: characterCard.spec_version,
+        data: {
+          name: characterCard.data.name,
+          description: characterCard.data.description,
+          personality: characterCard.data.personality,
+          scenario: characterCard.data.scenario,
+          first_mes: characterCard.data.first_mes,
+          mes_example: characterCard.data.mes_example,
+          system_prompt: characterCard.data.system_prompt,
+          post_history_instructions: characterCard.data.post_history_instructions,
+          alternate_greetings: characterCard.data.alternate_greetings,
+          character_uuid: characterCard.data.character_uuid,
+          tags: characterCard.data.tags,
+          creator: characterCard.data.creator,
+          character_version: characterCard.data.character_version,
+          // Explicitly exclude character_book - lore matching should happen on backend
+        }
+      } : null;
+
       const payload = {
         api_config: apiConfig,
         generation_params: {
@@ -308,7 +329,7 @@ ${character.data.mes_example || ''}
           memory: memory,
           stop_sequence: stopSequences,
           chat_session_uuid: chatSessionUuid, // Include for potential backend use
-          character_data: characterCard, // Include for lore matching and context
+          character_data: essentialCharacterData, // Essential character data only, no lore book
           chat_history: contextMessages, // Include for backend context processing
           quiet: true
         }

@@ -399,52 +399,103 @@ class ApiHandler:
             
             # Add lore matching to context window if it exists
             context_window = generation_params.get('context_window')
-            
-            # Handle lore matching if character data is available
-            if character_data and character_data.get('data') and character_data.get('data', {}).get('character_book'):
+              # Handle lore matching if character data is available
+            if character_data and character_data.get('data') and character_data.get('data', {}).get('character_uuid'):
                 try:
                     from backend.lore_handler import LoreHandler
+                    from backend.services.character_service import CharacterService
+                    from backend.dependencies import get_db
+                    
                     lore_handler = LoreHandler(self.logger)
                     
-                    # Get lore entries
-                    lore_entries = character_data.get('data', {}).get('character_book', {}).get('entries', [])
+                    # Get character UUID from the minimal character data
+                    character_uuid = character_data.get('data', {}).get('character_uuid')
                     
-                    if lore_entries:
-                        self.logger.log_step(f"Found {len(lore_entries)} lore entries")
+                    if character_uuid:
+                        self.logger.log_step(f"Loading lore for character UUID: {character_uuid}")
                         
-                        # Create text for matching
-                        history_text = ''
-                        for msg in chat_history:
-                            role = msg.get('role', '')
-                            content = msg.get('content', '')
-                            if role == 'user':
-                                history_text += f"User: {content}\n"
-                            else:
-                                char_name = character_data.get('data', {}).get('name', 'Character')
-                                history_text += f"{char_name}: {content}\n"
-                        
-                        # Add current message
-                        if current_message:
-                            history_text += f"User: {current_message}"
+                        # Load character with lore from database instead of using payload data
+                        # We'll create a minimal DB session for this lookup
+                        try:
+                            # Import required database components
+                            from backend.database import SessionLocal
+                            from backend.sql_models import Character as CharacterModel, LoreBook as LoreBookModel, LoreEntry as LoreEntryModel
+                            import json
                             
-                        # Match lore entries
-                        matched_entries = lore_handler.match_lore_entries(lore_entries, history_text)
-                        
-                        # Only modify memory if we matched entries
-                        if matched_entries:
-                            self.logger.log_step(f"Matched {len(matched_entries)} lore entries")
-                            # Create new memory with lore
-                            memory = lore_handler.integrate_lore_into_prompt(
-                                character_data, 
-                                matched_entries
-                            )
-                            # Note this in the context window
-                            if context_window is not None and isinstance(context_window, dict):
-                                context_window['lore_info'] = {
-                                    'matched_count': len(matched_entries),
-                                    'entry_keys': [entry.get('keys', [''])[0] for entry in matched_entries 
-                                                if entry.get('keys')]
-                                }
+                            db = SessionLocal()
+                            try:
+                                # Query character with lore book
+                                character_db = db.query(CharacterModel).filter(
+                                    CharacterModel.character_uuid == character_uuid
+                                ).first()
+                                
+                                if character_db and character_db.lore_books:
+                                    lore_book = character_db.lore_books[0]  # Assuming one lore book per character
+                                    lore_entries = []
+                                    
+                                    for db_entry in lore_book.entries:
+                                        if db_entry.enabled:  # Only include enabled entries
+                                            entry_dict = {
+                                                'content': db_entry.content,
+                                                'keys': json.loads(db_entry.keys_json) if db_entry.keys_json else [],
+                                                'enabled': db_entry.enabled,
+                                                'position': db_entry.position,
+                                                'insertion_order': db_entry.insertion_order,
+                                                'case_sensitive': False,  # Default value
+                                                'name': db_entry.comment or '',  # Use comment as name fallback
+                                                'has_image': bool(db_entry.image_uuid),
+                                                'image_uuid': db_entry.image_uuid or ''
+                                            }
+                                            lore_entries.append(entry_dict)
+                                    
+                                    if lore_entries:
+                                        self.logger.log_step(f"Loaded {len(lore_entries)} lore entries from database")
+                                        
+                                        # Create text for matching
+                                        history_text = ''
+                                        for msg in chat_history:
+                                            role = msg.get('role', '')
+                                            content = msg.get('content', '')
+                                            if role == 'user':
+                                                history_text += f"User: {content}\n"
+                                            else:
+                                                char_name = character_data.get('data', {}).get('name', 'Character')
+                                                history_text += f"{char_name}: {content}\n"
+                                        
+                                        # Add current message
+                                        if current_message:
+                                            history_text += f"User: {current_message}"
+                                            
+                                        # Match lore entries against chat history
+                                        matched_entries = lore_handler.match_lore_entries(lore_entries, history_text)
+                                        
+                                        # Only modify memory if we matched entries
+                                        if matched_entries:
+                                            self.logger.log_step(f"Matched {len(matched_entries)} lore entries")
+                                            # Create new memory with lore
+                                            memory = lore_handler.integrate_lore_into_prompt(
+                                                character_data, 
+                                                matched_entries
+                                            )                                            # Note this in the context window
+                                            if context_window is not None and isinstance(context_window, dict):
+                                                context_window['lore_info'] = {
+                                                    'matched_count': len(matched_entries),
+                                                    'entry_keys': [entry.get('keys', [''])[0] for entry in matched_entries 
+                                                                if entry.get('keys')]
+                                                }
+                                        else:
+                                            self.logger.log_step("No lore entries matched the chat history")
+                                    else:
+                                        self.logger.log_step("No enabled lore entries found for character")
+                                else:
+                                    self.logger.log_step("Character not found in database or has no lore book")
+                            finally:
+                                db.close()
+                        except Exception as db_error:
+                            self.logger.log_error(f"Error loading lore from database: {str(db_error)}")
+                            # Continue without lore if database lookup fails
+                    else:
+                        self.logger.log_step("No character UUID provided, skipping lore matching")
                 except Exception as e:
                     self.logger.log_error(f"Error processing lore: {str(e)}")
                     # Continue with generation even if lore processing fails
