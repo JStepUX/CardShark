@@ -1,7 +1,6 @@
 // utils/messageUtils.ts
 import { Message } from '../types/messages';
 import { generateUUID } from './uuidUtils';
-import { substituteVariables } from './variableUtils';
 
 export const MessageUtils = {
   /**

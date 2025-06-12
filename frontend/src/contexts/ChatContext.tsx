@@ -506,31 +506,30 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let bufTimer: NodeJS.Timeout | null = null;      const updateAssistantMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
         
-        if (!bufTimer || isFinal) {
-          if (bufTimer) clearTimeout(bufTimer);          
-          bufTimer = setTimeout(() => {
-            const curBuf = buffer; 
-            buffer = ''; 
-            fullContent += curBuf;
-            const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            // Update the UI with the new content
-            setMessages((prevMsgs: Message[]) => {
-              const updatedMsgs = prevMsgs.map((msg: Message) =>
-                msg.id === assistantMsgId ? { 
-                  ...msg, 
-                  content: filtContent, 
-                  variations: [filtContent], 
-                  currentVariation: 0,
-                  status: 'streaming' as const                } : msg
-              );
-              return updatedMsgs;
-            });
-            
-            if (isFinal) {
-              setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
-            }
-          }, bufferInterval);
-        }
-      };      for await (const chunk of PromptHandler.streamResponse(response)) {
+        // Always clear existing timer and set a new one for responsive streaming
+        if (bufTimer) clearTimeout(bufTimer);          
+        bufTimer = setTimeout(() => {
+          const curBuf = buffer; 
+          buffer = ''; 
+          fullContent += curBuf;
+          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            // Update the UI with the new content
+          setMessages((prevMsgs: Message[]) => {
+            const updatedMsgs = prevMsgs.map((msg: Message) =>
+              msg.id === assistantMsgId ? { 
+                ...msg, 
+                content: filtContent, 
+                variations: [filtContent], 
+                currentVariation: 0,
+                status: 'streaming' as const                } : msg
+            );
+            return updatedMsgs;
+          });
+          
+          if (isFinal) {
+            setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
+          }
+        }, isFinal ? 0 : bufferInterval); // Immediate update for final content
+      };for await (const chunk of PromptHandler.streamResponse(response)) {
         if (abortCtrl.signal.aborted) {
           console.log('Gen aborted by user.');
           if (bufTimer) clearTimeout(bufTimer);
@@ -588,28 +587,26 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
 
       let fullContent = ''; let buffer = ''; const bufferInt = 50; 
-      let bufTimer: NodeJS.Timeout | null = null;
-
-      const updateRegenMsgContent = (chunk: string, isFinal = false) => {
+      let bufTimer: NodeJS.Timeout | null = null;      const updateRegenMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
-        if (!bufTimer || isFinal) {
-          if (bufTimer) clearTimeout(bufTimer);          bufTimer = setTimeout(() => {
-            const curBuf = buffer; buffer = ''; fullContent += curBuf;
-            const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {if (msg.id === message.id) {
-                const newVars = [...origVariations, filtContent];
-                return { 
-                  ...msg, 
-                  content: filtContent, 
-                  variations: newVars, 
-                  currentVariation: newVars.length - 1, 
-                  role: 'assistant' as const,
-                  status: isFinal ? 'complete' as const : 'streaming' as const
-                };
-              } return msg;
-            }));
-            if (isFinal) setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
-          }, bufferInt);
-        }
+        // Always clear existing timer and set a new one for responsive streaming
+        if (bufTimer) clearTimeout(bufTimer);          
+        bufTimer = setTimeout(() => {
+          const curBuf = buffer; buffer = ''; fullContent += curBuf;
+          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {if (msg.id === message.id) {
+              const newVars = [...origVariations, filtContent];
+              return { 
+                ...msg, 
+                content: filtContent, 
+                variations: newVars, 
+                currentVariation: newVars.length - 1, 
+                role: 'assistant' as const,
+                status: isFinal ? 'complete' as const : 'streaming' as const
+              };
+            } return msg;
+          }));
+          if (isFinal) setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
+        }, isFinal ? 0 : bufferInt); // Immediate update for final content
       };
 
       for await (const chunk of PromptHandler.streamResponse(response)) {
@@ -665,25 +662,22 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
 
       let buffer = ''; const bufferInt = 50;
-      let bufTimer: NodeJS.Timeout | null = null;
-
-      const updateContinueMsgContent = (chunk: string, isFinal = false) => {
+      let bufTimer: NodeJS.Timeout | null = null;      const updateContinueMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
-        if (!bufTimer || isFinal) {
-          if (bufTimer) clearTimeout(bufTimer);
-          bufTimer = setTimeout(() => {
-            const curBuf = buffer; buffer = ''; appendedContent += curBuf;
-            const combinedContent = origContent + appendedContent;            const filtContent = shouldUseClientFiltering ? filterText(combinedContent) : combinedContent;
-            setMessages(prevMsgs => prevMsgs.map(msg => {
-              if (msg.id === message.id) {
-                const newVars = msg.variations ? [...msg.variations] : [origContent];
-                newVars[msg.currentVariation ?? newVars.length -1] = filtContent;
-                return { ...msg, content: filtContent, variations: newVars };
-              } return msg;
-            }));
-            if (isFinal) setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
-          }, bufferInt);
-        }
+        // Always clear existing timer and set a new one for responsive streaming
+        if (bufTimer) clearTimeout(bufTimer);
+        bufTimer = setTimeout(() => {
+          const curBuf = buffer; buffer = ''; appendedContent += curBuf;
+          const combinedContent = origContent + appendedContent;            const filtContent = shouldUseClientFiltering ? filterText(combinedContent) : combinedContent;
+          setMessages(prevMsgs => prevMsgs.map(msg => {
+            if (msg.id === message.id) {
+              const newVars = msg.variations ? [...msg.variations] : [origContent];
+              newVars[msg.currentVariation ?? newVars.length -1] = filtContent;
+              return { ...msg, content: filtContent, variations: newVars };
+            } return msg;
+          }));
+          if (isFinal) setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
+        }, isFinal ? 0 : bufferInt); // Immediate update for final content
       };
 
       for await (const chunk of PromptHandler.streamResponse(response)) {
