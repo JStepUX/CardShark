@@ -653,10 +653,12 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
              return;
         }
          setState(prev => ({ ...prev, isGenerating: true, generatingId: assistantMessage.id }));
-      }
-
-      let apiContextMessages = getContextMessages(state, assistantMessage.id)
-                                .filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+      }      let apiContextMessages = getContextMessages(state, assistantMessage.id)
+                                .filter(msg => msg.role !== 'thinking')
+                                .map(msg => ({
+                                  role: msg.role as 'user' | 'assistant' | 'system',
+                                  content: sanitizeMessageContent(msg.content)
+                                })) as PromptContextMessage[];
       
       if (reasoningText) {
         apiContextMessages = [
@@ -770,11 +772,14 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         }
         setState(prev => ({ ...prev, generatingId: messageToRegenerate.id })); 
       }
-      
-      // Prepare context for API: PromptContextMessage[]
+        // Prepare context for API: PromptContextMessage[]
       let contextMessagesForAPI = getContextMessages(state, messageToRegenerate.id)
                                     .slice(0, messageIndex) // History up to and including the preceding user message
-                                    .filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+                                    .filter(msg => msg.role !== 'thinking')
+                                    .map(msg => ({
+                                      role: msg.role as 'user' | 'assistant' | 'system',
+                                      content: sanitizeMessageContent(msg.content)
+                                    })) as PromptContextMessage[];
       if (reasoningText) {
         contextMessagesForAPI = [
             ...contextMessagesForAPI.slice(0,-1),
@@ -923,11 +928,14 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           return;
         }
       }
-      
-      // Prepare context for API: PromptContextMessage[]
+        // Prepare context for API: PromptContextMessage[]
       let contextMessagesForAPI = getContextMessages(state, messageToVary.id)
                                     .slice(0, messageIndex) // History up to and including the preceding user message
-                                    .filter(msg => msg.role !== 'thinking') as PromptContextMessage[];
+                                    .filter(msg => msg.role !== 'thinking')
+                                    .map(msg => ({
+                                      role: msg.role as 'user' | 'assistant' | 'system',
+                                      content: sanitizeMessageContent(msg.content)
+                                    })) as PromptContextMessage[];
       if (reasoningText) {
         contextMessagesForAPI = [
             ...contextMessagesForAPI.slice(0,-1),
