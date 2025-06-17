@@ -13,6 +13,8 @@ from .png_metadata_handler import PngMetadataHandler
 
 # Service dependencies
 from .services.character_service import CharacterService
+from .services.reliable_chat_manager_v2 import ReliableChatManager
+from .services.chat_endpoint_adapters import ChatEndpointAdapters
 
 # Handler dependencies
 from .chat_handler import ChatHandler
@@ -62,6 +64,27 @@ def get_character_service_dependency(request: Request, db: Session = Depends(get
         settings_manager=settings_manager,
         logger=logger
     )
+
+def get_reliable_chat_manager(request: Request, db: Session = Depends(get_db)) -> ReliableChatManager:
+    """
+    FastAPI dependency to get an instance of ReliableChatManager v2.
+    Retrieves required dependencies from app.state.
+    """
+    logger = get_logger(request)
+    
+    return ReliableChatManager(
+        db_session=db,
+        logger=logger
+    )
+
+def get_chat_endpoint_adapters(request: Request, db: Session = Depends(get_db)) -> ChatEndpointAdapters:
+    """
+    FastAPI dependency to get an instance of ChatEndpointAdapters.
+    Provides endpoint-compatible methods for the reliable chat system.
+    """
+    reliable_chat_manager = get_reliable_chat_manager(request, db)
+    
+    return ChatEndpointAdapters(reliable_chat_manager)
 
 # Handler dependency providers
 def get_chat_handler(request: Request) -> ChatHandler:

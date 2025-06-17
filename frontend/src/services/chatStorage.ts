@@ -255,7 +255,7 @@ export class ChatStorage {
       // if (character.data?.name) payload.title = `Chat with ${character.data.name}`;
 
 
-      const response = await fetch('/api/create-new-chat', {
+      const response = await fetch('/api/reliable-create-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -274,9 +274,12 @@ export class ChatStorage {
       
       // The API returns the chat session data wrapped in a DataResponse structure
       if (data.data && data.data.chat_session_uuid) {
-        return { success: true, ...data.data };
+        // Extract the needed fields from data.data, excluding any conflicting fields like 'success'
+        const { success: _, messages: __, ...cleanData } = data.data;
+        const result = { success: true, ...cleanData };
+        return result;
       } else {
-        console.error('/api/create-new-chat response missing chat_session_uuid:', data);
+        console.error('/api/reliable-create-chat response missing chat_session_uuid:', data);
         return { success: false, error: 'Missing chat_session_uuid in response' };
       }
     } catch (error) {
@@ -342,7 +345,7 @@ export class ChatStorage {
       // are passed to this saveChat function but are not part of the /api/save-chat payload itself.
       // They might be used for logging or other client-side logic if needed, or for generating the title.
 
-      const response = await fetch('/api/save-chat', {
+      const response = await fetch('/api/reliable-save-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -383,7 +386,7 @@ export class ChatStorage {
       }
       console.log('Using character_uuid for load-latest-chat:', characterUuid);
       
-      const response = await fetch('/api/load-latest-chat', {
+      const response = await fetch('/api/reliable-load-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -397,7 +400,7 @@ export class ChatStorage {
       console.log(`Latest chat response status: ${response.status}`);
       
       if (response.status === 404) {
-        console.log('Received 404 from /api/load-latest-chat, treating as "no chats found"');
+        console.log('Received 404 from /api/reliable-load-chat, treating as "no chats found"');
         return {
           success: false,
           error: "No chats found",
@@ -551,7 +554,7 @@ export class ChatStorage {
         message: message
       };
       
-      const response = await fetch('/api/append-chat-message', {
+      const response = await fetch('/api/reliable-append-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

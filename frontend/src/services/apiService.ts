@@ -303,31 +303,7 @@ class ApiService {
 // Export a singleton instance
 export const apiService = new ApiService();
 
-/**
- * Create a new chat for a character
- */
-export const createNewChat = async (characterData: CharacterData): Promise<any> => {
-  try {
-    const response = await fetch('/api/create-new-chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        character_data: characterData
-      }),
-    });
 
-    if (!response.ok) {
-      throw new Error(`Failed to create new chat: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error creating new chat:', error);
-    throw error;
-  }
-}
 
 /**
  * List all available chats for a character

@@ -141,8 +141,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('Cannot create new chat session: characterData is null.');
           setError('Cannot create new chat session: No character selected.');
           return false;
-        }
-        const newChatResponse = await ChatStorage.createNewChat(characterData);
+        }        const newChatResponse = await ChatStorage.createNewChat(characterData);
         if (newChatResponse.success && newChatResponse.chat_session_uuid) {
           chatToSaveId = newChatResponse.chat_session_uuid;
           setCurrentChatId(chatToSaveId); 

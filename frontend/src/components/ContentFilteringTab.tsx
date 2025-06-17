@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { WordSwapRule } from '../utils/contentProcessing';
 import { SubstitutionManager } from './SubstitutionManager';
 import { Info, ToggleLeft, ToggleRight, Edit, Trash2 } from 'lucide-react';
 import LoadingSpinner from './common/LoadingSpinner'; // Added
-import { FilterPackage, FilterPackageClient } from '@/services/filterPackageClient';
-import { ContentFilterClient } from '@/services/contentFilterClient';
+import { useFilterPackages } from '../hooks/useFilterPackages';
+import { useContentFilterRules } from '../hooks/useContentFilterRules';
+import { ContentFilterClient } from '../services/contentFilterClient';
 import { toast } from 'sonner';
+import { useState } from 'react';
+// Removed unused import: FilterPackage
 
 interface ContentFilteringTabProps {
   wordSwapRules: WordSwapRule[];
@@ -20,160 +23,27 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
   removeIncompleteSentences = false,
   onUpdateRemoveIncompleteSentences,
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
+  // Use custom hooks for better separation of concerns
+  const {
+    availablePackages,
+    selectedPackageId,
+    isLoading: isLoadingPackages,
+    togglePackage: handleTogglePackage,
+    editPackage: handleEditPackage,
+    deletePackage: handleDeletePackage,
+    createPackage: handleCreatePackage,
+    clearSelectedPackage
+  } = useFilterPackages(onUpdateRules);
+  
+  const {
+    isLoading,    updateRules: handleUpdateRules,
+    exportRules: handleExport,
+    importRules
+  } = useContentFilterRules(wordSwapRules, onUpdateRules);
+  
+  // Inline incomplete sentences setting management
   const [isSavingIncomplete, setIsSavingIncomplete] = useState(false);
   
-  // Filter package states
-  const [availablePackages, setAvailablePackages] = useState<FilterPackage[]>([]);
-  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
-  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
-  // Fetch available filter packages on component mount
-  useEffect(() => {
-    const fetchPackages = async () => {
-      setIsLoadingPackages(true);
-      try {
-        const packages = await FilterPackageClient.getFilterPackages();
-        setAvailablePackages(packages);
-        
-        // Select the first active package if none is selected
-        if (!selectedPackageId) {
-          const activePackage = packages.find(pkg => pkg.is_active);
-          if (activePackage) {
-            setSelectedPackageId(activePackage.id);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch filter packages:', error);
-        toast.error('Failed to load filter packages');
-      } finally {
-        setIsLoadingPackages(false);
-      }
-    };
-    
-    fetchPackages();
-  }, [selectedPackageId]);
-  
-  // Handle package activation/deactivation
-  const handleTogglePackage = async (packageId: string, isActive: boolean) => {
-    try {
-      if (isActive) {
-        await FilterPackageClient.deactivateFilterPackage(packageId);
-      } else {
-        await FilterPackageClient.activateFilterPackage(packageId);
-      }
-      
-      // Refresh packages and rules
-      const packages = await FilterPackageClient.getFilterPackages();
-      setAvailablePackages(packages);
-      
-      // Update rules from content filter manager (combined active packages)
-      const rules = await ContentFilterClient.getContentFilters();
-      onUpdateRules(rules);
-      
-      toast.success(`Filter package ${isActive ? 'deactivated' : 'activated'}`);
-    } catch (error) {
-      console.error(`Failed to ${isActive ? 'deactivate' : 'activate'} filter package:`, error);
-      toast.error(`Failed to ${isActive ? 'deactivate' : 'activate'} filter package`);
-    }
-  };
-  
-  // Handle viewing/editing a package's rules
-  const handleEditPackage = async (packageId: string) => {
-    try {
-      setIsLoading(true);
-      // Fetch the package's rules
-      const rules = await FilterPackageClient.getFilterPackageRules(packageId);
-      
-      // Update the UI with these rules for editing
-      setSelectedPackageId(packageId);
-      onUpdateRules(rules);
-      
-    } catch (error) {
-      console.error('Failed to load package rules:', error);
-      toast.error('Failed to load package rules');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Handle deleting a package
-  const handleDeletePackage = async (packageId: string) => {
-    if (window.confirm(`Are you sure you want to delete this filter package? This cannot be undone.`)) {
-      try {
-        await FilterPackageClient.deleteFilterPackage(packageId);
-        
-        // Refresh packages
-        const packages = await FilterPackageClient.getFilterPackages();
-        setAvailablePackages(packages);
-        
-        // Update rules
-        const rules = await ContentFilterClient.getContentFilters();
-        onUpdateRules(rules);
-        
-        toast.success('Filter package deleted');
-      } catch (error) {
-        console.error('Failed to delete filter package:', error);
-        toast.error('Failed to delete filter package');
-      }
-    }
-  };
-  
-  // Create a new filter package
-  const handleCreatePackage = async () => {
-    const packageName = prompt('Enter a name for the new filter package:');
-    if (!packageName) return;
-    
-    const packageDescription = prompt('Enter a description for the filter package:', 'Custom filter package');
-    
-    try {
-      const packageId = packageName.toLowerCase().replace(/\s+/g, '_') + '_filter';
-      
-      await FilterPackageClient.createFilterPackage(
-        { 
-          id: packageId, 
-          name: packageName, 
-          description: packageDescription || 'Custom filter package' 
-        }, 
-        [] // Start with no rules
-      );
-      
-      // Refresh packages
-      const packages = await FilterPackageClient.getFilterPackages();
-      setAvailablePackages(packages);
-      
-      // Select the new package
-      setSelectedPackageId(packageId);
-      onUpdateRules([]); // Clear rules for editing
-      
-      toast.success('New filter package created');
-    } catch (error) {
-      console.error('Failed to create filter package:', error);
-      toast.error('Failed to create filter package');
-    }
-  };
-  const handleUpdateRules = async (rules: WordSwapRule[]) => {
-    setIsLoading(true);
-    try {
-      // Update local state via parent component
-      onUpdateRules(rules);
-      
-      // If we're editing a specific package, update that package
-      if (selectedPackageId) {
-        await FilterPackageClient.updateFilterPackage(selectedPackageId, rules);
-        toast.success(`Filter package "${selectedPackageId}" updated`);
-      } else {
-        // Otherwise update the combined rules
-        await ContentFilterClient.updateContentFilters(rules);
-        toast.success('Content filtering rules updated');
-      }
-    } catch (error) {
-      console.error('Failed to update content filtering rules:', error);
-      toast.error('Failed to update content filtering rules');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleUpdateIncompleteSentences = async (enabled: boolean) => {
     setIsSavingIncomplete(true);
     try {
@@ -192,71 +62,16 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
       setIsSavingIncomplete(false);
     }
   };
-
-  const handleExport = () => {
-    try {
-      // Create a JSON string of the current rules
-      const rulesJson = JSON.stringify(wordSwapRules, null, 2);
-      
-      // Create a data URL for download
-      const dataUrl = `data:text/json;charset=utf-8,${encodeURIComponent(rulesJson)}`;
-      
-      // Create a temporary anchor element and trigger download
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = 'cardshark-content-filters.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Failed to export rules:', error);
-      toast.error('Failed to export rules');
-    }
+    // Wrapper function to handle rule updates with current package context
+  const handleRulesChange = (rules: WordSwapRule[]) => {
+    handleUpdateRules(rules, selectedPackageId);
   };
 
+  // Handler for importing rules
   const handleImport = () => {
-    // Create a file input element
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'application/json';
-    
-    fileInput.onchange = (event) => {
-      const target = event.target as HTMLInputElement;
-      if (!target.files || target.files.length === 0) return;
-      
-      const file = target.files[0];
-      const reader = new FileReader();
-      
-      reader.onload = (e) => {
-        try {
-          const content = e.target?.result as string;
-          const importedRules = JSON.parse(content) as WordSwapRule[];
-          
-          // Validate the imported rules
-          if (!Array.isArray(importedRules)) {
-            throw new Error('Imported data is not an array');
-          }
-          
-          // Check if each item has the required properties
-          for (const rule of importedRules) {
-            if (!rule.original || !Array.isArray(rule.substitutions) || 
-                !rule.mode || typeof rule.enabled !== 'boolean' || !rule.strategy) {
-              throw new Error('One or more rules are missing required properties');
-            }
-          }
-          
-          handleUpdateRules(importedRules);
-        } catch (error) {
-          console.error('Failed to import rules:', error);
-          toast.error('Failed to import rules. Make sure the file format is correct.');
-        }
-      };
-      
-      reader.readAsText(file);
-    };
-    
-    // Trigger the file dialog
-    fileInput.click();
+    importRules((importedRules) => {
+      handleUpdateRules(importedRules, selectedPackageId);
+    });
   };
 
   return (
@@ -267,7 +82,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
           Configure chat behavior, content filters, and word substitutions to control AI-generated responses.
         </p>
 
-        {/* Output Cleanup section - moved to top */}
+        {/* Output Cleanup section */}
         <div className="bg-stone-800 border border-stone-700 p-4 rounded-lg mb-6">
           <h3 className="text-md font-medium mb-3">Output Cleanup</h3>
           <div className="space-y-4">
@@ -293,7 +108,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
           </div>
         </div>
         
-        {/* Content Filtering section - renamed and reorganized */}
+        {/* Content Filtering section */}
         <h3 className="text-md font-medium mb-3">Content Filtering</h3>
         
         <div className="bg-blue-900/20 border border-blue-700/30 p-3 rounded mb-6">
@@ -318,7 +133,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-md font-medium">Filter Packages</h3>
             <button 
-              onClick={() => handleCreatePackage()}
+              onClick={handleCreatePackage}
               className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 transition-colors rounded"
               disabled={isLoadingPackages}
             >
@@ -401,8 +216,9 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
                 disabled={isLoading}
               >
                 Import Rules
-              </button>              <button
-                onClick={handleExport}
+              </button>
+              <button
+                onClick={() => handleExport(wordSwapRules)}
                 className="px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 transition-colors rounded"
                 disabled={wordSwapRules.length === 0 || isLoading}
                 title="Export word substitution rules to a JSON file"
@@ -412,11 +228,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
               
               {selectedPackageId && (
                 <button
-                  onClick={() => {
-                    setSelectedPackageId(null);
-                    // Load all rules
-                    ContentFilterClient.getContentFilters().then(rules => onUpdateRules(rules));
-                  }}
+                  onClick={clearSelectedPackage}
                   className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 transition-colors rounded"
                   title="Back to all rules"
                 >
@@ -433,10 +245,9 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
             </div>
           )}
         </div>
-        
-        <SubstitutionManager 
+          <SubstitutionManager 
           rules={wordSwapRules} 
-          onChange={handleUpdateRules} 
+          onChange={handleRulesChange} 
         />
       </div>
     </div>

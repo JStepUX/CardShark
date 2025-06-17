@@ -3,14 +3,21 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import datetime
+import os
+import uuid
+import time
 
 from backend import schemas as pydantic_models, sql_models # Use schemas for Pydantic models
 from backend.services import chat_service
 from backend.services.character_service import CharacterService # Import CharacterService
+from backend.services.reliable_chat_manager_v2 import ReliableChatManager
+from backend.services.chat_models import ChatOperationResult, ChatMessage
+from backend.services.chat_endpoint_adapters import ChatEndpointAdapters
 from backend.database import get_db
 from backend.chat_handler import ChatHandler # Import ChatHandler
-from backend.dependencies import get_chat_handler, get_character_service_dependency, get_logger_dependency # Import dependencies
+from backend.dependencies import get_chat_handler, get_character_service_dependency, get_logger, get_chat_endpoint_adapters, get_reliable_chat_manager # Import dependencies
 from backend.log_manager import LogManager
+import logging
 
 # Import standardized response models and error handling
 from backend.response_models import (
@@ -42,7 +49,7 @@ def create_new_chat_endpoint(
     db: Session = Depends(get_db),
     chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         # 1. Create DB record for the chat session
@@ -96,7 +103,7 @@ def load_latest_chat_endpoint(
     db: Session = Depends(get_db),
     chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         # Get the latest session from database
@@ -136,7 +143,7 @@ def save_chat_endpoint(
     db: Session = Depends(get_db),
     chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         # 1. Get the existing chat session from DB
@@ -209,7 +216,7 @@ def append_chat_message_endpoint(
     db: Session = Depends(get_db),
     chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         # 1. Get the existing chat session from DB
@@ -311,7 +318,7 @@ async def generate_chat_response_endpoint( # Made async to accommodate potential
     db: Session = Depends(get_db),
     chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
     # api_handler: APIHandler = Depends(get_api_handler) # Assuming a dependency for api_handler
 ):
     try:
@@ -394,7 +401,7 @@ def list_character_chats_endpoint(
     db: Session = Depends(get_db),
     chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     """List all chats for a specific character"""
     try:
@@ -438,7 +445,7 @@ def list_character_chats_endpoint(
 def create_chat_session_endpoint(
     chat_session: pydantic_models.ChatSessionCreate, # This is the old endpoint, distinct from /create-new-chat
     db: Session = Depends(get_db),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         result = chat_service.create_chat_session(db=db, chat_session=chat_session)
@@ -450,7 +457,7 @@ def create_chat_session_endpoint(
 def read_chat_session_endpoint(
     session_id: str, 
     db: Session = Depends(get_db),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         db_chat_session = chat_service.get_chat_session(db, chat_session_uuid=session_id)
@@ -469,7 +476,7 @@ def read_chat_sessions_endpoint(
     character_uuid: Optional[str] = None,
     user_uuid: Optional[str] = None,
     db: Session = Depends(get_db),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         chat_sessions = chat_service.get_chat_sessions(
@@ -484,7 +491,7 @@ def update_chat_session_endpoint(
     session_id: str,
     chat_update: pydantic_models.ChatSessionUpdate,
     db: Session = Depends(get_db),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         db_chat_session = chat_service.update_chat_session(db, chat_session_uuid=session_id, chat_update=chat_update)
@@ -500,7 +507,7 @@ def update_chat_session_endpoint(
 def delete_chat_session_endpoint(
     session_id: str, 
     db: Session = Depends(get_db),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     try:
         db_chat_session = chat_service.delete_chat_session(db, chat_session_uuid=session_id)
@@ -520,7 +527,7 @@ def delete_chat_endpoint(
     db: Session = Depends(get_db),
     chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger)
 ):
     """Delete a specific chat session and its associated files"""
     try:
@@ -555,3 +562,314 @@ def delete_chat_endpoint(
         raise
     except Exception as e:
         raise handle_generic_error(e, "deleting chat")
+
+# === RELIABLE CHAT MANAGER ENDPOINTS ===
+# These endpoints provide the new reliable chat persistence system
+# They run in parallel with existing endpoints during transition
+
+def safe_timestamp_to_datetime(timestamp: int, logger: LogManager = None) -> datetime.datetime:
+    """
+    Safely convert timestamp to datetime, handling both seconds and milliseconds.
+    """
+    try:
+        # If timestamp looks like milliseconds (> 1e10), convert to seconds
+        if timestamp > 1e10:
+            timestamp = timestamp / 1000
+        return datetime.datetime.fromtimestamp(timestamp)
+    except (OSError, ValueError) as e:
+        # Fallback to current time if conversion fails
+        if logger:
+            logger.log_warning(f"Failed to convert timestamp {timestamp}: {e}. Using current time.")
+        return datetime.datetime.utcnow()
+
+@router.post("/reliable-create-chat", response_model=DataResponse[pydantic_models.ChatSessionRead], status_code=201)
+def reliable_create_chat_endpoint(
+    payload: pydantic_models.ChatSessionCreate,
+    db: Session = Depends(get_db),
+    chat_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Create a new chat session using the ReliableChatManager.
+    This is the reliable version of create-new-chat endpoint.
+    """
+    try:
+        logger.log_info(f"Creating new reliable chat session for character: {payload.character_uuid}")
+        
+        # 1. Validate character exists
+        character = character_service.get_character_by_uuid(payload.character_uuid, db)
+        if not character:
+            raise NotFoundException(f"Character not found: {payload.character_uuid}")
+        
+        # 2. Create chat session using ReliableChatManager
+        result = chat_adapters.create_chat_session(
+            character_uuid=payload.character_uuid,
+            user_uuid=payload.user_uuid,
+            title=payload.title
+        )
+        
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(f"Failed to create reliable chat session: {result.error_message}")
+        
+        logger.log_info(f"Successfully created reliable chat session: {result.chat_metadata.chat_session_uuid}")
+        
+        # 3. Convert to Pydantic model for response
+        session_response = pydantic_models.ChatSessionRead(
+            chat_session_uuid=result.chat_metadata.chat_session_uuid,
+            character_uuid=result.chat_metadata.character_uuid,
+            user_uuid=result.chat_metadata.user_uuid,
+            title=result.chat_metadata.title,
+            start_time=safe_timestamp_to_datetime(result.chat_metadata.created_timestamp, logger),
+            last_message_time=result.chat_metadata.last_message_time,
+            message_count=result.chat_metadata.message_count,
+            chat_log_path=result.chat_metadata.chat_log_path
+        )
+        
+        return create_data_response(session_response)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in reliable_create_chat_endpoint: {str(e)}")
+        raise handle_generic_error(e, "creating reliable chat session")
+
+@router.post("/reliable-load-chat", response_model=DataResponse[Optional[pydantic_models.ChatSessionRead]])
+def reliable_load_chat_endpoint(
+    payload: pydantic_models.CharacterUUIDPayload,
+    db: Session = Depends(get_db),
+    reliable_chat_manager: ReliableChatManager = Depends(get_reliable_chat_manager),
+    chat_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Load the latest chat session for a character using ReliableChatManager.
+    This is the reliable version of load-latest-chat endpoint.
+    """
+    try:
+        logger.log_info(f"Loading latest reliable chat for character: {payload.character_uuid}")
+        
+        # Load latest chat session using ReliableChatManager
+        result = chat_adapters.load_latest_chat_session(payload.character_uuid)
+        
+        if result.result == ChatOperationResult.NOT_FOUND:
+            logger.log_info(f"No chat sessions found for character: {payload.character_uuid}")
+            return create_data_response(None)
+        
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(f"Failed to load reliable chat session: {result.error_message}")
+        
+        logger.log_info(f"Successfully loaded reliable chat session: {result.chat_metadata.chat_session_uuid}")
+        
+        # Convert to Pydantic model for response
+        session_response = pydantic_models.ChatSessionRead(
+            chat_session_uuid=result.chat_metadata.chat_session_uuid,
+            character_uuid=result.chat_metadata.character_uuid,
+            user_uuid=result.chat_metadata.user_uuid,
+            title=result.chat_metadata.title,
+            start_time=safe_timestamp_to_datetime(result.chat_metadata.created_timestamp, logger),
+            last_message_time=result.chat_metadata.last_message_time,
+            message_count=result.chat_metadata.message_count,
+            chat_log_path=result.chat_metadata.chat_log_path,
+            messages=result.messages if hasattr(result, 'messages') and result.messages else None,
+            success=True if hasattr(result, 'messages') and result.messages else None
+        )
+        
+        return create_data_response(session_response)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in reliable_load_chat_endpoint: {str(e)}")
+        raise handle_generic_error(e, "loading reliable chat session")
+
+@router.post("/reliable-append-message", response_model=DataResponse[pydantic_models.ChatSessionRead])
+def reliable_append_message_endpoint(
+    payload: pydantic_models.ChatMessageAppend,
+    db: Session = Depends(get_db),
+    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Append a message to a chat session using ReliableChatManager.
+    This is the reliable version of append-chat-message endpoint.
+    """
+    try:
+        logger.log_info(f"Appending message to reliable chat session: {payload.chat_session_uuid}")
+        
+        # Convert Pydantic message to ChatMessage
+        chat_message = ChatMessage(
+            id=payload.message.get('id', str(uuid.uuid4())),
+            role=payload.message.get('role', 'user'),
+            content=payload.message.get('content', ''),
+            timestamp=payload.message.get('timestamp', int(time.time() * 1000)),
+            status=payload.message.get('status', 'complete'),
+            variations=payload.message.get('variations'),
+            current_variation=payload.message.get('current_variation'),
+            metadata=payload.message.get('metadata')
+        )
+        
+        # Append message using ChatEndpointAdapters
+        result = chat_endpoint_adapters.append_message_endpoint(payload.chat_session_uuid, chat_message)
+        
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(f"Failed to append message to reliable chat: {result.error_message}")
+        
+        logger.log_info(f"Successfully appended message to reliable chat session: {payload.chat_session_uuid}")
+        
+        # Convert updated metadata to Pydantic model
+        session_response = pydantic_models.ChatSessionRead(
+            chat_session_uuid=result.chat_metadata.chat_session_uuid,
+            character_uuid=result.chat_metadata.character_uuid,
+            user_uuid=result.chat_metadata.user_uuid,
+            title=result.chat_metadata.title,
+            start_time=safe_timestamp_to_datetime(result.chat_metadata.created_timestamp, logger),
+            last_message_time=result.chat_metadata.last_message_time,
+            message_count=result.chat_metadata.message_count,
+            chat_log_path=result.chat_metadata.chat_log_path
+        )
+        
+        return create_data_response(session_response)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in reliable_append_message_endpoint: {str(e)}")
+        raise handle_generic_error(e, "appending message to reliable chat")
+
+@router.post("/reliable-save-chat", response_model=DataResponse[pydantic_models.ChatSessionRead])
+def reliable_save_chat_endpoint(
+    payload: pydantic_models.ChatSavePayload,
+    db: Session = Depends(get_db),
+    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Save chat messages using ReliableChatManager.
+    This is the reliable version of save-chat endpoint.
+    """
+    try:
+        # Convert Pydantic messages to ChatMessage objects
+        chat_messages = []
+        for msg_dict in payload.messages:
+            chat_message = ChatMessage(
+                id=msg_dict.get('id', str(uuid.uuid4())),
+                role=msg_dict.get('role', 'user'),
+                content=msg_dict.get('content', ''),
+                timestamp=msg_dict.get('timestamp', int(time.time() * 1000)),
+                status=msg_dict.get('status', 'complete'),
+                variations=msg_dict.get('variations'),
+                current_variation=msg_dict.get('current_variation'),
+                metadata=msg_dict.get('metadata')
+            )
+            chat_messages.append(chat_message)
+        
+        # Save messages using ChatEndpointAdapters
+        result = chat_endpoint_adapters.save_chat_session(
+            chat_session_uuid=payload.chat_session_uuid,
+            messages=chat_messages,
+            title=payload.title
+        )
+        
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(f"Failed to save reliable chat session: {result.error_message}")
+        
+        logger.log_info(f"Successfully saved reliable chat session: {payload.chat_session_uuid}")
+        
+        # Convert updated metadata to Pydantic model
+        session_response = pydantic_models.ChatSessionRead(
+            chat_session_uuid=result.chat_metadata.chat_session_uuid,
+            character_uuid=result.chat_metadata.character_uuid,
+            user_uuid=result.chat_metadata.user_uuid,
+            title=result.chat_metadata.title,
+            start_time=safe_timestamp_to_datetime(result.chat_metadata.created_timestamp, logger),
+            last_message_time=result.chat_metadata.last_message_time,
+            message_count=result.chat_metadata.message_count,
+            chat_log_path=result.chat_metadata.chat_log_path
+        )
+        
+        return create_data_response(session_response)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in reliable_save_chat_endpoint: {str(e)}")
+        raise handle_generic_error(e, "saving reliable chat session")
+
+@router.get("/reliable-list-chats/{character_uuid}", response_model=ListResponse[pydantic_models.ChatSessionRead])
+def reliable_list_chats_endpoint(
+    character_uuid: str,
+    db: Session = Depends(get_db),
+    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    List all chat sessions for a character using ReliableChatManager.
+    This is the reliable version for listing chats.
+    """
+    try:
+        logger.log_info(f"Listing reliable chat sessions for character: {character_uuid}")
+        
+        # List chat sessions using ChatEndpointAdapters
+        result = chat_endpoint_adapters.list_chat_sessions(character_uuid)
+        
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(f"Failed to list reliable chat sessions: {result.error_message}")
+        
+        # Convert to Pydantic models
+        session_responses = []
+        for metadata in result.chat_sessions:
+            session_response = pydantic_models.ChatSessionRead(
+                chat_session_uuid=metadata.chat_session_uuid,
+                character_uuid=metadata.character_uuid,
+                user_uuid=metadata.user_uuid,
+                title=metadata.title,
+                start_time=safe_timestamp_to_datetime(metadata.created_timestamp, logger),
+                last_message_time=metadata.last_message_time,
+                message_count=metadata.message_count,
+                chat_log_path=metadata.chat_log_path
+            )
+            session_responses.append(session_response)
+        
+        logger.log_info(f"Successfully listed {len(session_responses)} reliable chat sessions for character: {character_uuid}")
+        
+        return create_list_response(session_responses)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in reliable_list_chats_endpoint: {str(e)}")
+        raise handle_generic_error(e, "listing reliable chat sessions")
+
+@router.delete("/reliable-delete-chat/{chat_session_uuid}", response_model=DataResponse[bool])
+def reliable_delete_chat_endpoint(
+    chat_session_uuid: str,
+    db: Session = Depends(get_db),
+    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Delete a chat session using ReliableChatManager.
+    This is the reliable version of chat deletion.
+    """
+    try:
+        logger.log_info(f"Deleting reliable chat session: {chat_session_uuid}")
+        
+        # Delete chat session using ChatEndpointAdapters
+        result = chat_endpoint_adapters.delete_chat_session(chat_session_uuid)
+        
+        if result.result == ChatOperationResult.NOT_FOUND:
+            raise NotFoundException(f"Chat session not found: {chat_session_uuid}")
+        
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(f"Failed to delete reliable chat session: {result.error_message}")
+        
+        logger.log_info(f"Successfully deleted reliable chat session: {chat_session_uuid}")
+        
+        return create_data_response(True)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in reliable_delete_chat_endpoint: {str(e)}")
+        raise handle_generic_error(e, "deleting reliable chat session")

@@ -118,9 +118,7 @@ class PngMetadataHandler:
 
             # Open image and read metadata
             with Image.open(bio) as image:
-                self.logger.log_step("Successfully opened PNG image")
-
-                # Log all available keys in image.info for initial debugging
+                self.logger.log_step("Successfully opened PNG image")                # Log all available keys in image.info for initial debugging
                 self.logger.log_step("Image Info Keys (initial):")
                 for key in image.info:
                     self.logger.log_step(f"Info Key: {key}")
@@ -128,26 +126,38 @@ class PngMetadataHandler:
                     self.logger.log_step(f"Value preview: {value_preview}")
 
                 # **Prioritize EXIF extraction**
-                if hasattr(image, '_getexif') and image._getexif():
-                    self.logger.log_step("Getting EXIF data using _getexif")
-                    exif = image._getexif()
-                    if exif:
-                        self.logger.log_step("EXIF data found, inspecting EXIF tags...")
+                try:
+                    if hasattr(image, '_getexif'):
+                        self.logger.log_step("Attempting to get EXIF data using _getexif")
+                        exif = image._getexif()
+                        if exif:
+                            self.logger.log_step("Getting EXIF data using _getexif")
+                        else:
+                            self.logger.log_step("No EXIF data found via _getexif")
+                    else:
+                        self.logger.log_step("Image does not support _getexif method")
+                        exif = None
+                except (OSError, AttributeError, ValueError) as e:
+                    self.logger.log_step(f"Error reading EXIF data: {e}")
+                    exif = None
+                
+                if exif:
+                    self.logger.log_step("EXIF data found, inspecting EXIF tags...")
 
-                        # 1. Look for UserComment first (common practice)
-                        usercomment_tag = None
-                        for tag_id, tag_name in ExifTags.TAGS.items():
-                            if tag_name == 'UserComment':
-                                usercomment_tag = tag_id
-                                self.logger.log_step(f"Found UserComment tag ID: {tag_id}")
-                                break
+                    # 1. Look for UserComment first (common practice)
+                    usercomment_tag = None
+                    for tag_id, tag_name in ExifTags.TAGS.items():
+                        if tag_name == 'UserComment':
+                            usercomment_tag = tag_id
+                            self.logger.log_step(f"Found UserComment tag ID: {tag_id}")
+                            break
 
-                        if usercomment_tag and usercomment_tag in exif:
-                            self.logger.log_step("Found UserComment in EXIF data, attempting to decode.")
-                            try:
-                                return self._decode_metadata(exif[usercomment_tag])
-                            except Exception as e:
-                                self.logger.log_error(f"Error decoding UserComment: {str(e)}")
+                    if usercomment_tag and usercomment_tag in exif:
+                        self.logger.log_step("Found UserComment in EXIF data, attempting to decode.")
+                        try:
+                            return self._decode_metadata(exif[usercomment_tag])
+                        except Exception as e:
+                            self.logger.log_error(f"Error decoding UserComment: {str(e)}")
 
                         # 2. If UserComment not found, check for 'chara' directly in EXIF (less standard, but possible)
                         if 'chara' in exif:  # Directly check if 'chara' is an EXIF tag (might not be standard tag ID)

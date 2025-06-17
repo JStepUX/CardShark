@@ -41,11 +41,11 @@ class RoomUpdate(BaseModel): # Using BaseModel directly for more control over op
     # world_uuid is typically not updated, or handled separately
 
 class RoomRead(RoomBase):
-    room_id: int
-    # world_uuid is already in RoomBase
+    room_id: int    # world_uuid is already in RoomBase
 
     class Config:
         orm_mode = True
+
 # Pydantic models for Character (minimal for now, expand as needed)
 class CharacterBase(BaseModel):
     name: str
@@ -70,8 +70,7 @@ class NPCInRoomBase(BaseModel):
 class NPCInRoomCreate(BaseModel): # Request body for adding/updating NPC role in a room
     npc_role_in_room: Optional[str] = None
 
-class NPCInRoomRead(NPCInRoomBase): # Response for a specific assignment
-    id: int # The ID of the NPCsInRooms record
+class NPCInRoomRead(NPCInRoomBase): # Response for a specific assignment    id: int # The ID of the NPCsInRooms record
 
     class Config:
         orm_mode = True
@@ -137,6 +136,8 @@ class ChatSessionRead(ChatSessionBase):
     start_time: dt.datetime
     last_message_time: Optional[dt.datetime] = None
     message_count: int
+    messages: Optional[List[dict]] = None
+    success: Optional[bool] = None
 
     class Config:
         orm_mode = True

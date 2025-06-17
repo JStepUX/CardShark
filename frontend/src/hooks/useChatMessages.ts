@@ -46,8 +46,8 @@ const DEBOUNCE_DELAY = 1000;
 // --- Content Sanitization Utility ---
 const sanitizeMessageContent = (html: string): string => {
   if (!html) return '';
-  return html.replace(/<p\s+class=(['"])preserve-whitespace\1[^>]*>/g, '<p>')
-             .replace(/<p\s+class="preserve-whitespace"[^>]*>/g, '<p>'); 
+  // Use PromptHandler's stripHtmlTags to completely remove HTML markup
+  return PromptHandler.stripHtmlTags(html);
 };
 
 // --- Debounce Utility ---
