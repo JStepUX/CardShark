@@ -110,7 +110,6 @@ class ReliableChatManager:
                         self.db_session, chat_session_uuid, 1, metadata.last_message_time
                     )
                 
-                self.logger.log_info(f"Successfully created chat {chat_session_uuid}")
                 return ChatOperationResult.SUCCESS, chat_session_uuid, None
                 
             except Exception as e:
@@ -322,7 +321,6 @@ class ReliableChatManager:
                         shutil.copy2(backup_path, file_path)
                     return ChatOperationResult.DB_ERROR, "Failed to delete from database"
                 
-                self.logger.log_info(f"Successfully deleted chat {chat_session_uuid}")
                 return ChatOperationResult.SUCCESS, None
                 
             except Exception as e:
@@ -402,7 +400,6 @@ class ReliableChatManager:
                 if title and title != db_session.title:
                     self.db_manager.update_chat_title(self.db_session, chat_session_uuid, title)
                 
-                self.logger.log_info(f"Successfully saved chat session: {chat_session_uuid}")
                 return ChatOperationResult.SUCCESS, updated_metadata, None
                 
             except Exception as e:

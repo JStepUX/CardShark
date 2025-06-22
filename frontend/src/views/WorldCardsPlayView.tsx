@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Send, User } from 'lucide-react';
 import GameWorldIconBar from '../components/GameWorldIconBar';
-import { useCharacter, CharacterData } from '../contexts/CharacterContext';
+import { useCharacter } from '../contexts/CharacterContext';
 import { Dialog } from '../components/Dialog';
 import { CharacterCard } from '../types/schema';
 import { NpcGridItem } from '../types/worldState';
@@ -115,38 +115,6 @@ const InputArea: React.FC<{
   );
 };
 
-interface ReasoningSettings {
-  enabled: boolean;
-  visible: boolean;
-  instructions?: string;
-}
-interface SimplifiedChatState {
-  messages: Message[];
-  isLoading: boolean;
-  isGenerating: boolean;
-  error: string | null;
-  currentUser: UserProfile | null;
-  lastContextWindow: any;
-  generatingId: string | null;
-  reasoningSettings: ReasoningSettings;
-}
-interface UseChatMessagesReturn extends SimplifiedChatState {
-  generateResponse: (userInput: string) => Promise<void>;
-  regenerateMessage: (messageToRegenerate: Message) => Promise<void>;
-  generateVariation: (messageToVary: Message) => Promise<void>;
-  cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
-  stopGeneration: () => void;
-  setCurrentUser: (user: UserProfile | null) => void;
-  loadExistingChat: (chatId: string) => Promise<void>;
-  updateReasoningSettings: (settings: ReasoningSettings) => void;
-  deleteMessage: (messageId: string) => void;
-  updateMessage: (messageId: string, newContent: string, isStreamingUpdate?: boolean) => void;
-  handleNewChat: () => Promise<void>;
-  clearError: () => void;
-  activeCharacterData: CharacterData;
-  generateNpcIntroduction: (npcCharacterData: CharacterCard, worldInfo?: { worldName: string; settingDescription: string }, encounterContext?: string) => Promise<null>;
-}
-
 const WorldCardsPlayView: React.FC = () => {
   const { worldId } = useParams<{ worldId: string }>();
   const navigate = useNavigate();
@@ -164,6 +132,7 @@ const WorldCardsPlayView: React.FC = () => {
 
   const { messagesEndRef, messagesContainerRef, scrollToBottom } = useScrollToBottom();
 
+  // Get message management from the hook
   const {
     messages,
     isGenerating,
@@ -180,7 +149,7 @@ const WorldCardsPlayView: React.FC = () => {
     clearError: clearChatError,
     activeCharacterData,
     generateNpcIntroduction
-  }: UseChatMessagesReturn = useChatMessages(characterData, { isWorldPlay: true });
+  } = useChatMessages(characterData, { isWorldPlay: true });
 
   useEffect(() => {
     const loadWorldChat = async () => {
