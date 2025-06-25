@@ -244,13 +244,11 @@ const UserSelect: React.FC<UserSelectProps> = ({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: `Failed to create user (${response.status})` }));
         throw new Error(errorData.message || 'Failed to create user');
-      }
-
-      const data = await response.json();
-      if (data.success && data.filename) {
+      }      const data = await response.json();
+      if (data.success && data.data?.filename) {
         const newUser: UserProfile = {
           name: newUserName.trim(),
-          filename: data.filename,
+          filename: data.data.filename,
           size: newUserImage.size,
           modified: Date.now(),
           id: ''

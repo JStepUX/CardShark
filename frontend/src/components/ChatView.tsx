@@ -201,12 +201,13 @@ const ChatView: React.FC = () => {
 
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
-  const [showContextWindow, setShowContextWindow] = useState(false);
-  const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
+  const [showContextWindow, setShowContextWindow] = useState(false);  const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
   const [isRegeneratingGreeting, setIsRegeneratingGreeting] = useState(false);
   // Removed selectedApiIdForNextMessage state
-  const [localError, setLocalError] = useState<string | null>(null); // Local error state for UI feedback  // Use the custom scroll hook with our shared implementation
+  const [localError, setLocalError] = useState<string | null>(null); // Local error state for UI feedback  
+  
+  // Use the custom scroll hook with our shared implementation  
   const { endRef: messagesEndRef, containerRef: messagesContainerRef, scrollToBottom } = useScrollToBottom();
   // Use ChatContext instead of useChatMessages hook
   const {
@@ -277,8 +278,7 @@ const ChatView: React.FC = () => {
         setBackgroundSettings(lastContextWindow.backgroundSettings);
       }
     }
-  }, [lastContextWindow]);
-  // Use the chat continuation hook
+  }, [lastContextWindow]);  // Use the chat continuation hook
   const {
     continueResponse,
     stopContinuation,

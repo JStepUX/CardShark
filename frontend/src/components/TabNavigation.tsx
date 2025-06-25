@@ -28,9 +28,7 @@ const TabNavigation: React.FC<TabNavigationProps> = ({ characterData }) => {
   const [activeTab, setActiveTab] = useState('basic')
 
   useEffect(() => {
-    if (characterData) {
-      console.log('Character data updated:', characterData)
-    }
+    // Removed console.log to prevent test failures
   }, [characterData])
 
   const tabs = [

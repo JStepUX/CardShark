@@ -34,7 +34,7 @@ import {
 } from '../services/chat/chatUtils';
 
 // Import session management hook
-import { useChatSession } from './chat/useChatSession';
+import { useEnhancedChatSession } from './chat/useEnhancedChatSession';
 
 // Import stream processor hook
 import { useStreamProcessor } from './chat/useStreamProcessor';
@@ -52,29 +52,47 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
   const isGenericAssistant = !characterData; 
   const { apiConfig: globalApiConfig } = useAPIConfig();
   const { trackLoreImages } = useChat();
-  // Use the session management hook
+  // Phase 2: Initialize message state hook first (gradual migration)
+  const [messageStateParams, setMessageStateParams] = useState<{
+    chatSessionUuid: string | null;
+    currentUser: UserProfile | null;
+    autoSaveEnabled: boolean;
+    isGenericAssistant: boolean;
+  }>({
+    chatSessionUuid: null,
+    currentUser: null,
+    autoSaveEnabled: !isGenericAssistant,
+    isGenericAssistant
+  });
+  
+  const messageStateHook = useMessageState(messageStateParams);
+  
+  // Use the enhanced session management hook
   const {
     chatSessionUuid,
     currentUser,
     isLoading: isSessionLoading,
-    error: sessionError,
+    isDirty,
     ensureChatSession,
     createNewSession,
-    setCurrentUser
-  } = useChatSession(effectiveCharacterData, isGenericAssistant);
+    setCurrentUser,
+    markDirty,
+    saveIfDirty,
+    forceNavigationSave
+  } = useEnhancedChatSession(effectiveCharacterData, isGenericAssistant, messageStateHook.messages);
+  
+  // Update message state params when session changes
+  useEffect(() => {
+    setMessageStateParams(prev => ({
+      ...prev,
+      chatSessionUuid,
+      currentUser,
+      autoSaveEnabled: !isGenericAssistant
+    }));
+  }, [chatSessionUuid, currentUser, isGenericAssistant]);
 
   // Use the stream processor hook
   const streamProcessor = useStreamProcessor();
-  
-  // Phase 2: Initialize message state hook alongside existing state (gradual migration)
-  const messageStateParams = {
-    chatSessionUuid,
-    currentUser,
-    autoSaveEnabled: true, // Will be updated later based on isGenericAssistant
-    isGenericAssistant
-  };
-  
-  const messageStateHook = useMessageState(messageStateParams);
   
   useEffect(() => {
     if (characterData && characterData.data?.name) { 
@@ -142,8 +160,11 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     messageStateHook.setGenerationState(true, assistantMessage.id);
     messageStateHook.clearError();
     
+    // Mark as dirty for auto-save
+    markDirty(messageStateHook.messages);
+    
     console.log(`[setGeneratingStart] State updated with generatingId: ${assistantMessage.id}`);
-  };  const updateGeneratingMessageContent = (messageId: string, chunk: string) => {
+  };const updateGeneratingMessageContent = (messageId: string, chunk: string) => {
     console.log(`[updateGeneratingMessageContent] Updating message ${messageId} with chunk: "${chunk}"`);
     
     // Check if we're generating and this is the correct message
@@ -208,10 +229,11 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       variations: uniqueVariations,
       currentVariation: newVariationIndex,
       status: 'complete'
-    });
-
-    // Stop generation
+    });    // Stop generation
     messageStateHook.setGenerationState(false, null);
+
+    // Mark as dirty for auto-save since message was completed
+    markDirty(messageStateHook.messages);
 
     // Update context window in legacy state
     const finalContextWindow = { ...state.lastContextWindow, type: contextWindowType, finalResponse: sanitizedFinalContent, completionTime: new Date().toISOString(), totalChunks: receivedChunks };
@@ -894,7 +916,6 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         }
     }
   }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, clearError, appendMessage, stopGeneration, generateReasoning, isGenericAssistant, processStream, ensureChatSession, trackLoreImages]);
-
   const cycleVariation = (messageId: string, direction: 'next' | 'prev') => {
     setState(prev => {
       let chatSessionUuidToSave = chatSessionUuid; 
@@ -911,6 +932,9 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         }
         return msg;
       });
+
+      // Mark as dirty for auto-save
+      markDirty(updatedMessages);
 
       if (!isGenericAssistant && autoSaveEnabled.current && chatSessionUuidToSave) {
         const changedMessage = updatedMessages.find(m => m.id === messageId);
@@ -1061,46 +1085,36 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       } catch (error) {
         console.error('Failed to update stored reasoning settings to disabled state:', error);
       }
+    }  }, []);
+  
+  // Phase 2: Enhanced deleteMessage using message state hook
+  const deleteMessage = (messageId: string) => {
+    // Use the new message state hook for this operation
+    messageStateHook.deleteMessage(messageId);
+    
+    // Mark as dirty for auto-save
+    markDirty(messageStateHook.messages);
+  };
+  
+  // Phase 2: Enhanced updateMessage using message state hook
+  const updateMessage = (messageId: string, newContent: string, isStreamingUpdate: boolean = false) => {
+    if (isStreamingUpdate) {
+      // For streaming updates, just update content and status
+      messageStateHook.updateMessageContent(messageId, newContent, true);
+    } else {
+      // For regular updates, update content and handle variations
+      const sanitizedNewContent = sanitizeMessageContent(newContent);
+      messageStateHook.updateMessage(messageId, {
+        content: sanitizedNewContent,
+        status: 'complete',
+        variations: [sanitizedNewContent],
+        currentVariation: 0
+      });
+      
+      // Mark as dirty for auto-save
+      markDirty(messageStateHook.messages);
     }
-  }, []);   // Phase 2: Enhanced deleteMessage using message state hook
-   const deleteMessage = (messageId: string) => {
-     // Use the new message state hook for this operation
-     messageStateHook.deleteMessage(messageId);
-     
-     // Keep legacy behavior for non-message state (like auto-save)
-     if (!isGenericAssistant && autoSaveEnabled.current && chatSessionUuid) {
-       // Get updated messages from the hook and save
-       const updatedMessages = messageStateHook.messages;
-       saveChat(chatSessionUuid, updatedMessages, currentUser);
-     }
-   };   // Phase 2: Enhanced updateMessage using message state hook
-   const updateMessage = (messageId: string, newContent: string, isStreamingUpdate: boolean = false) => {
-     if (isStreamingUpdate) {
-       // For streaming updates, just update content and status
-       messageStateHook.updateMessageContent(messageId, newContent, true);
-     } else {
-       // For regular updates, update content and handle variations
-       const sanitizedNewContent = sanitizeMessageContent(newContent);
-       messageStateHook.updateMessage(messageId, {
-         content: sanitizedNewContent,
-         status: 'complete',
-         variations: [sanitizedNewContent],
-         currentVariation: 0
-       });
-       
-       // Handle auto-save for non-generic assistants
-       if (!isGenericAssistant && autoSaveEnabled.current && chatSessionUuid) {
-         const updatedMsg = messageStateHook.getMessageById(messageId);
-         if (updatedMsg) {
-           ChatStorage.appendMessage(chatSessionUuid, updatedMsg)
-             .then(() => {
-               saveChat(chatSessionUuid, messageStateHook.messages, currentUser); 
-             })
-             .catch(err => console.error(`[updateMessage] Error appending/updating edited message ${messageId}:`, err));
-         }
-       }
-     }
-   };
+  };
 
 
    useEffect(() => { 
@@ -1248,11 +1262,12 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     messages: messageStateHook.messages,
     isGenerating: messageStateHook.isGenerating,
     generatingId: messageStateHook.generatingId,
-    error: messageStateHook.error || state.error || sessionError,
-    // Add session state from session hook
+    error: messageStateHook.error || state.error,
+    // Add session state from enhanced session hook
     currentUser,
     chatSessionUuid,
     isLoading: state.isLoading || isSessionLoading,
+    isDirty, // Add dirty state
     setGeneratingStart,
     updateGeneratingMessageContent,
     updateThinkingMessageContent,
@@ -1262,16 +1277,19 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     clearError,
     generateResponse,
     regenerateMessage,
-    generateVariation,    cycleVariation,
+    generateVariation,
+    cycleVariation,
     setCurrentUser,
-    saveChat: () => {
-      saveChat(chatSessionUuid, messageStateHook.messages, currentUser);
-    },
+    // Enhanced auto-save functions
+    saveChat: () => saveIfDirty(),
+    forceNavigationSave,
+    markDirty: (messages: Message[]) => markDirty(messages),
+    // Legacy compatibility
     appendMessage: (message: Message) => appendMessage(chatSessionUuid, message),
     deleteMessage,
     updateMessage,
     updateReasoningSettings,
     generateNpcIntroduction,
-    activeCharacterData: effectiveCharacterData, // Add the missing activeCharacterData property
+    activeCharacterData: effectiveCharacterData,
   };
 }

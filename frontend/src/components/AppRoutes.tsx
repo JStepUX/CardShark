@@ -38,8 +38,11 @@ const AppRoutes: React.FC = () => (
   <ComparisonProvider>
     <SettingsProvider>
       <APIConfigProvider>
-        <CharacterProvider>
-          <Routes>
+        <TemplateProvider>
+          <CharacterProvider>
+            <ChatProvider>
+              <KoboldCPPProvider pollInterval={120000}>
+                <Routes>
             <Route path="/" element={<Layout />}>
             {/* Default view redirects to gallery */}
             <Route index element={<Navigate to="/gallery" replace />} />
@@ -67,13 +70,7 @@ const AppRoutes: React.FC = () => (
               {/* World Cards Play route needs chat providers */}
               <Route path=":worldId/play" element={
                 <LazyRoute routeName="World Play">
-                  <TemplateProvider>
-                    <ChatProvider>
-                      <KoboldCPPProvider pollInterval={120000}>
-                        <WorldCardsPlayView />
-                      </KoboldCPPProvider>
-                    </ChatProvider>
-                  </TemplateProvider>
+                  <WorldCardsPlayView />
                 </LazyRoute>
               } />
             </Route>
@@ -102,23 +99,15 @@ const AppRoutes: React.FC = () => (
             {/* Chat route with chat-specific providers - LAZY LOADED */}
             <Route path="chat" element={
               <LazyRoute routeName="Chat">
-                <TemplateProvider>
-                  <HighlightStylesUpdater />
-                  <ChatProvider>
-                    <KoboldCPPProvider pollInterval={120000}>
-                      <ChatView />
-                    </KoboldCPPProvider>
-                  </ChatProvider>
-                </TemplateProvider>
+                <HighlightStylesUpdater />
+                <ChatView />
               </LazyRoute>
             } />
             
             {/* Settings view with API configuration */}
             <Route path="settings" element={
               <LazyRoute routeName="Settings">
-                <TemplateProvider>
-                  <APISettingsView />
-                </TemplateProvider>
+                <APISettingsView />
               </LazyRoute>
             } />
 
@@ -126,7 +115,10 @@ const AppRoutes: React.FC = () => (
             <Route path="*" element={<Navigate to="/gallery" replace />} />
           </Route>
           </Routes>
-        </CharacterProvider>
+              </KoboldCPPProvider>
+            </ChatProvider>
+          </CharacterProvider>
+        </TemplateProvider>
       </APIConfigProvider>
     </SettingsProvider>
   </ComparisonProvider>

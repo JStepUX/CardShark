@@ -201,37 +201,47 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(err instanceof Error ? err.message : 'An unexpected error occurred during save.');
       return false;
     }
-  }, [characterData, currentUser, apiConfig, availablePreviewImages, currentPreviewImageIndex, triggeredLoreImages, currentChatId]);
-
-  useEffect(() => {
-    if (!characterData?.data?.name) return;
-    const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
-    if (currentCharacterFileId === lastCharacterId.current && currentChatId !== null) return; // Also check if chat already loaded
+  }, [characterData, currentUser, apiConfig, availablePreviewImages, currentPreviewImageIndex, triggeredLoreImages, currentChatId]);  useEffect(() => {
+    if (!characterData?.data?.name) {
+      console.log('ChatContext useEffect: No character data name, returning');
+      return;
+    }
     
-    if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) { // Only clear if character truly changed
+    const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
+    console.log('ChatContext useEffect: currentCharacterFileId:', currentCharacterFileId, 'lastCharacterId:', lastCharacterId.current, 'currentChatId:', currentChatId);
+    
+    // If this is the same character and we already have a chat loaded, don't reload
+    if (currentCharacterFileId === lastCharacterId.current && currentChatId !== null) {
+      console.log('Same character and chat already loaded, skipping reload');
+      return;
+    }
+    
+    if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) {
+      console.log('Character changed, clearing context window');
       ChatStorage.clearContextWindow();
     }
     
     console.log('Character changed or initial load, loading chat for:', characterData.data.name);
-    setCurrentChatId(null); 
-    resetTriggeredLoreImagesState(); 
+    // Only reset currentChatId if character actually changed
+    if (lastCharacterId.current !== currentCharacterFileId) {
+      console.log('Resetting currentChatId due to character change');
+      setCurrentChatId(null);
+    }
+    resetTriggeredLoreImagesState();
     
     async function loadChatForCharacterInternal() {
       try {
         setIsLoading(true);
         setError(null);
-        if (!characterData) throw new Error('No character data available');
+        if (!characterData) throw new Error('No character data available');        const response = await ChatStorage.loadLatestChat(characterData);
         
-        const response = await ChatStorage.loadLatestChat(characterData);
-        
-        if (response.success && response.messages && Array.isArray(response.messages) && response.messages.length > 0) {
-          setMessages(response.messages);
-          const loadedChatSessionId = response.chat_session_uuid || response.chatId || response.metadata?.chat_metadata?.chat_id || null;
-          setCurrentChatId(loadedChatSessionId); 
-          if (response.metadata?.chat_metadata?.lastUser) setCurrentUser(response.metadata.chat_metadata.lastUser);
+        if (response.success && response.data && response.data.messages && Array.isArray(response.data.messages) && response.data.messages.length > 0) {
+          setMessages(response.data.messages);
+          const loadedChatSessionId = response.data.chat_session_uuid || response.data.chatId || response.data.metadata?.chat_metadata?.chat_id || null;
+          setCurrentChatId(loadedChatSessionId);          if (response.data.metadata?.chat_metadata?.lastUser) setCurrentUser(response.data.metadata.chat_metadata.lastUser);
           
-          let loadedTrigLoreImgs: TriggeredLoreImage[] = [];          if (response.metadata?.chat_metadata?.triggeredLoreImages) {
-            loadedTrigLoreImgs = response.metadata.chat_metadata.triggeredLoreImages;
+          let loadedTrigLoreImgs: TriggeredLoreImage[] = [];          if (response.data.metadata?.chat_metadata?.triggeredLoreImages) {
+            loadedTrigLoreImgs = response.data.metadata.chat_metadata.triggeredLoreImages;
             setTriggeredLoreImages(loadedTrigLoreImgs); 
           }
           
@@ -240,8 +250,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const newAvailImgs = getAvailableImagesForPreview(charImgP);
           setAvailablePreviewImages(newAvailImgs);
  
-          if (response.metadata?.chat_metadata?.currentDisplayedImage && newAvailImgs.length > 0) {
-            const savedDisp = response.metadata.chat_metadata.currentDisplayedImage;
+          if (response.data.metadata?.chat_metadata?.currentDisplayedImage && newAvailImgs.length > 0) {
+            const savedDisp = response.data.metadata.chat_metadata.currentDisplayedImage;
             const foundIdx = newAvailImgs.findIndex(img =>
               img.type === savedDisp.type &&
               (img.type === 'character' || (img.entryId === savedDisp.entryId && img.imageUuid === savedDisp.imageUuid))
@@ -249,12 +259,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCurrentPreviewImageIndex(foundIdx !== -1 ? foundIdx : 0);
           } else {
             setCurrentPreviewImageIndex(newAvailImgs.length > 0 ? 0 : 0);
-          }
-
-          setLastContextWindow({
+          }          setLastContextWindow({
             type: 'loaded_chat', timestamp: new Date().toISOString(),
             characterName: characterData?.data?.name, chatId: loadedChatSessionId || 'unknown',
-            messageCount: response.messages.length
+            messageCount: response.data.messages.length
           });
           setError(null);
         } else if (response.isRecoverable && characterData?.data?.first_mes) {
@@ -302,7 +310,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastCharacterId.current = currentCharacterFileId;
       }    }
     loadChatForCharacterInternal();
-  }, [characterData, resetTriggeredLoreImagesState, currentUser]);
+  }, [characterData, resetTriggeredLoreImagesState]); // Remove currentUser from deps
   
   const debouncedSave = MessageUtils.createDebouncedSave(
     (msgs: Message[]): Promise<boolean> => saveChat(msgs).catch(e => { console.error("Debounced saveChat err:", e); throw e; }), 500
