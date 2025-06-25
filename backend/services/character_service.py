@@ -87,6 +87,8 @@ class CharacterService:
 
     def _get_character_dirs(self) -> List[str]:
         """Gets character directories from settings or uses a default."""
+        from backend.utils.path_utils import normalize_path
+        
         # Check for the singular setting first (this is what's actually used in settings.json)
         character_dir_setting = self.settings_manager.get_setting("character_directory")
         # Fallback to plural if singular not found (for backward compatibility)
@@ -105,8 +107,15 @@ class CharacterService:
             self.logger.log_warning(
                 f"'character_directory' not found in settings or invalid. Using default: {default_character_dir}"
             )
-            return [str(default_character_dir)]
-        return character_dirs_setting
+            return [normalize_path(str(default_character_dir))]
+        
+        # Normalize all character directory paths for consistency
+        normalized_dirs = []
+        for dir_path in character_dirs_setting:
+            if dir_path:  # Skip empty paths
+                normalized_dirs.append(normalize_path(str(dir_path)))
+        
+        return normalized_dirs
 
     def _ensure_lore_image_directory(self, character_uuid: str) -> Path:
         """Ensures the lore image directory for a character exists and returns its path."""
@@ -175,6 +184,7 @@ class CharacterService:
 
         # Ensure all character directories exist
         all_png_files_on_disk = set()
+        from backend.utils.path_utils import normalize_path
 
         for char_dir_path_str in character_dirs:
             char_dir = Path(char_dir_path_str)
@@ -184,7 +194,7 @@ class CharacterService:
 
             self.logger.log_info(f"Processing PNG files in {char_dir}...")
             for png_file in char_dir.rglob('*.png'):
-                abs_png_path = str(png_file.resolve())
+                abs_png_path = normalize_path(str(png_file.resolve()))
                 all_png_files_on_disk.add(abs_png_path)
 
                 try:

@@ -258,6 +258,8 @@ async def list_characters(
             files = []
             try:                # First attempt: Get characters from database that are in this directory
                 from fastapi.concurrency import run_in_threadpool
+                from backend.utils.path_utils import normalize_path
+                
                 # Use configurable limit or None for no limit
                 query_limit = db_limit if db_limit is not None else None
                 if query_limit is None:
@@ -265,17 +267,24 @@ async def list_characters(
                     db_characters = await run_in_threadpool(char_service.get_all_characters, 0, None)
                 else:
                     db_characters = await run_in_threadpool(char_service.get_all_characters, 0, query_limit)
-                  # Filter for characters in the requested directory
+                  # Filter for characters in the requested directory using normalized paths
                 db_files_in_dir = []
+                normalized_directory = normalize_path(str(directory_path))
+                
                 for db_char in db_characters:
-                    char_path = Path(db_char.png_file_path).resolve()
-                    if char_path.parent == directory_path.resolve() and char_path.exists():
-                        db_files_in_dir.append({
-                            "name": char_path.stem,
-                            "path": str(char_path),
-                            "size": char_path.stat().st_size,
-                            "modified": datetime.fromtimestamp(char_path.stat().st_mtime, tz=timezone.utc)
-                        })
+                    try:
+                        char_path = Path(db_char.png_file_path)
+                        normalized_char_dir = normalize_path(str(char_path.parent))
+                        
+                        if normalized_char_dir == normalized_directory and char_path.exists():
+                            db_files_in_dir.append({
+                                "name": char_path.stem,
+                                "path": str(char_path),
+                                "size": char_path.stat().st_size,
+                                "modified": datetime.fromtimestamp(char_path.stat().st_mtime, tz=timezone.utc)
+                            })
+                    except Exception as char_error:
+                        logger.warning(f"Error processing character {db_char.character_uuid}: {char_error}")
                 
                 logger.info(f"Found {len(db_files_in_dir)} characters in database for directory {directory}")
                 

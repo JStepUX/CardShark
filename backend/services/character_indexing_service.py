@@ -8,6 +8,8 @@ from asyncio import to_thread
 from backend.errors import CardSharkError
 
 from backend.sql_models import Character as CharacterModel
+from backend.utils.path_utils import normalize_path, paths_are_equal, is_pyinstaller_bundle
+from backend.services.character_deduplication_service import CharacterDeduplicationService
 
 
 class CharacterIndexingService:
@@ -17,6 +19,7 @@ class CharacterIndexingService:
         self.character_service = character_service
         self.settings_manager = settings_manager
         self.logger = logger
+        self.deduplication_service = CharacterDeduplicationService(logger, character_service.db_session_generator)
     
     async def get_characters_with_directory_sync(self) -> List[CharacterModel]:
         """
@@ -33,11 +36,11 @@ class CharacterIndexingService:
             # Step 2: Get character directories to check for new/changed files
             character_dirs = await to_thread(self.character_service._get_character_dirs)
             
-            # Step 3: Build a map of existing characters by file path for quick lookup
+            # Step 3: Build a map of existing characters by normalized file path for quick lookup
             db_char_map = {}
             for char in db_characters:
                 if getattr(char, "png_file_path", None):
-                    db_char_map[char.png_file_path] = char
+                    db_char_map[normalize_path(char.png_file_path)] = char
             
             # Step 4: Scan directories for changes (in background thread)
             directory_changes = await to_thread(
@@ -58,8 +61,13 @@ class CharacterIndexingService:
                 # Refresh again after cleanup
                 db_characters = await to_thread(self.character_service.get_all_characters)
             
+            # Step 7: Perform deduplication cleanup
+            await self._perform_deduplication_cleanup(db_characters)
+            
+            # Final refresh to get clean character list
+            db_characters = await to_thread(self.character_service.get_all_characters)
+            
             self.logger.log_info(f"Loaded {len(db_characters)} characters with directory sync")
-              # Convert to the format expected by frontend
             return db_characters
             
         except Exception as e:
@@ -94,7 +102,8 @@ class CharacterIndexingService:
                 # Scan for PNG files
                 for png_file in dir_obj.glob("*.png"):
                     file_path = str(png_file)
-                    files_found.add(file_path)
+                    normalized_file_path = normalize_path(file_path)
+                    files_found.add(normalized_file_path)
                     
                     # Get file modification time
                     try:
@@ -103,9 +112,9 @@ class CharacterIndexingService:
                         continue
                     
                     # Check if file is in database
-                    if file_path in db_char_map:
+                    if normalized_file_path in db_char_map:
                         # File exists in DB, check if it's been modified
-                        db_char = db_char_map[file_path]
+                        db_char = db_char_map[normalized_file_path]
                         
                         # Compare modification times
                         if (not db_char.db_metadata_last_synced_at or 
@@ -119,9 +128,12 @@ class CharacterIndexingService:
                 self.logger.log_error(f"Error scanning directory {dir_path}: {e}")
         
         # Find deleted files (in DB but not found in directories)
-        for file_path in db_char_map.keys():
-            if file_path not in files_found and not Path(file_path).exists():
-                changes['deleted_files'].append(file_path)
+        for normalized_db_path, db_char in db_char_map.items():
+            if normalized_db_path not in files_found:
+                # Double-check that file doesn't exist using original path
+                original_path = db_char.png_file_path
+                if not Path(original_path).exists():
+                    changes['deleted_files'].append(original_path)
         
         self.logger.log_info(
             f"Directory scan found: {len(changes['new_files'])} new, "
@@ -168,13 +180,15 @@ class CharacterIndexingService:
     async def _sync_single_file(self, file_path: str, is_new: bool = False):
         """Sync a single character file to the database"""
         try:
-            png_file = Path(file_path)
+            # Convert to absolute path and normalize
+            abs_file_path = normalize_path(file_path)
+            png_file = Path(abs_file_path)
             if not png_file.exists():
                 return
               # Read metadata in thread to avoid blocking event loop
             try:
                 metadata = await to_thread(
-                    self.character_service.png_handler.read_metadata, file_path
+                    self.character_service.png_handler.read_metadata, abs_file_path
                 )
             except CardSharkError as e:
                 self.logger.log_error(f"CardSharkError processing PNG file {file_path}: {e}")
@@ -183,6 +197,15 @@ class CharacterIndexingService:
             if not metadata or not metadata.get("data"):
                 self.logger.log_warning(f"No valid metadata in {file_path}")
                 return
+            
+            # Extract or generate UUID
+            character_uuid = await to_thread(
+                self.deduplication_service.extract_uuid_from_png, abs_file_path
+            )
+            if not character_uuid:
+                import uuid
+                character_uuid = str(uuid.uuid4())
+                self.logger.log_info(f"Generated new UUID {character_uuid} for {file_path}")
             
             if is_new:
                 # Create database record pointing to the existing file (avoid filename collision logic)
@@ -266,13 +289,23 @@ class CharacterIndexingService:
                     char_name = stem_name
             
             # Get or generate UUID
-            char_uuid = data_section.get("character_uuid")
+            abs_file_path = str(Path(file_path).resolve())
+            char_uuid = await to_thread(
+                self.deduplication_service.extract_uuid_from_png, abs_file_path
+            )
             if not char_uuid:
                 char_uuid = str(uuid.uuid4())
                 self.logger.log_info(f"Generated new UUID {char_uuid} for character: {char_name}")
             
-            # Create database record pointing to the existing file
-            abs_file_path = str(Path(file_path).resolve())
+            # Check for UUID duplicates
+            uuid_duplicate = await to_thread(
+                self._check_uuid_duplicate, char_uuid, abs_file_path
+            )
+            if uuid_duplicate:
+                self.logger.log_warning(
+                    f"Found UUID duplicate: {uuid_duplicate.png_file_path} and {abs_file_path} "
+                    f"both have UUID {char_uuid}"
+                )
             
             def _as_json_str(data):
                 """Helper to safely convert data to JSON string"""
@@ -322,3 +355,37 @@ class CharacterIndexingService:
         except Exception as e:
             self.logger.log_error(f"Failed to add character to database: {e}")
             raise
+    
+    def _check_uuid_duplicate(self, character_uuid: str, file_path: str):
+        """Check if UUID already exists for a different file"""
+        try:
+            with self.character_service.db_session_generator() as db:
+                return db.query(CharacterModel).filter(
+                    CharacterModel.character_uuid == character_uuid,
+                    CharacterModel.png_file_path != file_path
+                ).first()
+        except Exception as e:
+            self.logger.log_error(f"Failed to check UUID duplicate: {e}")
+            return None
+    
+    async def _perform_deduplication_cleanup(self, characters: List[CharacterModel]):
+        """Perform comprehensive deduplication cleanup"""
+        try:
+            self.logger.log_info("Starting deduplication cleanup")
+            
+            # Run deduplication in background thread
+            uuid_removed, path_removed = await to_thread(
+                self.deduplication_service.cleanup_duplicates, characters
+            )
+            
+            if uuid_removed > 0 or path_removed > 0:
+                self.logger.log_info(
+                    f"Deduplication cleanup completed: removed {uuid_removed} UUID duplicates "
+                    f"and {path_removed} path duplicates"
+                )
+            else:
+                self.logger.log_info("No duplicates found during cleanup")
+                
+        except Exception as e:
+            self.logger.log_error(f"Error during deduplication cleanup: {e}")
+            # Don't raise - this is a cleanup operation that shouldn't break the main flow
