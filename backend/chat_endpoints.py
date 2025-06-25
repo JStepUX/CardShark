@@ -715,6 +715,9 @@ def reliable_append_message_endpoint(
         if result.result != ChatOperationResult.SUCCESS:
             raise ValidationException(f"Failed to append message to reliable chat: {result.error_message}")
         
+        if result.chat_metadata is None:
+            raise ValidationException("Failed to append message to reliable chat: No chat metadata returned")
+        
         logger.log_info(f"Successfully appended message to reliable chat session: {payload.chat_session_uuid}")
         
         # Convert updated metadata to Pydantic model

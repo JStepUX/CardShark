@@ -167,6 +167,14 @@ class ChatEndpointAdapters:
                         chat_metadata=metadata,
                         error_message=None
                     )
+                else:
+                    # Message was appended successfully but failed to load metadata
+                    self.logger.log_error(f"Message appended but failed to load metadata: {load_error}")
+                    return ChatSaveResult(
+                        result=ChatOperationResult.RECOVERABLE_ERROR,
+                        chat_metadata=None,
+                        error_message=f"Message appended but failed to load metadata: {load_error}"
+                    )
             
             return ChatSaveResult(
                 result=result_code,
@@ -176,7 +184,8 @@ class ChatEndpointAdapters:
             
         except Exception as e:
             self.logger.log_error(f"Error in append_message_endpoint: {e}")
-            return ChatSaveResult(                result=ChatOperationResult.RECOVERABLE_ERROR,
+            return ChatSaveResult(
+                result=ChatOperationResult.RECOVERABLE_ERROR,
                 chat_metadata=None,
                 error_message=str(e)
             )

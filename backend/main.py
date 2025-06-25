@@ -702,6 +702,9 @@ async def get_uploaded_image(filename: str):
 
 def main():
     """Main entry point for the application."""
+    # Fix for _strptime threading issue in PyInstaller builds
+    import _strptime
+    
     parser = argparse.ArgumentParser(description="CardShark Character Card Editor")
     parser.add_argument("-host", "--host", default="0.0.0.0", help="Host to run the server on") # Changed default from "127.0.0.1"
     parser.add_argument("-port", "--port", type=int, default=9696, help="Port to run the server on")

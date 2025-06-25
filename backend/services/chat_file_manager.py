@@ -12,6 +12,7 @@ import time
 import uuid
 import shutil
 import tempfile
+import _strptime  # Fix for threading issues with strptime
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any

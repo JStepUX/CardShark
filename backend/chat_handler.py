@@ -4,6 +4,7 @@ import json
 import time
 import hashlib
 import uuid
+import _strptime  # Fix for threading issues with strptime
 from datetime import datetime
 from pathlib import Path
 import traceback
