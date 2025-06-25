@@ -876,3 +876,80 @@ def reliable_delete_chat_endpoint(
     except Exception as e:
         logger.log_error(f"Error in reliable_delete_chat_endpoint: {str(e)}")
         raise handle_generic_error(e, "deleting reliable chat session")
+
+@router.post("/load-chat", response_model=DataResponse[Optional[Dict[str, Any]]])
+def load_chat_endpoint(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    chat_handler: ChatHandler = Depends(get_chat_handler),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Load a specific chat by ID or the active chat for a character.
+    This endpoint matches the frontend's expected API.
+    """
+    try:
+        logger.log_info(f"Loading chat with payload: {payload}")
+        
+        # Extract parameters from payload
+        chat_id = payload.get('chat_id')
+        character_data = payload.get('character_data')
+        use_active = payload.get('use_active', False)
+        scan_all_files = payload.get('scan_all_files', True)
+        
+        if not character_data:
+            raise ValidationException("Missing character_data in request")
+        
+        # Extract character UUID from character_data
+        character_uuid = None
+        if isinstance(character_data, dict):
+            # Try different possible locations for character_uuid
+            character_uuid = (
+                character_data.get('character_uuid') or
+                character_data.get('uuid') or
+                (character_data.get('data', {}).get('character_uuid')) or
+                (character_data.get('data', {}).get('uuid'))
+            )
+        
+        if not character_uuid:
+            raise ValidationException("Missing character_uuid in character_data")
+        
+        logger.log_info(f"Loading chat for character: {character_uuid}, chat_id: {chat_id}, use_active: {use_active}")
+        
+        # Get character from database
+        character = character_service.get_character_by_uuid(character_uuid, db)
+        if not character:
+            raise NotFoundException(f"Character not found: {character_uuid}")
+        
+        # Prepare character data for ChatHandler
+        character_data_for_handler = {
+            "character_uuid": character.character_uuid,
+            "uuid": character.character_uuid,
+            "data": {
+                "name": character.name,
+                "description": character.description,
+                "personality": character.personality
+            }
+        }
+        
+        # Load chat using ChatHandler
+        if chat_id and not use_active:
+            # Load specific chat by ID
+            chat_data = chat_handler.load_chat_by_id(character_data_for_handler, chat_id)
+        else:
+            # Load latest/active chat
+            chat_data = chat_handler.load_latest_chat(character_data_for_handler, scan_all_files=scan_all_files)
+        
+        if not chat_data or not chat_data.get("success"):
+            logger.log_info(f"No chat found for character: {character_uuid}")
+            return create_data_response({"success": False, "error": "No chat found"})
+        
+        logger.log_info(f"Successfully loaded chat for character: {character_uuid}")
+        return create_data_response(chat_data)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in load_chat_endpoint: {str(e)}")
+        raise handle_generic_error(e, "loading chat")

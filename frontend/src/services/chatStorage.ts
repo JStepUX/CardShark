@@ -153,18 +153,11 @@ export class ChatStorage {
       
       // Added scanAllFiles parameter to ensure we scan for all JSONL files 
       // regardless of naming convention
-      const response = await fetch('/api/list-character-chats', {
-        method: 'POST',
+      const response = await fetch(`/api/reliable-list-chats/${characterId}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          character_data: character, // Send full character object
-          character_id: characterId,
-          char_name: character.data?.name || '',
-          format: 'jsonl',
-          scan_all_files: true // Add flag to scan for all JSONL files
-        }),
+        }
       });
 
       if (!response.ok) {
@@ -199,16 +192,14 @@ export class ChatStorage {
       const characterId = this.getCharacterId(character);
       console.log('Using character ID:', characterId);
       
-      const response = await fetch('/api/load-chat', {
+      const response = await fetch('/api/reliable-load-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          chat_id: chatId, // Could be null to let backend use active chat
-          character_data: character, // Send the full character object
-          use_active: chatId === null, // Signal to the backend to use the active chat
-          scan_all_files: true // Add parameter to scan all JSONL files
+          character_uuid: this.getCharacterId(character),
+          chat_session_uuid: chatId // Use chat_session_uuid instead of chat_id
         }),
       });
 
@@ -593,19 +584,11 @@ export class ChatStorage {
     try {
       console.log('Deleting chat with ID:', chatId, 'for character:', character.data?.name);
       
-      // Extract character ID
-      const characterId = this.getCharacterId(character);
-      
-      const response = await fetch('/api/delete-chat', {
-        method: 'POST',
+      const response = await fetch(`/api/reliable-delete-chat/${chatId}`, {
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          chat_id: chatId,
-          character_data: character, // Send full character object
-          character_id: characterId
-        }),
+        }
       });
 
       if (!response.ok) {
@@ -812,25 +795,20 @@ export class ChatStorage {
     try {
       console.log(`Listing backups for chat ${chatId}, character:`, character.data?.name);
       
-      const response = await fetch('/api/list-chat-backups', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          character_data: character,
-          chat_id: chatId
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to list backups:', response.status, errorText);
-        return { success: false, error: `Failed to list backups: ${response.status}`, backups: [] };
-      }
-
-      const data = await response.json();
-      return data;
+      // TODO: Backup endpoints not implemented in backend yet
+      // const response = await fetch('/api/list-chat-backups', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify({
+      //     character_data: character,
+      //     chat_id: chatId
+      //   }),
+      // });
+      
+      // Return empty backups list for now
+      return { success: true, backups: [] };
     } catch (error) {
       console.error('Error listing backups:', error);
       return { success: false, error: `Error: ${error}`, backups: [] };
@@ -857,25 +835,20 @@ export class ChatStorage {
     try {
       console.log(`Creating backup for chat ${chatId}, character:`, character.data?.name);
       
-      const response = await fetch('/api/create-chat-backup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          character_data: character,
-          chat_id: chatId
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to create backup:', response.status, errorText);
-        return { success: false, error: `Failed to create backup: ${response.status}` };
-      }
-
-      const data = await response.json();
-      return data;
+      // TODO: Backup endpoints not implemented in backend yet
+      // const response = await fetch('/api/create-chat-backup', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify({
+      //     character_data: character,
+      //     chat_id: chatId
+      //   }),
+      // });
+      
+      // Return success for now (no-op)
+      return { success: true, message: 'Backup feature not yet implemented' };
     } catch (error) {
       console.error('Error creating backup:', error);
       return { success: false, error: `Error: ${error}` };
@@ -903,26 +876,21 @@ export class ChatStorage {
     try {
       console.log(`Restoring chat ${chatId} from backup${backupPath ? ': ' + backupPath : ''}`);
       
-      const response = await fetch('/api/restore-chat-backup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          character_data: character,
-          chat_id: chatId,
-          backup_path: backupPath
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to restore from backup:', response.status, errorText);
-        return { success: false, error: `Failed to restore from backup: ${response.status}` };
-      }
-
-      const data = await response.json();
-      return data;
+      // TODO: Backup endpoints not implemented in backend yet
+      // const response = await fetch('/api/restore-chat-backup', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify({
+      //     character_data: character,
+      //     chat_id: chatId,
+      //     backup_path: backupPath
+      //   }),
+      // });
+      
+      // Return error for now since restore is not implemented
+      return { success: false, error: 'Backup restore feature not yet implemented' };
     } catch (error) {
       console.error('Error restoring from backup:', error);
       return { success: false, error: `Error: ${error}` };

@@ -310,13 +310,14 @@ export const apiService = new ApiService();
  */
 export const listCharacterChats = async (characterData: CharacterData): Promise<any> => {
   try {
-    const response = await fetch('/api/list-character-chats', {
+    const response = await fetch('/api/reliable-list-chats', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        character_data: characterData
+        character_data: characterData,
+        scan_all_files: true
       }),
     });
 
