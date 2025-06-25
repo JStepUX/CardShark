@@ -1,5 +1,6 @@
 // frontend/src/components/CharacterGallery.tsx
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
 import { Trash2, AlertTriangle, X } from 'lucide-react';
@@ -90,6 +91,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   scrollContainerRef,
   lazyLoad = false,
 }) => {
+  const navigate = useNavigate();
+  
   // State for character list, loading status, and errors
   const [characters, setCharacters] = useState<CharacterFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -438,6 +441,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         } else {
           setCharacterData(metadata);
           setImageUrl(newImageUrl);
+          // Navigate to chat after successfully loading the character
+          navigate('/chat');
         }
       } else {
         throw new Error('Failed to get metadata. Invalid response format.');
