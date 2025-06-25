@@ -1,7 +1,7 @@
 // components/APICard.tsx
 // This file contains the APICard component which is used to display and manage API configurations in the UI. The component allows users to configure API settings, test the connection, and disconnect from the API. It also displays information about the connected model and provides options for selecting templates and generation settings.
 import React, { useState, useEffect, useCallback } from 'react';
-import { Globe2, Key, CheckCircle2, XCircle, Trash2, Star, Save, AlertTriangle, Eye, EyeOff, Settings as SettingsIcon } from 'lucide-react'; // Removed Loader2, AlertCircleIcon as they are in ModelSelector
+import { Globe2, Key, CheckCircle2, XCircle, Trash2, Star, Save, AlertTriangle, Eye, EyeOff, Settings as SettingsIcon, Download } from 'lucide-react'; // Removed Loader2, AlertCircleIcon as they are in ModelSelector
 import { toast } from 'sonner';
 import {
   APIProvider,
@@ -40,6 +40,8 @@ export const APICard: React.FC<APICardProps> = ({
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showApiKey, setShowApiKey] = useState(false); // State for API key visibility
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false); // State for config dialog
+  const [isDownloading, setIsDownloading] = useState(false); // State for KoboldCPP download
+  const [koboldStatus, setKoboldStatus] = useState<{status: string, version?: string} | null>(null); // KoboldCPP status
   const { settings } = useSettings();
   const currentProviderConfig = PROVIDER_CONFIGS[editableApi.provider];
 
@@ -95,6 +97,26 @@ export const APICard: React.FC<APICardProps> = ({
       }
     }
   }, [editableApi.provider, editableApi.templateId]);
+
+  // Check KoboldCPP status when provider is KoboldCPP
+  useEffect(() => {
+    if (editableApi.provider === APIProvider.KOBOLD) {
+      const checkKoboldStatus = async () => {
+        try {
+          const response = await fetch('/api/koboldcpp/status');
+          if (response.ok) {
+            const data = await response.json();
+            setKoboldStatus(data);
+          }
+        } catch (error) {
+          console.error('Failed to check KoboldCPP status:', error);
+        }
+      };
+      checkKoboldStatus();
+    } else {
+      setKoboldStatus(null);
+    }
+  }, [editableApi.provider]);
 
   // Update local state
   const handleLocalUpdate = useCallback((updates: Partial<APIConfig>) => {
@@ -265,6 +287,170 @@ export const APICard: React.FC<APICardProps> = ({
     });
   };
 
+  // Download KoboldCPP
+  const handleDownloadKoboldCPP = async () => {
+    if (isDownloading) return;
+    
+    // Test toast to verify sonner is working
+    console.log('Testing toast functionality...');
+    toast.info('Testing toast - this should appear immediately');
+    
+    setIsDownloading(true);
+    try {
+      // First check if KoboldCPP is running
+      console.log('Checking KoboldCPP status...');
+      const statusCheck = await fetch('/api/koboldcpp/status');
+      console.log('Status check response:', statusCheck.status, statusCheck.ok);
+      if (statusCheck.ok) {
+        const statusData = await statusCheck.json();
+        console.log('Status data:', statusData);
+        if (statusData.is_running) {
+          console.log('KoboldCPP is running, showing toast...');
+          toast.error('KoboldCPP is currently running. Please stop it before downloading/updating.', {
+            description: 'You can stop KoboldCPP from the model selector or by closing the application.',
+            duration: 6000
+          });
+          console.log('Toast called');
+          setIsDownloading(false);
+          return;
+        }
+      } else {
+        console.log('Status check failed:', statusCheck.status);
+      }
+      
+      // Try streaming download first for better UX
+      const response = await fetch('/api/koboldcpp/download', {
+        method: 'POST',
+        headers: {
+          'Accept': 'text/event-stream, application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.error_code === 'running') {
+          toast.error('KoboldCPP is currently running', {
+            description: 'Please stop KoboldCPP before downloading/updating.',
+            duration: 6000
+          });
+        } else {
+          throw new Error(errorData.message || 'Download failed');
+        }
+        return;
+      }
+      
+      // Check if we got a streaming response
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('text/event-stream')) {
+        // Handle streaming response with progress
+        await handleStreamingDownload(response);
+      } else {
+        // Handle regular JSON response
+        const data = await response.json();
+        if (data.status === 'success') {
+          toast.success('KoboldCPP downloaded successfully!');
+          await checkKoboldStatus(); // Refresh status
+        } else {
+          throw new Error(data.message || 'Download failed');
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Download failed';
+      toast.error(`Failed to download KoboldCPP: ${message}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+  
+  const handleBrowserDownload = async () => {
+    try {
+      const response = await fetch('/api/koboldcpp/download-url');
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        window.open(data.download_url, '_blank');
+        toast.success('Opening download in browser. Please save the file to your KoboldCPP directory.');
+      } else if (data.error_code === 'running') {
+        toast.error('KoboldCPP is currently running. Please stop it before downloading.');
+      } else {
+        toast.error(data.message || 'Failed to get download URL');
+      }
+    } catch (error) {
+      console.error('Failed to get download URL:', error);
+      // Fallback to GitHub releases page
+      window.open('https://github.com/LostRuins/koboldcpp/releases/latest', '_blank');
+      toast.info('Opened GitHub releases page as fallback.');
+    }
+  };
+  
+  const checkKoboldStatus = async () => {
+    try {
+      const response = await fetch('/api/koboldcpp/status');
+      if (response.ok) {
+        const data = await response.json();
+        setKoboldStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to check KoboldCPP status:', error);
+    }
+  };
+  
+  const handleStreamingDownload = async (response: Response) => {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('Stream reader not available');
+    
+    const decoder = new TextDecoder();
+    let downloadToast: string | number | undefined;
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const lines = decoder.decode(value).split('\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.error) {
+                toast.error(`Download error: ${data.error}`);
+                return;
+              }
+              
+              if (data.status === 'completed') {
+                if (downloadToast) {
+                  toast.dismiss(downloadToast);
+                }
+                toast.success('KoboldCPP downloaded successfully!');
+                await checkKoboldStatus(); // Refresh status
+                return;
+              }
+              
+              // Show progress toast
+              if (data.percent !== undefined) {
+                const message = `Downloading KoboldCPP... ${Math.round(data.percent)}%`;
+                if (downloadToast) {
+                  toast.dismiss(downloadToast);
+                }
+                downloadToast = toast.loading(message, {
+                  duration: Infinity // Keep showing until dismissed
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing download progress:', e);
+            }
+          }
+        }
+      }
+    } finally {
+      if (downloadToast) {
+        toast.dismiss(downloadToast);
+      }
+    }
+  };
+
   return (
     <div
       className={`space-y-4 ${isActive ? 'border-l-4 border-blue-500 pl-3 -ml-4' : 'border-l-4 border-transparent pl-3 -ml-4'} ${hasChanges ? 'border-yellow-500/50' : ''}`}
@@ -363,6 +549,76 @@ export const APICard: React.FC<APICardProps> = ({
         />
       </div>
 
+      {/* KoboldCPP Download Button */}
+      {editableApi.provider === APIProvider.KOBOLD && (
+        <div className="p-3 bg-stone-900/50 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-gray-300">KoboldCPP Status</div>
+              <div className="text-xs text-gray-500">
+                {koboldStatus ? (
+                  koboldStatus.status === 'missing' ? (
+                    'KoboldCPP not found'
+                  ) : koboldStatus.status === 'present' ? (
+                    `KoboldCPP installed${koboldStatus.version ? ` (${koboldStatus.version})` : ''}`
+                  ) : koboldStatus.status === 'running' ? (
+                    `KoboldCPP running${koboldStatus.version ? ` (${koboldStatus.version})` : ''}`
+                  ) : (
+                    'Status unknown'
+                  )
+                ) : (
+                  'Checking status...'
+                )}
+              </div>
+            </div>
+            {koboldStatus?.status === 'missing' && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleDownloadKoboldCPP}
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  title="Download the latest version of KoboldCPP from GitHub with progress tracking"
+                >
+                  <Download className="w-4 h-4" />
+                  {isDownloading ? 'Downloading...' : 'Download KoboldCPP'}
+                </button>
+                <button
+                  onClick={handleBrowserDownload}
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  title="Download KoboldCPP in browser (manual installation)"
+                >
+                  <Globe2 className="w-4 h-4" />
+                  Browser
+                </button>
+              </div>
+            )}
+            {(koboldStatus?.status === 'present' || koboldStatus?.status === 'running') && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleDownloadKoboldCPP}
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  title="Download the latest version of KoboldCPP from GitHub (will replace current version)"
+                >
+                  <Download className="w-4 h-4" />
+                  {isDownloading ? 'Downloading...' : 'Update'}
+                </button>
+                <button
+                  onClick={handleBrowserDownload}
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  title="Download KoboldCPP in browser (manual installation)"
+                >
+                  <Globe2 className="w-4 h-4" />
+                  Browser
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* API Key Field */}
       {currentProviderConfig.requiresApiKey && (
         <div>
@@ -415,7 +671,18 @@ export const APICard: React.FC<APICardProps> = ({
             ))}
           </select>
         </div>
-      ) : null }
+      ) : (
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Model</label>
+          <input
+            type="text"
+            value={editableApi.model || ''}
+            onChange={(e) => handleLocalUpdate({ model: e.target.value })}
+            placeholder="Enter model name"
+            className="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      )}
 
       {/* Template Selection */}
       <div>

@@ -280,14 +280,122 @@ async def download_progress_generator(request: Request) -> AsyncGenerator[str, N
 
 @router.post("/download")
 async def download_koboldcpp(request: Request):
-    """Download KoboldCPP with simple response (streaming removed for PyInstaller compatibility)"""
+    """Download KoboldCPP with streaming progress updates"""
     try:
-        # Simple download without streaming progress
-        # For PyInstaller compatibility, we'll just return a simple status
-        return JSONResponse({"status": "Download functionality temporarily disabled for executable version"})
+        logger.info("Starting KoboldCPP download")
+        
+        # Check if we can provide streaming response
+        accept_header = request.headers.get('accept', '')
+        if 'text/event-stream' in accept_header:
+            # Return streaming response for better UX
+            return StreamingResponse(
+                download_with_progress(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                }
+            )
+        else:
+            # Fallback to simple JSON response
+            result = manager.download()
+            
+            if result.get('status') == 'completed':
+                return JSONResponse({
+                    "status": "success", 
+                    "message": "KoboldCPP downloaded successfully",
+                    "exe_path": result.get('exe_path')
+                })
+            elif result.get('status') == 'error':
+                # Handle specific error codes for better UX
+                error_code = result.get('error_code')
+                status_code = 409 if error_code == 'running' else 500
+                return JSONResponse(
+                    {
+                        "status": "error", 
+                        "message": result.get('error', 'Download failed'),
+                        "error_code": error_code
+                    },
+                    status_code=status_code
+                )
+            else:
+                return JSONResponse({"status": "unknown", "message": "Download status unknown"})
+                
     except Exception as e:
         logger.error(f"Error in download endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Download error: {str(e)}")
+
+async def download_with_progress():
+    """Generator function for streaming download progress"""
+    import asyncio
+    import json
+    
+    def progress_callback(data):
+        # Store progress data in a way that can be accessed by the async generator
+        progress_callback.last_data = data
+    
+    progress_callback.last_data = None
+    
+    try:
+        # Start download in a thread to avoid blocking
+        import threading
+        result_container = {'result': None, 'completed': False}
+        
+        def download_thread():
+            result_container['result'] = manager.download(callback=progress_callback)
+            result_container['completed'] = True
+        
+        thread = threading.Thread(target=download_thread)
+        thread.start()
+        
+        # Stream progress updates
+        last_percent = -1
+        while not result_container['completed']:
+            if progress_callback.last_data:
+                data = progress_callback.last_data
+                # Only send updates when progress changes significantly
+                if data.get('percent', 0) != last_percent:
+                    yield f"data: {json.dumps(data)}\n\n"
+                    last_percent = data.get('percent', 0)
+                progress_callback.last_data = None
+            
+            await asyncio.sleep(0.1)  # Small delay to prevent overwhelming the client
+        
+        # Wait for thread to complete
+        thread.join()
+        
+        # Send final result
+        if result_container['result']:
+            yield f"data: {json.dumps(result_container['result'])}\n\n"
+        
+    except Exception as e:
+        error_data = {'status': 'error', 'error': str(e)}
+        yield f"data: {json.dumps(error_data)}\n\n"
+
+@router.get("/download-url")
+async def get_download_url():
+    """Get the direct download URL for KoboldCPP (for browser downloads)"""
+    try:
+        # Check if KoboldCPP is running
+        if manager.is_running():
+            return JSONResponse(
+                {
+                    "status": "error", 
+                    "message": "KoboldCPP is currently running. Please stop it before downloading.",
+                    "error_code": "running"
+                },
+                status_code=409
+            )
+        
+        download_url = manager._get_download_url()
+        return JSONResponse({
+            "status": "success",
+            "download_url": download_url,
+            "message": "Use this URL to download KoboldCPP directly in your browser"
+        })
+    except Exception as e:
+        logger.error(f"Error getting download URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get download URL: {str(e)}")
 
 @router.post("/scan-models")
 async def scan_models_directory(request: ModelDirectoryRequest):

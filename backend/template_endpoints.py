@@ -152,7 +152,7 @@ async def delete_template(
             )
     except (NotFoundException, ValidationException) as e:
         if isinstance(e, NotFoundException):
-            return create_error_response(str(e), 404)
+            return create_error_response(str(e), "404")
         else:
             return handle_validation_error(e)
     except Exception as e:
@@ -178,7 +178,7 @@ async def get_template_by_id(
             "template": template
         })
     except NotFoundException as e:
-        return create_error_response(str(e), 404)
+        return create_error_response(str(e), "404")
     except Exception as e:
         logger.log_error(f"Error getting template {template_id}: {str(e)}")
         logger.log_error(traceback.format_exc())
@@ -220,7 +220,7 @@ async def update_template(
             )
     except (NotFoundException, ValidationException) as e:
         if isinstance(e, NotFoundException):
-            return create_error_response(str(e), 404)
+            return create_error_response(str(e), "404")
         else:
             return handle_validation_error(e)
     except Exception as e:

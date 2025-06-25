@@ -95,6 +95,35 @@ class KoboldCPPManager:
             logger.warning(f"Failed to get latest release info: {e}")
             return None
     
+    def _get_download_url(self):
+        """Get the direct download URL for the current platform"""
+        try:
+            release_info = self._get_latest_release_info()
+            
+            # Determine the correct asset based on platform
+            import platform
+            system = platform.system().lower()
+            
+            if system == "windows":
+                filename = "koboldcpp.exe"
+            elif system == "darwin":  # macOS
+                filename = "koboldcpp-mac"
+            else:  # Linux and others
+                filename = "koboldcpp-linux"
+            
+            # Find the matching asset
+            for asset in release_info.get('assets', []):
+                if asset['name'] == filename:
+                    return asset['browser_download_url']
+            
+            # Fallback to releases page if specific asset not found
+            return release_info.get('html_url', 'https://github.com/LostRuins/koboldcpp/releases/latest')
+            
+        except Exception as e:
+            logger.error(f"Failed to get download URL: {e}")
+            # Ultimate fallback
+            return 'https://github.com/LostRuins/koboldcpp/releases/latest'
+    
     def _get_installed_version(self) -> str:
         """Get the installed version of KoboldCPP"""
         if not self.exe_path:
@@ -291,6 +320,15 @@ class KoboldCPPManager:
         }
         """
         try:
+            # Check if KoboldCPP is currently running
+            if self.is_running():
+                logger.warning("KoboldCPP is currently running. Cannot download while running.")
+                return {
+                    'status': 'error', 
+                    'error': 'KoboldCPP is currently running. Please stop KoboldCPP before downloading/updating.',
+                    'error_code': 'running'
+                }
+            
             # Delete any existing directory or file that would conflict
             if os.path.exists(self.koboldcpp_dir):
                 try:
@@ -304,7 +342,11 @@ class KoboldCPPManager:
                     logger.info("Cleared existing KoboldCPP directory")
                 except Exception as e:
                     logger.error(f"Error clearing KoboldCPP directory: {e}")
-                    return {'status': 'error', 'error': f"Could not clear existing KoboldCPP directory: {str(e)}"}
+                    return {
+                        'status': 'error', 
+                        'error': f"Could not clear existing KoboldCPP directory. Please ensure KoboldCPP is not running and try again. Error: {str(e)}",
+                        'error_code': 'access_denied'
+                    }
             
             # Create the directory
             os.makedirs(self.koboldcpp_dir, exist_ok=True)

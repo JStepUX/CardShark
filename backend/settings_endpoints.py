@@ -263,12 +263,12 @@ async def test_api_connection(
                         response.close()
                     
                     logger.log_warning(error_message)
-                    return create_error_response(error_message, response.status_code if response.status_code >= 400 else 400)
+                    return create_error_response(error_message, str(response.status_code) if response.status_code >= 400 else "400")
 
             except requests.exceptions.RequestException as req_exc:
                 logger.log_error(f"RequestException during Featherless AI stream test: {str(req_exc)}")
                 logger.log_error(traceback.format_exc())
-                return create_error_response(f"Connection error: {str(req_exc)}", 503)
+                return create_error_response(f"Connection error: {str(req_exc)}", "503")
             except Exception as e:
                 logger.log_error(f"Error testing Featherless AI stream connection: {str(e)}")
                 logger.log_error(traceback.format_exc())
@@ -337,7 +337,7 @@ async def test_api_connection(
                 elif response.text:
                     error_msg = f"{error_msg}: {response.text[:200]}"
                 logger.log_warning(f"Connection test failed: {error_msg}")
-                return create_error_response(error_msg, 400)
+                return create_error_response(error_msg, "400")
 
     except ValidationException as e:
         return handle_validation_error(e)
@@ -394,11 +394,11 @@ async def get_featherless_models_proxy(
                 })
             elif models_response.get("success") is False and "error" in models_response:
                 logger.log_warning(f"Error reported by Featherless adapter list_models: {models_response['error']}")
-                return create_error_response(models_response['error'], 400)
+                return create_error_response(models_response['error'], "400")
         
         # Fallback for truly unexpected response structure from adapter
         logger.log_warning(f"Unexpected response format from Featherless adapter: {models_response}")
-        return create_error_response("Unexpected response format from Featherless adapter", 500)
+        return create_error_response("Unexpected response format from Featherless adapter", "500")
     except Exception as e:
         logger.log_error(f"Error proxying Featherless models request: {str(e)}")
         logger.log_error(traceback.format_exc())
