@@ -397,6 +397,16 @@ class ApiHandler:
             chat_history = generation_params.get('chat_history', [])
             current_message = generation_params.get('current_message', '')
             
+            # Extract current message from chat_history if not provided explicitly
+            # The last message in chat_history should be the user's current message
+            if not current_message and chat_history:
+                last_message = chat_history[-1]
+                if last_message.get('role') == 'user':
+                    current_message = last_message.get('content', '')
+                    self.logger.log_step(f"Extracted current message from chat_history: {current_message[:100]}...")
+                else:
+                    self.logger.log_step("Last message in chat_history is not from user, no current_message extracted")
+            
             # Add lore matching to context window if it exists
             context_window = generation_params.get('context_window')
               # Handle lore matching if character data is available
@@ -551,7 +561,14 @@ class ApiHandler:
             self.logger.log_step("Request data prepared with generation settings")
             self.logger.log_step(f"Prompt length: {len(prompt) if prompt else 0} chars")
             self.logger.log_step(f"Memory length: {len(memory) if memory else 0} chars")
+            self.logger.log_step(f"Current message: {current_message[:100] if current_message else 'None'}...")
+            self.logger.log_step(f"Chat history length: {len(chat_history)} messages")
             self.logger.log_step(f"Using provider: {provider}")
+            
+            # Log the actual prompt being sent for debugging
+            if prompt:
+                self.logger.log_step(f"Prompt preview (first 200 chars): {prompt[:200]}...")
+                self.logger.log_step(f"Prompt preview (last 200 chars): ...{prompt[-200:]}")
             
             # OpenRouter-specific streaming handling
             if provider == "OpenRouter":
