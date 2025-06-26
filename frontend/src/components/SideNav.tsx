@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom'; // Import NavLink
+import { NavLink, useNavigate } from 'react-router-dom'; // Import NavLink and useNavigate
 import {
   ImagePlus,
   Link,
@@ -79,6 +79,7 @@ const SideNav: React.FC<SideNavProps> = ({
 }) => {
 const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter(); // Add setters
 const chatContext = useOptionalChat();
+const navigate = useNavigate(); // Add navigation hook
 const [isCollapsed, setIsCollapsed] = useState(false);
 
 // Extract chat preview image data with fallbacks
@@ -211,7 +212,8 @@ return (
                     onNavigate={navigateToPreviewImage}
                     onUnloadCharacter={() => {
                       setCharacterData(null);
-                      setImageUrl(undefined);
+                      setImageUrl(undefined); // Reset to undefined to trigger placeholder
+                      navigate('/gallery'); // Navigate to Character Gallery
                     }}
                     hasCharacterLoaded={!!characterData}
                   />
