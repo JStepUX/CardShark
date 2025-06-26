@@ -81,7 +81,11 @@ async def upload_background(
 ):
     """Upload a new background image."""
     try:
-        result = await background_handler.save_background(file)
+        # Read file content and get filename
+        file_content = await file.read()
+        original_filename = file.filename or "background.png"
+        
+        result = background_handler.save_background(file_content, original_filename)
         return create_data_response(result)
     except Exception as e:
         logger.log_error(f"Error uploading background: {str(e)}")
