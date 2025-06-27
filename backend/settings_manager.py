@@ -47,7 +47,7 @@ class SettingsManager:
     def _load_settings(self) -> Dict[str, Any]:
         """Load settings from file, creating default if doesn't exist."""
         default_settings = {
-            "character_directory": "",
+            "character_directory": "characters",
             "worldcards_directory": "",  # Default directory for world cards
             "models_directory": "",      # Default directory for AI models
             "last_export_directory": "",

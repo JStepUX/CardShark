@@ -87,7 +87,7 @@ class CharacterService:
 
     def _get_character_dirs(self) -> List[str]:
         """Gets character directories from settings or uses a default."""
-        from backend.utils.path_utils import normalize_path
+        from backend.utils.path_utils import normalize_path, resolve_directory_path, get_application_base_path, ensure_directory_exists
         
         # Check for the singular setting first (this is what's actually used in settings.json)
         character_dir_setting = self.settings_manager.get_setting("character_directory")
@@ -99,21 +99,27 @@ class CharacterService:
         else:
             character_dirs_setting = [character_dir_setting] if isinstance(character_dir_setting, str) else character_dir_setting
         
-        # project_root is no longer defined here, assuming settings_manager provides absolute paths or paths relative to a known root
-        # For default, let's assume a path relative to the script's parent's parent (original project_root logic)
-        # This might need adjustment based on how project_root was used elsewhere or if settings_manager handles this.
-        default_character_dir = Path(__file__).resolve().parent.parent.parent / "characters"
+        # Use default 'characters' directory relative to application base if no setting found
         if not character_dirs_setting or not isinstance(character_dirs_setting, list):
+            default_character_dir = get_application_base_path() / "characters"
             self.logger.log_warning(
                 f"'character_directory' not found in settings or invalid. Using default: {default_character_dir}"
             )
+            # Ensure the default directory exists
+            ensure_directory_exists(default_character_dir)
             return [normalize_path(str(default_character_dir))]
         
-        # Normalize all character directory paths for consistency
+        # Resolve and normalize all character directory paths for consistency
+        # This supports both absolute paths (like "C:\sillytavern\characters") 
+        # and relative paths (like "characters")
         normalized_dirs = []
         for dir_path in character_dirs_setting:
             if dir_path:  # Skip empty paths
-                normalized_dirs.append(normalize_path(str(dir_path)))
+                resolved_path = resolve_directory_path(dir_path)
+                if resolved_path:
+                    # Ensure the directory exists
+                    ensure_directory_exists(resolved_path)
+                    normalized_dirs.append(resolved_path)
         
         return normalized_dirs
 

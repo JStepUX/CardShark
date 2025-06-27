@@ -69,6 +69,9 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
 
   return (
     <div className="w-full space-y-2">
+      <div className="text-sm text-slate-400 mb-2">
+        💡 You can use absolute paths (like <code className="bg-slate-800 px-1 rounded">C:\sillytavern\characters</code>) or relative paths (like <code className="bg-slate-800 px-1 rounded">characters</code>) from the application directory.
+      </div>
       <form onSubmit={handleSubmit} className="flex space-x-2">
         <input
           type="text"
@@ -80,7 +83,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
           }}
           className="flex-grow px-3 py-2 bg-stone-950 border border-slate-700 
                    rounded-lg focus:ring-1 focus:ring-blue-500"
-          placeholder="Enter full directory path"
+          placeholder="e.g., C:\sillytavern\characters or just 'characters'"
         />
         <button
           type="submit"

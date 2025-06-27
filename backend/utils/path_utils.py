@@ -131,3 +131,31 @@ def get_application_base_path() -> Path:
     else:
         # Running from source
         return Path(__file__).resolve().parent.parent.parent
+
+
+def resolve_directory_path(directory_path: str) -> str:
+    """
+    Resolve a directory path, supporting both absolute and relative paths.
+    
+    For relative paths (not starting with drive letter or slash), they are resolved
+    relative to the application base directory.
+    
+    Args:
+        directory_path: Directory path to resolve (can be absolute or relative)
+        
+    Returns:
+        Normalized absolute path as string
+    """
+    if not directory_path:
+        return ""
+    
+    path_obj = Path(directory_path)
+    
+    # Check if path is already absolute
+    if path_obj.is_absolute():
+        return normalize_path(directory_path)
+    
+    # For relative paths, resolve from application base
+    base_path = get_application_base_path()
+    resolved_path = base_path / directory_path
+    return normalize_path(str(resolved_path))
