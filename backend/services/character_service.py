@@ -841,3 +841,20 @@ class CharacterService:
 #     # For the purpose of this step, we acknowledge its need.
 #     # The actual implementation of this dependency will be done when refactoring endpoints.
 #     pass
+
+    def clear_all_characters(self) -> bool:
+        """
+        Clears all characters from the database.
+        This is useful when the character directory changes and we want to rebuild the database.
+        Returns True if successful, False otherwise.
+        """
+        try:
+            with self.db_session_generator() as db:
+                # Delete all characters (cascade should handle related lore_books, lore_entries, etc.)
+                deleted_count = db.query(CharacterModel).delete()
+                db.commit()
+                self.logger.log_info(f"Cleared {deleted_count} characters from database")
+                return True
+        except Exception as e:
+            self.logger.log_error(f"Failed to clear characters from database: {e}")
+            return False

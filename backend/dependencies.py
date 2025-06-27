@@ -49,7 +49,7 @@ def get_png_handler(request: Request) -> PngMetadataHandler:
     return png_handler
 
 # Service dependency providers
-def get_character_service_dependency(request: Request, db: Session = Depends(get_db)) -> CharacterService:
+def get_character_service_dependency(request: Request) -> CharacterService:
     """
     FastAPI dependency to get an instance of CharacterService.
     Retrieves required dependencies from app.state.
@@ -59,7 +59,7 @@ def get_character_service_dependency(request: Request, db: Session = Depends(get
     logger = get_logger(request)
 
     return CharacterService(
-        db_session=db,
+        db_session_generator=get_db,
         png_handler=png_handler,
         settings_manager=settings_manager,
         logger=logger

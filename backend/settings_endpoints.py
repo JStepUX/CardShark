@@ -34,7 +34,8 @@ from backend.error_handlers import (
 )
 from backend.dependencies import (
     get_logger_dependency,
-    get_settings_manager_dependency
+    get_settings_manager_dependency,
+    get_character_service_dependency
 )
 
 # Create router
@@ -85,7 +86,8 @@ async def get_settings(
 async def update_settings(
     payload: Dict[str, Any],  # Accept raw dict to handle both formats
     settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger_dependency),
+    character_service = Depends(get_character_service_dependency)
 ):
     """Update application settings with standardized response."""
     try:
@@ -99,6 +101,19 @@ async def update_settings(
 
         if not new_settings or not isinstance(new_settings, dict):
             raise ValidationException("Invalid or no settings provided")
+
+        # Check if character_directory is being changed
+        old_character_directory = settings_manager.get_setting("character_directory")
+        new_character_directory = new_settings.get("character_directory")
+        
+        character_directory_changed = (
+            new_character_directory is not None and 
+            new_character_directory != old_character_directory
+        )
+        
+        if character_directory_changed:
+            logger.log_step(f"Character directory changing from '{old_character_directory}' to '{new_character_directory}' - clearing database")
+            character_service.clear_all_characters()
 
         # Apply new settings
         logger.log_step("Updating settings")
@@ -122,7 +137,8 @@ async def update_settings(
 async def update_settings_put(
     payload: Dict[str, Any],
     settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
+    logger: LogManager = Depends(get_logger_dependency),
+    character_service = Depends(get_character_service_dependency)
 ):
     """Update application settings via PUT request with standardized response."""
     try:
@@ -135,6 +151,19 @@ async def update_settings_put(
 
         if not new_settings or not isinstance(new_settings, dict):
             raise ValidationException("Invalid or no settings provided")
+
+        # Check if character_directory is being changed
+        old_character_directory = settings_manager.get_setting("character_directory")
+        new_character_directory = new_settings.get("character_directory")
+        
+        character_directory_changed = (
+            new_character_directory is not None and 
+            new_character_directory != old_character_directory
+        )
+        
+        if character_directory_changed:
+            logger.log_step(f"Character directory changing from '{old_character_directory}' to '{new_character_directory}' - clearing database")
+            character_service.clear_all_characters()
 
         logger.log_step("Updating settings")
         settings_manager.update_settings(new_settings)

@@ -675,8 +675,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           />
         )}
         
-        {/* Loading Indicator / Intersection Observer Trigger */}
-        <div 
+        {/* Load more trigger for intersection observer */}
+        <div
           ref={loadMoreTriggerRef}
           className={`p-4 flex justify-center items-center transition-opacity duration-300
             ${(isLoadingMore || displayedCount < filteredCharacters.length) ? 'opacity-100 h-16' : 'opacity-0 h-0'}`}
@@ -693,14 +693,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           )}
         </div>
         
-        {/* Progress indicator */}
-        {filteredCharacters.length > 0 && (
-          <div className="sticky bottom-0 w-full flex justify-center py-1 bg-gradient-to-t from-stone-900 to-transparent pointer-events-none">
-            <div className="text-xs text-slate-400 bg-stone-800/80 px-2 py-1 rounded-full backdrop-blur-sm">
-              {displayedCount} of {filteredCharacters.length}
-            </div>
-          </div>
-        )}
+        {/* Progress indicator removed - keeping lazy loading but hiding count */}
       </div>
 
       {/* Delete confirmation dialog using our reusable component */}
