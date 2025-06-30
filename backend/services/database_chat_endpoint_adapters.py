@@ -138,6 +138,64 @@ class DatabaseChatEndpointAdapters:
                 message=error_message or "Failed to delete chat"
             )
     
+    def create_chat_session(self, character_uuid: str, user_uuid: Optional[str] = None, 
+                           title: Optional[str] = None) -> ChatCreateResult:
+        """
+        Create a new chat session - endpoint compatibility wrapper.
+        
+        Returns:
+            ChatCreateResult with result code, metadata, and error message
+        """
+        try:
+            # Get character name for proper chat creation
+            from backend import sql_models
+            character = self.chat_manager.db_session.query(sql_models.Character).filter(
+                sql_models.Character.character_uuid == character_uuid
+            ).first()
+            character_name = character.name if character else "Unknown Character"
+            
+            result_code, chat_session_uuid, error_message = self.chat_manager.create_new_chat(
+                character_uuid, character_name, user_uuid, title
+            )
+            
+            if result_code == ChatOperationResult.SUCCESS and chat_session_uuid:
+                # Load the created chat to get metadata
+                load_result_code, chat_data, load_error = self.chat_manager.load_chat(chat_session_uuid)
+                
+                if load_result_code == ChatOperationResult.SUCCESS and chat_data:
+                    # Create metadata from the chat data
+                    from datetime import datetime
+                    metadata = ChatMetadata(
+                        chat_session_uuid=chat_session_uuid,
+                        character_uuid=character_uuid,
+                        user_uuid=user_uuid,
+                        title=title or 'New Chat',
+                        created_timestamp=int(datetime.now().timestamp()),
+                        last_message_time=datetime.now(),
+                        message_count=0,
+                        chat_log_path=""  # Not used in database-only system
+                    )
+                    
+                    return ChatCreateResult(
+                        result=ChatOperationResult.SUCCESS,
+                        chat_metadata=metadata,
+                        error_message=None
+                    )
+            
+            return ChatCreateResult(
+                result=result_code,
+                chat_metadata=None,
+                error_message=error_message
+            )
+            
+        except Exception as e:
+            self.logger.log_error(f"Error in create_chat_session: {e}")
+            return ChatCreateResult(
+                result=ChatOperationResult.RECOVERABLE_ERROR,
+                chat_metadata=None,
+                error_message=str(e)
+            )
+    
     def save_chat_session(self, chat_session_uuid: str, messages: List[ChatMessage],
                          title: Optional[str] = None) -> ChatSaveResult:
         """
@@ -159,4 +217,97 @@ class DatabaseChatEndpointAdapters:
             return ChatSaveResult(
                 success=False,
                 message=error_message or "Failed to save chat session"
+            )
+    
+    def load_latest_chat_session(self, character_uuid: str) -> ChatLoadResult:
+        """
+        Load the latest chat session for a character.
+        
+        Returns:
+            ChatLoadResult with chat data or error information
+        """
+        try:
+            result_code, chat_data, error_message = self.chat_manager.load_latest_chat_session(character_uuid)
+            
+            if result_code == ChatOperationResult.SUCCESS and chat_data:
+                # Convert metadata dict to ChatMetadata object
+                metadata = ChatMetadata(
+                    chat_session_uuid=chat_data['metadata']['chat_session_uuid'],
+                    character_uuid=chat_data['metadata']['character_uuid'],
+                    user_uuid=chat_data['metadata'].get('user_uuid'),
+                    title=chat_data['metadata']['title'],
+                    created_timestamp=chat_data['metadata']['created_timestamp'],
+                    last_message_time=chat_data['metadata'].get('last_message_time'),
+                    message_count=chat_data['metadata']['message_count'],
+                    chat_log_path=chat_data['metadata'].get('chat_log_path', '')
+                )
+                
+                return ChatLoadResult(
+                    result=ChatOperationResult.SUCCESS,
+                    chat_metadata=metadata,
+                    messages=chat_data['messages'],
+                    error_message=None
+                )
+            
+            return ChatLoadResult(
+                result=result_code,
+                chat_metadata=None,
+                messages=None,
+                error_message=error_message
+            )
+            
+        except Exception as e:
+            self.logger.log_error(f"Error in load_latest_chat_session: {e}")
+            return ChatLoadResult(
+                result=ChatOperationResult.RECOVERABLE_ERROR,
+                chat_metadata=None,
+                messages=None,
+                error_message=str(e)
+            )
+    
+    def list_chat_sessions(self, character_uuid: str) -> ChatListResult:
+        """
+        List all chat sessions for a character - endpoint compatibility wrapper.
+        
+        Returns:
+            ChatListResult with result code, chat sessions list, and error message
+        """
+        try:
+            result_code, chat_list, error_message = self.chat_manager.list_character_chats(character_uuid)
+            
+            if result_code == ChatOperationResult.SUCCESS:
+                # Convert to ChatMetadata objects (handle empty list case)
+                metadata_list = []
+                if chat_list:  # Only process if chat_list is not None and not empty
+                    for chat_data in chat_list:
+                        metadata = ChatMetadata(
+                            chat_session_uuid=chat_data['id'],  # Fixed: use 'id' not 'chat_session_uuid'
+                            character_uuid=character_uuid,
+                            user_uuid=None,  # Not available in list view
+                            title=chat_data['title'],
+                            created_timestamp=chat_data.get('created_timestamp', 0),
+                            last_message_time=chat_data.get('last_message_time'),
+                            message_count=chat_data['message_count'],
+                            chat_log_path=""  # Not available in list view
+                        )
+                        metadata_list.append(metadata)
+                
+                return ChatListResult(
+                    result=ChatOperationResult.SUCCESS,
+                    chat_sessions=metadata_list,
+                    error_message=None
+                )
+            
+            return ChatListResult(
+                result=result_code,
+                chat_sessions=[],  # Return empty list instead of None
+                error_message=error_message
+            )
+            
+        except Exception as e:
+            self.logger.log_error(f"Error in list_chat_sessions: {e}")
+            return ChatListResult(
+                result=ChatOperationResult.RECOVERABLE_ERROR,
+                chat_sessions=None,
+                error_message=str(e)
             )

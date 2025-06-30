@@ -17,7 +17,7 @@ def create_chat_session(db: Session, chat_session: pydantic_models.ChatSessionCr
         chat_session_uuid=session_uuid,
         character_uuid=chat_session.character_uuid,
         user_uuid=chat_session.user_uuid,
-        chat_log_path=chat_session.chat_log_path or temp_log_path,
+        # chat_log_path removed as per database schema update
         title=chat_session.title,
         start_time=datetime.utcnow(), # Set by server
         message_count=0 # Initial count
@@ -68,8 +68,7 @@ def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydant
     if db_chat_session:
         if chat_update.title is not None:
             db_chat_session.title = chat_update.title
-        if chat_update.chat_log_path is not None: # Added to allow updating chat_log_path if necessary
-            db_chat_session.chat_log_path = chat_update.chat_log_path
+        # chat_log_path update removed as per database schema update
         if chat_update.message_count is not None:
             db_chat_session.message_count = chat_update.message_count
         

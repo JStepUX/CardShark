@@ -59,7 +59,7 @@ class ChatDatabaseManager:
                 character_uuid=metadata.character_uuid,
                 user_uuid=metadata.user_uuid,
                 title=metadata.title,
-                chat_log_path=metadata.chat_log_path,
+                # chat_log_path removed as per database schema update
                 start_time=datetime.fromtimestamp(metadata.created_timestamp / 1000),
                 message_count=metadata.message_count,
                 last_message_time=metadata.last_message_time
