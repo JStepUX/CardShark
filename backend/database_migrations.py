@@ -8,7 +8,7 @@ from sqlalchemy import Column, String, DateTime, text, Table, MetaData
 logger = logging.getLogger(__name__)
 
 # Current schema version - increment when making schema changes
-CURRENT_SCHEMA_VERSION = "1.0.0"
+CURRENT_SCHEMA_VERSION = "1.1.0"
 
 def get_database_version() -> str:
     """Get the current database schema version."""
@@ -97,6 +97,60 @@ def needs_migration(current_version: str) -> bool:
     
     return False
 
+def migrate_to_1_1_0():
+    """Migrate to version 1.1.0 - Add ChatMessage table and enhance ChatSession."""
+    from backend.database import engine, SessionLocal
+    
+    logger.info("Running migration to 1.1.0: Adding ChatMessage table and enhancing ChatSession")
+    
+    with SessionLocal() as db:
+        try:
+            # Create ChatMessage table
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    message_id TEXT PRIMARY KEY,
+                    chat_session_uuid TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    status TEXT DEFAULT 'complete',
+                    reasoning_content TEXT,
+                    metadata_json TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (chat_session_uuid) REFERENCES chat_sessions (chat_session_uuid)
+                )
+            """))
+            
+            # Create indexes for ChatMessage table
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_chat_messages_session_uuid ON chat_messages (chat_session_uuid)"))
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_chat_messages_role ON chat_messages (role)"))
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages (timestamp)"))
+            
+            # Add new columns to ChatSession table
+            try:
+                db.execute(text("ALTER TABLE chat_sessions ADD COLUMN export_format_version TEXT"))
+            except Exception:
+                # Column might already exist
+                pass
+                
+            try:
+                db.execute(text("ALTER TABLE chat_sessions ADD COLUMN is_archived BOOLEAN DEFAULT 0"))
+            except Exception:
+                # Column might already exist
+                pass
+            
+            # Note: We're not dropping chat_log_path yet as it might be needed for data migration
+            # This will be handled in Phase 2 when we implement the transition logic
+            
+            db.commit()
+            logger.info("Migration to 1.1.0 completed successfully")
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Migration to 1.1.0 failed: {e}")
+            raise
+
 def run_migrations(from_version: str):
     """Run database migrations from the specified version."""
     logger.info(f"Running migrations from version {from_version} to {CURRENT_SCHEMA_VERSION}")
@@ -116,6 +170,9 @@ def run_migrations(from_version: str):
             # Add future migration logic here
             # Example: migrate_to_1_0_0()
             pass
+        elif from_version == "1.0.0":
+            # Migrate from 1.0.0 to 1.1.0
+            migrate_to_1_1_0()
         
         # Update database version
         set_database_version(CURRENT_SCHEMA_VERSION, f"Migrated from {from_version}")

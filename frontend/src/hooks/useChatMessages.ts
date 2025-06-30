@@ -336,7 +336,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           const userForSave: UserProfile | null = currentUserFromState;
 
           // --- BEGIN DIAGNOSTIC LOGS ---
-          console.log('[useChatMessages] Preparing to call ChatStorage.saveChat. Logging arguments for payload:');
+          console.log('[useChatMessages] Preparing to save chat using database-centric API. Logging arguments for payload:');
           console.log('[useChatMessages] chat_session_uuid (uuidForSave, should be string):', uuidForSave, 'Type:', typeof uuidForSave, 'Is Array:', Array.isArray(uuidForSave));
           console.log('[useChatMessages] messages (messagesForSave, should be array of Message objects):', messagesForSave, 'Type:', typeof messagesForSave, 'Is Array:', Array.isArray(messagesForSave));
           if (Array.isArray(messagesForSave) && messagesForSave.length > 0) {
@@ -344,16 +344,21 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           }
           // --- END DIAGNOSTIC LOGS ---
           
-          await ChatStorage.saveChat(
-            characterForSave,
-            uuidForSave,
-            messagesForSave,
-            userForSave,
-            apiInfo,
-            null,
-            undefined,
-            chatTitle
-          );
+          // Save chat using database-centric API
+          await fetch('/api/reliable-save-chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chat_id: uuidForSave,
+              character_uuid: characterForSave.data.character_uuid,
+              messages: messagesForSave,
+              user_name: userForSave,
+              api_info: apiInfo,
+              title: chatTitle
+            })
+          });
         }
       } catch (err) {
         console.error('Error saving chat:', err);

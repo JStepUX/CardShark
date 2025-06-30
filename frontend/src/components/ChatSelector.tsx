@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useChat } from '../contexts/ChatContext';
-import { ChatStorage } from '../services/chatStorage';
-import { Plus, RefreshCw, MessageSquare, Trash2, AlertTriangle, X } from 'lucide-react';
+
+import { Plus, RefreshCw, MessageSquare, Trash2, AlertTriangle, X, Search, Filter, Download, SortAsc, SortDesc, ChevronDown } from 'lucide-react';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 
 interface ChatInfo {
@@ -30,6 +30,17 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  
+  // Search and filtering state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'title' | 'messages'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [messageCountFilter, setMessageCountFilter] = useState<'all' | 'short' | 'medium' | 'long'>('all');
+  const [isExporting, setIsExporting] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   // Load available chats when character changes
   useEffect(() => {
@@ -37,6 +48,20 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     
     loadAvailableChats();
   }, [characterData]);
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setShowExportDropdown(false);
+      }
+    };
+
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showExportDropdown]);
 
   const loadAvailableChats = async () => {
     if (!characterData) return;
@@ -46,31 +71,60 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       setError(null);
       setDeleteError(null);
       
-      const chats = await ChatStorage.listChats(characterData);
+      // Use the new database-centric API endpoint
+      const characterUuid = characterData.data?.character_uuid;
+      if (!characterUuid) {
+        throw new Error('Character UUID not found');
+      }
+
+      const response = await fetch(`/api/reliable-list-chats/${characterUuid}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to load chats: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const chats = data.data || [];
       
       if (Array.isArray(chats)) {
-        // Transform the API response into our ChatInfo format
+        // Transform the database response into our ChatInfo format
         const charName = characterData?.data?.name;
         const chatInfoList: ChatInfo[] = chats.map((chat: any) => {
-          const lastUserName = chat.chat_metadata?.lastUser?.name;
-          const rawPreview = chat.preview || chat.last_message || 'No messages';
+          // Handle both old JSONL format and new database format
+          const chatId = chat.chat_session_uuid || chat.id || chat.chat_id;
+          const title = chat.title || formatChatTitle(
+            chat.start_time || chat.create_date || chat.display_date, 
+            chat.preview || chat.last_message, 
+            charName, 
+            chat.user_name
+          );
+          const lastModified = chat.last_updated || chat.last_modified || chat.start_time || chat.create_date;
+          const messageCount = chat.message_count || 0;
           
+          // Clean up preview text
+          const rawPreview = chat.preview || chat.last_message || 'No messages';
           let cleanPreview = rawPreview.replace(/<[^>]*>/g, '');
           let finalPreview = cleanPreview;
 
           if (charName) {
             finalPreview = finalPreview.replace(/\{\{char\}\}/g, charName);
           }
-          if (lastUserName) {
-            finalPreview = finalPreview.replace(/\{\{user\}\}/g, lastUserName);
+          if (chat.user_name) {
+            finalPreview = finalPreview.replace(/\{\{user\}\}/g, chat.user_name);
           }
 
           return {
-            id: chat.id || chat.chat_id,
-            filename: chat.filename,
-            title: formatChatTitle(chat.create_date || chat.display_date, chat.preview || chat.last_message, charName, lastUserName),
-            lastModified: formatDate(chat.last_modified || chat.create_date || chat.display_date),
-            messageCount: chat.message_count || 0,
+            id: chatId,
+            filename: chat.filename || `chat_${chatId}.jsonl`, // Fallback for database entries
+            title,
+            lastModified: formatDate(lastModified),
+            messageCount,
             preview: finalPreview
           };
         });
@@ -149,14 +203,28 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     setDeleteError(null);
     
     try {
-      const result = await ChatStorage.deleteChat(characterData, deletingChat.id);
+      // Use the new database-centric API endpoint for deleting chats
+      const response = await fetch(`/api/reliable-delete-chat/${deletingChat.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to delete chat: ${response.status}`);
+      }
+
+      const result = await response.json();
       
       if (result.success) {
         // Remove the deleted chat from the list
         setAvailableChats(prev => prev.filter(chat => chat.id !== deletingChat.id));
         setIsDeleteConfirmOpen(false);
+        setDeletingChat(null);
       } else {
-        throw new Error(result.error || 'Failed to delete chat');
+        throw new Error(result.message || 'Failed to delete chat');
       }
     } catch (err) {
       console.error('Error deleting chat:', err);
@@ -173,6 +241,150 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
 
   const dismissDeleteError = () => {
     setDeleteError(null);
+  };
+
+  // Filter and sort chats
+  const filteredAndSortedChats = useMemo(() => {
+    let filtered = [...availableChats];
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(chat => 
+        chat.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (chat.preview && chat.preview.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    }
+
+    // Apply date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      filtered = filtered.filter(chat => {
+        const chatDate = new Date(chat.lastModified);
+        switch (dateFilter) {
+          case 'today':
+            return chatDate >= today;
+          case 'week':
+            const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            return chatDate >= weekAgo;
+          case 'month':
+            const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+            return chatDate >= monthAgo;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply message count filter
+    if (messageCountFilter !== 'all') {
+      filtered = filtered.filter(chat => {
+        const count = chat.messageCount;
+        switch (messageCountFilter) {
+          case 'short':
+            return count <= 10;
+          case 'medium':
+            return count > 10 && count <= 50;
+          case 'long':
+            return count > 50;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case 'title':
+          comparison = a.title.localeCompare(b.title);
+          break;
+        case 'messages':
+          comparison = a.messageCount - b.messageCount;
+          break;
+        case 'date':
+        default:
+          comparison = new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
+          break;
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [availableChats, searchTerm, sortBy, sortOrder, dateFilter, messageCountFilter]);
+
+  // Export functionality - Updated for database-centric approach
+  const handleExportChats = async (format: 'json' | 'jsonl' = 'json') => {
+    if (!characterData) return;
+    
+    setIsExporting(true);
+    try {
+      const chatsToExport = filteredAndSortedChats.length > 0 ? filteredAndSortedChats : availableChats;
+      
+      if (format === 'jsonl') {
+        // Use the new bulk export endpoint for JSONL format
+        const response = await fetch('/api/export-chats-bulk', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            character_uuid: characterData.data?.character_uuid,
+            chat_session_uuids: chatsToExport.map(chat => chat.id)
+          })
+        });
+
+        if (response.ok) {
+          const exportData = await response.json();
+          if (exportData.success && exportData.data) {
+            const blob = new Blob([exportData.data.content], { type: 'application/jsonl' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = exportData.data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } else {
+            throw new Error(exportData.message || 'Export failed');
+          }
+        } else {
+          throw new Error(`Export failed with status: ${response.status}`);
+        }
+      } else {
+        // Export summary data in JSON format
+        const exportData = {
+          character: characterData.data?.name || 'Unknown',
+          exportDate: new Date().toISOString(),
+          totalChats: chatsToExport.length,
+          chats: chatsToExport.map(chat => ({
+            id: chat.id,
+            title: chat.title,
+            messageCount: chat.messageCount,
+            lastModified: chat.lastModified,
+            preview: chat.preview
+          }))
+        };
+        
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${characterData.data?.name || 'character'}_chats_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Error exporting chats:', error);
+      setError('Failed to export chats');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Helper to format date from ISO string
@@ -278,10 +490,16 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
 
   return (
     <div className="chat-selector p-4 bg-stone-900 text-white rounded-lg max-w-3xl mx-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">
-          {characterData?.data?.name ? `Chats with ${characterData.data.name}` : 'Character Chats'}
-        </h2>
+      <div className="flex justify-between items-center mb-2">
+        <div>
+          <h2 className="text-xl font-semibold">
+            {characterData?.data?.name ? `Chats with ${characterData.data.name}` : 'Character Chats'}
+          </h2>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span className="text-xs text-stone-400">Database-centric storage</span>
+          </div>
+        </div>
         <div className="flex gap-2">
           <button 
             onClick={loadAvailableChats}
@@ -290,7 +508,55 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             title="Refresh chats"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>          <button 
+          </button>
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`p-2 rounded-full transition-colors ${
+              showFilters ? 'bg-orange-700 hover:bg-orange-600' : 'bg-stone-800 hover:bg-stone-700'
+            }`}
+            title="Toggle filters"
+          >
+            <Filter size={16} />
+          </button>
+          <div className="relative" ref={exportDropdownRef}>
+            <button 
+              onClick={() => setShowExportDropdown(!showExportDropdown)}
+              className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+              disabled={isExporting || availableChats.length === 0}
+              title="Export chats"
+            >
+              <Download size={16} className={isExporting ? 'animate-pulse' : ''} />
+              <ChevronDown size={12} />
+            </button>
+            
+            {showExportDropdown && (
+              <div className="absolute right-0 top-full mt-1 bg-stone-800 border border-stone-600 rounded-lg shadow-lg z-50 min-w-[160px]">
+                <button
+                  onClick={() => {
+                    handleExportChats('json');
+                    setShowExportDropdown(false);
+                  }}
+                  className="w-full px-4 py-2 text-left hover:bg-stone-700 transition-colors flex items-center gap-2 rounded-t-lg"
+                  disabled={isExporting}
+                >
+                  <Download size={14} />
+                  Export as JSON
+                </button>
+                <button
+                  onClick={() => {
+                    handleExportChats('jsonl');
+                    setShowExportDropdown(false);
+                  }}
+                  className="w-full px-4 py-2 text-left hover:bg-stone-700 transition-colors flex items-center gap-2 rounded-b-lg border-t border-stone-600"
+                  disabled={isExporting}
+                >
+                  <Download size={14} />
+                  Export as JSONL
+                </button>
+              </div>
+            )}
+          </div>
+          <button 
             onClick={handleCreateNewChat}
             className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
@@ -300,6 +566,90 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           </button>
         </div>
       </div>
+
+      {/* Search Bar */}
+      <div className="mb-4 mt-4">
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-stone-400" />
+          <input
+            type="text"
+            placeholder="Search chats by title or content..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-600 rounded-lg focus:outline-none focus:border-orange-500 text-white placeholder-stone-400"
+          />
+        </div>
+      </div>
+
+      {/* Filters Panel */}
+      {showFilters && (
+        <div className="mb-4 p-4 bg-stone-800 rounded-lg border border-stone-600">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Sort By */}
+            <div>
+              <label className="block text-sm font-medium text-stone-300 mb-2">Sort By</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'date' | 'title' | 'messages')}
+                  className="flex-1 px-3 py-2 bg-stone-700 border border-stone-600 rounded focus:outline-none focus:border-orange-500 text-white"
+                >
+                  <option value="date">Last Modified</option>
+                  <option value="title">Title</option>
+                  <option value="messages">Message Count</option>
+                </select>
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="p-2 bg-stone-700 hover:bg-stone-600 rounded transition-colors"
+                  title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+                >
+                  {sortOrder === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Date Filter */}
+            <div>
+              <label className="block text-sm font-medium text-stone-300 mb-2">Date Range</label>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'week' | 'month')}
+                className="w-full px-3 py-2 bg-stone-700 border border-stone-600 rounded focus:outline-none focus:border-orange-500 text-white"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+              </select>
+            </div>
+
+            {/* Message Count Filter */}
+            <div>
+              <label className="block text-sm font-medium text-stone-300 mb-2">Message Count</label>
+              <select
+                value={messageCountFilter}
+                onChange={(e) => setMessageCountFilter(e.target.value as 'all' | 'short' | 'medium' | 'long')}
+                className="w-full px-3 py-2 bg-stone-700 border border-stone-600 rounded focus:outline-none focus:border-orange-500 text-white"
+              >
+                <option value="all">All Lengths</option>
+                <option value="short">Short (≤10 messages)</option>
+                <option value="medium">Medium (11-50 messages)</option>
+                <option value="long">Long ({'>'}50 messages)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Results Summary */}
+          <div className="mt-3 pt-3 border-t border-stone-600 text-sm text-stone-400">
+            Showing {filteredAndSortedChats.length} of {availableChats.length} chats
+            {searchTerm && (
+              <span className="ml-2">
+                • Filtered by: "{searchTerm}"
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded flex items-center justify-between">
@@ -346,7 +696,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         </div>
       ) : (
         <ul className="chat-list space-y-2 max-h-96 overflow-y-auto pr-1">
-          {availableChats.map((chat) => (
+          {filteredAndSortedChats.map((chat) => (
             <li 
               key={chat.id}
               className="p-3 bg-stone-800 hover:bg-stone-700 rounded-lg cursor-pointer transition-colors group relative"

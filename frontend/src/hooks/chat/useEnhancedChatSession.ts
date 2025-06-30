@@ -104,16 +104,25 @@ export function useEnhancedChatSession(
     try {
       console.log(`[EnhancedChatSession] Auto-saving ${messages.length} messages for session ${sessionUuid}`);
       
-      const result = await ChatStorage.saveChat(
-        effectiveCharacterData,
-        sessionUuid,
-        messages,
-        state.currentUser,
-        null, // apiInfo
-        null, // backgroundSettings
-        undefined, // lorePersistenceData
-        effectiveCharacterData.data?.name ? `Chat with ${effectiveCharacterData.data.name}` : undefined
-      );
+      // Save chat using database-centric API
+      const response = await fetch('/api/reliable-save-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: sessionUuid,
+          character_uuid: effectiveCharacterData.data.character_uuid,
+          messages: messages,
+          user_name: state.currentUser,
+          api_info: null,
+          background_settings: null,
+          lore_persistence_data: undefined,
+          title: effectiveCharacterData.data?.name ? `Chat with ${effectiveCharacterData.data.name}` : undefined
+        })
+      });
+      
+      const result = response.ok ? await response.json() : { success: false, error: 'Save failed' };
       
       if (result.success) {
         setState(prev => ({

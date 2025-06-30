@@ -240,7 +240,8 @@ Key client-side routes defined in [`src/App.tsx`](frontend/src/App.tsx:1) or sim
 ## Additional Resources
 -   **Persistence Architecture**: See [`docs/persistence_architecture.md`](docs/persistence_architecture.md).
 -   **Character UUIDs**: See [`docs/backend_character_uuid_implementation_plan.md`](docs/backend_character_uuid_implementation_plan.md).
--   **Chat Persistence**: See [`docs/chat_persistence_strategy.md`](docs/chat_persistence_strategy.md).
+-   **Chat Storage Implementation**: See [`docs/chat_storage_transition_plan.md`](docs/chat_storage_transition_plan.md) for the complete database-only chat system.
+-   **Chat Persistence Strategy**: See [`docs/chat_persistence_strategy.md`](docs/chat_persistence_strategy.md) for architectural overview.
 -   **World Cards System Plan**: See [`docs/plan_WorldCards2.md`](docs/plan_WorldCards2.md).
 -   **World Persistence Strategy**: See [`docs/world_persistence_strategy.md`](docs/world_persistence_strategy.md).
 -   **World Prompts**: See [`docs/world_prompts.md`](docs/world_prompts.md).

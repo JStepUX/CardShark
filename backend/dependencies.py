@@ -14,7 +14,9 @@ from .png_metadata_handler import PngMetadataHandler
 # Service dependencies
 from .services.character_service import CharacterService
 from .services.reliable_chat_manager_v2 import ReliableChatManager
+from .services.reliable_chat_manager_db import DatabaseReliableChatManager
 from .services.chat_endpoint_adapters import ChatEndpointAdapters
+from .services.database_chat_endpoint_adapters import DatabaseChatEndpointAdapters
 
 # Handler dependencies
 from .chat_handler import ChatHandler
@@ -77,6 +79,18 @@ def get_reliable_chat_manager(request: Request, db: Session = Depends(get_db)) -
         logger=logger
     )
 
+def get_database_chat_manager(request: Request, db: Session = Depends(get_db)) -> DatabaseReliableChatManager:
+    """
+    FastAPI dependency to get an instance of DatabaseReliableChatManager.
+    This is the new database-only implementation without file dependencies.
+    """
+    logger = get_logger(request)
+    
+    return DatabaseReliableChatManager(
+        db_session=db,
+        logger=logger
+    )
+
 def get_chat_endpoint_adapters(request: Request, db: Session = Depends(get_db)) -> ChatEndpointAdapters:
     """
     FastAPI dependency to get an instance of ChatEndpointAdapters.
@@ -85,6 +99,15 @@ def get_chat_endpoint_adapters(request: Request, db: Session = Depends(get_db)) 
     reliable_chat_manager = get_reliable_chat_manager(request, db)
     
     return ChatEndpointAdapters(reliable_chat_manager)
+
+def get_database_chat_endpoint_adapters(request: Request, db: Session = Depends(get_db)) -> DatabaseChatEndpointAdapters:
+    """
+    FastAPI dependency to get an instance of DatabaseChatEndpointAdapters.
+    Provides endpoint-compatible methods for the database-only chat system.
+    """
+    database_chat_manager = get_database_chat_manager(request, db)
+    
+    return DatabaseChatEndpointAdapters(database_chat_manager)
 
 # Handler dependency providers
 def get_chat_handler(request: Request) -> ChatHandler:

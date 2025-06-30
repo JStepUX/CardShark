@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -6,16 +6,18 @@ import datetime
 import os
 import uuid
 import time
+import json
 
 from backend import schemas as pydantic_models, sql_models # Use schemas for Pydantic models
 from backend.services import chat_service
 from backend.services.character_service import CharacterService # Import CharacterService
 from backend.services.reliable_chat_manager_v2 import ReliableChatManager
+from backend.services.reliable_chat_manager_db import DatabaseReliableChatManager
 from backend.services.chat_models import ChatOperationResult, ChatMessage
 from backend.services.chat_endpoint_adapters import ChatEndpointAdapters
+from backend.services.database_chat_endpoint_adapters import DatabaseChatEndpointAdapters
 from backend.database import get_db
-from backend.chat_handler import ChatHandler # Import ChatHandler
-from backend.dependencies import get_chat_handler, get_character_service_dependency, get_logger, get_chat_endpoint_adapters, get_reliable_chat_manager # Import dependencies
+from backend.dependencies import get_character_service_dependency, get_logger, get_chat_endpoint_adapters, get_reliable_chat_manager, get_database_chat_endpoint_adapters, get_database_chat_manager # Import dependencies
 from backend.log_manager import LogManager
 import logging
 
@@ -43,68 +45,83 @@ router = APIRouter(
     responses=STANDARD_RESPONSES
 )
 
-@router.post("/create-new-chat", response_model=DataResponse[pydantic_models.ChatSessionRead], status_code=201)
+@router.post("/create-new-chat", response_model=DataResponse[pydantic_models.ChatSessionReadV2], status_code=201)
 def create_new_chat_endpoint(
-    payload: pydantic_models.ChatSessionCreate, # character_uuid, user_uuid (optional), title (optional)
+    payload: pydantic_models.ChatSessionCreateV2, # character_uuid, user_uuid (optional), title (optional)
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
 ):
+    """Create a new chat session using database storage (Phase 2 implementation)."""
     try:
-        # 1. Create DB record for the chat session
-        # The service will generate chat_session_uuid and a default chat_log_path
-        db_chat_session = chat_service.create_chat_session(db=db, chat_session=payload)
-        if not db_chat_session:
-            raise ValidationException("Failed to create chat session in database")
-
-        # 2. Get character data for initializing the chat file
-        character = character_service.get_character_by_uuid(db_chat_session.character_uuid, db)
+        # 1. Validate character exists
+        character = character_service.get_character_by_uuid(payload.character_uuid, db)
         if not character:
-            # This case should ideally be prevented by FK constraints or prior validation
-            raise NotFoundException(f"Character not found: {db_chat_session.character_uuid}")
+            raise NotFoundException(f"Character not found: {payload.character_uuid}")
 
-        # Construct a dictionary that _initialize_chat_file expects for character_data
-        # Based on ChatHandler._get_character_uuid and _initialize_chat_file
-        character_data_for_handler: Dict[str, Any] = {
-            "character_uuid": character.character_uuid, # Canonical UUID
-            "uuid": character.character_uuid, # For compatibility if _get_character_uuid checks it
-            "data": {
-                "name": character.name,
-                "description": character.description,
-                "personality": character.personality
-                # Add other fields if _get_character_uuid or _initialize_chat_file depends on them
-            }
-        }
+        # 2. Create DB record for the chat session (database-first approach)
+        session_uuid = str(uuid.uuid4())
         
-        # 3. Initialize the physical chat log file using ChatHandler's path generation
-        # ChatHandler will generate the correct path and create the file
-        actual_chat_file_path = chat_handler._get_or_create_chat_file(
-            character_data=character_data_for_handler,
-            force_new=True,
-            chat_id=db_chat_session.chat_session_uuid
+        db_chat_session = sql_models.ChatSession(
+            chat_session_uuid=session_uuid,
+            character_uuid=payload.character_uuid,
+            user_uuid=payload.user_uuid,
+            title=payload.title or f"Chat with {character.name}",
+            start_time=datetime.datetime.utcnow(),
+            message_count=0,
+            export_format_version=payload.export_format_version or "1.1.0",
+            is_archived=payload.is_archived or False
         )
         
-        # 4. Update the database with the actual file path generated by ChatHandler
-        db_chat_session.chat_log_path = str(actual_chat_file_path)
+        db.add(db_chat_session)
         db.commit()
         db.refresh(db_chat_session)
 
-        return create_data_response(db_chat_session)
+        # 3. Create initial system message if needed
+        if character.description or character.personality:
+            system_content = f"Character: {character.name}\n"
+            if character.description:
+                system_content += f"Description: {character.description}\n"
+            if character.personality:
+                system_content += f"Personality: {character.personality}\n"
+            
+            chat_service.create_chat_message(
+                db=db,
+                chat_session_uuid=session_uuid,
+                role="system",
+                content=system_content.strip(),
+                status="complete"
+            )
+
+        # 4. Return the session with empty messages list
+        session_response = pydantic_models.ChatSessionReadV2(
+            chat_session_uuid=db_chat_session.chat_session_uuid,
+            character_uuid=db_chat_session.character_uuid,
+            user_uuid=db_chat_session.user_uuid,
+            start_time=db_chat_session.start_time,
+            last_message_time=db_chat_session.last_message_time,
+            message_count=db_chat_session.message_count,
+            title=db_chat_session.title,
+            export_format_version=db_chat_session.export_format_version,
+            is_archived=db_chat_session.is_archived,
+            messages=[]
+        )
+
+        return create_data_response(session_response)
     
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
         raise handle_generic_error(e, "creating new chat session")
 
-@router.post("/load-latest-chat", response_model=DataResponse[Optional[pydantic_models.ChatSessionRead]])
+@router.post("/load-latest-chat", response_model=DataResponse[Optional[pydantic_models.ChatSessionReadV2]])
 def load_latest_chat_endpoint(
     payload: pydantic_models.CharacterUUIDPayload, # Use the new Pydantic model for the request body
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
 ):
+    """Load the latest chat session for a character using database storage (Phase 2 implementation)."""
     try:
         # Get the latest session from database
         latest_session = chat_service.get_latest_chat_session_for_character(db=db, character_uuid=payload.character_uuid)
@@ -114,198 +131,221 @@ def load_latest_chat_endpoint(
             # For now, let's return None, which will be an empty 200 if no session.
             return create_data_response(None)
         
-        # Also load the actual messages from the chat file using ChatHandler
-        character = character_service.get_character_by_uuid(payload.character_uuid, db)
-        if character:
-            character_data_for_handler = {
-                "character_uuid": character.character_uuid,
-                "uuid": character.character_uuid, 
-                "data": {"name": character.name}
-            }
-            
-            # Load the chat messages from file
-            chat_data = chat_handler.load_latest_chat(character_data_for_handler, scan_all_files=True)
-            if chat_data and chat_data.get("success") and chat_data.get("messages"):
-                # Add the messages to the session response
-                session_dict = latest_session.__dict__.copy()
-                session_dict["messages"] = chat_data["messages"]
-                session_dict["success"] = True
-                return create_data_response(session_dict)
+        # Load the actual messages from the database
+        db_messages = chat_service.get_chat_messages(db=db, chat_session_uuid=latest_session.chat_session_uuid)
         
-        return create_data_response(latest_session)
+        # Convert database messages to Pydantic models
+        message_responses = [
+            pydantic_models.ChatMessageRead(
+                message_id=msg.message_id,
+                chat_session_uuid=msg.chat_session_uuid,
+                role=msg.role,
+                content=msg.content,
+                status=msg.status,
+                reasoning_content=msg.reasoning_content,
+                metadata_json=msg.metadata_json,
+                timestamp=msg.timestamp,
+                created_at=msg.created_at,
+                updated_at=msg.updated_at
+            )
+            for msg in db_messages
+        ]
+        
+        # Create the session response with messages
+        session_response = pydantic_models.ChatSessionReadV2(
+            chat_session_uuid=latest_session.chat_session_uuid,
+            character_uuid=latest_session.character_uuid,
+            user_uuid=latest_session.user_uuid,
+            start_time=latest_session.start_time,
+            last_message_time=latest_session.last_message_time,
+            message_count=latest_session.message_count,
+            title=latest_session.title,
+            export_format_version=latest_session.export_format_version,
+            is_archived=latest_session.is_archived,
+            messages=message_responses
+        )
+        
+        return create_data_response(session_response)
     
     except Exception as e:
         raise handle_generic_error(e, "loading latest chat")
 
-@router.post("/save-chat", response_model=DataResponse[pydantic_models.ChatSessionRead])
+@router.post("/save-chat", response_model=DataResponse[pydantic_models.ChatSessionReadV2])
 def save_chat_endpoint(
     payload: pydantic_models.ChatSavePayload,
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
 ):
+    """Save chat messages to database storage (Phase 2 implementation)."""
     try:
         # 1. Get the existing chat session from DB
         db_chat_session = chat_service.get_chat_session(db, chat_session_uuid=payload.chat_session_uuid)
         if not db_chat_session:
             raise NotFoundException(f"ChatSession not found: {payload.chat_session_uuid}")
 
-        # 2. Get character data for ChatHandler
-        character = character_service.get_character_by_uuid(db_chat_session.character_uuid, db)
-        if not character:
-            raise NotFoundException(f"Character not found for session: {db_chat_session.character_uuid}")
-        
-        character_data_for_handler: Dict[str, Any] = {
-            "character_uuid": character.character_uuid,
-            "uuid": character.character_uuid,
-            "data": {"name": character.name} # Add other fields if save_chat_state needs them
-        }
+        # 2. Clear existing messages for this session (replace all)
+        existing_messages = chat_service.get_chat_messages(db=db, chat_session_uuid=payload.chat_session_uuid)
+        for msg in existing_messages:
+            chat_service.delete_chat_message(db=db, message_id=msg.message_id)
 
-        # 3. Prepare metadata for chat_handler.save_chat_state
-        # The `save_chat_state` in ChatHandler seems to expect a specific metadata structure.
-        # We need to ensure the `chat_id` is correctly passed.
-        # The title from payload can also be part of this metadata if ChatHandler uses it.
-        handler_metadata = {
-            "chat_id": db_chat_session.chat_session_uuid,
-            "title": payload.title if payload.title is not None else db_chat_session.title
-            # Add other fields if save_chat_state expects them in its 'metadata' param
-        }
+        # 3. Save new messages to database
+        saved_messages = []
+        for message_data in payload.messages:
+            # Extract message fields from the dict format
+            role = message_data.get('role', 'user')
+            content = message_data.get('content', '') or message_data.get('text', '')
+            status = message_data.get('status', 'complete')
+            reasoning_content = message_data.get('reasoning_content')
+            metadata_json = message_data.get('metadata')
+            
+            # Create message in database
+            db_message = chat_service.create_chat_message(
+                db=db,
+                chat_session_uuid=payload.chat_session_uuid,
+                role=role,
+                content=content,
+                status=status,
+                reasoning_content=reasoning_content,
+                metadata_json=metadata_json
+            )
+            saved_messages.append(db_message)
 
-        # 4. Save messages to the chat log file using ChatHandler
-        # Assuming payload.messages is a list of message dicts compatible with ChatHandler
-        # The ChatHandler's save_chat_state takes 'messages' in its internal format.
-        # For now, we pass it directly. If conversion is needed, it should happen here or in ChatHandler.
-        save_success = chat_handler.save_chat_state(
-            character_data=character_data_for_handler,
-            messages=payload.messages, # This is List[Dict] from ChatSavePayload
-            metadata=handler_metadata # Pass the constructed metadata
-        )
-
-        if not save_success:
-            # Log the error, but maybe don't fail the whole request if DB update can still proceed
-            # Or, decide if this is a critical failure. For now, let's assume it is.
-            raise ValidationException("Failed to save chat log to file")
-
-        # 5. Update ChatSession DB record (title, last_message_time, message_count)
-        update_data = pydantic_models.ChatSessionUpdate(
-            title=payload.title if payload.title is not None else db_chat_session.title,
-            message_count=len(payload.messages), # Update message count based on saved messages
-            # chat_log_path is not changing here
-        )
-        updated_session = chat_service.update_chat_session(
-            db,
-            chat_session_uuid=payload.chat_session_uuid,
-            chat_update=update_data
-        )
+        # 4. Update ChatSession DB record (title, message_count)
+        if payload.title is not None:
+            update_data = pydantic_models.ChatSessionUpdateV2(
+                title=payload.title,
+                message_count=len(payload.messages)
+            )
+            updated_session = chat_service.update_chat_session(
+                db,
+                chat_session_uuid=payload.chat_session_uuid,
+                chat_update=update_data
+            )
+        else:
+            # Just update message count
+            db_chat_session.message_count = len(payload.messages)
+            db_chat_session.last_message_time = datetime.datetime.utcnow()
+            db.commit()
+            db.refresh(db_chat_session)
+            updated_session = db_chat_session
         
         if not updated_session:
             # This would be unusual if the session existed before
             raise ValidationException("Failed to update chat session in database after saving log")
 
-        return create_data_response(updated_session)
+        # 5. Convert saved messages to ChatMessageRead format
+        message_reads = []
+        for db_message in saved_messages:
+            message_read = pydantic_models.ChatMessageRead(
+                message_id=db_message.message_id,
+                chat_session_uuid=db_message.chat_session_uuid,
+                role=db_message.role,
+                content=db_message.content,
+                status=db_message.status,
+                reasoning_content=db_message.reasoning_content,
+                metadata_json=db_message.metadata_json,
+                timestamp=db_message.timestamp,
+                created_at=db_message.created_at,
+                updated_at=db_message.updated_at
+            )
+            message_reads.append(message_read)
+
+        # 6. Return the updated session with messages
+        session_read_v2 = pydantic_models.ChatSessionReadV2(
+            chat_session_uuid=updated_session.chat_session_uuid,
+            character_uuid=updated_session.character_uuid,
+            user_uuid=updated_session.user_uuid,
+            start_time=updated_session.start_time,
+            last_message_time=updated_session.last_message_time,
+            message_count=updated_session.message_count,
+            title=updated_session.title,
+            export_format_version=updated_session.export_format_version,
+            is_archived=updated_session.is_archived,
+            messages=message_reads
+        )
+        
+        return create_data_response(session_read_v2)
     
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
         raise handle_generic_error(e, "saving chat")
 
-@router.post("/append-chat-message", response_model=DataResponse[pydantic_models.ChatSessionRead])
+@router.post("/append-chat-message", response_model=DataResponse[pydantic_models.ChatSessionReadV2])
 def append_chat_message_endpoint(
     payload: pydantic_models.ChatMessageAppend,
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
 ):
+    """Append a new message to chat session using database storage (Phase 2 implementation)."""
     try:
         # 1. Get the existing chat session from DB
         db_chat_session = chat_service.get_chat_session(db, chat_session_uuid=payload.chat_session_uuid)
         if not db_chat_session:
             raise NotFoundException(f"ChatSession not found: {payload.chat_session_uuid}")
 
-        # 2. Get character data for ChatHandler
-        character = character_service.get_character_by_uuid(db_chat_session.character_uuid, db)
-        if not character:
-            raise NotFoundException(f"Character not found for session: {db_chat_session.character_uuid}")
-        
-        character_data_for_handler: Dict[str, Any] = {
-            "character_uuid": character.character_uuid,
-            "uuid": character.character_uuid,
-            "data": {"name": character.name}
-        }
-        
-        # 3. Append message to the chat log file using ChatHandler
-        # ChatHandler.append_message expects the chat_id and the message content.
-        # The message content is payload.message (a dict)
-        # Metadata for ChatHandler might be needed if its append_message expects it.
-        # For now, assuming chat_id (session_uuid) and the message dict are sufficient.
-        
-        # Construct metadata for ChatHandler's append_message method
-        # This is similar to save_chat_state but for a single message.
-        # We need the chat_id (which is db_chat_session.chat_session_uuid)
-        # and the file_path (db_chat_session.chat_log_path).
-        
-        # The ChatHandler's append_message method needs the file_path, chat_id, and the message.
-        # It might also need character_data if it re-validates or uses it.
-        
-        # Let's ensure we have the correct parameters for chat_handler.append_message
-        # Based on typical ChatHandler design, it might look like:
-        # chat_handler.append_message(file_path: Path, chat_id: str, message: Dict[str, Any])
-        # Or it might take the full character_data and metadata similar to save_chat_state.
-        # For now, let's assume a simpler append_message that takes the essential parts.
-        # If ChatHandler.append_message is more complex, this part needs adjustment.
+        # 2. Extract message fields from the dict format
+        message_data = payload.message
+        role = message_data.get('role', 'user')
+        content = message_data.get('content', '') or message_data.get('text', '')
+        status = message_data.get('status', 'complete')
+        reasoning_content = message_data.get('reasoning_content')
+        metadata_json = message_data.get('metadata')
 
-        # Simplistic call to a hypothetical append_message in ChatHandler
-        # This part is a placeholder and needs to align with actual ChatHandler.append_message signature
-        # For now, we'll assume it takes the file path and the message.
-        # A more robust ChatHandler might take the session_uuid and manage the file path internally.
-        
-        # Let's assume ChatHandler.append_message takes similar arguments to how save_chat_state works
-        # but for a single message. It would need character_data, the message, and metadata (chat_id).
-        
-        # Re-using the metadata structure from save_chat_endpoint for consistency
-        handler_metadata = {
-            "chat_id": db_chat_session.chat_session_uuid,
-            # title is not usually updated on append, but can be included if handler uses it
-        }
-
-        # The append_message method in ChatHandler needs to be defined or confirmed.
-        # Assuming it takes character_data, a single message, and metadata.
-        # If it only takes file_path and message, this needs to be simpler.
-        # For now, let's assume it's similar to how save_chat_state might handle one message.
-        
-        # This is a conceptual call. The actual ChatHandler.append_message might differ.
-        # We are focusing on the DB update first, then the file write.
-        # The `chat_handler.append_message` method is not yet defined in the provided `ChatHandler`
-        # For now, we will call the service to update the DB, and the file operation will be a TODO
-        # or needs ChatHandler to be updated separately.
-
-        # For the purpose of this exercise, we'll assume a method exists in ChatHandler
-        # that can take the chat_log_path and the new message.
-        chat_log_file_path = Path(db_chat_session.chat_log_path)
-        
-        # Call the actual ChatHandler.append_message method to write message to JSONL file
-        try:
-            append_success = chat_handler.append_message(character_data_for_handler, payload.message)
-            if not append_success:
-                raise ValidationException("ChatHandler failed to append message to file")
-        except Exception as e:
-            logger.log_error(f"Failed to append message to log file {chat_log_file_path}: {e}")
-            raise ValidationException(f"Failed to append message to chat log file: {e}")
-
-        # 4. Update ChatSession DB record (message_count, last_message_time)
-        updated_session = chat_service.append_message_to_chat_session(
-            db,
+        # 3. Create the new message in database
+        db_message = chat_service.create_chat_message(
+            db=db,
             chat_session_uuid=payload.chat_session_uuid,
-            message_payload=payload.message # Pass the message for context, though service only uses it for count now
+            role=role,
+            content=content,
+            status=status,
+            reasoning_content=reasoning_content,
+            metadata_json=metadata_json
         )
 
-        if not updated_session:
-            # This would be unusual if the session existed before and append_message_to_chat_session failed
-            raise ValidationException("Failed to update chat session in database after appending message")
+        # 4. Update ChatSession DB record (message_count, last_message_time)
+        # The create_chat_message function already updates the session metadata
+        # But let's refresh to get the latest data
+        db.refresh(db_chat_session)
+        updated_session = db_chat_session
 
-        return create_data_response(updated_session)
+        # 5. Convert to ChatSessionReadV2 format with the new message
+        db_messages = chat_service.get_chat_messages(db=db, chat_session_uuid=payload.chat_session_uuid)
+        
+        # Convert database messages to Pydantic models
+        message_responses = [
+            pydantic_models.ChatMessageRead(
+                message_id=msg.message_id,
+                chat_session_uuid=msg.chat_session_uuid,
+                role=msg.role,
+                content=msg.content,
+                status=msg.status,
+                reasoning_content=msg.reasoning_content,
+                metadata_json=msg.metadata_json,
+                timestamp=msg.timestamp,
+                created_at=msg.created_at,
+                updated_at=msg.updated_at
+            )
+            for msg in db_messages
+        ]
+        
+        # Create the session response with messages
+        session_response = pydantic_models.ChatSessionReadV2(
+            chat_session_uuid=updated_session.chat_session_uuid,
+            character_uuid=updated_session.character_uuid,
+            user_uuid=updated_session.user_uuid,
+            start_time=updated_session.start_time,
+            last_message_time=updated_session.last_message_time,
+            message_count=updated_session.message_count,
+            title=updated_session.title,
+            export_format_version=updated_session.export_format_version,
+            is_archived=updated_session.is_archived,
+            messages=message_responses
+        )
+
+        return create_data_response(session_response)
     
     except (NotFoundException, ValidationException):
         raise
@@ -316,11 +356,11 @@ def append_chat_message_endpoint(
 async def generate_chat_response_endpoint( # Made async to accommodate potential async API calls
     payload: pydantic_models.ChatGenerateRequest,
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
     # api_handler: APIHandler = Depends(get_api_handler) # Assuming a dependency for api_handler
 ):
+    """Generate chat response using database storage (Phase 2 implementation)."""
     try:
         # 1. Get the existing chat session from DB
         db_chat_session = chat_service.get_chat_session(db, chat_session_uuid=payload.chat_session_uuid)
@@ -349,44 +389,32 @@ async def generate_chat_response_endpoint( # Made async to accommodate potential
             raise ValidationException("Failed to generate chat response from LLM")
 
         # 4. Format the generated response as a message dictionary
-        # Assuming a standard format like {"assistant": "response text"}
-        # This should align with how messages are stored and processed by ChatHandler
-        assistant_message = {"assistant": generated_text} # Or {"sender": "assistant", "text": generated_text}
-
-        # 5. Append the generated message to the chat log file using ChatHandler
-        # Similar to append_chat_message_endpoint, this relies on a conceptual ChatHandler method.
-        chat_log_file_path = Path(db_chat_session.chat_log_path)
-        character_data_for_handler: Dict[str, Any] = {
-            "character_uuid": character.character_uuid,
-            "uuid": character.character_uuid,
-            "data": {"name": character.name}
+        # Convert to database-compatible format
+        assistant_message = {
+            "role": "assistant",
+            "content": generated_text,
+            "status": "complete"
         }
-        handler_metadata = {"chat_id": db_chat_session.chat_session_uuid}
 
-        try:
-            # Call the actual ChatHandler.append_message method to write generated message to JSONL file
-            append_success = chat_handler.append_message(character_data_for_handler, assistant_message)
-            if not append_success:
-                raise ValidationException("ChatHandler failed to append generated message to file")
-        except Exception as e:
-            logger.log_error(f"Failed to append generated message to log file {chat_log_file_path}: {e}")
-            raise ValidationException(f"Failed to append generated message to chat log file: {e}")
-
-        # 6. Update ChatSession DB record (message_count, last_message_time)
-        # The service function `append_message_to_chat_session` handles DB updates.
-        updated_session = chat_service.append_message_to_chat_session(
-            db,
+        # 5. Save the generated message to database
+        db_message = chat_service.create_chat_message(
+            db=db,
             chat_session_uuid=payload.chat_session_uuid,
-            message_payload=assistant_message # The message being added
+            role="assistant",
+            content=generated_text,
+            status="complete"
         )
 
-        if not updated_session:
-            raise ValidationException("Failed to update chat session in database after generation")
+        # 6. Get updated session data
+        db.refresh(db_chat_session)
+        updated_session = db_chat_session
 
-        # 7. Return the generated message
+        # 7. Return the generated message in the expected format
+        # Convert back to the format expected by the frontend
+        response_message = {"assistant": generated_text}
         response_data = pydantic_models.ChatGenerateResponse(
             chat_session_uuid=payload.chat_session_uuid,
-            generated_message=assistant_message
+            generated_message=response_message
         )
         return create_data_response(response_data)
     
@@ -399,11 +427,11 @@ async def generate_chat_response_endpoint( # Made async to accommodate potential
 def list_character_chats_endpoint(
     payload: dict,  # Accept the payload structure from frontend
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
+    chat_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
-    """List all chats for a specific character"""
+    """List all chats for a specific character using database-only implementation"""
     try:
         character_data = payload.get("character_data")
         if not character_data:
@@ -413,25 +441,13 @@ def list_character_chats_endpoint(
         if not character_uuid:
             raise ValidationException("character_uuid is required in character_data")
         
-        # Get all chat sessions for this character from database
-        chat_sessions = chat_service.get_chat_sessions_by_character(db, character_uuid)
+        # Use database chat adapters
+        result = chat_adapters.list_character_chats_endpoint(character_uuid)
         
-        # Convert to the format expected by frontend
-        chats = []
-        for session in chat_sessions:
-            chat_info = {
-                "id": session.chat_session_uuid,
-                "title": session.title or f"Chat {session.chat_session_uuid[:8]}",
-                "last_message_time": session.last_message_time.isoformat() if session.last_message_time else session.start_time.isoformat(),
-                "message_count": session.message_count,
-                "start_time": session.start_time.isoformat()
-            }
-            chats.append(chat_info)
+        if not result.success:
+            raise ValidationException(result.message)
         
-        # Sort by last message time (most recent first)
-        chats.sort(key=lambda x: x["last_message_time"], reverse=True)
-        
-        return create_data_response(chats)
+        return create_data_response(result.chats)
         
     except (NotFoundException, ValidationException):
         raise
@@ -525,36 +541,21 @@ def delete_chat_session_endpoint(
 def delete_chat_endpoint(
     payload: dict,  # Accept the payload structure from frontend
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
+    chat_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
-    """Delete a specific chat session and its associated files"""
+    """Delete a specific chat session using database-only implementation."""
     try:
         chat_id = payload.get("chat_id")
         if not chat_id:
             raise ValidationException("chat_id is required")
         
-        # Get the chat session from database to get file path
-        db_chat_session = chat_service.get_chat_session(db, chat_session_uuid=chat_id)
-        if not db_chat_session:
-            raise NotFoundException(f"ChatSession not found: {chat_id}")
+        # Use database chat adapters
+        result = chat_adapters.delete_chat_endpoint(chat_id)
         
-        # Delete the chat log file if it exists
-        if db_chat_session.chat_log_path:
-            chat_log_file = Path(db_chat_session.chat_log_path)
-            if chat_log_file.exists():
-                try:
-                    chat_log_file.unlink()
-                    logger.log_info(f"Deleted chat log file: {chat_log_file}")
-                except Exception as e:
-                    logger.log_error(f"Failed to delete chat log file {chat_log_file}: {e}")
-                    # Continue with database deletion even if file deletion fails
-        
-        # Delete the chat session from database
-        deleted_session = chat_service.delete_chat_session(db, chat_session_uuid=chat_id)
-        if not deleted_session:
-            raise ValidationException("Failed to delete chat session from database")
+        if not result.success:
+            raise ValidationException(result.message)
         
         return create_data_response(True)
         
@@ -586,7 +587,7 @@ def safe_timestamp_to_datetime(timestamp: int, logger: LogManager = None) -> dat
 def reliable_create_chat_endpoint(
     payload: pydantic_models.ChatSessionCreate,
     db: Session = Depends(get_db),
-    chat_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    chat_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     character_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger)
 ):
@@ -638,8 +639,8 @@ def reliable_create_chat_endpoint(
 def reliable_load_chat_endpoint(
     payload: pydantic_models.CharacterUUIDPayload,
     db: Session = Depends(get_db),
-    reliable_chat_manager: ReliableChatManager = Depends(get_reliable_chat_manager),
-    chat_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    reliable_chat_manager: DatabaseReliableChatManager = Depends(get_database_chat_manager),
+    chat_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
     """
@@ -687,7 +688,7 @@ def reliable_load_chat_endpoint(
 def reliable_append_message_endpoint(
     payload: pydantic_models.ChatMessageAppend,
     db: Session = Depends(get_db),
-    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    chat_endpoint_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
     """
@@ -744,7 +745,7 @@ def reliable_append_message_endpoint(
 def reliable_save_chat_endpoint(
     payload: pydantic_models.ChatSavePayload,
     db: Session = Depends(get_db),
-    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    chat_endpoint_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
     """
@@ -803,7 +804,7 @@ def reliable_save_chat_endpoint(
 def reliable_list_chats_endpoint(
     character_uuid: str,
     db: Session = Depends(get_db),
-    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    chat_endpoint_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
     """
@@ -848,7 +849,7 @@ def reliable_list_chats_endpoint(
 def reliable_delete_chat_endpoint(
     chat_session_uuid: str,
     db: Session = Depends(get_db),
-    chat_endpoint_adapters: ChatEndpointAdapters = Depends(get_chat_endpoint_adapters),
+    chat_endpoint_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
     """
@@ -881,13 +882,13 @@ def reliable_delete_chat_endpoint(
 def load_chat_endpoint(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
-    chat_handler: ChatHandler = Depends(get_chat_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
+    chat_adapters: DatabaseChatEndpointAdapters = Depends(get_database_chat_endpoint_adapters),
     logger: LogManager = Depends(get_logger)
 ):
     """
     Load a specific chat by ID or the active chat for a character.
-    This endpoint matches the frontend's expected API.
+    This endpoint uses database-only implementation.
     """
     try:
         logger.log_info(f"Loading chat with payload: {payload}")
@@ -896,7 +897,6 @@ def load_chat_endpoint(
         chat_id = payload.get('chat_id')
         character_data = payload.get('character_data')
         use_active = payload.get('use_active', False)
-        scan_all_files = payload.get('scan_all_files', True)
         
         if not character_data:
             raise ValidationException("Missing character_data in request")
@@ -922,8 +922,28 @@ def load_chat_endpoint(
         if not character:
             raise NotFoundException(f"Character not found: {character_uuid}")
         
-        # Prepare character data for ChatHandler
-        character_data_for_handler = {
+        # Determine which chat to load
+        target_chat_id = chat_id
+        if not target_chat_id or use_active:
+            # Get latest chat for character
+            chat_sessions = chat_service.get_chat_sessions_by_character(db, character_uuid)
+            if not chat_sessions:
+                logger.log_info(f"No chat found for character: {character_uuid}")
+                return create_data_response({"success": False, "error": "No chat found"})
+            # Sort by last message time and get the most recent
+            chat_sessions.sort(key=lambda x: x.last_message_time or x.start_time, reverse=True)
+            target_chat_id = chat_sessions[0].chat_session_uuid
+        
+        # Use database chat adapters to load the chat
+        result = chat_adapters.load_chat_endpoint(target_chat_id)
+        
+        if not result.success:
+            logger.log_info(f"Failed to load chat: {result.message}")
+            return create_data_response({"success": False, "error": result.message})
+        
+        # Add character data to the response
+        chat_data = result.data
+        chat_data["character_data"] = {
             "character_uuid": character.character_uuid,
             "uuid": character.character_uuid,
             "data": {
@@ -933,18 +953,6 @@ def load_chat_endpoint(
             }
         }
         
-        # Load chat using ChatHandler
-        if chat_id and not use_active:
-            # Load specific chat by ID
-            chat_data = chat_handler.load_chat_by_id(character_data_for_handler, chat_id)
-        else:
-            # Load latest/active chat
-            chat_data = chat_handler.load_latest_chat(character_data_for_handler, scan_all_files=scan_all_files)
-        
-        if not chat_data or not chat_data.get("success"):
-            logger.log_info(f"No chat found for character: {character_uuid}")
-            return create_data_response({"success": False, "error": "No chat found"})
-        
         logger.log_info(f"Successfully loaded chat for character: {character_uuid}")
         return create_data_response(chat_data)
         
@@ -953,3 +961,209 @@ def load_chat_endpoint(
     except Exception as e:
         logger.log_error(f"Error in load_chat_endpoint: {str(e)}")
         raise handle_generic_error(e, "loading chat")
+
+
+# === EXPORT ENDPOINTS ===
+
+@router.get("/export-chat/{chat_session_uuid}", response_model=DataResponse[Dict[str, Any]])
+def export_chat_to_jsonl_endpoint(
+    chat_session_uuid: str,
+    db: Session = Depends(get_db),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Export a specific chat session to JSONL format.
+    Returns the JSONL content as a string that can be downloaded.
+    """
+    try:
+        logger.log_info(f"Exporting chat to JSONL: {chat_session_uuid}")
+        
+        # Get chat session
+        chat_session = chat_service.get_chat_session(db, chat_session_uuid)
+        if not chat_session:
+            raise NotFoundException(f"Chat session not found: {chat_session_uuid}")
+        
+        # Get character
+        character = character_service.get_character_by_uuid(chat_session.character_uuid, db)
+        if not character:
+            raise NotFoundException(f"Character not found: {chat_session.character_uuid}")
+        
+        # Get messages
+        messages = chat_service.get_chat_messages(db, chat_session_uuid)
+        
+        # Generate JSONL content
+        jsonl_lines = []
+        
+        # Add metadata line (first line)
+        metadata_line = {
+            "type": "metadata",
+            "chat_session_uuid": chat_session.chat_session_uuid,
+            "character_uuid": chat_session.character_uuid,
+            "character_name": character.name,
+            "user_uuid": chat_session.user_uuid,
+            "title": chat_session.title,
+            "created_timestamp": int(chat_session.start_time.timestamp() * 1000) if chat_session.start_time else None,
+            "last_message_time": int(chat_session.last_message_time.timestamp() * 1000) if chat_session.last_message_time else None,
+            "message_count": chat_session.message_count,
+            "export_format_version": chat_session.export_format_version or "1.1.0",
+            "exported_at": int(datetime.now().timestamp() * 1000)
+        }
+        jsonl_lines.append(json.dumps(metadata_line))
+        
+        # Add message lines
+        for msg in messages:
+            message_line = {
+                "type": "message",
+                "id": msg.message_id,
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": int(msg.created_at.timestamp() * 1000) if msg.created_at else None,
+                "status": msg.status or "complete",
+                "reasoning_content": msg.reasoning_content,
+                "variations": msg.variations,
+                "current_variation": msg.current_variation,
+                "metadata": msg.metadata
+            }
+            jsonl_lines.append(json.dumps(message_line))
+        
+        # Join lines with newlines
+        jsonl_content = "\n".join(jsonl_lines)
+        
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"chat_{character.name}_{timestamp}.jsonl"
+        
+        logger.log_info(f"Successfully exported chat {chat_session_uuid} to JSONL")
+        
+        return create_data_response({
+            "content": jsonl_content,
+            "filename": filename,
+            "chat_title": chat_session.title,
+            "character_name": character.name,
+            "message_count": len(messages)
+        })
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error exporting chat to JSONL: {str(e)}")
+        raise handle_generic_error(e, "exporting chat to JSONL")
+
+
+@router.post("/export-chats-bulk", response_model=DataResponse[Dict[str, Any]])
+def export_chats_bulk_endpoint(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Export multiple chat sessions for a character to JSONL format.
+    Payload should contain: { "character_uuid": "...", "chat_ids": [...] (optional) }
+    If chat_ids is not provided, exports all chats for the character.
+    """
+    try:
+        character_uuid = payload.get("character_uuid")
+        chat_ids = payload.get("chat_ids")  # Optional - if not provided, export all
+        
+        if not character_uuid:
+            raise ValidationException("Missing character_uuid in request")
+        
+        logger.log_info(f"Bulk exporting chats for character: {character_uuid}")
+        
+        # Get character
+        character = character_service.get_character_by_uuid(character_uuid, db)
+        if not character:
+            raise NotFoundException(f"Character not found: {character_uuid}")
+        
+        # Get chat sessions
+        if chat_ids:
+            # Export specific chats
+            chat_sessions = []
+            for chat_id in chat_ids:
+                session = chat_service.get_chat_session(db, chat_id)
+                if session and session.character_uuid == character_uuid:
+                    chat_sessions.append(session)
+        else:
+            # Export all chats for character
+            chat_sessions = chat_service.get_chat_sessions_for_character(db, character_uuid)
+        
+        if not chat_sessions:
+            raise NotFoundException("No chat sessions found for export")
+        
+        # Generate combined JSONL content
+        all_jsonl_lines = []
+        total_messages = 0
+        
+        for chat_session in chat_sessions:
+            # Get messages for this chat
+            messages = chat_service.get_chat_messages(db, chat_session.chat_session_uuid)
+            
+            # Add separator comment for multiple chats
+            if len(chat_sessions) > 1:
+                separator_line = {
+                    "type": "separator",
+                    "chat_session_uuid": chat_session.chat_session_uuid,
+                    "title": chat_session.title
+                }
+                all_jsonl_lines.append(json.dumps(separator_line))
+            
+            # Add metadata line
+            metadata_line = {
+                "type": "metadata",
+                "chat_session_uuid": chat_session.chat_session_uuid,
+                "character_uuid": chat_session.character_uuid,
+                "character_name": character.name,
+                "user_uuid": chat_session.user_uuid,
+                "title": chat_session.title,
+                "created_timestamp": int(chat_session.start_time.timestamp() * 1000) if chat_session.start_time else None,
+                "last_message_time": int(chat_session.last_message_time.timestamp() * 1000) if chat_session.last_message_time else None,
+                "message_count": chat_session.message_count,
+                "export_format_version": chat_session.export_format_version or "1.1.0"
+            }
+            all_jsonl_lines.append(json.dumps(metadata_line))
+            
+            # Add message lines
+            for msg in messages:
+                message_line = {
+                    "type": "message",
+                    "id": msg.message_id,
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": int(msg.created_at.timestamp() * 1000) if msg.created_at else None,
+                    "status": msg.status or "complete",
+                    "reasoning_content": msg.reasoning_content,
+                    "variations": msg.variations,
+                    "current_variation": msg.current_variation,
+                    "metadata": msg.metadata
+                }
+                all_jsonl_lines.append(json.dumps(message_line))
+            
+            total_messages += len(messages)
+        
+        # Join all lines
+        jsonl_content = "\n".join(all_jsonl_lines)
+        
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if len(chat_sessions) == 1:
+            filename = f"chat_{character.name}_{timestamp}.jsonl"
+        else:
+            filename = f"chats_{character.name}_{len(chat_sessions)}sessions_{timestamp}.jsonl"
+        
+        logger.log_info(f"Successfully bulk exported {len(chat_sessions)} chats for character {character_uuid}")
+        
+        return create_data_response({
+            "content": jsonl_content,
+            "filename": filename,
+            "character_name": character.name,
+            "chat_count": len(chat_sessions),
+            "total_messages": total_messages
+        })
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.log_error(f"Error in bulk export: {str(e)}")
+        raise handle_generic_error(e, "bulk exporting chats")

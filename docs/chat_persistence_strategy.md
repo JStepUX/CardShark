@@ -1,6 +1,8 @@
-# Chat Persistence Architecture (SQLite)
+# Chat Persistence Strategy
 
-This document outlines the architecture for robust chat persistence in CardShark, utilizing an SQLite database. The goal is to ensure reliable storage of all chat messages with proper state management, high performance, and data integrity, moving away from the previous file-based system.
+This document describes the implemented database-centric chat persistence architecture in CardShark. The system uses an SQLite database to provide reliable storage of all chat messages with proper state management, high performance, and data integrity.
+
+**Status: IMPLEMENTED** - As of January 2025, the database-only chat system is fully operational.
 
 ## Background/Motivation
 
@@ -16,7 +18,7 @@ These issues necessitated a move to a more robust and structured database soluti
 
 ## SQLite Implementation Strategy
 
-The chat persistence has been re-architected to use an SQLite database, `cardshark.sqlite`, managed by [`backend/services/chat_service.py`](backend/services/chat_service.py:0). This service layer interacts with the database and is utilized by the new chat API endpoints.
+The chat persistence system uses an SQLite database, `cardshark.sqlite`, managed by [`backend/services/chat_service.py`](backend/services/chat_service.py:0). This service layer provides all database operations and is utilized by the chat API endpoints.
 
 ### Database and Schemas
 
@@ -59,21 +61,20 @@ Chat identification is now managed through `chat_session_uuid` stored in the SQL
 *   The frontend is responsible for persisting and reusing this UUID to maintain session continuity.
 *   The backend uses this UUID to fetch, update, and manage chat data in the database.
 
-## Migration Strategy
+## Implementation Status
 
-*   **From Old File-Based System to SQLite:**
-    *   A one-time migration script or utility (e.g., as part of [`backend/database_migrations.py`](backend/database_migrations.py:0) or a standalone script) would be needed to parse existing JSONL chat files.
-    *   For each character and their chat files:
-        1.  Read the metadata and messages from the JSONL file.
-        2.  Create a new entry in the `ChatSessions` table, generating a new `chat_session_uuid`.
-        3.  Insert each message into the `ChatMessages` table, associating it with the new `chat_session_uuid`.
-    *   Legacy chat files could be archived or deleted post-migration.
+*   **Database Implementation: COMPLETED**
+    *   Full SQLite schema implemented with `ChatSession` and `ChatMessage` tables
+    *   Database-only services operational via `DatabaseReliableChatManager`
+    *   All API endpoints updated to use database persistence
+    *   File-based system completely replaced
 *   **Future Database Migrations:**
-    *   Tools like Alembic (if integrated with SQLAlchemy) would be used to manage schema changes and data migrations for the SQLite database as the application evolves.
+    *   Database schema changes are managed through [`backend/database_migrations.py`](backend/database_migrations.py:0)
+    *   SQLAlchemy models provide structured data access
 
 ## Success Criteria
 
-The SQLite-based chat persistence system is considered successful when:
+The implemented SQLite-based chat persistence system has achieved:
 
 1.  **Data Integrity:** No chat data is lost or corrupted during normal operation, API calls, or application restarts. Database transactions ensure atomicity.
 2.  **Reliable Retrieval:** All chat sessions and messages are correctly loaded when requested via API, using the `chat_session_uuid`.

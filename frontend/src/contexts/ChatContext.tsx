@@ -175,11 +175,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentDisplayedImage: currentDisplayedImageForSave,
       };
  
-      const result = await ChatStorage.saveChat(
-        characterData, chatToSaveId!, messagesToSave, currentUser, 
-        apiInfo, null, lorePersistenceData, 
-        characterData.data.name ? `Chat with ${characterData.data.name}` : undefined 
-      );
+      // Save chat using database-centric API
+      const response = await fetch('/api/reliable-save-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatToSaveId,
+          character_uuid: characterData.data.character_uuid,
+          messages: messagesToSave,
+          user_name: currentUser,
+          api_info: apiInfo,
+          lore_persistence_data: lorePersistenceData,
+          title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
+        })
+      });
+      
+      const result = response.ok ? await response.json() : { success: false, error: 'Save failed' };
 
       if (result?.success) {
         if (result.chat_session_uuid && result.chat_session_uuid !== chatToSaveId) { // Backend might return a consolidated/different ID
@@ -210,23 +223,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
     console.log('ChatContext useEffect: currentCharacterFileId:', currentCharacterFileId, 'lastCharacterId:', lastCharacterId.current, 'currentChatId:', currentChatId);
     
-    // If this is the same character and we already have a chat loaded, don't reload
-    if (currentCharacterFileId === lastCharacterId.current && currentChatId !== null) {
-      console.log('Same character and chat already loaded, skipping reload');
-      return;
-    }
+    // Always load the most recent chat for any character selection
+    // This ensures we get the latest chat from the database even if returning to the same character
     
     if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) {
       console.log('Character changed, clearing context window');
       ChatStorage.clearContextWindow();
     }
     
-    console.log('Character changed or initial load, loading chat for:', characterData.data.name);
-    // Only reset currentChatId if character actually changed
-    if (lastCharacterId.current !== currentCharacterFileId) {
-      console.log('Resetting currentChatId due to character change');
-      setCurrentChatId(null);
-    }
+    console.log('Loading most recent chat for character:', characterData.data.name);
+    // Always reset currentChatId to ensure we load the most recent chat from database
+    console.log('Resetting currentChatId to load most recent chat');
+    setCurrentChatId(null);
     resetTriggeredLoreImagesState();
     
     async function loadChatForCharacterInternal() {
@@ -757,7 +765,35 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     autoSaveEnabled.current = false; 
 
     try {
-      const response = await ChatStorage.loadChat(chatIdToLoad, characterData);
+      // Load chat using database-centric API
+      const apiResponse = await fetch('/api/reliable-load-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatIdToLoad,
+          character_uuid: characterData.data.character_uuid
+        })
+      });
+      
+      let response;
+      if (apiResponse.ok) {
+        const contentType = apiResponse.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            response = await apiResponse.json();
+          } catch (jsonError) {
+            console.error('Failed to parse JSON response:', jsonError);
+            response = { success: false, error: 'Invalid JSON response from server' };
+          }
+        } else {
+          console.error('Expected JSON response but received:', contentType);
+          response = { success: false, error: 'Server returned non-JSON response' };
+        }
+      } else {
+        response = { success: false, error: 'Load failed' };
+      }
       if (response.success && response.messages) {
         setMessages(response.messages);
         const loadedChatSessId = response.chat_session_uuid || response.chatId || chatIdToLoad;

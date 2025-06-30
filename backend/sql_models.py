@@ -150,6 +150,24 @@ class NPCInRoom(Base):
     room = relationship("Room", back_populates="npcs_in_room")
     npc_character = relationship("Character") # Simple relationship
 
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = {'extend_existing': True}
+
+    message_id = Column(String, primary_key=True, index=True)  # UUID
+    chat_session_uuid = Column(String, ForeignKey("chat_sessions.chat_session_uuid"), nullable=False, index=True)
+    role = Column(String, nullable=False, index=True)  # user/assistant/system
+    content = Column(Text, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    status = Column(String, nullable=False, default="complete")  # complete/generating/error
+    reasoning_content = Column(Text, nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    chat_session = relationship("ChatSession", back_populates="messages")
+
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
     __table_args__ = {'extend_existing': True}
@@ -164,9 +182,13 @@ class ChatSession(Base):
     start_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_message_time = Column(DateTime(timezone=True), nullable=True)
     message_count = Column(Integer, default=0)
-    chat_log_path = Column(String, nullable=False) # Path to the JSONL file
+    # Removed chat_log_path as per transition plan
+    # chat_log_path = Column(String, nullable=False) # Path to the JSONL file
     title = Column(String, nullable=True)
+    export_format_version = Column(String, nullable=True)  # for future compatibility
+    is_archived = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     character = relationship("Character") # Add back_populates if Character links to ChatSessions
     user_profile = relationship("UserProfile", back_populates="chat_sessions")
+    messages = relationship("ChatMessage", back_populates="chat_session", cascade="all, delete-orphan")

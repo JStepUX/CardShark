@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 import datetime as dt # Renamed to avoid conflict with sqlalchemy.DateTime
+from pydantic import BaseModel
 
 # Pydantic models for World
 class WorldBase(BaseModel):
@@ -136,8 +137,69 @@ class ChatSessionRead(ChatSessionBase):
     start_time: dt.datetime
     last_message_time: Optional[dt.datetime] = None
     message_count: int
+    export_format_version: Optional[str] = None
+    is_archived: Optional[bool] = False
     messages: Optional[List[dict]] = None
     success: Optional[bool] = None
+
+    class Config:
+        orm_mode = True
+
+# Pydantic models for ChatMessage (Phase 1 database transition)
+class ChatMessageBase(BaseModel):
+    role: str  # user/assistant/system
+    content: str
+    status: Optional[str] = "complete"  # complete/generating/error
+    reasoning_content: Optional[str] = None
+    metadata_json: Optional[dict] = None
+
+class ChatMessageCreate(ChatMessageBase):
+    chat_session_uuid: str
+
+class ChatMessageUpdate(BaseModel):
+    content: Optional[str] = None
+    status: Optional[str] = None
+    reasoning_content: Optional[str] = None
+    metadata_json: Optional[dict] = None
+
+class ChatMessageRead(ChatMessageBase):
+    message_id: str
+    chat_session_uuid: str
+    timestamp: dt.datetime
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+    class Config:
+        orm_mode = True
+
+# Enhanced ChatSession schemas for database transition
+class ChatSessionCreateV2(BaseModel):
+    """Updated ChatSession creation schema for database-first approach."""
+    character_uuid: str
+    user_uuid: Optional[str] = None
+    title: Optional[str] = None
+    export_format_version: Optional[str] = None
+    is_archived: Optional[bool] = False
+
+class ChatSessionUpdateV2(BaseModel):
+    """Updated ChatSession update schema for database-first approach."""
+    title: Optional[str] = None
+    export_format_version: Optional[str] = None
+    is_archived: Optional[bool] = None
+    message_count: Optional[int] = None
+
+class ChatSessionReadV2(BaseModel):
+    """Updated ChatSession read schema with database messages."""
+    chat_session_uuid: str
+    character_uuid: str
+    user_uuid: Optional[str] = None
+    start_time: dt.datetime
+    last_message_time: Optional[dt.datetime] = None
+    message_count: int
+    title: Optional[str] = None
+    export_format_version: Optional[str] = None
+    is_archived: bool
+    messages: Optional[List[ChatMessageRead]] = None
 
     class Config:
         orm_mode = True

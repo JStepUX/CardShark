@@ -3,6 +3,7 @@ from backend import sql_models, schemas as pydantic_models # Use schemas for Pyd
 import uuid
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy.orm import Session
 
 def create_chat_session(db: Session, chat_session: pydantic_models.ChatSessionCreate) -> sql_models.ChatSession:
     # Generate UUID for session
@@ -79,6 +80,95 @@ def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydant
         db.commit()
         db.refresh(db_chat_session)
     return db_chat_session
+
+# ChatMessage operations for Phase 1 database transition
+
+def create_chat_message(db: Session, chat_session_uuid: str, role: str, content: str, 
+                       status: str = "complete", reasoning_content: Optional[str] = None,
+                       metadata_json: Optional[dict] = None) -> sql_models.ChatMessage:
+    """Create a new chat message in the database."""
+    message_id = str(uuid.uuid4())
+    
+    db_message = sql_models.ChatMessage(
+        message_id=message_id,
+        chat_session_uuid=chat_session_uuid,
+        role=role,
+        content=content,
+        status=status,
+        reasoning_content=reasoning_content,
+        metadata_json=metadata_json
+    )
+    
+    db.add(db_message)
+    
+    # Update chat session metadata
+    chat_session = get_chat_session(db, chat_session_uuid)
+    if chat_session:
+        chat_session.message_count += 1
+        chat_session.last_message_time = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(db_message)
+    return db_message
+
+def get_chat_messages(db: Session, chat_session_uuid: str, 
+                     skip: int = 0, limit: int = 1000) -> List[sql_models.ChatMessage]:
+    """Get messages for a chat session, ordered by timestamp."""
+    return db.query(sql_models.ChatMessage)\
+        .filter(sql_models.ChatMessage.chat_session_uuid == chat_session_uuid)\
+        .order_by(sql_models.ChatMessage.timestamp.asc())\
+        .offset(skip).limit(limit).all()
+
+def get_chat_message(db: Session, message_id: str) -> Optional[sql_models.ChatMessage]:
+    """Get a specific chat message by ID."""
+    return db.query(sql_models.ChatMessage)\
+        .filter(sql_models.ChatMessage.message_id == message_id).first()
+
+def update_chat_message(db: Session, message_id: str, 
+                       content: Optional[str] = None,
+                       status: Optional[str] = None,
+                       reasoning_content: Optional[str] = None,
+                       metadata_json: Optional[dict] = None) -> Optional[sql_models.ChatMessage]:
+    """Update a chat message."""
+    db_message = get_chat_message(db, message_id)
+    if db_message:
+        if content is not None:
+            db_message.content = content
+        if status is not None:
+            db_message.status = status
+        if reasoning_content is not None:
+            db_message.reasoning_content = reasoning_content
+        if metadata_json is not None:
+            db_message.metadata_json = metadata_json
+        
+        db_message.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(db_message)
+    return db_message
+
+def delete_chat_message(db: Session, message_id: str) -> Optional[sql_models.ChatMessage]:
+    """Delete a chat message from the database."""
+    try:
+        db_message = get_chat_message(db, message_id)
+        if not db_message:
+            return None
+        
+        # Update chat session message count
+        chat_session = get_chat_session(db, db_message.chat_session_uuid)
+        if chat_session and chat_session.message_count > 0:
+            chat_session.message_count -= 1
+        
+        db.delete(db_message)
+        db.commit()
+        return db_message
+    except Exception as e:
+        db.rollback()
+        raise e
+
+def get_chat_message_count(db: Session, chat_session_uuid: str) -> int:
+    """Get the total number of messages in a chat session."""
+    return db.query(sql_models.ChatMessage)\
+        .filter(sql_models.ChatMessage.chat_session_uuid == chat_session_uuid).count()
 
 def delete_chat_session(db: Session, chat_session_uuid: str) -> Optional[sql_models.ChatSession]:
     """Delete a chat session from the database"""

@@ -254,14 +254,23 @@ const ChatView: React.FC = () => {
     localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));    // Also update background settings in current chat metadata
     if (characterData && messages.length > 0 && !isGenerating && currentChatId) { // Avoid saving during generation
       try {        // Pass current background settings when saving the chat
-        ChatStorage.saveChat(
-          characterData,
-          currentChatId,
-          messages,
-          currentUser,
-          null, // No need to pass apiInfo here, saveChat uses global
-          backgroundSettings // Pass current background settings
-        );
+        // Save chat using database-centric API
+        fetch('/api/reliable-save-chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            chat_id: currentChatId,
+            character_uuid: characterData.data.character_uuid,
+            messages: messages,
+            user_name: currentUser,
+            background_settings: backgroundSettings
+          })
+        }).catch(err => {
+          console.error('Error saving chat with background settings:', err);
+          setLocalError(err instanceof Error ? err.message : 'Failed to save chat with background settings');
+        });
       } catch (err) {
         console.error('Error saving background settings to chat metadata:', err);
       }
@@ -290,7 +299,23 @@ const ChatView: React.FC = () => {
     (updatedMessages) => {      // This is the saveMessages function passed to useChatContinuation
       // Use ChatStorage directly as apiService.saveChat might not exist or be correct
       if (characterData && currentChatId) {
-          ChatStorage.saveChat(characterData, currentChatId, updatedMessages, currentUser, null, backgroundSettings);
+          // Save chat using database-centric API
+          fetch('/api/reliable-save-chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              chat_id: currentChatId,
+              character_uuid: characterData.data.character_uuid,
+              messages: updatedMessages,
+              user_name: currentUser,
+              background_settings: backgroundSettings
+            })
+          }).catch(err => {
+            console.error('Error saving chat during continuation:', err);
+            setLocalError(err instanceof Error ? err.message : 'Failed to save chat during continuation');
+          });
       }
     },
     (updatedMessages) => {
