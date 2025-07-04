@@ -261,11 +261,9 @@ const ChatView: React.FC = () => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            chat_id: currentChatId,
-            character_uuid: characterData.data.character_uuid,
+            chat_session_uuid: currentChatId,
             messages: messages,
-            user_name: currentUser,
-            background_settings: backgroundSettings
+            title: characterData.data?.name ? `Chat with ${characterData.data.name}` : undefined
           })
         }).catch(err => {
           console.error('Error saving chat with background settings:', err);
@@ -306,11 +304,9 @@ const ChatView: React.FC = () => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              chat_id: currentChatId,
-              character_uuid: characterData.data.character_uuid,
+              chat_session_uuid: currentChatId,
               messages: updatedMessages,
-              user_name: currentUser,
-              background_settings: backgroundSettings
+              title: characterData.data?.name ? `Chat with ${characterData.data.name}` : undefined
             })
           }).catch(err => {
             console.error('Error saving chat during continuation:', err);

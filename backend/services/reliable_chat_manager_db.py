@@ -238,6 +238,53 @@ class DatabaseReliableChatManager:
             self.logger.log_error(f"Error deleting chat: {e}")
             return ChatOperationResult.DB_ERROR, str(e)
     
+    def load_latest_chat_session(self, character_uuid: str) -> Tuple[ChatOperationResult, Optional[Dict], Optional[str]]:
+        """
+        Load the latest chat session for a character.
+        
+        Returns:
+            (result_code, chat_data, error_message)
+        """
+        try:
+            self.logger.log_info(f"Loading latest reliable chat for character: {character_uuid}")
+            
+            # Get all chat sessions for this character
+            list_result_code, chat_list, list_error = self.list_character_chats(character_uuid)
+            
+            if list_result_code != ChatOperationResult.SUCCESS:
+                return list_result_code, None, list_error
+            
+            if not chat_list or len(chat_list) == 0:
+                return ChatOperationResult.NOT_FOUND, None, "No chat sessions found for this character"
+            
+            # Get the most recent chat (first in the sorted list)
+            latest_chat = chat_list[0]
+            chat_session_uuid = latest_chat['id']
+            
+            # Load the full chat data
+            load_result_code, chat_data, load_error = self.load_chat(chat_session_uuid)
+            
+            if load_result_code == ChatOperationResult.SUCCESS and chat_data:
+                # Add metadata to match expected format
+                chat_data['metadata'] = {
+                    'chat_session_uuid': chat_session_uuid,
+                    'character_uuid': character_uuid,
+                    'user_uuid': None,  # Will be filled from session data if available
+                    'title': chat_data['title'],
+                    'created_timestamp': int(time.time() * 1000),  # Current timestamp as fallback
+                    'last_message_time': latest_chat['last_message_time'],
+                    'message_count': latest_chat['message_count'],
+                    'chat_log_path': ''  # No longer used
+                }
+                
+                return ChatOperationResult.SUCCESS, chat_data, None
+            
+            return load_result_code, None, load_error
+            
+        except Exception as e:
+            self.logger.log_error(f"Error loading latest chat session: {e}")
+            return ChatOperationResult.DB_ERROR, None, str(e)
+    
     def save_chat_session(self, chat_session_uuid: str, messages: List[ChatMessage], 
                          title: Optional[str] = None) -> Tuple[ChatOperationResult, Optional[ChatMetadata], Optional[str]]:
         """

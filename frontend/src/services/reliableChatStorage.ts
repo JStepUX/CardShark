@@ -93,14 +93,13 @@ class ReliableChatStorage {
   }
 
   async saveChat(
-    characterUuid: string,
     chatSessionUuid: string,
     messages: ChatMessage[]
   ): Promise<ReliableChatResult<ChatSession>> {
     return this.makeRequest<ChatSession>('reliable-save-chat', 'POST', {
-      character_uuid: characterUuid,
       chat_session_uuid: chatSessionUuid,
       messages,
+      title: undefined
     });
   }
 

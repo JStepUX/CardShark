@@ -444,10 +444,10 @@ def list_character_chats_endpoint(
         # Use database chat adapters
         result = chat_adapters.list_character_chats_endpoint(character_uuid)
         
-        if not result.success:
-            raise ValidationException(result.message)
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(result.error_message)
         
-        return create_data_response(result.chats)
+        return create_data_response(result.chat_sessions)
         
     except (NotFoundException, ValidationException):
         raise
@@ -554,8 +554,8 @@ def delete_chat_endpoint(
         # Use database chat adapters
         result = chat_adapters.delete_chat_endpoint(chat_id)
         
-        if not result.success:
-            raise ValidationException(result.message)
+        if result.result != ChatOperationResult.SUCCESS:
+            raise ValidationException(result.error_message)
         
         return create_data_response(True)
         
@@ -716,18 +716,20 @@ def reliable_append_message_endpoint(
         if result.result != ChatOperationResult.SUCCESS:
             raise ValidationException(f"Failed to append message to reliable chat: {result.error_message}")
         
-        if result.chat_metadata is None:
-            raise ValidationException("Failed to append message to reliable chat: No chat metadata returned")
-        
         logger.log_info(f"Successfully appended message to reliable chat session: {payload.chat_session_uuid}")
+        
+        # Load the updated chat session to get current metadata
+        load_result = chat_endpoint_adapters.load_chat_endpoint(payload.chat_session_uuid)
+        if load_result.result != ChatOperationResult.SUCCESS or load_result.chat_metadata is None:
+            raise ValidationException(f"Failed to load updated chat metadata: {load_result.error_message}")
         
         # Convert updated metadata to Pydantic model
         session_response = pydantic_models.ChatSessionRead(
-            chat_session_uuid=result.chat_metadata.chat_session_uuid,
-            character_uuid=result.chat_metadata.character_uuid,
-            user_uuid=result.chat_metadata.user_uuid,
-            title=result.chat_metadata.title,
-            start_time=safe_timestamp_to_datetime(result.chat_metadata.created_timestamp, logger),
+            chat_session_uuid=load_result.chat_metadata.chat_session_uuid,
+            character_uuid=load_result.chat_metadata.character_uuid,
+            user_uuid=load_result.chat_metadata.user_uuid,
+            title=load_result.chat_metadata.title,
+            start_time=safe_timestamp_to_datetime(load_result.chat_metadata.created_timestamp, logger),
             last_message_time=result.chat_metadata.last_message_time,
             message_count=result.chat_metadata.message_count,
             chat_log_path=result.chat_metadata.chat_log_path
@@ -937,12 +939,15 @@ def load_chat_endpoint(
         # Use database chat adapters to load the chat
         result = chat_adapters.load_chat_endpoint(target_chat_id)
         
-        if not result.success:
-            logger.log_info(f"Failed to load chat: {result.message}")
-            return create_data_response({"success": False, "error": result.message})
+        if result.result != ChatOperationResult.SUCCESS:
+            logger.log_info(f"Failed to load chat: {result.error_message}")
+            return create_data_response({"success": False, "error": result.error_message})
         
         # Add character data to the response
-        chat_data = result.data
+        chat_data = {
+            "metadata": result.chat_metadata.to_dict() if result.chat_metadata else {},
+            "messages": result.messages or []
+        }
         chat_data["character_data"] = {
             "character_uuid": character.character_uuid,
             "uuid": character.character_uuid,

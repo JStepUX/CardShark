@@ -62,16 +62,33 @@ class DatabaseChatEndpointAdapters:
         result_code, chat_data, error_message = self.chat_manager.load_chat(chat_session_uuid)
         
         if result_code == ChatOperationResult.SUCCESS:
+            # Convert chat_data to proper format if needed
+            if chat_data and 'metadata' in chat_data:
+                metadata = ChatMetadata(
+                    chat_session_uuid=chat_data['metadata']['chat_session_uuid'],
+                    character_uuid=chat_data['metadata']['character_uuid'],
+                    user_uuid=chat_data['metadata'].get('user_uuid'),
+                    title=chat_data['metadata']['title'],
+                    created_timestamp=chat_data['metadata']['created_timestamp'],
+                    last_message_time=chat_data['metadata'].get('last_message_time'),
+                    message_count=chat_data['metadata']['message_count'],
+                    chat_log_path=chat_data['metadata'].get('chat_log_path', '')
+                )
+            else:
+                metadata = None
+                
             return ChatLoadResult(
-                success=True,
-                data=chat_data,
-                message="Chat loaded successfully"
+                result=ChatOperationResult.SUCCESS,
+                chat_metadata=metadata,
+                messages=chat_data.get('messages') if chat_data else None,
+                error_message=None
             )
         else:
             return ChatLoadResult(
-                success=False,
-                data=None,
-                message=error_message or "Failed to load chat"
+                result=result_code,
+                chat_metadata=None,
+                messages=None,
+                error_message=error_message or "Failed to load chat"
             )
     
     def append_message_endpoint(self, chat_session_uuid: str, message: ChatMessage) -> ChatSaveResult:
@@ -87,13 +104,15 @@ class DatabaseChatEndpointAdapters:
         
         if result_code == ChatOperationResult.SUCCESS:
             return ChatSaveResult(
-                success=True,
-                message="Message appended successfully"
+                result=ChatOperationResult.SUCCESS,
+                chat_metadata=None,  # append_message doesn't return metadata
+                error_message=None
             )
         else:
             return ChatSaveResult(
-                success=False,
-                message=error_message or "Failed to append message"
+                result=result_code,
+                chat_metadata=None,
+                error_message=error_message or "Failed to append message"
             )
     
     def list_character_chats_endpoint(self, character_uuid: str) -> ChatListResult:
@@ -107,15 +126,15 @@ class DatabaseChatEndpointAdapters:
         
         if result_code == ChatOperationResult.SUCCESS:
             return ChatListResult(
-                success=True,
-                chats=chat_list or [],
-                message="Chats listed successfully"
+                result=ChatOperationResult.SUCCESS,
+                chat_sessions=chat_list or [],
+                error_message=None
             )
         else:
             return ChatListResult(
-                success=False,
-                chats=[],
-                message=error_message or "Failed to list chats"
+                result=result_code,
+                chat_sessions=[],
+                error_message=error_message or "Failed to list chats"
             )
     
     def delete_chat_endpoint(self, chat_session_uuid: str) -> ChatDeleteResult:
@@ -129,13 +148,13 @@ class DatabaseChatEndpointAdapters:
         
         if result_code == ChatOperationResult.SUCCESS:
             return ChatDeleteResult(
-                success=True,
-                message="Chat deleted successfully"
+                result=ChatOperationResult.SUCCESS,
+                error_message=None
             )
         else:
             return ChatDeleteResult(
-                success=False,
-                message=error_message or "Failed to delete chat"
+                result=result_code,
+                error_message=error_message or "Failed to delete chat"
             )
     
     def create_chat_session(self, character_uuid: str, user_uuid: Optional[str] = None, 
@@ -210,13 +229,15 @@ class DatabaseChatEndpointAdapters:
         
         if result_code == ChatOperationResult.SUCCESS:
             return ChatSaveResult(
-                success=True,
-                message="Chat session saved successfully"
+                result=ChatOperationResult.SUCCESS,
+                chat_metadata=updated_metadata,
+                error_message=None
             )
         else:
             return ChatSaveResult(
-                success=False,
-                message=error_message or "Failed to save chat session"
+                result=result_code,
+                chat_metadata=None,
+                error_message=error_message or "Failed to save chat session"
             )
     
     def load_latest_chat_session(self, character_uuid: str) -> ChatLoadResult:

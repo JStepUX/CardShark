@@ -1,9 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel # Pydantic models for World
 from typing import Optional, List
 import datetime as dt # Renamed to avoid conflict with sqlalchemy.DateTime
-from pydantic import BaseModel
-
-# Pydantic models for World
 class WorldBase(BaseModel):
     name: str
     description: Optional[str] = None

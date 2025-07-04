@@ -351,11 +351,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              chat_id: uuidForSave,
-              character_uuid: characterForSave.data.character_uuid,
+              chat_session_uuid: uuidForSave,
               messages: messagesForSave,
-              user_name: userForSave,
-              api_info: apiInfo,
               title: chatTitle
             })
           });

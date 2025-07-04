@@ -111,13 +111,8 @@ export function useEnhancedChatSession(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          chat_id: sessionUuid,
-          character_uuid: effectiveCharacterData.data.character_uuid,
+          chat_session_uuid: sessionUuid,
           messages: messages,
-          user_name: state.currentUser,
-          api_info: null,
-          background_settings: null,
-          lore_persistence_data: undefined,
           title: effectiveCharacterData.data?.name ? `Chat with ${effectiveCharacterData.data.name}` : undefined
         })
       });

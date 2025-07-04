@@ -182,12 +182,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          chat_id: chatToSaveId,
-          character_uuid: characterData.data.character_uuid,
+          chat_session_uuid: chatToSaveId,
           messages: messagesToSave,
-          user_name: currentUser,
-          api_info: apiInfo,
-          lore_persistence_data: lorePersistenceData,
           title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
         })
       });

@@ -50,6 +50,7 @@ class ChatMessage:
     content: str
     timestamp: int
     status: str = 'complete'  # 'streaming', 'complete', 'error', 'aborted'
+    reasoning_content: Optional[str] = None
     variations: Optional[List[str]] = None
     current_variation: Optional[int] = None
     metadata: Optional[Dict[str, Any]] = None
