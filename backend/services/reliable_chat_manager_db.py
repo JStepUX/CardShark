@@ -110,14 +110,14 @@ class DatabaseReliableChatManager:
             messages = []
             for db_msg in db_messages:
                 message = {
-                    "id": db_msg.message_uuid,
+                    "id": db_msg.message_id,
                     "role": db_msg.role,
                     "content": db_msg.content,
                     "timestamp": db_msg.created_at.timestamp() * 1000 if db_msg.created_at else None,
                     "status": db_msg.status,
-                    "variations": db_msg.variations,
-                    "current_variation": db_msg.current_variation,
-                    "metadata": db_msg.metadata
+                    "variations": db_msg.metadata_json.get('variations', []) if db_msg.metadata_json else [],
+                    "current_variation": db_msg.metadata_json.get('current_variation', 0) if db_msg.metadata_json else 0,
+                    "metadata": db_msg.metadata_json or {}
                 }
                 messages.append(message)
             
@@ -152,27 +152,16 @@ class DatabaseReliableChatManager:
             if not db_session:
                 return ChatOperationResult.NOT_FOUND, "Chat session not found"
             
-            # Use chat_service to create the message
-            message_data = {
-                "message_uuid": message.id,
-                "chat_session_uuid": chat_session_uuid,
-                "role": message.role,
-                "content": message.content,
-                "status": message.status,
-                "variations": getattr(message, 'variations', []),
-                "current_variation": getattr(message, 'current_variation', 0),
-                "metadata": getattr(message, 'metadata', {})
-            }
-            
-            # Create message using chat service
-            chat_service.create_chat_message(self.db_session, **message_data)
-            
-            # Update session metadata
-            chat_service.update_chat_session(
-                self.db_session, 
-                chat_session_uuid, 
-                message_count=db_session.message_count + 1,
-                last_message_time=datetime.now()
+            # Create message using chat service with correct parameters
+            # Note: create_chat_message automatically updates session metadata
+            chat_service.create_chat_message(
+                self.db_session,
+                chat_session_uuid=chat_session_uuid,
+                role=message.role,
+                content=message.content,
+                status=message.status,
+                reasoning_content=getattr(message, 'reasoning_content', None),
+                metadata_json=getattr(message, 'metadata', {})
             )
             
             self.logger.debug(f"Successfully appended message to chat {chat_session_uuid}")

@@ -1026,9 +1026,9 @@ def export_chat_to_jsonl_endpoint(
                 "timestamp": int(msg.created_at.timestamp() * 1000) if msg.created_at else None,
                 "status": msg.status or "complete",
                 "reasoning_content": msg.reasoning_content,
-                "variations": msg.variations,
-                "current_variation": msg.current_variation,
-                "metadata": msg.metadata
+                "variations": msg.metadata_json.get('variations', []) if msg.metadata_json else [],
+                "current_variation": msg.metadata_json.get('current_variation', 0) if msg.metadata_json else 0,
+                "metadata": msg.metadata_json or {}
             }
             jsonl_lines.append(json.dumps(message_line))
         
@@ -1139,9 +1139,9 @@ def export_chats_bulk_endpoint(
                     "timestamp": int(msg.created_at.timestamp() * 1000) if msg.created_at else None,
                     "status": msg.status or "complete",
                     "reasoning_content": msg.reasoning_content,
-                    "variations": msg.variations,
-                    "current_variation": msg.current_variation,
-                    "metadata": msg.metadata
+                    "variations": msg.metadata_json.get('variations', []) if msg.metadata_json else [],
+                    "current_variation": msg.metadata_json.get('current_variation', 0) if msg.metadata_json else 0,
+                    "metadata": msg.metadata_json or {}
                 }
                 all_jsonl_lines.append(json.dumps(message_line))
             
