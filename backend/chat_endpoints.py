@@ -730,9 +730,9 @@ def reliable_append_message_endpoint(
             user_uuid=load_result.chat_metadata.user_uuid,
             title=load_result.chat_metadata.title,
             start_time=safe_timestamp_to_datetime(load_result.chat_metadata.created_timestamp, logger),
-            last_message_time=result.chat_metadata.last_message_time,
-            message_count=result.chat_metadata.message_count,
-            chat_log_path=result.chat_metadata.chat_log_path
+            last_message_time=load_result.chat_metadata.last_message_time,
+            message_count=load_result.chat_metadata.message_count,
+            chat_log_path=load_result.chat_metadata.chat_log_path
         )
         
         return create_data_response(session_response)

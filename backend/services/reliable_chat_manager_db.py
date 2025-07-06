@@ -126,7 +126,17 @@ class DatabaseReliableChatManager:
                 "success": True,
                 "chat_id": chat_session_uuid,
                 "title": db_session.title,
-                "messages": messages
+                "messages": messages,
+                "metadata": {
+                    'chat_session_uuid': chat_session_uuid,
+                    'character_uuid': db_session.character_uuid,
+                    'user_uuid': db_session.user_uuid,
+                    'title': db_session.title,
+                    'created_timestamp': int(db_session.start_time.timestamp() * 1000) if db_session.start_time else int(time.time() * 1000),
+                    'last_message_time': db_session.last_message_time.isoformat() if db_session.last_message_time else None,
+                    'message_count': db_session.message_count,
+                    'chat_log_path': ''  # No longer used in database-only system
+                }
             }
             
             self.logger.debug(f"Successfully loaded chat with {len(messages)} messages")
