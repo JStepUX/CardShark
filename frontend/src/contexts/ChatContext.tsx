@@ -155,25 +155,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.debug(`Executing save for chat ID ${chatToSaveId} with ${messageList.length} messages`);
       const messagesToSave = JSON.parse(JSON.stringify(messageList));
-      const apiInfo = apiConfig ? {
-        provider: apiConfig.provider, model: apiConfig.model || 'unknown',
-        url: apiConfig.url || '', templateId: apiConfig.templateId || 'unknown',
-        enabled: apiConfig.enabled
-      } : null;
-      
-      let currentDisplayedImageForSave: { type: 'character' | 'lore'; entryId?: string; imageUuid?: string } | undefined = undefined;
-      if (availablePreviewImages && availablePreviewImages.length > 0 && currentPreviewImageIndex < availablePreviewImages.length) {
-        const currentImage = availablePreviewImages[currentPreviewImageIndex];
-        currentDisplayedImageForSave = {
-          type: currentImage.type,
-          ...(currentImage.type === 'lore' && { entryId: currentImage.entryId, imageUuid: currentImage.imageUuid }),
-        };
-      }
 
-      const lorePersistenceData = {
-        triggeredLoreImages: triggeredLoreImages,
-        currentDisplayedImage: currentDisplayedImageForSave,
-      };
+      
+
+
+
  
       // Save chat using database-centric API
       const response = await fetch('/api/reliable-save-chat', {

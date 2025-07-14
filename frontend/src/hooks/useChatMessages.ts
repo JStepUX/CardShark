@@ -307,7 +307,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
-  const saveChat = useCallback((chatSessionUuidFromState: string | null, messageListFromState: Message[], currentUserFromState: UserProfile | null) => {
+  const saveChat = useCallback((chatSessionUuidFromState: string | null, messageListFromState: Message[]) => {
     if (isGenericAssistant || !effectiveCharacterData.data?.name || !autoSaveEnabled.current || !chatSessionUuidFromState) {
       if (!autoSaveEnabled.current) {
       } else if (!chatSessionUuidFromState) {
@@ -328,12 +328,9 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
         if (effectiveCharacterData && chatSessionUuidFromState) {
-          const apiInfo = globalApiConfig ? { provider: globalApiConfig.provider, model: globalApiConfig.model, url: globalApiConfig.url, template: globalApiConfig.templateId, enabled: globalApiConfig.enabled } : null;
           const chatTitle = effectiveCharacterData.data?.name ? `Chat with ${effectiveCharacterData.data.name}` : undefined;
-          const characterForSave: CharacterCard = effectiveCharacterData;
           const uuidForSave: string = chatSessionUuidFromState; 
           const messagesForSave: Message[] = sanitizedMessagesToSave;
-          const userForSave: UserProfile | null = currentUserFromState;
 
           // --- BEGIN DIAGNOSTIC LOGS ---
           console.log('[useChatMessages] Preparing to save chat using database-centric API. Logging arguments for payload:');
@@ -735,7 +732,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
               });
           }           if (!isGenericAssistant) {
              setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages, currentUser);
+                saveChat(currentChatSessionUuid, prev.messages);
                 const finalMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
                 if (finalMsg) appendMessage(currentChatSessionUuid, finalMsg);
                 return prev;
@@ -745,7 +742,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         (error) => {
           handleGenerationError(error, messageToRegenerate.id, 'regeneration');           if (!isGenericAssistant) {
              setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages, currentUser);
+                saveChat(currentChatSessionUuid, prev.messages);
                 const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
                 if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
                 return prev;
@@ -761,7 +758,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       }
        if (!isGenericAssistant) {
              setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages, currentUser);
+                saveChat(currentChatSessionUuid, prev.messages);
                 const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
                 if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
                 return prev;
@@ -890,7 +887,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
              setState(prev => {
                 const updatedMessage = prev.messages.find(m => m.id === messageToVary.id);
                 if (updatedMessage) {
-                    saveChat(currentChatSessionUuid, prev.messages, currentUser);
+                    saveChat(currentChatSessionUuid, prev.messages);
                     appendMessage(currentChatSessionUuid, updatedMessage);
                 }
                 return prev;
@@ -910,7 +907,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       }
        if (!isGenericAssistant) {
              setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages, currentUser);
+                saveChat(currentChatSessionUuid, prev.messages);
                 const errorMsg = prev.messages.find(m => m.id === messageToVary.id); 
                 if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
                 return prev;
@@ -943,7 +940,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         if (changedMessage) {
           ChatStorage.appendMessage(chatSessionUuidToSave, changedMessage) 
             .then(() => {
-              saveChat(chatSessionUuidToSave, updatedMessages, currentUser);
+              saveChat(chatSessionUuidToSave, updatedMessages);
             })
             .catch(err => console.error(`[cycleVariation] Error appending message ${messageId}:`, err));
         }
