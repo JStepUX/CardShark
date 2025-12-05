@@ -41,6 +41,7 @@ class Character(Base):
     png_file_path = Column(String, nullable=False, unique=True) # Relative path to PNG
     tags = Column(JSON, nullable=True)
     spec_version = Column(String, nullable=True)
+    file_last_modified = Column(Integer, nullable=True) # Timestamp of last modification
     
     # Timestamps
     # For created_at, using client-side default for now, can switch to server_default=func.now() if DB supports it well

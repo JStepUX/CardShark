@@ -159,6 +159,7 @@ DEBUG = os.environ.get("DEBUG", "").lower() in ("true", "1", "t")
 from backend.database import init_db, SessionLocal, get_db # Import SessionLocal and get_db
 from contextlib import asynccontextmanager
 from backend.services.character_service import CharacterService # Import CharacterService
+from backend.services.character_sync_service import CharacterSyncService # Import CharacterSyncService
 from sqlalchemy.orm import Session # For type hinting in dependency
 from fastapi import Depends # For dependency injection
 
@@ -189,7 +190,17 @@ async def lifespan(app: FastAPI):
         
         # Synchronize character directories using the initialized service
         try:
-            app.state.character_service.sync_character_directories()
+            # app.state.character_service.sync_character_directories() # Deprecated method
+            
+            # Initialize and run the new CharacterSyncService
+            character_sync_service = CharacterSyncService(
+                db_session_generator=db_session_generator,
+                png_handler=png_handler,
+                settings_manager=settings_manager,
+                logger=logger
+            )
+            app.state.character_sync_service = character_sync_service # Store for dependency injection if needed
+            character_sync_service.sync_characters()
         except Exception as sync_exc:
             logger.log_error(f"Character sync failed: {sync_exc}")
             raise

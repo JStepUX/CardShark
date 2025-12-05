@@ -3,6 +3,7 @@ from typing import Dict, Union, BinaryIO, Optional, Any
 from io import BytesIO
 import base64
 import json
+from pathlib import Path
 
 class PngMetadataHandler:
     """Handles reading and writing character card metadata in PNG files."""
@@ -103,12 +104,17 @@ class PngMetadataHandler:
             raise
 
           
+    def read_character_data(self, file_data: Union[str, bytes, BinaryIO]) -> Dict:
+        """Alias for read_metadata to match service expectations."""
+        return self.read_metadata(file_data)
+
     def read_metadata(self, file_data: Union[str, bytes, BinaryIO]) -> Dict:
         """Read character metadata from a PNG file, prioritizing EXIF."""
         try:
             # Handle file path string, bytes, or file object
-            if isinstance(file_data, str):
-                with open(file_data, 'rb') as f:
+            # Handle file path string, bytes, Path object, or file object
+            if isinstance(file_data, (str, Path)):
+                with open(str(file_data), 'rb') as f:
                     content = f.read()
                 bio = BytesIO(content)
             elif isinstance(file_data, bytes):

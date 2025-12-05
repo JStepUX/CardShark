@@ -13,6 +13,8 @@ from .png_metadata_handler import PngMetadataHandler
 
 # Service dependencies
 from .services.character_service import CharacterService
+from .services.character_sync_service import CharacterSyncService
+from .services.character_sync_service import CharacterSyncService
 from .services.reliable_chat_manager_db import DatabaseReliableChatManager
 from .services.database_chat_endpoint_adapters import DatabaseChatEndpointAdapters
 
@@ -63,6 +65,16 @@ def get_character_service_dependency(request: Request) -> CharacterService:
         settings_manager=settings_manager,
         logger=logger
     )
+
+def get_character_sync_service_dependency(request: Request) -> CharacterSyncService:
+    """
+    FastAPI dependency to get an instance of CharacterSyncService.
+    Retrieves required dependencies from app.state.
+    """
+    character_sync_service = cast(CharacterSyncService, request.app.state.character_sync_service)
+    if character_sync_service is None:
+        raise HTTPException(status_code=500, detail="Character sync service not initialized")
+    return character_sync_service
 
 def get_database_chat_manager(request: Request, db: Session = Depends(get_db)) -> DatabaseReliableChatManager:
     """
