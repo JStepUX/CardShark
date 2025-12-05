@@ -1,6 +1,7 @@
 # backend/services/character_indexing_service.py
 import asyncio
 import datetime
+import os
 from pathlib import Path
 from typing import List, Dict, Set
 from asyncio import to_thread
@@ -40,7 +41,10 @@ class CharacterIndexingService:
             db_char_map = {}
             for char in db_characters:
                 if getattr(char, "png_file_path", None):
-                    db_char_map[normalize_path(char.png_file_path)] = char
+                    norm_path = normalize_path(char.png_file_path)
+                    if os.name == 'nt':
+                        norm_path = norm_path.lower()
+                    db_char_map[norm_path] = char
             
             # Step 4: Scan directories for changes (in background thread)
             directory_changes = await to_thread(
@@ -101,8 +105,19 @@ class CharacterIndexingService:
                 
                 # Scan for PNG files
                 for png_file in dir_obj.glob("*.png"):
-                    file_path = str(png_file)
+                    # Resolve to absolute path first to avoid relative path confusion
+                    abs_path = png_file.resolve()
+                    file_path = str(abs_path)
+                    
+                    # Normalize path (handling slashes)
                     normalized_file_path = normalize_path(file_path)
+                    
+                    # On Windows, filesystem is case-insensitive.
+                    # normalize_path might not lower-case it, but DB might have different casing.
+                    # Best practice for deduplication map keys is to lower-case them on Windows.
+                    if os.name == 'nt': 
+                         normalized_file_path = normalized_file_path.lower()
+
                     files_found.add(normalized_file_path)
                     
                     # Get file modification time
@@ -162,20 +177,39 @@ class CharacterIndexingService:
     
     async def _cleanup_deleted_files(self, deleted_files: List[str]):
         """Remove deleted files from database"""
-        for file_path in deleted_files:
-            try:
-                char_to_delete = await to_thread(
-                    self.character_service.get_character_by_path, file_path
-                )
-                if char_to_delete:
-                    await to_thread(
-                        self.character_service.delete_character,
-                        char_to_delete.character_uuid,
-                        False  # delete_png_file=False since it's already gone
-                    )
-                    self.logger.log_info(f"Removed deleted character from database: {file_path}")
-            except Exception as e:
-                self.logger.log_error(f"Failed to cleanup deleted character {file_path}: {e}")
+        # We need to run this in a thread because it involves DB operations
+        await to_thread(self._cleanup_deleted_files_sync, deleted_files)
+
+    def _cleanup_deleted_files_sync(self, deleted_files: List[str]):
+        """Synchronous implementation of cleanup"""
+        # Use a single session for lookups
+        try:
+             with self.character_service._get_session_context() as db:
+                for file_path in deleted_files:
+                    try:
+                        char_to_delete = self.character_service.get_character_by_path(file_path, db)
+                        
+                        if char_to_delete:
+                            # Note: delete_character manages its own session/transaction
+                            # We should probably get the UUID, close our lookup session (or just use the UUID), 
+                            # and then call delete_character.
+                            # However, reusing the object across sessions might be tricky if it's attached.
+                            # Best to get the UUID, then call delete.
+                            uuid_to_delete = char_to_delete.character_uuid
+                            
+                            # Log first
+                            self.logger.log_info(f"Removing deleted character from database: {file_path} (UUID: {uuid_to_delete})")
+                            
+                            # Call delete_character (which handles its own session)
+                            # We don't verify success here as it logs errors itself
+                            self.character_service.delete_character(
+                                uuid_to_delete,
+                                delete_png_file=False 
+                            )
+                    except Exception as e:
+                        self.logger.log_error(f"Failed to cleanup deleted character {file_path}: {e}")
+        except Exception as session_error:
+             self.logger.log_error(f"Session error during cleanup: {session_error}")
     
     async def _sync_single_file(self, file_path: str, is_new: bool = False):
         """Sync a single character file to the database"""
@@ -348,7 +382,7 @@ class CharacterIndexingService:
         """Helper method to add character to database in sync context"""
         try:
             # Use the character service's database session
-            with self.character_service.db_session_generator() as db:
+            with self.character_service._get_session_context() as db:
                 db.add(db_char)
                 db.commit()
                 db.refresh(db_char)
@@ -359,7 +393,7 @@ class CharacterIndexingService:
     def _check_uuid_duplicate(self, character_uuid: str, file_path: str):
         """Check if UUID already exists for a different file"""
         try:
-            with self.character_service.db_session_generator() as db:
+            with self.character_service._get_session_context() as db:
                 return db.query(CharacterModel).filter(
                     CharacterModel.character_uuid == character_uuid,
                     CharacterModel.png_file_path != file_path

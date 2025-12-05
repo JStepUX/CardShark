@@ -67,14 +67,14 @@ class ReliableChatStorage {
   }
 
   async createNewChat(characterUuid: string, userUuid?: string): Promise<ReliableChatResult<ChatSession>> {
-    return this.makeRequest<ChatSession>('reliable-create-chat', 'POST', {
+    return this.makeRequest<ChatSession>('create-new-chat', 'POST', {
       character_uuid: characterUuid,
       user_uuid: userUuid,
     });
   }
 
   async loadChat(characterUuid: string, chatSessionUuid: string): Promise<ReliableChatResult<ChatSession>> {
-    return this.makeRequest<ChatSession>('reliable-load-chat', 'POST', {
+    return this.makeRequest<ChatSession>('load-chat', 'POST', {
       character_uuid: characterUuid,
       chat_session_uuid: chatSessionUuid,
     });
@@ -85,8 +85,7 @@ class ReliableChatStorage {
     chatSessionUuid: string,
     message: ChatMessage
   ): Promise<ReliableChatResult<ChatSession>> {
-    return this.makeRequest<ChatSession>('reliable-append-message', 'POST', {
-      character_uuid: characterUuid,
+    return this.makeRequest<ChatSession>('append-chat-message', 'POST', {
       chat_session_uuid: chatSessionUuid,
       message,
     });
@@ -96,7 +95,7 @@ class ReliableChatStorage {
     chatSessionUuid: string,
     messages: ChatMessage[]
   ): Promise<ReliableChatResult<ChatSession>> {
-    return this.makeRequest<ChatSession>('reliable-save-chat', 'POST', {
+    return this.makeRequest<ChatSession>('save-chat', 'POST', {
       chat_session_uuid: chatSessionUuid,
       messages,
       title: undefined
@@ -104,11 +103,20 @@ class ReliableChatStorage {
   }
 
   async listChats(characterUuid: string): Promise<ReliableChatResult<ChatSession[]>> {
-    return this.makeRequest<ChatSession[]>(`reliable-list-chats/${characterUuid}`, 'GET');
+    // Backend expects { character_data: { data: { character_uuid: ... } } }
+    return this.makeRequest<ChatSession[]>('list-character-chats', 'POST', {
+      character_data: {
+        data: {
+          character_uuid: characterUuid
+        }
+      }
+    });
   }
 
   async deleteChat(characterUuid: string, chatSessionUuid: string): Promise<ReliableChatResult<void>> {
-    return this.makeRequest<void>(`reliable-delete-chat/${characterUuid}/${chatSessionUuid}`, 'DELETE');
+    return this.makeRequest<void>('delete-chat', 'POST', {
+      chat_id: chatSessionUuid
+    });
   }
 
   // Legacy compatibility methods - mirror existing ChatStorage interface
@@ -116,14 +124,14 @@ class ReliableChatStorage {
     const result = await this.listChats(characterUuid);
     if (result.success && result.data && result.data.length > 0) {
       // Get most recent chat
-      const latestChat = result.data.sort((a, b) => 
+      const latestChat = result.data.sort((a, b) =>
         new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
       )[0];
-      
+
       // Load the full chat with messages
       return this.loadChat(characterUuid, latestChat.chat_session_uuid);
     }
-    
+
     // No existing chats, create new one
     return this.createNewChat(characterUuid);
   }

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -206,7 +207,7 @@ class CharacterService:
                 try:
                     file_mod_time = datetime.datetime.fromtimestamp(png_file.stat().st_mtime)
                     
-                    with self.db_session_generator() as db:
+                    with self._get_session_context() as db:
                         existing_char = db.query(CharacterModel).filter(CharacterModel.png_file_path == abs_png_path).first()
 
                     if existing_char and existing_char.db_metadata_last_synced_at and existing_char.db_metadata_last_synced_at >= file_mod_time:
@@ -249,7 +250,7 @@ class CharacterService:
                         # Ensure lore image directory exists for new UUID
                         self._ensure_lore_image_directory(final_char_uuid)                        # TODO: Consider a mechanism to write this new UUID back to the PNG.
 
-                    with self.db_session_generator() as db:
+                    with self._get_session_context() as db:
                         if existing_char: # Update existing
                             self.logger.log_info(f"Updating character {final_char_uuid} (Path: {abs_png_path}) in DB.")
                             existing_char.character_uuid = final_char_uuid # Ensure UUID is updated if it changed
@@ -398,20 +399,50 @@ class CharacterService:
     def get_character_by_path(self, png_file_path: str, db: Session) -> Optional[CharacterModel]:
         return db.query(CharacterModel).filter(CharacterModel.png_file_path == str(Path(png_file_path).resolve())).first()
 
+    @contextlib.contextmanager
+    def _get_session_context(self):
+        """
+        Robustly handle both factory (SessionLocal) and generator (get_db) patterns.
+        """
+        session = self.db_session_generator()
+        
+        # Check if it's a generator (has __next__)
+        if hasattr(session, '__next__') or hasattr(session, 'send'):
+            try:
+                # Yield the session from the generator
+                yield next(session)
+            finally:
+                # Close/cleanup generator
+                try:
+                    next(session) # Should raise StopIteration
+                except StopIteration:
+                    pass
+                except Exception as e:
+                    self.logger.log_error(f"Error closing session generator: {e}")
+        else:
+            # It's a direct session object (or context manager)
+            # If it's a context manager (SessionLocal often isn't, but the result of SessionLocal() is a Session which IS)
+            # SessionLocal() returns a Session, which is a context manager.
+            # But here 'session' IS the Session object.
+            try:
+                yield session
+            finally:
+                 session.close()
+
     def get_all_characters(self, skip: int = 0, limit: Optional[int] = None) -> List[CharacterModel]:
-        with self.db_session_generator() as db:
+        with self._get_session_context() as db:
             query = db.query(CharacterModel).offset(skip)
             if limit is not None:
                 query = query.limit(limit)
             return query.all()
 
     def count_all_characters(self) -> int:
-        with self.db_session_generator() as db:
+        with self._get_session_context() as db:
             return db.query(CharacterModel).count()
 
     def update_character(self, character_uuid: str, character_data: Dict[str, Any], write_to_png: bool = True) -> Optional[CharacterModel]:
         """Updates a character in the DB and optionally writes back to PNG."""
-        with self.db_session_generator() as db:
+        with self._get_session_context() as db:
             db_char = self.get_character_by_uuid(character_uuid, db)
             if not db_char:
                 return None
@@ -489,7 +520,7 @@ class CharacterService:
 
     def create_character(self, character_data: Dict[str, Any], png_file_path_str: str, write_to_png: bool = True) -> CharacterModel:
         """Creates a new character in DB and saves a new PNG."""
-        with self.db_session_generator() as db:
+        with self._get_session_context() as db:
             abs_png_path = str(Path(png_file_path_str).resolve())
             
             # Ensure character_uuid is present, generate if not
@@ -559,7 +590,7 @@ class CharacterService:
 
     def delete_character(self, character_uuid: str, delete_png_file: bool = False) -> bool:
         """Deletes a character from DB and optionally its PNG file."""
-        with self.db_session_generator() as db:
+        with self._get_session_context() as db:
             db_char = self.get_character_by_uuid(character_uuid, db)
             if not db_char:
                 return False
@@ -613,7 +644,7 @@ class CharacterService:
                     uuid.UUID(str(provided_uuid_str)) # Validate format
                     final_uuid_str = str(provided_uuid_str)
                     # Check if character exists in DB using proper session context
-                    with self.db_session_generator() as db:
+                    with self._get_session_context() as db:
                         existing_db_char = self.get_character_by_uuid(final_uuid_str, db)
                     if existing_db_char:
                         is_update = True
@@ -705,7 +736,7 @@ class CharacterService:
             }
 
             # Use proper database session context
-            with self.db_session_generator() as db:
+            with self._get_session_context() as db:
                 saved_db_model: CharacterModel
                 if is_update and existing_db_char:
                     self.logger.log_info(f"Service: Updating DB for character UUID: {final_uuid_str}")
@@ -756,7 +787,7 @@ class CharacterService:
         
         try:
             # Get the original character
-            with self.db_session_generator() as db:
+            with self._get_session_context() as db:
                 original_char = self.get_character_by_uuid(character_uuid, db)
                 if not original_char:
                     self.logger.log_warning(f"Character {character_uuid} not found for duplication")

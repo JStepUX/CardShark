@@ -167,6 +167,70 @@ def load_latest_chat_endpoint(
     except Exception as e:
         raise handle_generic_error(e, "loading latest chat")
 
+@router.post("/load-chat", response_model=DataResponse[Optional[pydantic_models.ChatSessionReadV2]])
+def load_chat_endpoint(
+    payload: dict, # Expected: {character_uuid: str, chat_session_uuid: str}
+    db: Session = Depends(get_db),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    """Load a specific chat session for a character using database storage."""
+    try:
+        character_uuid = payload.get("character_uuid")
+        chat_session_uuid = payload.get("chat_session_uuid")
+        
+        if not character_uuid or not chat_session_uuid:
+             raise ValidationException("character_uuid and chat_session_uuid are required")
+
+        # Get the specific session from database
+        session = chat_service.get_chat_session(db=db, chat_session_uuid=chat_session_uuid)
+        if not session:
+            return create_data_response(None)
+            
+        if session.character_uuid != character_uuid:
+             raise ValidationException("Chat session does not belong to the specified character")
+        
+        # Load the actual messages from the database
+        db_messages = chat_service.get_chat_messages(db=db, chat_session_uuid=session.chat_session_uuid)
+        
+        # Convert database messages to Pydantic models
+        message_responses = [
+            pydantic_models.ChatMessageRead(
+                message_id=msg.message_id,
+                chat_session_uuid=msg.chat_session_uuid,
+                role=msg.role,
+                content=msg.content,
+                status=msg.status,
+                reasoning_content=msg.reasoning_content,
+                metadata_json=msg.metadata_json,
+                timestamp=msg.timestamp,
+                created_at=msg.created_at,
+                updated_at=msg.updated_at
+            )
+            for msg in db_messages
+        ]
+        
+        # Create the session response with messages
+        session_response = pydantic_models.ChatSessionReadV2(
+            chat_session_uuid=session.chat_session_uuid,
+            character_uuid=session.character_uuid,
+            user_uuid=session.user_uuid,
+            start_time=session.start_time,
+            last_message_time=session.last_message_time,
+            message_count=session.message_count,
+            title=session.title,
+            export_format_version=session.export_format_version,
+            is_archived=session.is_archived,
+            messages=message_responses
+        )
+        
+        return create_data_response(session_response)
+    
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        raise handle_generic_error(e, "loading specific chat")
+
 @router.post("/save-chat", response_model=DataResponse[pydantic_models.ChatSessionReadV2])
 def save_chat_endpoint(
     payload: pydantic_models.ChatSavePayload,

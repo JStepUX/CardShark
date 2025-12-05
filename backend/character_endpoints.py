@@ -520,6 +520,24 @@ async def get_character_image_by_uuid(
         logger.info(f"Removed .png extension from UUID parameter, using: {character_uuid}")
     
     db_char = char_service.get_character_by_uuid(character_uuid, db)
+    
+    # Fallback: Try looking up by name if UUID lookup fails
+    if not db_char:
+        logger.info(f"Character not found by UUID: {character_uuid}. Trying lookup by name.")
+        # Try exact name match
+        db_char = db.query(CharacterDBModel).filter(CharacterDBModel.name == character_uuid).first()
+        
+        if not db_char:
+            # Try matching filename stem if name lookup fails
+            # This is expensive but useful for legacy/broken paths
+            # We look for a character whose png_file_path ends with the requested string + .png
+            search_filename = f"{character_uuid}.png"
+            # Note: This might be slow on large databases, but it's a fallback
+            try:
+                db_char = db.query(CharacterDBModel).filter(CharacterDBModel.png_file_path.ilike(f"%{search_filename}")).first()
+            except Exception:
+                pass # Ignore if ILIKE validation fails or other DB issues
+
     if not db_char or not db_char.png_file_path:
         raise HTTPException(status_code=404, detail="Character or character image path not found.")
     

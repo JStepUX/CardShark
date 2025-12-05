@@ -1,3 +1,4 @@
+import contextlib
 import os
 import time
 import datetime
@@ -37,8 +38,45 @@ class CharacterSyncService:
         """
         self.logger.log_step("Starting character synchronization...")
         
+    @contextlib.contextmanager
+    def _get_session_context(self):
+        """
+        Robustly handle both factory (SessionLocal) and generator (get_db) patterns.
+        """
+        session = self.db_session_generator()
+        
+        # Check if it's a generator (has __next__)
+        if hasattr(session, '__next__') or hasattr(session, 'send'):
+            try:
+                # Yield the session from the generator
+                yield next(session)
+            finally:
+                # Close/cleanup generator
+                try:
+                    next(session) # Should raise StopIteration
+                except StopIteration:
+                    pass
+                except Exception as e:
+                    self.logger.log_error(f"Error closing session generator: {e}")
+        else:
+            # It's a direct session object (or context manager)
+            # If it's a context manager (SessionLocal often isn't, but the result of SessionLocal() is a Session which IS)
+            # SessionLocal() returns a Session, which is a context manager.
+            # But here 'session' IS the Session object.
+            try:
+                yield session
+            finally:
+                 session.close()
+
+    def sync_characters(self):
+        """
+        Main synchronization method.
+        Scans the characters directory and updates the database.
+        """
+        self.logger.log_step("Starting character synchronization...")
+        
         try:
-            with self.db_session_generator() as db:
+            with self._get_session_context() as db:
                 self._sync_files_to_db(db)
                 self._sync_db_to_files(db)
                 
@@ -69,8 +107,8 @@ class CharacterSyncService:
         """
         Process a single character file: Insert or Update.
         """
-        # Get relative path for DB storage
-        relative_path = file_path.name # Store just the filename as per current convention
+        # Get absolute path for DB storage to ensure compatibility with API endpoints
+        relative_path = str(file_path.resolve()) # Temporarily reuse variable name to minimize diff, but it holds absolute path now
         
         # Get file modification time
         file_mtime = int(file_path.stat().st_mtime)
