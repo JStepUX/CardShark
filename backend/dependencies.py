@@ -13,18 +13,15 @@ from .png_metadata_handler import PngMetadataHandler
 
 # Service dependencies
 from .services.character_service import CharacterService
-from .services.reliable_chat_manager_v2 import ReliableChatManager
 from .services.reliable_chat_manager_db import DatabaseReliableChatManager
-from .services.chat_endpoint_adapters import ChatEndpointAdapters
 from .services.database_chat_endpoint_adapters import DatabaseChatEndpointAdapters
 
 # Handler dependencies
-from .chat_handler import ChatHandler
 from .template_handler import TemplateHandler
 from .background_handler import BackgroundHandler
 from .content_filter_manager import ContentFilterManager
 from .lore_handler import LoreHandler
-from .backyard_handler import BackyardHandler  # Add missing import
+from .backyard_handler import BackyardHandler
 from .handlers.world_state_handler import WorldStateHandler
 from .handlers.world_card_chat_handler import WorldCardChatHandler
 
@@ -67,18 +64,6 @@ def get_character_service_dependency(request: Request) -> CharacterService:
         logger=logger
     )
 
-def get_reliable_chat_manager(request: Request, db: Session = Depends(get_db)) -> ReliableChatManager:
-    """
-    FastAPI dependency to get an instance of ReliableChatManager v2.
-    Retrieves required dependencies from app.state.
-    """
-    logger = get_logger(request)
-    
-    return ReliableChatManager(
-        db_session=db,
-        logger=logger
-    )
-
 def get_database_chat_manager(request: Request, db: Session = Depends(get_db)) -> DatabaseReliableChatManager:
     """
     FastAPI dependency to get an instance of DatabaseReliableChatManager.
@@ -91,15 +76,6 @@ def get_database_chat_manager(request: Request, db: Session = Depends(get_db)) -
         logger=logger
     )
 
-def get_chat_endpoint_adapters(request: Request, db: Session = Depends(get_db)) -> ChatEndpointAdapters:
-    """
-    FastAPI dependency to get an instance of ChatEndpointAdapters.
-    Provides endpoint-compatible methods for the reliable chat system.
-    """
-    reliable_chat_manager = get_reliable_chat_manager(request, db)
-    
-    return ChatEndpointAdapters(reliable_chat_manager)
-
 def get_database_chat_endpoint_adapters(request: Request, db: Session = Depends(get_db)) -> DatabaseChatEndpointAdapters:
     """
     FastAPI dependency to get an instance of DatabaseChatEndpointAdapters.
@@ -110,13 +86,6 @@ def get_database_chat_endpoint_adapters(request: Request, db: Session = Depends(
     return DatabaseChatEndpointAdapters(database_chat_manager)
 
 # Handler dependency providers
-def get_chat_handler(request: Request) -> ChatHandler:
-    """Get ChatHandler instance from app state."""
-    chat_handler = cast(ChatHandler, request.app.state.chat_handler)
-    if chat_handler is None:
-        raise HTTPException(status_code=500, detail="Chat handler not initialized")
-    return chat_handler
-
 def get_template_handler(request: Request) -> TemplateHandler:
     """Get TemplateHandler instance from app state."""
     template_handler = cast(TemplateHandler, request.app.state.template_handler)
@@ -234,10 +203,6 @@ def get_background_handler_dependency(request: Request) -> BackgroundHandler:
     """Get BackgroundHandler instance from app state (standardized dependency)."""
     return get_background_handler(request)
 
-def get_chat_handler_dependency(request: Request) -> ChatHandler:
-    """Get ChatHandler instance from app state (standardized dependency)."""
-    return get_chat_handler(request)
-
 def get_png_handler_dependency(request: Request) -> PngMetadataHandler:
     """Get PngMetadataHandler instance from app state (standardized dependency)."""
     return get_png_handler(request)
@@ -257,7 +222,3 @@ def get_lore_handler_dependency(request: Request) -> LoreHandler:
 def get_world_state_handler_dependency(request: Request) -> WorldStateHandler:
     """Get WorldStateHandler instance from app state (standardized dependency)."""
     return get_world_state_handler(request)
-
-def get_character_service_dependency(request: Request) -> CharacterService:
-    """Get CharacterService instance from app state (standardized dependency)."""
-    return get_character_service(request)

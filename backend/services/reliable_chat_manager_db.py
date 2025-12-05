@@ -135,7 +135,7 @@ class DatabaseReliableChatManager:
                     'created_timestamp': int(db_session.start_time.timestamp() * 1000) if db_session.start_time else int(time.time() * 1000),
                     'last_message_time': db_session.last_message_time.isoformat() if db_session.last_message_time else None,
                     'message_count': db_session.message_count,
-                    'chat_log_path': ''  # No longer used in database-only system
+                    'chat_log_path': ''
                 }
             }
             
@@ -273,7 +273,7 @@ class DatabaseReliableChatManager:
                     'created_timestamp': int(time.time() * 1000),  # Current timestamp as fallback
                     'last_message_time': latest_chat['last_message_time'],
                     'message_count': latest_chat['message_count'],
-                    'chat_log_path': ''  # No longer used
+                    'chat_log_path': ''
                 }
                 
                 return ChatOperationResult.SUCCESS, chat_data, None
@@ -335,7 +335,7 @@ class DatabaseReliableChatManager:
                 created_timestamp=int(db_session.start_time.timestamp() * 1000),
                 last_message_time=db_session.last_message_time,
                 message_count=len(messages),
-                chat_log_path=""  # No longer used
+                chat_log_path=""
             )
             
             return ChatOperationResult.SUCCESS, updated_metadata, None

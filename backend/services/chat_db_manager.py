@@ -59,7 +59,7 @@ class ChatDatabaseManager:
                 character_uuid=metadata.character_uuid,
                 user_uuid=metadata.user_uuid,
                 title=metadata.title,
-                # chat_log_path removed as per database schema update
+
                 start_time=datetime.fromtimestamp(metadata.created_timestamp / 1000),
                 message_count=metadata.message_count,
                 last_message_time=metadata.last_message_time
@@ -117,7 +117,7 @@ class ChatDatabaseManager:
                     "start_time": session.start_time.isoformat() if session.start_time else None,
                     "last_message_time": session.last_message_time.isoformat() if session.last_message_time else None,
                     "message_count": session.message_count,
-                    "file_exists": True  # We'll check this in the file manager
+                    "file_exists": True
                 }
                 chat_list.append(chat_data)
             

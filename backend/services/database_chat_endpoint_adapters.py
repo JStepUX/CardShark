@@ -192,7 +192,7 @@ class DatabaseChatEndpointAdapters:
                         created_timestamp=int(datetime.now().timestamp()),
                         last_message_time=datetime.now(),
                         message_count=0,
-                        chat_log_path=""  # Not used in database-only system
+                        chat_log_path=""
                     )
                     
                     return ChatCreateResult(

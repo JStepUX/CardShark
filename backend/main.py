@@ -97,7 +97,7 @@ from backend.backyard_handler import BackyardHandler
 from backend.settings_manager import SettingsManager
 from backend.character_validator import CharacterValidator
 from backend.api_handler import ApiHandler
-from backend.chat_handler import ChatHandler
+
 from backend.template_handler import TemplateHandler
 from backend.background_handler import BackgroundHandler
 from backend.content_filter_manager import ContentFilterManager
@@ -321,7 +321,7 @@ app.add_middleware(
 debug_handler = PngDebugHandler(logger)
 backyard_handler = BackyardHandler(logger)
 api_handler = ApiHandler(logger)
-chat_handler = ChatHandler(logger, api_handler) # Pass api_handler here
+
 template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds() # Initialize default backgrounds
@@ -331,7 +331,7 @@ world_state_handler = WorldStateHandler(logger, settings_manager)
 # Store handlers on app.state for access in dependencies
 app.state.png_handler = png_handler
 app.state.settings_manager = settings_manager
-app.state.chat_handler = chat_handler # Store ChatHandler for dependency injection
+
 app.state.background_handler = background_handler # Store BackgroundHandler for dependency injection
 app.state.content_filter_manager = content_filter_manager # Store ContentFilterManager for dependency injection
 app.state.template_handler = template_handler # Store TemplateHandler for dependency injection

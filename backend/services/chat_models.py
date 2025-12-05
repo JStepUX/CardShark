@@ -56,7 +56,7 @@ class ChatMessage:
     metadata: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSONL storage"""
+        """Convert to dictionary"""
         return asdict(self)
     
     @classmethod
