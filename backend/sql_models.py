@@ -43,6 +43,15 @@ class Character(Base):
     spec_version = Column(String, nullable=True)
     file_last_modified = Column(Integer, nullable=True) # Timestamp of last modification
     
+    # Additional character card fields
+    alternate_greetings_json = Column(JSON, nullable=True)  # List of alternative first messages
+    creator_notes = Column(Text, nullable=True)  # Notes from character creator
+    system_prompt = Column(Text, nullable=True)  # System prompt for AI
+    post_history_instructions = Column(Text, nullable=True)  # Post-context instructions
+    creator = Column(String, nullable=True)  # Character creator name
+    character_version = Column(String, nullable=True)  # Character card version
+    combat_stats_json = Column(JSON, nullable=True)  # World Card combat statistics
+    
     # Timestamps
     # For created_at, using client-side default for now, can switch to server_default=func.now() if DB supports it well
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -193,3 +202,24 @@ class ChatSession(Base):
     character = relationship("Character") # Add back_populates if Character links to ChatSessions
     user_profile = relationship("UserProfile", back_populates="chat_sessions")
     messages = relationship("ChatMessage", back_populates="chat_session", cascade="all, delete-orphan")
+
+
+class UserProfileCard(Base):
+    """
+    Indexes user profile PNG files from the users/ directory.
+    The PNG file is the source of truth; this table is an index/cache.
+    """
+    __tablename__ = "user_profile_cards"
+    __table_args__ = {'extend_existing': True}
+
+    user_uuid = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    png_file_path = Column(String, nullable=False, unique=True)  # Absolute path to PNG
+    file_last_modified = Column(Integer, nullable=True)  # Timestamp of last modification
+    extensions_json = Column(JSON, nullable=True)  # Store additional metadata
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    db_metadata_last_synced_at = Column(DateTime(timezone=True), server_default=func.now())

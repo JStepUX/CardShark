@@ -256,7 +256,6 @@ class CharacterService:
                             existing_char.character_uuid = final_char_uuid # Ensure UUID is updated if it changed
                             existing_char.name = char_name
                             existing_char.description = data_section.get("description")
-                            # ... (update all other fields as in migration script) ...
                             existing_char.personality = data_section.get("personality")
                             existing_char.scenario = data_section.get("scenario")
                             existing_char.first_mes = data_section.get("first_mes")
@@ -265,6 +264,14 @@ class CharacterService:
                             existing_char.tags = _as_json_str(data_section.get("tags", []))
                             existing_char.spec_version = metadata.get("spec_version")
                             existing_char.extensions_json = _as_json_str(data_section.get("extensions", {}))
+                            # New fields from character card spec
+                            existing_char.alternate_greetings_json = _as_json_str(data_section.get("alternate_greetings", []))
+                            existing_char.creator_notes = data_section.get("creator_notes")
+                            existing_char.system_prompt = data_section.get("system_prompt")
+                            existing_char.post_history_instructions = data_section.get("post_history_instructions")
+                            existing_char.creator = data_section.get("creator")
+                            existing_char.character_version = data_section.get("character_version")
+                            existing_char.combat_stats_json = _as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None
                             if original_id_for_db and not existing_char.original_character_id:
                                 existing_char.original_character_id = original_id_for_db
                             existing_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
@@ -277,16 +284,23 @@ class CharacterService:
                                 name=char_name,
                                 png_file_path=abs_png_path,
                                 description=data_section.get("description"),
-                                # ... (populate all other fields) ...
-                                personality = data_section.get("personality"),
-                                scenario = data_section.get("scenario"),
-                                first_mes = data_section.get("first_mes"),
-                                mes_example = data_section.get("mes_example"),
-                                creator_comment = metadata.get("creatorcomment"),
-                                tags = _as_json_str(data_section.get("tags", [])),
-                                spec_version = metadata.get("spec_version"),
-                                extensions_json = _as_json_str(data_section.get("extensions", {})),
-                                db_metadata_last_synced_at = datetime.datetime.utcnow()
+                                personality=data_section.get("personality"),
+                                scenario=data_section.get("scenario"),
+                                first_mes=data_section.get("first_mes"),
+                                mes_example=data_section.get("mes_example"),
+                                creator_comment=metadata.get("creatorcomment"),
+                                tags=_as_json_str(data_section.get("tags", [])),
+                                spec_version=metadata.get("spec_version"),
+                                extensions_json=_as_json_str(data_section.get("extensions", {})),
+                                # New fields from character card spec
+                                alternate_greetings_json=_as_json_str(data_section.get("alternate_greetings", [])),
+                                creator_notes=data_section.get("creator_notes"),
+                                system_prompt=data_section.get("system_prompt"),
+                                post_history_instructions=data_section.get("post_history_instructions"),
+                                creator=data_section.get("creator"),
+                                character_version=data_section.get("character_version"),
+                                combat_stats_json=_as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None,
+                                db_metadata_last_synced_at=datetime.datetime.utcnow()
                             )
                             db.add(new_db_char)
                             db.flush() # Necessary to get ID for new entries
@@ -448,13 +462,13 @@ class CharacterService:
                 return None
 
             # Update DB fields
+            json_fields = ["tags", "extensions_json", "alternate_greetings_json", "combat_stats_json"]
             for key, value in character_data.items():
                 if hasattr(db_char, key):
                     # Special handling for JSON fields
-                    if key == "tags":
-                        setattr(db_char, key, _as_json_str(value if value is not None else []))
-                    elif key == "extensions_json":
-                        setattr(db_char, key, _as_json_str(value if value is not None else {}))
+                    if key in json_fields:
+                        default = [] if key in ["tags", "alternate_greetings_json"] else {}
+                        setattr(db_char, key, _as_json_str(value if value is not None else default))
                     else:
                         setattr(db_char, key, value)
             db_char.updated_at = datetime.datetime.utcnow()
@@ -465,9 +479,9 @@ class CharacterService:
                 self._sync_character_lore(character_uuid, character_data["character_book"], db)
 
             if write_to_png:
-                # Reconstruct metadata for PNG
+                # Reconstruct metadata for PNG with all fields
                 png_metadata_to_write = {
-                    "spec": "chara_card_v2", # Assuming v2
+                    "spec": "chara_card_v2",
                     "spec_version": db_char.spec_version or "2.0",
                     "data": {
                         "name": db_char.name,
@@ -476,10 +490,17 @@ class CharacterService:
                         "scenario": db_char.scenario,
                         "first_mes": db_char.first_mes,
                         "mes_example": db_char.mes_example,
-                        "character_uuid": db_char.character_uuid, # Ensure this is written
+                        "character_uuid": db_char.character_uuid,
                         "tags": self._safe_json_load(db_char.tags, [], "tags", character_uuid),
                         "extensions": self._safe_json_load(db_char.extensions_json, {}, "extensions_json", character_uuid),
-                        # TODO: Reconstruct character_book for PNG from DB
+                        # Additional character card fields
+                        "alternate_greetings": self._safe_json_load(db_char.alternate_greetings_json, [], "alternate_greetings_json", character_uuid),
+                        "creator_notes": db_char.creator_notes,
+                        "system_prompt": db_char.system_prompt,
+                        "post_history_instructions": db_char.post_history_instructions,
+                        "creator": db_char.creator,
+                        "character_version": db_char.character_version,
+                        "combat_stats": self._safe_json_load(db_char.combat_stats_json, None, "combat_stats_json", character_uuid),
                     },
                     "creatorcomment": db_char.creator_comment
                 }
@@ -540,6 +561,14 @@ class CharacterService:
                 tags=_as_json_str(character_data.get("tags", [])),
                 spec_version=character_data.get("spec_version", "2.0"),
                 extensions_json=_as_json_str(character_data.get("extensions", {})),
+                # New fields from character card spec
+                alternate_greetings_json=_as_json_str(character_data.get("alternate_greetings", [])),
+                creator_notes=character_data.get("creator_notes"),
+                system_prompt=character_data.get("system_prompt"),
+                post_history_instructions=character_data.get("post_history_instructions"),
+                creator=character_data.get("creator"),
+                character_version=character_data.get("character_version"),
+                combat_stats_json=_as_json_str(character_data.get("combat_stats")) if character_data.get("combat_stats") else None,
                 db_metadata_last_synced_at=datetime.datetime.utcnow(),
                 updated_at=datetime.datetime.utcnow(),
                 created_at=datetime.datetime.utcnow()
@@ -552,7 +581,7 @@ class CharacterService:
                 self._sync_character_lore(char_uuid, character_data["character_book"], db)
 
         if write_to_png:
-            # Prepare metadata for PNG (similar to update_character)
+            # Prepare metadata for PNG with all fields
             png_metadata_to_write = {
                 "spec": "chara_card_v2",
                 "spec_version": db_char.spec_version,
@@ -566,6 +595,14 @@ class CharacterService:
                     "character_uuid": db_char.character_uuid,
                     "tags": self._safe_json_load(db_char.tags, [], "tags", db_char.character_uuid),
                     "extensions": self._safe_json_load(db_char.extensions_json, {}, "extensions_json", db_char.character_uuid),
+                    # Additional character card fields
+                    "alternate_greetings": self._safe_json_load(db_char.alternate_greetings_json, [], "alternate_greetings_json", db_char.character_uuid),
+                    "creator_notes": db_char.creator_notes,
+                    "system_prompt": db_char.system_prompt,
+                    "post_history_instructions": db_char.post_history_instructions,
+                    "creator": db_char.creator,
+                    "character_version": db_char.character_version,
+                    "combat_stats": self._safe_json_load(db_char.combat_stats_json, None, "combat_stats_json", db_char.character_uuid),
                 },
                 "creatorcomment": db_char.creator_comment
             }
@@ -717,7 +754,9 @@ class CharacterService:
                 self.logger.log_info(f"Service: Successfully saved character PNG to: {abs_save_png_path}")
             except IOError as e:
                 self.logger.log_error(f"Service: Failed to save character PNG to disk at {abs_save_png_path}: {e}", exc_info=True)
-                raise # Re-raise            # 6. Create or Update DB Record using proper session context
+                raise # Re-raise
+            
+            # 6. Create or Update DB Record using proper session context
             # Ensure all fields for CharacterModel are extracted from raw_character_card_data
             db_data = {
                 "name": char_name_from_meta, # Use the determined name
@@ -730,6 +769,14 @@ class CharacterService:
                 "tags": _as_json_str(data_section.get("tags", [])),
                 "spec_version": raw_character_card_data.get("spec_version", "2.0"),
                 "extensions_json": _as_json_str(data_section.get("extensions", {})),
+                # New fields from character card spec
+                "alternate_greetings_json": _as_json_str(data_section.get("alternate_greetings", [])),
+                "creator_notes": data_section.get("creator_notes"),
+                "system_prompt": data_section.get("system_prompt"),
+                "post_history_instructions": data_section.get("post_history_instructions"),
+                "creator": data_section.get("creator"),
+                "character_version": data_section.get("character_version"),
+                "combat_stats_json": _as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None,
                 "png_file_path": abs_save_png_path,
                 "db_metadata_last_synced_at": datetime.datetime.utcnow(),
                 "updated_at": datetime.datetime.utcnow()

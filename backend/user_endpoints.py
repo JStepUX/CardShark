@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 import logging
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse
 from PIL import Image, PngImagePlugin
 from io import BytesIO
@@ -33,6 +33,7 @@ from backend.error_handlers import (
     handle_generic_error
 )
 from backend.dependencies import get_logger_dependency
+from backend.utils.path_utils import get_application_base_path, ensure_directory_exists
 
 # Create router
 router = APIRouter(
@@ -43,7 +44,14 @@ router = APIRouter(
 
 # --- User Profile Endpoints ---
 
-USERS_DIR = Path("users")
+def _get_users_dir() -> Path:
+    """Get the users directory path, ensuring it exists."""
+    base_path = get_application_base_path()
+    users_dir = base_path / "users"
+    ensure_directory_exists(users_dir)
+    return users_dir
+
+USERS_DIR = Path("users")  # Fallback for legacy code
 
 
 def _read_user_metadata_from_png(file_path: Path) -> dict:
@@ -93,17 +101,44 @@ def _write_user_metadata_to_png(image_data: bytes, metadata: dict) -> bytes:
         return output.getvalue()
 
 @router.get("/users", response_model=ListResponse[dict])
-async def list_users(logger: LogManager = Depends(get_logger_dependency)):
-    """List user profile filenames (PNG) in the users directory."""
+async def list_users(request: Request, logger: LogManager = Depends(get_logger_dependency)):
+    """List user profile filenames (PNG) in the users directory.
+    
+    Uses database index if available, falls back to file system scan.
+    """
     try:
-        # Create users directory if it doesn't exist
-        if not USERS_DIR.exists():
-            USERS_DIR.mkdir(parents=True, exist_ok=True)
-            logger.log_step(f"Created users directory: {USERS_DIR}")
+        # Try to use the user profile service from app state (database-backed)
+        user_profile_service = getattr(request.app.state, 'user_profile_service', None)
+        
+        if user_profile_service:
+            # Database-backed listing
+            db_users = user_profile_service.get_all_users()
+            user_files = []
+            for user in db_users:
+                user_files.append({
+                    "user_uuid": user.user_uuid,
+                    "name": user.name,
+                    "filename": Path(user.png_file_path).name if user.png_file_path else None,
+                    "description": user.description or "",
+                    "modified": user.file_last_modified
+                })
+            
+            # Sort by name (case-insensitive)
+            user_files.sort(key=lambda x: x["name"].lower())
+            
+            logger.log_step(f"Found {len(user_files)} user profiles (from database)")
+            return ListResponse(
+                success=True,
+                message="User profiles retrieved successfully",
+                data=user_files,
+                total=len(user_files)
+            )
+        
+        # Fallback to file system scan
+        users_dir = _get_users_dir()
 
         user_files = []
-        for file in USERS_DIR.glob("*.png"):
-            # Only include PNG files
+        for file in users_dir.glob("*.png"):
             if file.suffix.lower() == ".png":
                 try:
                     stat_result = file.stat()
@@ -134,12 +169,11 @@ async def list_users(logger: LogManager = Depends(get_logger_dependency)):
                     })
                 except OSError as stat_error:
                     logger.log_warning(f"Could not stat file {file.name}: {stat_error}")
-                    # Optionally skip the file or add with null modified time
 
         # Sort by name (case-insensitive)
         user_files.sort(key=lambda x: x["name"].lower())
 
-        logger.log_step(f"Found {len(user_files)} user profiles")
+        logger.log_step(f"Found {len(user_files)} user profiles (from file system)")
         return ListResponse(
             success=True,
             message="User profiles retrieved successfully",
@@ -164,7 +198,8 @@ async def get_user_image(
             logger.log_warning(f"Suspicious user image filename requested: {filename}")
             raise ValidationException("Invalid filename")
 
-        file_path = USERS_DIR / filename
+        users_dir = _get_users_dir()
+        file_path = users_dir / filename
         logger.log_step(f"Attempting to serve user image: {file_path}")
 
         if not file_path.is_file(): # Check if it's a file and exists
@@ -173,7 +208,7 @@ async def get_user_image(
 
         # Basic check for image type based on extension
         if file_path.suffix.lower() != ".png":
-             logger.warning(f"Requested user file is not a PNG: {filename}")
+             logger.log_warning(f"Requested user file is not a PNG: {filename}")
              raise ValidationException("Invalid file type, only PNG supported")
 
         return FileResponse(file_path, media_type="image/png")
@@ -187,16 +222,14 @@ async def get_user_image(
 
 @router.post("/user-image/create", response_model=DataResponse[dict])
 async def create_user_image(
+    request: Request,
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Upload a new user profile PNG image with metadata."""
     try:
-        # Create users directory if it doesn't exist
-        if not USERS_DIR.exists():
-            USERS_DIR.mkdir(parents=True, exist_ok=True)
-            logger.log_step(f"Created users directory: {USERS_DIR}")
+        users_dir = _get_users_dir()
 
         # Check file content type - allow common image types, will convert to PNG
         content_type = file.content_type
@@ -231,7 +264,7 @@ async def create_user_image(
         safe_name = safe_name[:50]  # Limit length
 
         new_filename = f"{safe_name}.png"
-        file_path = USERS_DIR / new_filename
+        file_path = users_dir / new_filename
 
         # Handle potential filename conflicts by adding a timestamp
         counter = 0
@@ -239,9 +272,9 @@ async def create_user_image(
             counter += 1
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             new_filename = f"{safe_name}_{timestamp}_{counter}.png"
-            file_path = USERS_DIR / new_filename
+            file_path = users_dir / new_filename
             if counter > 10:
-                logger.error("Could not generate unique filename after multiple attempts.")
+                logger.log_error("Could not generate unique filename after multiple attempts.")
                 raise ValidationException("Failed to generate unique filename")
 
         # Read the uploaded file content
@@ -263,8 +296,17 @@ async def create_user_image(
             with open(file_path, "wb") as f:
                 f.write(output_bytes)
             logger.log_step(f"User image saved: {file_path}")
+            
+            # Update database index if service is available
+            user_profile_service = getattr(request.app.state, 'user_profile_service', None)
+            if user_profile_service:
+                try:
+                    user_profile_service.sync_users_directory()
+                except Exception as sync_error:
+                    logger.log_warning(f"Failed to sync user profile to database: {sync_error}")
+                    
         except IOError as write_error:
-            logger.error(f"Failed to write user image file {file_path}: {write_error}")
+            logger.log_error(f"Failed to write user image file {file_path}: {write_error}")
             raise ValidationException("Failed to save user image file")
 
         return create_data_response({
@@ -281,6 +323,7 @@ async def create_user_image(
 
 @router.delete("/user/{filename}", response_model=DataResponse[dict])
 async def delete_user_image(
+    request: Request,
     filename: str, 
     logger: LogManager = Depends(get_logger_dependency)
 ):
@@ -291,7 +334,8 @@ async def delete_user_image(
             logger.log_warning(f"Suspicious user image filename requested for deletion: {filename}")
             raise ValidationException("Invalid filename")
 
-        file_path = USERS_DIR / filename
+        users_dir = _get_users_dir()
+        file_path = users_dir / filename
         logger.log_step(f"Request to delete user image: {file_path}")
 
         if not file_path.is_file(): # Check if it's a file and exists
@@ -304,13 +348,21 @@ async def delete_user_image(
             send2trash.send2trash(str(file_path))
             logger.log_step(f"User image sent to trash: {file_path}")
         except ImportError:
-             logger.warning("send2trash module not found. Falling back to direct deletion.")
+             logger.log_warning("send2trash module not found. Falling back to direct deletion.")
              os.remove(file_path)
              logger.log_step(f"User image deleted directly: {file_path}")
         except Exception as trash_error:
-             logger.error(f"Error sending user image to trash: {trash_error}. Falling back to direct deletion.")
+             logger.log_error(f"Error sending user image to trash: {trash_error}. Falling back to direct deletion.")
              os.remove(file_path)
              logger.log_step(f"User image deleted directly after trash error: {file_path}")
+
+        # Update database index if service is available
+        user_profile_service = getattr(request.app.state, 'user_profile_service', None)
+        if user_profile_service:
+            try:
+                user_profile_service.sync_users_directory()
+            except Exception as sync_error:
+                logger.log_warning(f"Failed to sync user profile deletion to database: {sync_error}")
 
         return create_data_response({
             "filename": filename

@@ -160,6 +160,7 @@ from backend.database import init_db, SessionLocal, get_db # Import SessionLocal
 from contextlib import asynccontextmanager
 from backend.services.character_service import CharacterService # Import CharacterService
 from backend.services.character_sync_service import CharacterSyncService # Import CharacterSyncService
+from backend.services.user_profile_service import UserProfileService # Import UserProfileService
 from sqlalchemy.orm import Session # For type hinting in dependency
 from fastapi import Depends # For dependency injection
 
@@ -205,6 +206,19 @@ async def lifespan(app: FastAPI):
             logger.log_error(f"Character sync failed: {sync_exc}")
             raise
         logger.log_info("Initial character directory synchronization complete.")
+        
+        # Initialize and run user profile synchronization
+        try:
+            user_profile_service = UserProfileService(
+                db_session_generator=db_session_generator,
+                logger=logger
+            )
+            app.state.user_profile_service = user_profile_service
+            user_profile_service.sync_users_directory()
+            logger.log_info("User profiles directory synchronization complete.")
+        except Exception as user_sync_exc:
+            logger.log_error(f"User profile sync failed: {user_sync_exc}")
+            # Don't raise - user profiles are not critical for app startup
     except Exception as exc:
         logger.log_error(f"DB init or character sync failed: {exc}\n{traceback.format_exc()}")
         raise

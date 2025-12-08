@@ -365,6 +365,14 @@ class CharacterIndexingService:
                 tags=_as_json_str(data_section.get("tags", [])),
                 spec_version=metadata.get("spec_version", "2.0"),
                 extensions_json=_as_json_str(data_section.get("extensions", {})),
+                # New fields from character card spec
+                alternate_greetings_json=_as_json_str(data_section.get("alternate_greetings", [])),
+                creator_notes=data_section.get("creator_notes"),
+                system_prompt=data_section.get("system_prompt"),
+                post_history_instructions=data_section.get("post_history_instructions"),
+                creator=data_section.get("creator"),
+                character_version=data_section.get("character_version"),
+                combat_stats_json=_as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None,
                 db_metadata_last_synced_at=datetime.datetime.utcnow(),
                 updated_at=datetime.datetime.utcnow(),
                 created_at=datetime.datetime.utcnow()

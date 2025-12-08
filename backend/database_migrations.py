@@ -1,6 +1,15 @@
 # backend/database_migrations.py
+"""
+Database initialization and migration handling.
+
+Design Philosophy:
+- Files (PNG, JSON) are the source of truth for portable data
+- Database is an index/cache that can be deleted and rebuilt
+- On schema version mismatch, delete old database and rebuild fresh
+- No backwards compatibility concerns - fresh rebuild is acceptable
+"""
 import logging
-import shutil
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from sqlalchemy import Column, String, DateTime, text, Table, MetaData
@@ -8,7 +17,20 @@ from sqlalchemy import Column, String, DateTime, text, Table, MetaData
 logger = logging.getLogger(__name__)
 
 # Current schema version - increment when making schema changes
-CURRENT_SCHEMA_VERSION = "1.1.0"
+# When this changes, the old database will be deleted and rebuilt fresh
+CURRENT_SCHEMA_VERSION = "2.0.0"
+
+
+def get_database_path() -> Path:
+    """Get the path to the database file."""
+    from backend.database import PROJECT_ROOT, DATABASE_FILE_NAME
+    return PROJECT_ROOT / DATABASE_FILE_NAME
+
+
+def database_exists() -> bool:
+    """Check if the database file exists."""
+    return get_database_path().exists()
+
 
 def get_database_version() -> str:
     """Get the current database schema version."""
@@ -34,11 +56,13 @@ def get_database_version() -> str:
         logger.warning(f"Could not read database version: {e}")
         return "0.0.0"
 
+
 def set_database_version(version: str, description: str = None):
     """Set the database schema version."""
     try:
         from backend.database import engine, SessionLocal
-          # Create version table if it doesn't exist
+        
+        # Create version table if it doesn't exist
         metadata = MetaData()
         version_table = Table(
             'database_version', metadata,
@@ -51,7 +75,7 @@ def set_database_version(version: str, description: str = None):
         with SessionLocal() as db:
             # Remove existing version record
             db.execute(text("DELETE FROM database_version"))
-              # Add new version record
+            # Add new version record
             db.execute(text(
                 "INSERT INTO database_version (version, applied_at, description) VALUES (:version, :applied_at, :description)"
             ), {
@@ -65,146 +89,90 @@ def set_database_version(version: str, description: str = None):
         logger.error(f"Failed to set database version: {e}")
         raise
 
-def backup_database() -> Path:
-    """Create a backup of the current database."""
-    from backend.database import PROJECT_ROOT, DATABASE_FILE_NAME
+
+def delete_database():
+    """Delete the existing database file."""
+    from backend.database import engine
     
-    db_path = PROJECT_ROOT / DATABASE_FILE_NAME
+    db_path = get_database_path()
+    
     if not db_path.exists():
-        logger.warning("Database file does not exist, skipping backup")
-        return None
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = PROJECT_ROOT / f"cardshark_backup_{timestamp}.sqlite"
+        logger.info("No existing database to delete")
+        return
     
     try:
-        shutil.copy2(db_path, backup_path)
-        logger.info(f"Database backed up to: {backup_path}")
-        return backup_path
+        # Dispose of the engine to release any connections
+        engine.dispose()
+        
+        # Delete the database file
+        os.remove(db_path)
+        logger.info(f"Deleted old database: {db_path}")
     except Exception as e:
-        logger.error(f"Failed to backup database: {e}")
+        logger.error(f"Failed to delete database: {e}")
         raise
 
-def needs_migration(current_version: str) -> bool:
-    """Check if database migration is needed."""
-    if current_version == "0.0.0":
-        # Fresh database, no migration needed (will be created fresh)
-        return False
+
+def needs_rebuild() -> bool:
+    """
+    Check if the database needs to be rebuilt.
+    Returns True if:
+    - Database doesn't exist (fresh install)
+    - Schema version doesn't match current version
+    """
+    if not database_exists():
+        logger.info("Database does not exist - fresh install")
+        return True
+    
+    current_version = get_database_version()
     
     if current_version != CURRENT_SCHEMA_VERSION:
-        logger.info(f"Migration needed: {current_version} -> {CURRENT_SCHEMA_VERSION}")
+        logger.info(f"Schema version mismatch: {current_version} != {CURRENT_SCHEMA_VERSION}")
         return True
     
     return False
 
-def migrate_to_1_1_0():
-    """Migrate to version 1.1.0 - Add ChatMessage table and enhance ChatSession."""
-    from backend.database import engine, SessionLocal
-    
-    logger.info("Running migration to 1.1.0: Adding ChatMessage table and enhancing ChatSession")
-    
-    with SessionLocal() as db:
-        try:
-            # Create ChatMessage table
-            db.execute(text("""
-                CREATE TABLE IF NOT EXISTS chat_messages (
-                    message_id TEXT PRIMARY KEY,
-                    chat_session_uuid TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    status TEXT DEFAULT 'complete',
-                    reasoning_content TEXT,
-                    metadata_json TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (chat_session_uuid) REFERENCES chat_sessions (chat_session_uuid)
-                )
-            """))
-            
-            # Create indexes for ChatMessage table
-            db.execute(text("CREATE INDEX IF NOT EXISTS idx_chat_messages_session_uuid ON chat_messages (chat_session_uuid)"))
-            db.execute(text("CREATE INDEX IF NOT EXISTS idx_chat_messages_role ON chat_messages (role)"))
-            db.execute(text("CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages (timestamp)"))
-            
-            # Add new columns to ChatSession table
-            try:
-                db.execute(text("ALTER TABLE chat_sessions ADD COLUMN export_format_version TEXT"))
-            except Exception:
-                # Column might already exist
-                pass
-                
-            try:
-                db.execute(text("ALTER TABLE chat_sessions ADD COLUMN is_archived BOOLEAN DEFAULT 0"))
-            except Exception:
-                # Column might already exist
-                pass
-            
-            # Note: We're not dropping chat_log_path yet as it might be needed for data migration
-            # This will be handled in Phase 2 when we implement the transition logic
-            
-            db.commit()
-            logger.info("Migration to 1.1.0 completed successfully")
-            
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Migration to 1.1.0 failed: {e}")
-            raise
 
-def run_migrations(from_version: str):
-    """Run database migrations from the specified version."""
-    logger.info(f"Running migrations from version {from_version} to {CURRENT_SCHEMA_VERSION}")
+def create_fresh_database():
+    """Create a fresh database with all tables."""
+    from backend.database import Base, engine
     
-    # Initialize backup_path to avoid potential UnboundLocalError
-    backup_path = None
+    logger.info("Creating fresh database with all tables...")
     
-    try:
-        # Create backup before migration
-        backup_path = backup_database()
-        
-        # Run version-specific migrations
-        if from_version == "0.0.0":
-            # Fresh installation, no migration needed
-            pass
-        elif from_version < "1.0.0":
-            # Add future migration logic here
-            # Example: migrate_to_1_0_0()
-            pass
-        elif from_version == "1.0.0":
-            # Migrate from 1.0.0 to 1.1.0
-            migrate_to_1_1_0()
-        
-        # Update database version
-        set_database_version(CURRENT_SCHEMA_VERSION, f"Migrated from {from_version}")
-        
-        logger.info("Database migration completed successfully")
-        
-    except Exception as e:
-        logger.error(f"Database migration failed: {e}")
-        if backup_path and backup_path.exists():
-            logger.info(f"You can restore from backup: {backup_path}")
-        raise
+    # Create all tables defined in sql_models
+    Base.metadata.create_all(bind=engine)
+    
+    # Set the schema version
+    set_database_version(CURRENT_SCHEMA_VERSION, "Fresh database creation")
+    
+    logger.info(f"Fresh database created with schema version {CURRENT_SCHEMA_VERSION}")
+
 
 def init_db_with_migrations():
-    """Initialize database with migration support."""
+    """
+    Initialize the database.
+    
+    Strategy:
+    1. If database doesn't exist or schema version mismatches -> delete and rebuild
+    2. After rebuild, character and user indexing services will populate data from files
+    """
     try:
-        from backend.database import Base, engine
-        
-        # Create all tables (this will include any new tables)
-        Base.metadata.create_all(bind=engine)
-        
-        # Check if migration is needed
-        current_version = get_database_version()
-        
-        if current_version == "0.0.0":
-            # Fresh database, set initial version
-            set_database_version(CURRENT_SCHEMA_VERSION, "Initial database creation")
-            logger.info("Fresh database initialized")
-        elif needs_migration(current_version):
-            # Existing database needs migration
-            run_migrations(current_version)
+        if needs_rebuild():
+            if database_exists():
+                logger.info("Schema version changed - rebuilding database from scratch")
+                delete_database()
+            
+            # Need to recreate engine after deleting database
+            from backend.database import engine, Base
+            
+            # Re-create engine connection (the engine will auto-connect to new file)
+            Base.metadata.create_all(bind=engine)
+            
+            # Set version
+            set_database_version(CURRENT_SCHEMA_VERSION, "Fresh database creation")
+            
+            logger.info("Database rebuilt successfully. Character and user data will be indexed from files.")
         else:
-            logger.info(f"Database is up to date (version {current_version})")
+            logger.info(f"Database is up to date (version {CURRENT_SCHEMA_VERSION})")
             
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
