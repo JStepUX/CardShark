@@ -545,7 +545,12 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     const { signal } = currentAbortController;
 
     try {
-      const contextMessagesForReasoning = getContextMessages(state, assistantMessage.id);
+      // CRITICAL: Include the new user message explicitly since React state updates are async
+      // Without this, the LLM wouldn't see what the user just said!
+      const contextMessagesForReasoning = [
+        ...getContextMessages(state, assistantMessage.id),
+        userMessage
+      ];
       let reasoningText: string | null = null;
       if (state.reasoningSettings.enabled) {
         reasoningText = await generateReasoning(userInput, contextMessagesForReasoning.slice(0, -1)); 
@@ -559,18 +564,25 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
              return;
         }
          setState(prev => ({ ...prev, isGenerating: true, generatingId: assistantMessage.id }));
-      }      let apiContextMessages = getContextMessages(state, assistantMessage.id)
-                                .filter(msg => msg.role !== 'thinking')
-                                .map(msg => ({
-                                  role: msg.role as 'user' | 'assistant' | 'system',
-                                  content: sanitizeMessageContent(msg.content)
-                                })) as PromptContextMessage[];
+      }
+      
+      // CRITICAL: Include the new user message explicitly since React state updates are async
+      // The userMessage was added via setGeneratingStart but state hasn't updated yet in this closure
+      let apiContextMessages = [
+        ...getContextMessages(state, assistantMessage.id),
+        userMessage
+      ].filter(msg => msg.role !== 'thinking')
+       .map(msg => ({
+         role: msg.role as 'user' | 'assistant' | 'system',
+         content: sanitizeMessageContent(msg.content)
+       })) as PromptContextMessage[];
       
       if (reasoningText) {
+        // Reasoning should come AFTER the user message - it's the assistant's thoughts
+        // about what the user said, not thoughts inserted before the user speaks
         apiContextMessages = [
-            ...apiContextMessages.slice(0,-1), 
-            { role: 'assistant', content: `(Thinking: ${reasoningText})` }, 
-            apiContextMessages[apiContextMessages.length-1] 
+            ...apiContextMessages,
+            { role: 'assistant', content: `(Thinking: ${reasoningText})` }
         ].filter((msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system');
       }
 
@@ -686,10 +698,11 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
                                       content: sanitizeMessageContent(msg.content)
                                     })) as PromptContextMessage[];
       if (reasoningText) {
+        // Reasoning should come AFTER the user message - it's the assistant's thoughts
+        // about what the user said, not thoughts inserted before the user speaks
         contextMessagesForAPI = [
-            ...contextMessagesForAPI.slice(0,-1),
-            {role: 'assistant', content: `(Thinking: ${reasoningText})`},
-            contextMessagesForAPI[contextMessagesForAPI.length-1]
+            ...contextMessagesForAPI,
+            {role: 'assistant', content: `(Thinking: ${reasoningText})`}
         ].filter((msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system');
       }
       
@@ -837,10 +850,11 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
                                       content: sanitizeMessageContent(msg.content)
                                     })) as PromptContextMessage[];
       if (reasoningText) {
+        // Reasoning should come AFTER the user message - it's the assistant's thoughts
+        // about what the user said, not thoughts inserted before the user speaks
         contextMessagesForAPI = [
-            ...contextMessagesForAPI.slice(0,-1),
-            {role: 'assistant', content: `(Thinking: ${reasoningText})`},
-            contextMessagesForAPI[contextMessagesForAPI.length-1]
+            ...contextMessagesForAPI,
+            {role: 'assistant', content: `(Thinking: ${reasoningText})`}
         ].filter((msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system');
       }
 

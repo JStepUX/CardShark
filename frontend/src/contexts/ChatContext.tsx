@@ -488,8 +488,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMessages((prev: Message[]) => [...prev, assistantMsg]);
     setIsGenerating(true); setGeneratingId(assistantMsgId); setError(null);
 
-    const abortCtrl = new AbortController();    currentGenerationRef.current = abortCtrl;    try {      const ctxMsgs = messagesRef.current.filter(msg => msg.id !== assistantMsgId && msg.role !== 'thinking')
-        .map(({ role, content }) => ({ role: (role === 'user' || role === 'assistant' || role === 'system' ? role : 'system') as 'user' | 'assistant' | 'system', content }));
+    const abortCtrl = new AbortController();    currentGenerationRef.current = abortCtrl;    try {
+      // CRITICAL: Include the new user message explicitly since React state updates are async
+      // messagesRef.current might not have userMsg yet, so we append it manually
+      const ctxMsgs = [
+        ...messagesRef.current.filter(msg => msg.id !== assistantMsgId && msg.role !== 'thinking'),
+        userMsg
+      ].map(({ role, content }) => ({ role: (role === 'user' || role === 'assistant' || role === 'system' ? role : 'system') as 'user' | 'assistant' | 'system', content }));
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const response = await PromptHandler.generateChatResponse(
         effectiveChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData

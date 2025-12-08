@@ -17,6 +17,7 @@ cardshark.sqlite
 .env.local
 .env.*.local
 
+
 # IDE files
 .idea/
 .vscode/*
