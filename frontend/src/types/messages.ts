@@ -25,6 +25,7 @@ export interface IMessage {
 export interface IUserProfile {
   id: string;
   name: string;
+  description?: string;
   avatar?: string;
   color?: string;
   filename: string;
@@ -88,6 +89,7 @@ export const MessageSchema = z.object({
  */
 export const UserProfileSchema = z.object({
   name: z.string().min(1),
+  description: z.string().optional(),
   filename: z.string().optional(),
   id: z.string().optional(),
   size: z.number().optional(),

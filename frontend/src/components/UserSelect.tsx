@@ -85,6 +85,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
         // Map the fetched data to the imported UserProfile type
         const mappedUsers: UserProfile[] = data.data.map((user: any): UserProfile => ({ // Use data.data instead of data.users
           name: user.name || 'Unnamed User', // Provide default if name is missing
+          description: user.description || '', // User description from PNG metadata
           filename: user.filename || '', // Use user.filename from response (not user.name)
           size: user.size || 0,
           modified: user.modified || Date.now(),
