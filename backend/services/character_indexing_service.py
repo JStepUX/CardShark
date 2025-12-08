@@ -225,12 +225,14 @@ class CharacterIndexingService:
                     self.character_service.png_handler.read_metadata, abs_file_path
                 )
             except CardSharkError as e:
-                self.logger.log_error(f"CardSharkError processing PNG file {file_path}: {e}")
-                return # Skip this file and continue processing others
+                self.logger.log_warning(f"CardSharkError processing PNG file {file_path}: {e} - Creating incomplete character stub.")
+                metadata = None  # Treat as incomplete character
             
-            if not metadata or not metadata.get("data"):
-                self.logger.log_warning(f"No valid metadata in {file_path}")
-                return
+            # Determine if this is an incomplete character (no valid metadata)
+            is_incomplete = not metadata or not metadata.get("data")
+            
+            if is_incomplete:
+                self.logger.log_info(f"No valid metadata in {file_path} - creating incomplete character stub for editing.")
             
             # Extract or generate UUID
             character_uuid = await to_thread(
@@ -243,8 +245,8 @@ class CharacterIndexingService:
             
             if is_new:
                 # Create database record pointing to the existing file (avoid filename collision logic)
-                await self._create_database_record_for_existing_file(file_path, metadata)
-                self.logger.log_info(f"Added new character: {file_path}")
+                await self._create_database_record_for_existing_file(file_path, metadata, is_incomplete)
+                self.logger.log_info(f"Added new character: {file_path}{' (incomplete)' if is_incomplete else ''}")
             else:
                 # Update existing character
                 existing_char = await to_thread(
@@ -302,7 +304,7 @@ class CharacterIndexingService:
             "description": "Characters loaded from database, patched with directory changes on page load"
         }
     
-    async def _create_database_record_for_existing_file(self, file_path: str, metadata: Dict):
+    async def _create_database_record_for_existing_file(self, file_path: str, metadata: Dict, is_incomplete: bool = False):
         """Create database record pointing to existing PNG file without creating new PNG files"""
         try:
             from backend.sql_models import Character as CharacterModel
@@ -310,6 +312,8 @@ class CharacterIndexingService:
             import uuid
             import json
             
+            # Handle case where metadata is None for incomplete characters
+            metadata = metadata or {}
             data_section = metadata.get("data", {})
             char_name = data_section.get("name")
             if not char_name:
@@ -324,9 +328,14 @@ class CharacterIndexingService:
             
             # Get or generate UUID
             abs_file_path = str(Path(file_path).resolve())
-            char_uuid = await to_thread(
-                self.deduplication_service.extract_uuid_from_png, abs_file_path
-            )
+            char_uuid = None
+            
+            # Only try to extract UUID from PNG if we have valid metadata
+            if not is_incomplete:
+                char_uuid = await to_thread(
+                    self.deduplication_service.extract_uuid_from_png, abs_file_path
+                )
+            
             if not char_uuid:
                 char_uuid = str(uuid.uuid4())
                 self.logger.log_info(f"Generated new UUID {char_uuid} for character: {char_name}")
@@ -363,7 +372,7 @@ class CharacterIndexingService:
                 mes_example=data_section.get("mes_example"),
                 creator_comment=metadata.get("creatorcomment"),
                 tags=_as_json_str(data_section.get("tags", [])),
-                spec_version=metadata.get("spec_version", "2.0"),
+                spec_version=metadata.get("spec_version", "2.0") if not is_incomplete else None,
                 extensions_json=_as_json_str(data_section.get("extensions", {})),
                 # New fields from character card spec
                 alternate_greetings_json=_as_json_str(data_section.get("alternate_greetings", [])),
@@ -373,6 +382,7 @@ class CharacterIndexingService:
                 creator=data_section.get("creator"),
                 character_version=data_section.get("character_version"),
                 combat_stats_json=_as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None,
+                is_incomplete=is_incomplete,
                 db_metadata_last_synced_at=datetime.datetime.utcnow(),
                 updated_at=datetime.datetime.utcnow(),
                 created_at=datetime.datetime.utcnow()

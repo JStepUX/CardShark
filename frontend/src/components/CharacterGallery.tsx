@@ -22,6 +22,7 @@ interface CharacterFile {
   modified: string | number;
   character_uuid?: string;
   description?: string;
+  is_incomplete?: boolean; // True if character has no valid metadata (needs editing)
 }
 
 // Props for the CharacterGallery component
@@ -323,7 +324,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             modified: c.modified || c.updated_at || new Date().toISOString(),
             // Add other fields as needed
             character_uuid: c.character_uuid,
-            description: c.description
+            description: c.description,
+            is_incomplete: c.is_incomplete || false
           }));
 
           setCharacterCache({
@@ -495,8 +497,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         } else {
           setCharacterData(metadata);
           setImageUrl(newImageUrl);
-          // Navigate to chat after successfully loading the character
-          navigate('/chat');
+          // Navigate based on character completeness:
+          // - Complete characters with valid metadata -> Chat
+          // - Incomplete characters without metadata -> Basic Info & Greetings for editing
+          if (character.is_incomplete) {
+            navigate('/info');
+          } else {
+            navigate('/chat');
+          }
         }
       } else {
         throw new Error('Failed to get metadata. Invalid response format.');
@@ -684,13 +692,24 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                     relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-[3/5]
                     transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
                     ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
+                    ${character.is_incomplete ? 'ring-2 ring-amber-500/70' : ''}
                     hover:shadow-xl 
                   `}
                   onClick={() => handleCharacterClick(character)}
                   role="button"
                   tabIndex={0}
-                  aria-label={`Select character ${character.name}`}
+                  aria-label={`Select character ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
                 >
+                  {/* Incomplete Character Indicator */}
+                  {character.is_incomplete && (
+                    <div
+                      className="absolute top-2 left-2 z-10 p-1.5 bg-amber-500/90 text-white rounded-full shadow-lg"
+                      title="New character - needs basic info setup"
+                    >
+                      <AlertTriangle size={16} />
+                    </div>
+                  )}
+                  
                   {/* Delete Button - Only show if not in comparison selection mode */}
                   {!isSecondarySelector && (
                     <button

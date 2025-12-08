@@ -83,6 +83,7 @@ class CharacterAPIBase(BaseModel):
     db_metadata_last_synced_at: datetime
     extensions_json: Optional[Dict[str, Any]] = Field(default_factory=dict)
     original_character_id: Optional[str] = None
+    is_incomplete: bool = False  # True if character has no valid metadata (needs editing)
 
     class Config:
         from_attributes = True # Changed from orm_mode for Pydantic V2
@@ -190,7 +191,9 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             updated_at=updated_at,
             db_metadata_last_synced_at=synced_at,
             extensions_json=parsed_extensions,
-            original_character_id=db_char.original_character_id        )
+            original_character_id=db_char.original_character_id,
+            is_incomplete=getattr(db_char, 'is_incomplete', False)
+        )
         
         return api_char
     except Exception as e:
@@ -216,7 +219,8 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             updated_at=fallback_updated_at,
             db_metadata_last_synced_at=fallback_synced_at,
             extensions_json={},
-            original_character_id=db_char.original_character_id
+            original_character_id=db_char.original_character_id,
+            is_incomplete=getattr(db_char, 'is_incomplete', False)
         )
 
 # --- Character Endpoints ---

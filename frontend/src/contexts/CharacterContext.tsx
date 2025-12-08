@@ -8,6 +8,7 @@ interface CharacterFile {
   path: string;
   size: number;
   modified: number;
+  is_incomplete?: boolean; // True if character has no valid metadata (needs editing)
 }
 
 // Add character gallery cache interface

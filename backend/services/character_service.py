@@ -217,12 +217,18 @@ class CharacterService:
                     self.logger.log_info(f"Syncing PNG: {abs_png_path}")
                     metadata = self.png_handler.read_metadata(abs_png_path)
                     
-                    if not metadata or not metadata.get("data"):
-                        self.logger.log_warning(f"No valid CardShark metadata found in {abs_png_path}. Skipping sync for this file.")
-                        continue
+                    # Determine if this is an incomplete character (no valid metadata)
+                    is_incomplete_char = not metadata or not metadata.get("data")
                     
-                    data_section = metadata["data"]
-                    char_name = data_section.get("name")
+                    if is_incomplete_char:
+                        self.logger.log_warning(f"No valid CardShark metadata found in {abs_png_path}. Creating stub record for editing.")
+                        # Create empty data section for incomplete characters
+                        data_section = {}
+                        metadata = metadata or {}
+                    else:
+                        data_section = metadata["data"]
+                    
+                    char_name = data_section.get("name") if data_section else None
                     if not char_name:
                         # Extract name from filename, removing trailing _\d+ if present
                         stem_name = png_file.stem
@@ -235,7 +241,7 @@ class CharacterService:
                     if not char_name: # Final fallback if name is still empty
                         char_name = "Unknown Character"
                     
-                    char_uuid_from_png = data_section.get("character_uuid")
+                    char_uuid_from_png = data_section.get("character_uuid") if data_section else None
                     final_char_uuid = char_uuid_from_png
                     original_id_for_db = None # Will be set if from legacy mapping
 
@@ -274,10 +280,12 @@ class CharacterService:
                             existing_char.combat_stats_json = _as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None
                             if original_id_for_db and not existing_char.original_character_id:
                                 existing_char.original_character_id = original_id_for_db
+                            # Update is_incomplete flag - character is complete if it has valid metadata
+                            existing_char.is_incomplete = is_incomplete_char
                             existing_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
                             db.add(existing_char) # Mark as dirty
                         else: # Create new
-                            self.logger.log_info(f"Adding new character {final_char_uuid} (Path: {abs_png_path}) to DB.")
+                            self.logger.log_info(f"Adding new character {final_char_uuid} (Path: {abs_png_path}) to DB{' (incomplete)' if is_incomplete_char else ''}.")
                             new_db_char = CharacterModel(
                                 character_uuid=final_char_uuid,
                                 original_character_id=original_id_for_db,
@@ -300,13 +308,15 @@ class CharacterService:
                                 creator=data_section.get("creator"),
                                 character_version=data_section.get("character_version"),
                                 combat_stats_json=_as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None,
+                                is_incomplete=is_incomplete_char,
                                 db_metadata_last_synced_at=datetime.datetime.utcnow()
                             )
                             db.add(new_db_char)
                             db.flush() # Necessary to get ID for new entries
                             self._ensure_lore_image_directory(final_char_uuid)
-                        # Sync Lore for this character
-                        self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)
+                        # Sync Lore for this character (only if we have lore data)
+                        if not is_incomplete_char:
+                            self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)
                         db.commit() # Commit changes for this character
 
                 except Exception as e:
@@ -473,6 +483,11 @@ class CharacterService:
                         setattr(db_char, key, value)
             db_char.updated_at = datetime.datetime.utcnow()
             db_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
+            
+            # Clear is_incomplete flag when character is saved with valid metadata
+            # Character is considered complete when it has at least a name and description
+            if db_char.name and (db_char.description or db_char.first_mes):
+                db_char.is_incomplete = False
 
         # Sync lore if provided in character_data
             if "character_book" in character_data and isinstance(character_data["character_book"], dict):

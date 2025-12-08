@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Current schema version - increment when making schema changes
 # When this changes, the old database will be deleted and rebuilt fresh
-CURRENT_SCHEMA_VERSION = "2.0.0"
+CURRENT_SCHEMA_VERSION = "2.1.0"  # Added is_incomplete column to Character model
 
 
 def get_database_path() -> Path:

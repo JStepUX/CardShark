@@ -52,6 +52,9 @@ class Character(Base):
     character_version = Column(String, nullable=True)  # Character card version
     combat_stats_json = Column(JSON, nullable=True)  # World Card combat statistics
     
+    # Flag for characters that have no valid metadata (imported but need editing)
+    is_incomplete = Column(Boolean, default=False, nullable=False)
+    
     # Timestamps
     # For created_at, using client-side default for now, can switch to server_default=func.now() if DB supports it well
     created_at = Column(DateTime(timezone=True), server_default=func.now())

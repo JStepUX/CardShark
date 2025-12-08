@@ -8,6 +8,7 @@ import { worldStateApi } from '../utils/worldStateApi';
 interface CharacterFile {
   name: string;
   path: string;
+  is_incomplete?: boolean;
 }
 
 interface WorldCreationModalProps {
