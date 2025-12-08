@@ -16,6 +16,7 @@ import {
   resetTriggeredImages as resetGlobalTriggeredImages
 } from '../handlers/loreHandler';
 import { LoreEntry } from '../types/schema';
+import { buildContextMessages } from '../utils/contextBuilder';
 
 interface ReasoningSettings {
   enabled: boolean;
@@ -489,12 +490,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsGenerating(true); setGeneratingId(assistantMsgId); setError(null);
 
     const abortCtrl = new AbortController();    currentGenerationRef.current = abortCtrl;    try {
-      // CRITICAL: Include the new user message explicitly since React state updates are async
-      // messagesRef.current might not have userMsg yet, so we append it manually
-      const ctxMsgs = [
-        ...messagesRef.current.filter(msg => msg.id !== assistantMsgId && msg.role !== 'thinking'),
-        userMsg
-      ].map(({ role, content }) => ({ role: (role === 'user' || role === 'assistant' || role === 'system' ? role : 'system') as 'user' | 'assistant' | 'system', content }));
+      // Build context using shared utility - handles async state bug
+      const ctxMsgs = buildContextMessages({
+        existingMessages: messagesRef.current,
+        newUserMessage: userMsg,
+        excludeMessageId: assistantMsgId
+      });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const response = await PromptHandler.generateChatResponse(
         effectiveChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
@@ -580,9 +581,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl;
 
-    try {      const ctxMsgs = messagesRef.current.slice(0, msgIdx)
-        .filter(msg => msg.role !== 'thinking')
-        .map(msg => ({ role: (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system' ? msg.role : 'system') as 'user' | 'assistant' | 'system', content: msg.content }));
+    try {
+      // Build context using shared utility - for regeneration, slice to msgIdx
+      // which includes history up to and including the preceding user message
+      const ctxMsgs = buildContextMessages({
+        existingMessages: messagesRef.current.slice(0, msgIdx),
+        excludeMessageId: message.id
+      });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const response = await PromptHandler.generateChatResponse(
         currentChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData

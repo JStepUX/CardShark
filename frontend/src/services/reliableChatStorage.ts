@@ -81,7 +81,7 @@ class ReliableChatStorage {
   }
 
   async appendMessage(
-    characterUuid: string,
+    _characterUuid: string,
     chatSessionUuid: string,
     message: ChatMessage
   ): Promise<ReliableChatResult<ChatSession>> {
@@ -113,7 +113,7 @@ class ReliableChatStorage {
     });
   }
 
-  async deleteChat(characterUuid: string, chatSessionUuid: string): Promise<ReliableChatResult<void>> {
+  async deleteChat(_characterUuid: string, chatSessionUuid: string): Promise<ReliableChatResult<void>> {
     return this.makeRequest<void>('delete-chat', 'POST', {
       chat_id: chatSessionUuid
     });

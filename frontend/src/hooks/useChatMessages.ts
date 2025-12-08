@@ -42,6 +42,9 @@ import { useStreamProcessor } from './chat/useStreamProcessor';
 // Import message state management hook (Phase 2 integration)
 import { useMessageState } from './chat/useMessageState';
 
+// Import shared context builder utility
+import { buildContextMessages } from '../utils/contextBuilder';
+
 // --- Constants ---
 const REASONING_SETTINGS_KEY = 'cardshark_reasoning_settings';
 const CONTEXT_WINDOW_KEY = 'cardshark_context_window';
@@ -566,25 +569,13 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
          setState(prev => ({ ...prev, isGenerating: true, generatingId: assistantMessage.id }));
       }
       
-      // CRITICAL: Include the new user message explicitly since React state updates are async
-      // The userMessage was added via setGeneratingStart but state hasn't updated yet in this closure
-      let apiContextMessages = [
-        ...getContextMessages(state, assistantMessage.id),
-        userMessage
-      ].filter(msg => msg.role !== 'thinking')
-       .map(msg => ({
-         role: msg.role as 'user' | 'assistant' | 'system',
-         content: sanitizeMessageContent(msg.content)
-       })) as PromptContextMessage[];
-      
-      if (reasoningText) {
-        // Reasoning should come AFTER the user message - it's the assistant's thoughts
-        // about what the user said, not thoughts inserted before the user speaks
-        apiContextMessages = [
-            ...apiContextMessages,
-            { role: 'assistant', content: `(Thinking: ${reasoningText})` }
-        ].filter((msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system');
-      }
+      // Build context using shared utility - handles async state bug and reasoning placement
+      const apiContextMessages = buildContextMessages({
+        existingMessages: getContextMessages(state, assistantMessage.id),
+        newUserMessage: userMessage,
+        excludeMessageId: assistantMessage.id,
+        reasoning: reasoningText
+      });
 
       const contextWindow = {
         type: 'generation_start', timestamp: new Date().toISOString(),
@@ -689,22 +680,14 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         }
         setState(prev => ({ ...prev, generatingId: messageToRegenerate.id })); 
       }
-        // Prepare context for API: PromptContextMessage[]
-      let contextMessagesForAPI = getContextMessages(state, messageToRegenerate.id)
-                                    .slice(0, messageIndex) // History up to and including the preceding user message
-                                    .filter(msg => msg.role !== 'thinking')
-                                    .map(msg => ({
-                                      role: msg.role as 'user' | 'assistant' | 'system',
-                                      content: sanitizeMessageContent(msg.content)
-                                    })) as PromptContextMessage[];
-      if (reasoningText) {
-        // Reasoning should come AFTER the user message - it's the assistant's thoughts
-        // about what the user said, not thoughts inserted before the user speaks
-        contextMessagesForAPI = [
-            ...contextMessagesForAPI,
-            {role: 'assistant', content: `(Thinking: ${reasoningText})`}
-        ].filter((msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system');
-      }
+      
+      // Build context using shared utility - for regeneration, we slice to messageIndex
+      // which includes history up to and including the preceding user message
+      const contextMessagesForAPI = buildContextMessages({
+        existingMessages: getContextMessages(state, messageToRegenerate.id).slice(0, messageIndex),
+        excludeMessageId: messageToRegenerate.id,
+        reasoning: reasoningText
+      });
       
       const contextWindow = {
           type: 'regeneration_start', timestamp: new Date().toISOString(),
@@ -841,22 +824,14 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           return;
         }
       }
-        // Prepare context for API: PromptContextMessage[]
-      let contextMessagesForAPI = getContextMessages(state, messageToVary.id)
-                                    .slice(0, messageIndex) // History up to and including the preceding user message
-                                    .filter(msg => msg.role !== 'thinking')
-                                    .map(msg => ({
-                                      role: msg.role as 'user' | 'assistant' | 'system',
-                                      content: sanitizeMessageContent(msg.content)
-                                    })) as PromptContextMessage[];
-      if (reasoningText) {
-        // Reasoning should come AFTER the user message - it's the assistant's thoughts
-        // about what the user said, not thoughts inserted before the user speaks
-        contextMessagesForAPI = [
-            ...contextMessagesForAPI,
-            {role: 'assistant', content: `(Thinking: ${reasoningText})`}
-        ].filter((msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system');
-      }
+      
+      // Build context using shared utility - for variation, we slice to messageIndex
+      // which includes history up to and including the preceding user message
+      const contextMessagesForAPI = buildContextMessages({
+        existingMessages: getContextMessages(state, messageToVary.id).slice(0, messageIndex),
+        excludeMessageId: messageToVary.id,
+        reasoning: reasoningText
+      });
 
       const contextWindow = {
            type: 'variation_start', timestamp: new Date().toISOString(),
