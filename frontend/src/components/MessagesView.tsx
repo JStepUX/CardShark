@@ -189,25 +189,46 @@ const MessagesView: React.FC = () => {
     setIsGeneratingGreeting(true); // Set loading state
     setError(null); // Clear previous errors
 
-    try {
-      // Use streaming greeting generation
-      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig);
+    // Create a new ID for the message being generated
+    const newMessageId = crypto.randomUUID();
 
-      if (result.success && result.greeting) {
-        setMessages(prev => {
-          const newGreeting: Message = {
-            id: crypto.randomUUID(),
-            content: result.greeting!,
+    // Add a placeholder message immediately
+    setMessages(prev => {
+        const newMessage: Message = {
+            id: newMessageId,
+            content: '',
             isFirst: prev.length === 0,
             order: prev.length,
-          };
-          return [...prev, newGreeting];
-        });
-      } else {
+        };
+        return [...prev, newMessage];
+    });
+
+    try {
+      // Use streaming greeting generation
+      const result = await ChatStorage.generateGreetingStream(
+          characterData, 
+          apiConfig,
+          (chunk) => {
+              // Update message content as chunks arrive
+              setMessages(prev => prev.map(msg => 
+                  msg.id === newMessageId 
+                      ? { ...msg, content: msg.content + chunk }
+                      : msg
+              ));
+          }
+      );
+
+      if (!result.success) {
+        // If failed, remove the placeholder
+        setMessages(prev => prev.filter(msg => msg.id !== newMessageId));
         throw new Error(result.message || 'Greeting generation failed on the backend.');
       }
+      
+      // If success, the message is already fully populated via the stream
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred during generation.');
+      // Remove the partial/empty message on error
+      setMessages(prev => prev.filter(msg => msg.id !== newMessageId));
     } finally {
       setIsGeneratingGreeting(false); // Clear loading state regardless of outcome
     }

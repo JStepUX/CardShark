@@ -672,6 +672,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     const greetingMsg = msgs[firstAssMsgIdx];
+    const origContent = greetingMsg.content;
+    const origVariations = greetingMsg.variations ? [...greetingMsg.variations] : [origContent];
 
     setIsGenerating(true); setGeneratingId(greetingMsg.id); setError(null);
     
@@ -679,23 +681,61 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // But we set state to prevent concurrent actions.
     
     try {
-      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig); 
+      let fullGreeting = '';
+      
+      const result = await ChatStorage.generateGreetingStream(
+        characterData, 
+        apiConfig,
+        (chunk) => {
+          fullGreeting += chunk;
+          
+          setMessages(prevMsgs => prevMsgs.map(msg => {
+            if (msg.id === greetingMsg.id) {
+              const newVars = [...origVariations, fullGreeting];
+              return { 
+                ...msg, 
+                content: fullGreeting, 
+                variations: newVars, 
+                currentVariation: newVars.length - 1 
+              };
+            }
+            return msg;
+          }));
+        }
+      ); 
 
       if (result.success && result.greeting) {
-        // Update the message content in the chat state
-        // updateMessage handles debounced saving
-        updateMessage(greetingMsg.id, result.greeting);
+        // Final update to ensure consistency and save
+        setMessages(prevMsgs => {
+          const updatedMsgs = prevMsgs.map(msg => {
+            if (msg.id === greetingMsg.id) {
+              const newVars = [...origVariations, result.greeting!];
+              return { 
+                ...msg, 
+                content: result.greeting!, 
+                variations: newVars, 
+                currentVariation: newVars.length - 1 
+              };
+            }
+            return msg;
+          });
+          debouncedSave(updatedMsgs);
+          return updatedMsgs;
+        });
       } else {
         throw new Error(result.message || "Failed to generate new greeting");
       }
     } catch (err) {
       console.error("Error regenerating greeting:", err);
       setError(err instanceof Error ? err.message : 'Failed to regenerate greeting');
+      
+      // Revert to original content on error if needed, or just leave the partial generation
+      // For now, we leave partial generation as it might be useful, or user can cycle back
     } finally {
       setIsGenerating(false);
       setGeneratingId(null);
     }
-  }, [characterData, isGenerating, apiConfig, updateMessage]);
+  }, [characterData, isGenerating, apiConfig, debouncedSave]);
 
   const continueResponse = useCallback(async (message: Message) => {
     if (!characterData || message.role !== 'assistant' || !message.content) return;

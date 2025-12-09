@@ -51,14 +51,17 @@ export class ChatStorage {
    * Generates a greeting for a character using the configured API (STREAMING VERSION)
    * @param characterData The character data to generate a greeting for
    * @param apiConfig The API configuration to use for generation
+   * @param onChunk Optional callback for streaming updates
    * @returns A promise that resolves to the generated greeting
    */
-  static async generateGreetingStream(characterData: any, apiConfig: any): Promise<{ success: boolean; greeting?: string; message?: string }> {
-    // NOTE: Replaced streaming logic with non-streaming logic from generateGreeting
-    // as the /api/generate-greeting/stream endpoint doesn't exist in main.py
+  static async generateGreetingStream(
+    characterData: any, 
+    apiConfig: any, 
+    onChunk?: (chunk: string) => void
+  ): Promise<{ success: boolean; greeting?: string; message?: string }> {
     try {
       // Use the dedicated greeting generation endpoint
-      const response = await fetch("/api/generate-greeting", { // Changed endpoint
+      const response = await fetch("/api/generate-greeting", {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -66,7 +69,6 @@ export class ChatStorage {
         body: JSON.stringify({
           character_data: characterData,
           api_config: apiConfig
-          // Note: The non-streaming backend endpoint builds its own prompt/memory
         })
       });
 
@@ -75,17 +77,55 @@ export class ChatStorage {
         throw new Error(errorData.message || `API responded with status ${response.status}`);
       }
 
-      // For this endpoint, we expect a direct JSON response
-      const data = await response.json();
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Response body is not readable");
 
-      if (!data.success || !data.greeting) {
-        // Use the message from the backend if available
-        throw new Error(data.message || "Failed to generate greeting (backend error)");
+      const decoder = new TextDecoder();
+      let fullGreeting = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        
+        // Keep the last potentially incomplete line in the buffer
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') continue;
+            
+            try {
+              const data = JSON.parse(dataStr);
+              
+              if (data.error) {
+                 throw new Error(data.error.message || "Streaming error");
+              }
+              
+              if (data.content) {
+                fullGreeting += data.content;
+                if (onChunk) {
+                    onChunk(data.content);
+                }
+              }
+            } catch (e) {
+              // Ignore JSON parse errors for non-JSON lines or partial data
+              console.warn("Error parsing SSE data:", e);
+            }
+          }
+        }
       }
 
       return {
         success: true,
-        greeting: data.greeting
+        greeting: fullGreeting
       };
     } catch (error) {
       console.error('Error generating greeting:', error);

@@ -455,33 +455,61 @@ async def generate_greeting(request: Request):
                 content={"success": False, "message": "API configuration is required"}
             )
             
-        # Generate a simple prompt for the greeting
-        prompt = f"You are tasked with crafting a new, engaging first message for the character {character_data.get('data', {}).get('name', 'Character')}. Use the character's personality traits and background to write a brief, natural introduction. Keep it concise and in character."
+        # Extract character fields for context
+        data = character_data.get('data', {})
+        name = data.get('name', 'Character')
+        personality = data.get('personality', '')
+        description = data.get('description', '')
+        scenario = data.get('scenario', '')
+        first_mes = data.get('first_mes', '')
         
-        # Use the ApiHandler to generate a non-streaming response
-        result = await api_handler.generate_with_config(
-            api_config,
-            {
-                "prompt": prompt,
-                "memory": character_data.get('data', {}).get('system_prompt', ''),
-                "stop_sequence": ["User:", "Human:", "</s>"]
-            }
-        )
-        
-        # Check for errors
-        if "error" in result:
-            logger.log_error(f"Error generating greeting: {result['error']}")
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": result["error"]}
-            )
+        # Construct detailed context
+        context_parts = []
+        if description:
+            context_parts.append(f"Description: {description}")
+        if personality:
+            context_parts.append(f"Personality: {personality}")
+        if scenario:
+            context_parts.append(f"Scenario: {scenario}")
             
-        # Return the generated greeting
-        return JSONResponse(
-            content={
-                "success": True,
-                "greeting": result.get("content", "Hello! How are you today?")
+        character_context = "\n\n".join(context_parts)
+        
+        # Get existing system prompt if any
+        system_prompt = data.get('system_prompt', '')
+        
+        # Combine system prompt and character context
+        full_memory = ""
+        if system_prompt:
+             full_memory += system_prompt + "\n\n"
+        if character_context:
+             full_memory += "Character Data:\n" + character_context
+
+        # Construct prompt
+        prompt = f"You are tasked with crafting a new, engaging first message for the character {name}."
+        
+        if first_mes:
+            prompt += f"\n\nThe original first message was:\n\"{first_mes}\"\n\nPlease write a variation of this greeting that captures the same tone and personality, but offers a fresh introduction."
+        else:
+             prompt += " Use the character's personality traits and background to write a brief, natural introduction."
+        
+        prompt += " Keep it concise and in character."
+        
+        # Stream the response using ApiHandler
+        # Pass full_memory as the memory context
+        stream_request_data = {
+            "api_config": api_config,
+            "generation_params": {
+                "prompt": prompt,
+                "memory": full_memory,
+                "stop_sequence": ["User:", "Human:", "</s>"],
+                "character_data": character_data,
+                "quiet": True
             }
+        }
+        
+        return StreamingResponse(
+            api_handler.stream_generate(stream_request_data),
+            media_type="text/event-stream"
         )
     except Exception as e:
         logger.log_error(f"Error generating greeting: {str(e)}")
