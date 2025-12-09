@@ -53,6 +53,7 @@ class SettingsManager:
             "last_export_directory": "",
             "save_to_character_directory": False,
             "show_koboldcpp_launcher": False,  # Default: don't show KoboldCPP launcher on startup
+            "remove_incomplete_sentences": True,  # Default: enable incomplete sentence removal
             "theme": "dark",
             "version": "1.2",
             "api": {

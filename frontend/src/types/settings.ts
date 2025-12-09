@@ -123,7 +123,7 @@ export const DEFAULT_SETTINGS: Settings = {
   models_directory: '', // Explicitly initialize
   model_directory: '',  // Explicitly initialize
   show_koboldcpp_launcher: false, // Default to not showing KoboldCPP launcher on startup
-  remove_incomplete_sentences: false, // Default to not removing incomplete sentences
+  remove_incomplete_sentences: true, // Default to removing incomplete sentences
   theme: 'dark',
   version: '1.0',
   

@@ -74,8 +74,33 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
     return result;
   }
   
-  // If no sentence ending is found, return the original text (might be just one incomplete sentence)
-  console.log('[removeIncompleteSentences] No sentence ending found, returning original');
+  // If no sentence ending is found, check if the entire text appears to be an incomplete sentence
+  // This handles cases where the whole response is one incomplete sentence
+  const isEntirelyIncomplete = !/[.!?]['"""'']?[)\]"'"""'\s]*$/.test(trimmedText) &&
+    trimmedText.length > 10 && // Avoid removing very short responses
+    !/^(yes|no|okay?|sure|fine|good|bad|maybe|perhaps?|alright?|thanks?|please|sorry|hello|hi|hey|bye|goodbye|thanks?|welcome)$/i.test(trimmedText.trim()) && // Don't remove common short complete responses
+    /\w$/.test(trimmedText); // Ends with a word character (not punctuation)
+
+  if (isEntirelyIncomplete) {
+    console.log('[removeIncompleteSentences] Detected entire response as incomplete sentence, removing.');
+    return '';
+  }
+
+  // Legacy cutoff indicators for cases where there might be partial sentences after complete ones
+  // (though this is rare since we already checked for sentence endings above)
+  const cutoffIndicators = [
+    /[;,:]\s*$/,                                            // Ends in non-terminal punctuation
+    /[;,:]\s+\w{1,5}$/,                                     // Ends in punctuation + short word (e.g. ", a")
+    /\s(and|but|or|the|a|an|of|to|in|at|by|for|with)\s*$/i  // Ends in connector/preposition
+  ];
+
+  if (cutoffIndicators.some(regex => regex.test(trimmedText))) {
+    console.log('[removeIncompleteSentences] Detected incomplete sentence fragment, removing.');
+    return '';
+  }
+
+  // Otherwise return the original text (might be a short answer like "Yes" or "Okay" without punctuation)
+  console.log('[removeIncompleteSentences] No sentence ending found but seems complete, returning original');
   return trimmedText;
 }
 

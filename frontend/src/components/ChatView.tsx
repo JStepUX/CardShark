@@ -2,7 +2,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Send, User, Plus, Eye, Wallpaper, MessageSquare } from 'lucide-react'; // Removed Server icon
 import { useCharacter } from '../contexts/CharacterContext';
-import { useAPIConfig } from '../contexts/APIConfigContext'; // Keep for greeting regen config
 // Removed useSettings import
 import ChatBubble from './ChatBubble';
 import ThoughtBubble from './ThoughtBubble';
@@ -13,13 +12,11 @@ import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSett
 import MoodBackground from './MoodBackground';
 import MoodIndicator from './MoodIndicator';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
-import { useChatContinuation } from '../hooks/useChatContinuation';
 import { Message, UserProfile } from '../types/messages';
 import { EmotionState } from '../hooks/useEmotionDetection';
 import RichTextEditor from './RichTextEditor';
 import { substituteVariables } from '../utils/variableUtils';
 import ErrorMessage from './ErrorMessage';
-import { ChatStorage } from '../services/chatStorage';
 import { useScrollToBottom } from '../hooks/useScrollToBottom';
 import { useChat } from '../contexts/ChatContext'; // Import useChat
 
@@ -196,14 +193,12 @@ const InputArea: React.FC<InputAreaProps> = ({
 
 // Main ChatView component
 const ChatView: React.FC = () => {
-  const { characterData, setCharacterData } = useCharacter();
-  const { apiConfig } = useAPIConfig(); // Get the globally active config
-
+  const { characterData } = useCharacter();
+  // Removed selectedApiIdForNextMessage state
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);  const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
-  const [isRegeneratingGreeting, setIsRegeneratingGreeting] = useState(false);
   // Removed selectedApiIdForNextMessage state
   const [localError, setLocalError] = useState<string | null>(null); // Local error state for UI feedback  
   
@@ -229,7 +224,9 @@ const ChatView: React.FC = () => {
     createNewChat: handleNewChat,
     updateReasoningSettings,
     clearError: clearHookError,
-    currentChatId // Get currentChatId directly from ChatContext
+    currentChatId, // Get currentChatId directly from ChatContext
+    continueResponse, // Get continueResponse from ChatContext
+    regenerateGreeting // Get regenerateGreeting from ChatContext
   } = useChat();
   // Create a unified scroll function that works for both virtual and regular chat lists
   const scrollToBottomUnified = useCallback(() => {
@@ -251,29 +248,11 @@ const ChatView: React.FC = () => {
 
   // Save background settings when they change
   useEffect(() => {
-    localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));    // Also update background settings in current chat metadata
-    if (characterData && messages.length > 0 && !isGenerating && currentChatId) { // Avoid saving during generation
-      try {        // Pass current background settings when saving the chat
-        // Save chat using database-centric API
-        fetch('/api/reliable-save-chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            chat_session_uuid: currentChatId,
-            messages: messages,
-            title: characterData.data?.name ? `Chat with ${characterData.data.name}` : undefined
-          })
-        }).catch(err => {
-          console.error('Error saving chat with background settings:', err);
-          setLocalError(err instanceof Error ? err.message : 'Failed to save chat with background settings');
-        });
-      } catch (err) {
-        console.error('Error saving background settings to chat metadata:', err);
-      }
-    }
-  }, [backgroundSettings, characterData, messages, currentUser, isGenerating]); // Added isGenerating dependency
+    localStorage.setItem(BACKGROUND_SETTINGS_KEY, JSON.stringify(backgroundSettings));
+    // Background settings are not currently saved to the backend as part of chat metadata
+    // because the reliable-save-chat endpoint doesn't support them in the payload.
+    // They are only persisted locally in localStorage.
+  }, [backgroundSettings]);
 
   // Sync background settings from loaded chat metadata
   useEffect(() => {
@@ -285,61 +264,7 @@ const ChatView: React.FC = () => {
         setBackgroundSettings(lastContextWindow.backgroundSettings);
       }
     }
-  }, [lastContextWindow]);  // Use the chat continuation hook
-  const {
-    continueResponse,
-    stopContinuation,
-    error: continuationError,
-    clearError: clearContinuationError  } = useChatContinuation(
-    messages,
-    characterData,
-    currentChatId || '', // Provide empty string fallback
-    (updatedMessages) => {      // This is the saveMessages function passed to useChatContinuation
-      // Use ChatStorage directly as apiService.saveChat might not exist or be correct
-      if (characterData && currentChatId) {
-          // Save chat using database-centric API
-          fetch('/api/reliable-save-chat', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              chat_session_uuid: currentChatId,
-              messages: updatedMessages,
-              title: characterData.data?.name ? `Chat with ${characterData.data.name}` : undefined
-            })
-          }).catch(err => {
-            console.error('Error saving chat during continuation:', err);
-            setLocalError(err instanceof Error ? err.message : 'Failed to save chat during continuation');
-          });
-      }
-    },
-    (updatedMessages) => {
-      // This is the updateMessagesState function
-      const messagesToUpdate = updatedMessages.filter((msg, index) =>
-        index < messages.length && JSON.stringify(msg) !== JSON.stringify(messages[index])
-      );
-
-      messagesToUpdate.forEach(msg => {
-        // Remove the third parameter for isStreamingUpdate 
-        updateMessage(msg.id, msg.content);
-      });
-    },
-    // Now we properly set isGenerating state to show the stop button during continuation
-    (isGen) => {
-      // Update global generating state during continuation
-      // This part seems complex and might need adjustment in useChatMessages hook itself
-      // For now, rely on the hook's internal state management if possible
-      console.log('Continuation generating state changed:', isGen);
-    },
-    (genId) => {
-      // No way to directly update generatingId from useChatMessages
-      console.log('Continuation generating ID:', genId);
-    },
-    (contextWindow) => {
-      console.log('Continuation context window:', contextWindow);
-    }
-  );
+  }, [lastContextWindow]);
 
   // Add listener for forced generation stop
   useEffect(() => {
@@ -348,7 +273,6 @@ const ChatView: React.FC = () => {
       // If we're still generating, reset state
       if (isGenerating) {
         stopGeneration();
-        stopContinuation();
       }
     };
 
@@ -357,7 +281,7 @@ const ChatView: React.FC = () => {
     return () => {
       window.removeEventListener('cardshark:force-generation-stop', handleForceStop);
     };
-  }, [isGenerating, stopGeneration, stopContinuation]);
+  }, [isGenerating, stopGeneration]);
   // Add listener for the global scroll-to-bottom event
   useEffect(() => {
     const handleScrollEvent = () => {
@@ -372,14 +296,13 @@ const ChatView: React.FC = () => {
   }, [scrollToBottomUnified]);
 
   // Combine local error and hook errors for display
-  const combinedError = localError || hookError || continuationError;
+  const combinedError = localError || hookError;
 
   // Handle error dismissal from either source
   const handleDismissError = useCallback(() => {
     if (localError) setLocalError(null); // Clear local error
     if (hookError) clearHookError(); // Clear hook error
-    if (continuationError) clearContinuationError(); // Clear continuation error
-  }, [localError, hookError, continuationError, clearHookError, clearContinuationError]);
+  }, [localError, hookError, clearHookError]);
 
   // Use local state for UI control, synced with hook state
   const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(
@@ -474,7 +397,7 @@ const ChatView: React.FC = () => {
     // If this message is currently being generated by either method
     return isGenerating && (generatingId === message.id)
       ? stopGeneration
-      : stopContinuation;
+      : undefined;
   };
 
   // Function to find the first assistant message index in the chat
@@ -490,7 +413,7 @@ const ChatView: React.FC = () => {
 
   // Function to regenerate the first assistant message (greeting)
   const handleRegenerateGreeting = useCallback(async () => {
-    if (!characterData || isGenerating || isRegeneratingGreeting) return;
+    if (!characterData || isGenerating) return;
 
     const firstAssistantIndex = getFirstAssistantMessageIndex();
     if (firstAssistantIndex === -1) {
@@ -498,45 +421,9 @@ const ChatView: React.FC = () => {
       return;
     }
 
-    const greetingMessage = messages[firstAssistantIndex];
-    setIsRegeneratingGreeting(true);
     handleDismissError(); // Clear previous errors (local and hook)
-
-    try {
-      // Use ChatStorage to generate a new greeting
-      // Use the globally active API config for greeting regeneration
-      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig); // Use global apiConfig
-
-      if (result.success && result.greeting) {
-        const newGreeting = result.greeting;
-        // Update the character data in context if setCharacterData is available
-        if (setCharacterData) {
-          setCharacterData(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              data: {
-                ...prev.data,
-                first_mes: newGreeting // Update the first_mes in the character data
-              }
-            };
-          });
-        }
-        // Update the message content in the chat state
-        updateMessage(greetingMessage.id, newGreeting);
-        // Optionally save the chat state after updating the greeting
-        // saveChat(updatedMessages, currentUser); // Need access to updated messages
-      } else {
-        throw new Error(result.message || "Failed to generate new greeting");
-      }
-    } catch (err) {
-      console.error("Error regenerating greeting:", err);
-      // Display error to the user using local state
-       setLocalError(err instanceof Error ? err.message : 'Failed to regenerate greeting');
-    } finally {
-      setIsRegeneratingGreeting(false);
-    }
-  }, [characterData, isGenerating, isRegeneratingGreeting, messages, getFirstAssistantMessageIndex, apiConfig, updateMessage, handleDismissError, setCharacterData]); // Added apiConfig dependency
+    regenerateGreeting();
+  }, [characterData, isGenerating, getFirstAssistantMessageIndex, handleDismissError, regenerateGreeting]);
 
   // Handle sending a message - Reverted to not pass API ID
   const handleSendMessage = (content: string) => {
@@ -662,7 +549,7 @@ const ChatView: React.FC = () => {
                   onStop={getStopHandler(message)} // Correct prop name
                   isFirstMessage={isFirstAssistantMessage(message.id)} // Corrected prop name
                   onRegenerateGreeting={handleRegenerateGreeting}
-                  isRegeneratingGreeting={isRegeneratingGreeting && isFirstAssistantMessage(message.id)}
+                  isRegeneratingGreeting={isGenerating && isFirstAssistantMessage(message.id)}
                   onNextVariation={() => cycleVariation(message.id, 'next')} // Add variation handlers
                   onPrevVariation={() => cycleVariation(message.id, 'prev')} // Add variation handlers
                 />

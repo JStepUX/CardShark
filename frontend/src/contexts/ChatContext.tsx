@@ -49,6 +49,7 @@ interface ChatContextType {
   cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
   generateResponse: (prompt: string) => Promise<void>;
   regenerateMessage: (message: Message) => Promise<void>;
+  regenerateGreeting: () => Promise<void>;
   continueResponse: (message: Message) => Promise<void>;
   stopGeneration: () => void;
   setCurrentUser: (user: UserProfile | null) => void;
@@ -649,6 +650,42 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat]);
 
+  const regenerateGreeting = useCallback(async () => {
+    if (!characterData || isGenerating) return;
+
+    // Find first assistant message
+    const msgs = messagesRef.current;
+    const firstAssMsgIdx = msgs.findIndex(m => m.role === 'assistant');
+    if (firstAssMsgIdx === -1) {
+      console.error("Cannot regenerate greeting: No assistant message found.");
+      return;
+    }
+    const greetingMsg = msgs[firstAssMsgIdx];
+
+    setIsGenerating(true); setGeneratingId(greetingMsg.id); setError(null);
+    
+    // We don't support aborting this specific call easily since ChatStorage.generateGreetingStream handles it internally or doesn't expose abort signal
+    // But we set state to prevent concurrent actions.
+    
+    try {
+      const result = await ChatStorage.generateGreetingStream(characterData, apiConfig); 
+
+      if (result.success && result.greeting) {
+        // Update the message content in the chat state
+        // updateMessage handles debounced saving
+        updateMessage(greetingMsg.id, result.greeting);
+      } else {
+        throw new Error(result.message || "Failed to generate new greeting");
+      }
+    } catch (err) {
+      console.error("Error regenerating greeting:", err);
+      setError(err instanceof Error ? err.message : 'Failed to regenerate greeting');
+    } finally {
+      setIsGenerating(false);
+      setGeneratingId(null);
+    }
+  }, [characterData, isGenerating, apiConfig, updateMessage]);
+
   const continueResponse = useCallback(async (message: Message) => {
     if (!characterData || message.role !== 'assistant' || !message.content) return;
     if (!currentChatId) { setError("Cannot continue: No active chat."); return; }
@@ -661,9 +698,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     let appendedContent = ''; // Declare here to be available in catch block
 
-    try {const ctxMsgs = messagesRef.current.slice(0, msgIdx + 1)
+    try {
+      const ctxMsgs = messagesRef.current.slice(0, msgIdx + 1)
         .filter(msg => msg.role !== 'thinking')
-        .map(msg => ({ role: (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system' ? msg.role : 'system') as 'user' | 'assistant' | 'system', content: msg.id === message.id ? origContent : msg.content }));
+        .map(msg => ({ 
+          role: (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system' ? msg.role : 'system') as 'user' | 'assistant' | 'system', 
+          content: msg.id === message.id ? origContent : msg.content 
+        }));
+
+      // Get the last part of the message to help the model identify where to continue
+      const lastPart = origContent.slice(-100);
+      const continuationPrompt = {
+        role: 'system' as const,
+        content: `The assistant's response was cut off. The last part was: "...${lastPart}"
+Continue the response from exactly that point. Do not repeat the existing text. Do not start a new paragraph unless necessary.`
+      };
+      
+      ctxMsgs.push(continuationPrompt);
+
       const fmtAPIConfig = prepareAPIConfig(apiConfig);      const response = await PromptHandler.generateChatResponse(
         currentChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
       );
@@ -877,7 +929,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
     currentPreviewImageIndex, currentChatId: currentChatId, 
     updateMessage, deleteMessage, addMessage, cycleVariation,
-    generateResponse, regenerateMessage, continueResponse, stopGeneration,
+    generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,
     resetTriggeredLoreImagesState, clearError,

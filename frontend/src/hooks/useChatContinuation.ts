@@ -92,12 +92,15 @@ export function useChatContinuation(
       
       setContextWindow(contextWindow);
 
+      // Get the last part of the message to help the model identify where to continue
+      const lastPart = message.content.slice(-100);
       const continuationPrompt: {
         role: 'user' | 'assistant' | 'system';
         content: string;
       } = {
         role: 'system',
-        content: "Continue from exactly where you left off without repeating anything. Do not summarize or restart."
+        content: `The assistant's response was cut off. The last part was: "...${lastPart}"
+Continue the response from exactly that point. Do not repeat the existing text. Do not start a new paragraph unless necessary.`
       };
 
       contextMessages.push(continuationPrompt);
