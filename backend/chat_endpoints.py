@@ -704,9 +704,9 @@ def reliable_load_chat_endpoint(
             is_archived=session.is_archived,
             messages=message_responses
         )
-        
+
         return create_data_response(session_response)
-    
+
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:

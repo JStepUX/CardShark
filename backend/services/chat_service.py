@@ -50,13 +50,21 @@ def get_chat_sessions_by_character(db: Session, character_uuid: str) -> List[sql
 
 def get_latest_chat_session_for_character(db: Session, character_uuid: str) -> Optional[sql_models.ChatSession]:
     """
-    Retrieves the most recent chat session for a given character,
-    ordered by last_message_time descending.
+    Retrieves the most recent chat session for a given character that has actual conversation
+    (at least one user message), ordered by last_message_time descending.
+    Only returns chats that have been interacted with by the user.
     """
-    return db.query(sql_models.ChatSession)\
-        .filter(sql_models.ChatSession.character_uuid == character_uuid)\
+    # Use a join to find chat sessions that have user messages
+    conversation_chat = db.query(sql_models.ChatSession)\
+        .join(sql_models.ChatMessage, sql_models.ChatSession.chat_session_uuid == sql_models.ChatMessage.chat_session_uuid)\
+        .filter(
+            sql_models.ChatSession.character_uuid == character_uuid,
+            sql_models.ChatMessage.role == 'user'
+        )\
         .order_by(sql_models.ChatSession.last_message_time.desc().nulls_last(), sql_models.ChatSession.start_time.desc())\
         .first()
+
+    return conversation_chat
 
 def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydantic_models.ChatSessionUpdate) -> Optional[sql_models.ChatSession]:
     db_chat_session = get_chat_session(db, chat_session_uuid)

@@ -216,9 +216,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     console.log('Loading most recent chat for character:', characterData.data.name);
-    // Always reset currentChatId to ensure we load the most recent chat from database
-    console.log('Resetting currentChatId to load most recent chat');
-    setCurrentChatId(null);
+
+    // Only reset currentChatId if this is a character change or first load
+    // If returning to chat with same character, preserve current chat
+    if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) {
+      console.log('Character changed, resetting currentChatId to load most recent chat');
+      setCurrentChatId(null);
+    } else if (!currentChatId) {
+      console.log('No current chat, loading most recent chat');
+      setCurrentChatId(null); // Explicitly set to null to trigger latest chat load
+    } else {
+      console.log('Returning to existing chat session:', currentChatId);
+      // Don't reset currentChatId - we're resuming an existing session
+    }
+
     resetTriggeredLoreImagesState();
     
     async function loadChatForCharacterInternal() {
@@ -816,7 +827,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          chat_id: chatIdToLoad,
+          chat_session_uuid: chatIdToLoad,
           character_uuid: characterData.data.character_uuid
         })
       });
