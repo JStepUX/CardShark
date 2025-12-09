@@ -4,7 +4,7 @@ import time
 import json
 import traceback
 import logging
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 class WorldInfoPosition(str, Enum):
@@ -352,7 +352,8 @@ class GenerationRequest(BaseModel):
     top_p: float = Field(default=0.9, ge=0, le=1)
     stop_sequences: List[str] = []
     
-    @validator('prompt')
+    @field_validator('prompt')
+    @classmethod
     def prompt_not_empty(cls, v):
         if not v.strip():
             raise ValueError('prompt cannot be empty')
