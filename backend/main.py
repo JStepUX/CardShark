@@ -20,6 +20,7 @@ try:
     import httptools
     import uvicorn.protocols.http.h11_impl
     import uvicorn.protocols.http.httptools_impl
+    import _strptime # Fix for _strptime threading issue in PyInstaller builds
 except ImportError as e:
     print(f"Warning: Failed to import HTTP modules: {e}")
 
@@ -755,8 +756,6 @@ async def get_uploaded_image(filename: str):
 
 def main():
     """Main entry point for the application."""
-    # Fix for _strptime threading issue in PyInstaller builds
-    import _strptime
     
     parser = argparse.ArgumentParser(description="CardShark Character Card Editor")
     parser.add_argument("-host", "--host", default="0.0.0.0", help="Host to run the server on") # Changed default from "127.0.0.1"

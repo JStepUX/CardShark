@@ -288,6 +288,8 @@ hidden_imports = [    # Core FastAPI and dependencies
     'uvicorn.protocols.websockets.auto',
     'uvicorn.supervisors',
     'uvicorn.supervisors.multiprocess',
+    '_strptime', # Explicitly add _strptime for datetime fix
+    'datetime',  # Explicitly add datetime
     
     # HTTP libraries
     'h11',

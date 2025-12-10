@@ -31,6 +31,17 @@ class PngMetadataHandler:
             # Remove null bytes and whitespace
             encoded_data = encoded_data.strip('\x00').strip()
             self.logger.log_step(f"Cleaned data length: {len(encoded_data)}")
+
+            # Check if it's already JSON (some cards use raw JSON instead of base64)
+            if (encoded_data.startswith('{') and encoded_data.endswith('}')) or \
+               (encoded_data.startswith('[') and encoded_data.endswith(']')):
+                try:
+                    self.logger.log_step("Data looks like raw JSON, attempting to parse directly")
+                    result = json.loads(encoded_data)
+                    self.logger.log_step("Successfully parsed raw JSON")
+                    return result
+                except json.JSONDecodeError:
+                    self.logger.log_step("Raw JSON parse failed, proceeding to base64 decode")
             
             # Fix padding - this is the key improvement
             # Base64 data should have length that is a multiple of 4

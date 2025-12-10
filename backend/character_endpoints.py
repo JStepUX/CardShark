@@ -229,7 +229,7 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
 async def list_characters(
     directory: Optional[str] = Query(None, description="Get characters from a specific directory instead of DB"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(0, ge=0, description="0 means no limit (return all)"),
     db_limit: Optional[int] = Query(None, ge=1, description="Limit for DB queries when filtering by directory (None for no limit)"),
     char_service: CharacterService = Depends(get_character_service_dependency),
     indexing_service: CharacterIndexingService = Depends(get_character_indexing_service),
