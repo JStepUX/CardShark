@@ -35,6 +35,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 }) => {
   const cursorPosRef = useRef<{ from: number, to: number } | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  const onKeyDownRef = useRef(onKeyDown);
+
+  // Keep onKeyDown handler current without re-triggering useEditor
+  useEffect(() => {
+    onKeyDownRef.current = onKeyDown;
+  }, [onKeyDown]);
   
   // Pre-process content for initial rendering
   const initialContent = content?.includes('![') 
@@ -95,6 +101,13 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         // Preserve newlines in pasted text
         return text;
       },
+      handleKeyDown: (view, event) => {
+        if (onKeyDownRef.current) {
+          onKeyDownRef.current(event as unknown as React.KeyboardEvent<HTMLDivElement>);
+          return event.defaultPrevented;
+        }
+        return false;
+      },
     },
   });  // Update content from props (for external changes)
   useEffect(() => {
@@ -130,12 +143,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   }, [content, editor]);
 
-  // Handle key events
-  const handleKeyDown = (_e: React.KeyboardEvent) => {
-    if (onKeyDown) {
-      onKeyDown(_e);
-    }
-  };
   // Handle clicks on the container to focus the editor seamlessly
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (editor && !readOnly) {
@@ -150,7 +157,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   return (
     <div 
       className={`tiptap-editor ${className} performance-contain performance-transform`}
-      onKeyDown={handleKeyDown}
       onClick={handleContainerClick}
       ref={editorContainerRef}
       style={{ cursor: readOnly ? 'default' : 'text' }}
