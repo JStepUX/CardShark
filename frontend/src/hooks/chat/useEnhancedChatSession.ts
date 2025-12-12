@@ -107,6 +107,7 @@ export function useEnhancedChatSession(
       // Save chat using database-centric API
       const response = await fetch('/api/reliable-save-chat', {
         method: 'POST',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },

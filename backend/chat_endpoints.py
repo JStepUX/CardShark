@@ -245,37 +245,17 @@ def save_chat_endpoint(
         if not db_chat_session:
             raise NotFoundException(f"ChatSession not found: {payload.chat_session_uuid}")
 
-        # 2. Clear existing messages for this session (replace all)
-        # Extract message IDs upfront to avoid SQLAlchemy ObjectDeletedError
-        # (db.commit() in delete_chat_message expires other loaded objects)
-        existing_messages = chat_service.get_chat_messages(db=db, chat_session_uuid=payload.chat_session_uuid)
-        message_ids_to_delete = [msg.message_id for msg in existing_messages]
-        for message_id in message_ids_to_delete:
-            chat_service.delete_chat_message(db=db, message_id=message_id)
+        # 2. Atomically replace all messages
+        # This replaces the previous "Delete All" then "Insert All" logic which was not atomic
+        new_db_messages = chat_service.replace_chat_session_messages(
+            db=db, 
+            chat_session_uuid=payload.chat_session_uuid, 
+            messages_data=payload.messages
+        )
 
-        # 3. Save new messages to database
-        # Convert to Pydantic models immediately to avoid ObjectDeletedError
-        # (subsequent db.commit() calls expire ORM objects)
+        # 3. Convert to Pydantic models for response
         message_reads = []
-        for message_data in payload.messages:
-            # Extract message fields from the dict format
-            role = message_data.get('role', 'user')
-            content = message_data.get('content', '') or message_data.get('text', '')
-            status = message_data.get('status', 'complete')
-            reasoning_content = message_data.get('reasoning_content')
-            metadata_json = message_data.get('metadata')
-            
-            # Create message in database
-            db_message = chat_service.create_chat_message(
-                db=db,
-                chat_session_uuid=payload.chat_session_uuid,
-                role=role,
-                content=content,
-                status=status,
-                reasoning_content=reasoning_content,
-                metadata_json=metadata_json
-            )
-            # Convert to Pydantic model immediately before any commits expire the ORM object
+        for db_message in new_db_messages:
             message_reads.append(pydantic_models.ChatMessageRead(
                 message_id=db_message.message_id,
                 chat_session_uuid=db_message.chat_session_uuid,
@@ -289,24 +269,22 @@ def save_chat_endpoint(
                 updated_at=db_message.updated_at
             ))
 
-        # 4. Update ChatSession DB record (title, message_count)
+        # 4. Update ChatSession DB record (title)
+        # message_count and last_message_time are already updated by replace_chat_session_messages
+        updated_session = db_chat_session
+        
         if payload.title is not None:
             update_data = pydantic_models.ChatSessionUpdateV2(
-                title=payload.title,
-                message_count=len(payload.messages)
+                title=payload.title
             )
             updated_session = chat_service.update_chat_session(
                 db,
                 chat_session_uuid=payload.chat_session_uuid,
                 chat_update=update_data
             )
-        else:
-            # Just update message count
-            db_chat_session.message_count = len(payload.messages)
-            db_chat_session.last_message_time = datetime.datetime.utcnow()
-            db.commit()
-            db.refresh(db_chat_session)
-            updated_session = db_chat_session
+        
+        # Refresh to ensure we have latest data
+        db.refresh(updated_session)
         
         if not updated_session:
             # This would be unusual if the session existed before

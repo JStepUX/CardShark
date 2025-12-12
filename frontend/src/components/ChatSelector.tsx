@@ -129,12 +129,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           };
         });
         
-        // Filter out the current chat if currentChatId is provided
-        const filteredChatList = currentChatId 
-          ? chatInfoList.filter(chat => chat.id !== currentChatId)
-          : chatInfoList;
-        
-        setAvailableChats(filteredChatList);
+        setAvailableChats(chatInfoList);
       } else {
         setError('Failed to load chats');
         setAvailableChats([]);
@@ -696,18 +691,31 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         </div>
       ) : (
         <ul className="chat-list space-y-2 max-h-96 overflow-y-auto pr-1">
-          {filteredAndSortedChats.map((chat) => (
+          {filteredAndSortedChats.map((chat) => {
+            const isCurrentChat = chat.id === currentChatId;
+            return (
             <li 
               key={chat.id}
-              className="p-3 bg-stone-800 hover:bg-stone-700 rounded-lg cursor-pointer transition-colors group relative"
-              onClick={() => handleLoadChat(chat.id)}
+              className={`p-3 rounded-lg cursor-pointer transition-colors group relative ${
+                isCurrentChat 
+                  ? 'bg-orange-900/40 border border-orange-700/50' 
+                  : 'bg-stone-800 hover:bg-stone-700'
+              }`}
+              onClick={() => !isCurrentChat && handleLoadChat(chat.id)}
             >
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 mt-1">
-                  <MessageSquare size={20} className="text-orange-500" />
+                  <MessageSquare size={20} className={isCurrentChat ? "text-orange-400" : "text-orange-500"} />
                 </div>
                 <div className="flex-grow">
-                  <h3 className="font-medium">{chat.title}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium">{chat.title}</h3>
+                    {isCurrentChat && (
+                      <span className="px-2 py-0.5 text-xs bg-orange-600 text-white rounded-full">
+                        Current
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-stone-400">
                     {chat.messageCount} messages • Last updated: {chat.lastModified}
                   </p>
@@ -718,18 +726,21 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
                   )}
                 </div>
                 
-                {/* Delete button that shows on hover */}
-                <button
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
-                  onClick={(e) => handleDeleteClick(e, chat)}
-                  aria-label="Delete chat"
-                  title="Delete chat"
-                >
-                  <Trash2 size={16} className="text-stone-300 hover:text-white" />
-                </button>
+                {/* Delete button that shows on hover (disabled for current chat to avoid confusion) */}
+                {!isCurrentChat && (
+                  <button
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                    onClick={(e) => handleDeleteClick(e, chat)}
+                    aria-label="Delete chat"
+                    title="Delete chat"
+                  >
+                    <Trash2 size={16} className="text-stone-300 hover:text-white" />
+                  </button>
+                )}
               </div>
             </li>
-          ))}
+          );
+        })}
         </ul>
       )}
       

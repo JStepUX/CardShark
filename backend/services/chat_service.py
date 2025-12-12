@@ -87,9 +87,10 @@ def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydant
 
 def create_chat_message(db: Session, chat_session_uuid: str, role: str, content: str, 
                        status: str = "complete", reasoning_content: Optional[str] = None,
-                       metadata_json: Optional[dict] = None) -> sql_models.ChatMessage:
+                       metadata_json: Optional[dict] = None, message_id: Optional[str] = None) -> sql_models.ChatMessage:
     """Create a new chat message in the database."""
-    message_id = str(uuid.uuid4())
+    if not message_id:
+        message_id = str(uuid.uuid4())
     
     db_message = sql_models.ChatMessage(
         message_id=message_id,
@@ -112,6 +113,70 @@ def create_chat_message(db: Session, chat_session_uuid: str, role: str, content:
     db.commit()
     db.refresh(db_message)
     return db_message
+
+def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_data: List[dict]) -> List[sql_models.ChatMessage]:
+    """
+    Atomically replaces all messages in a chat session with the provided list.
+    Preserves message IDs if provided in the payload.
+    """
+    try:
+        # 1. Delete existing messages
+        db.query(sql_models.ChatMessage).filter(
+            sql_models.ChatMessage.chat_session_uuid == chat_session_uuid
+        ).delete(synchronize_session=False)
+
+        new_messages = []
+        for message_data in messages_data:
+            # Extract fields
+            # Frontend often sends 'id' or 'message_id'
+            msg_id = message_data.get('id') or message_data.get('message_id')
+            if not msg_id:
+                msg_id = str(uuid.uuid4())
+                
+            role = message_data.get('role', 'user')
+            content = message_data.get('content', '') or message_data.get('text', '')
+            status = message_data.get('status', 'complete')
+            reasoning_content = message_data.get('reasoning_content')
+            metadata_json = message_data.get('metadata')
+            
+            db_message = sql_models.ChatMessage(
+                message_id=msg_id,
+                chat_session_uuid=chat_session_uuid,
+                role=role,
+                content=content,
+                status=status,
+                reasoning_content=reasoning_content,
+                metadata_json=metadata_json,
+                timestamp=datetime.utcnow() # Reset timestamp? Or keep? Usually reset on save/re-insert implies "now", but maybe we should try to preserve if available. 
+                # For now, let's use utcnow() as the model defaults to server_default=func.now()
+            )
+            
+            # If timestamp is provided in ms (frontend standard), convert it
+            if 'timestamp' in message_data and message_data['timestamp']:
+                try:
+                    ts = message_data['timestamp']
+                    if isinstance(ts, (int, float)):
+                        db_message.timestamp = datetime.fromtimestamp(ts / 1000.0)
+                    elif isinstance(ts, str):
+                        # Try to parse string ISO?
+                        pass 
+                except:
+                    pass
+
+            db.add(db_message)
+            new_messages.append(db_message)
+        
+        # Update session metadata
+        chat_session = get_chat_session(db, chat_session_uuid)
+        if chat_session:
+            chat_session.message_count = len(new_messages)
+            chat_session.last_message_time = datetime.utcnow()
+        
+        db.commit()
+        return new_messages
+    except Exception as e:
+        db.rollback()
+        raise e
 
 def get_chat_messages(db: Session, chat_session_uuid: str, 
                      skip: int = 0, limit: int = 1000) -> List[sql_models.ChatMessage]:

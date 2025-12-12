@@ -288,6 +288,7 @@ export class ChatStorage {
 
       const response = await fetch('/api/reliable-create-chat', {
         method: 'POST',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -378,6 +379,7 @@ export class ChatStorage {
 
       const response = await fetch('/api/reliable-save-chat', {
         method: 'POST',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -587,6 +589,7 @@ export class ChatStorage {
       
       const response = await fetch('/api/reliable-append-message', {
         method: 'POST',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -626,6 +629,7 @@ export class ChatStorage {
       
       const response = await fetch(`/api/reliable-delete-chat/${chatId}`, {
         method: 'DELETE',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         }

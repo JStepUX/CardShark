@@ -347,6 +347,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           // Save chat using database-centric API
           await fetch('/api/reliable-save-chat', {
             method: 'POST',
+            keepalive: true,
             headers: {
               'Content-Type': 'application/json',
             },
