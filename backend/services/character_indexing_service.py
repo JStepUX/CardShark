@@ -271,7 +271,7 @@ class CharacterIndexingService:
             'name': char.name,
             'description': char.description,
             'file_path': char.file_path,
-            'image_url': f"/api/characters/{char.character_uuid}/image" if char.character_uuid else None,
+            'image_url': f"/api/character-image/{char.character_uuid}" if char.character_uuid else None,
             'created_at': char.created_at.isoformat() if char.created_at else None,
             'updated_at': char.updated_at.isoformat() if char.updated_at else None,
             'db_metadata_last_synced_at': char.db_metadata_last_synced_at.isoformat() if char.db_metadata_last_synced_at else None,

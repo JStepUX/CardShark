@@ -3,11 +3,12 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
-import { Trash2, AlertTriangle, X } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown } from 'lucide-react';
 import LoadingSpinner from './common/LoadingSpinner';
 import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from './KoboldCPPDrawerManager';
+import { useCharacterSort, SortOption, getSortLabel } from '../hooks/useCharacterSort';
 
 // Track API calls across component instances - simplified
 const apiRequestCache = {
@@ -147,6 +148,21 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // Ref for the load more trigger element (for Intersection Observer)
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
 
+  // State for sort dropdown
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
+        setIsSortDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Memoized filtering - MOVED UP before it's used
   const filteredCharacters = useMemo(() => {
     const searchLower = searchTerm.toLowerCase().trim();
@@ -156,16 +172,31 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     );
   }, [characters, searchTerm]);
 
+  // Apply sorting hook
+  const { 
+    sortedItems: sortedAndFilteredCharacters, 
+    sortOption, 
+    setSortOption,
+    sortLabel 
+  } = useCharacterSort(
+    filteredCharacters, 
+    {
+      getName: (c) => c.name,
+      getDate: (c) => c.modified
+    },
+    'name_asc' // Default to A-Z
+  );
+
   // loadMore function definition with improved loading behavior
   const loadMore = useCallback(() => {
-    if (isLoadingMore || displayedCount >= filteredCharacters.length) return;
+    if (isLoadingMore || displayedCount >= sortedAndFilteredCharacters.length) return;
 
     setIsLoadingMore(true);
 
     // Use setTimeout to avoid blocking the main thread during loading
     setTimeout(() => {
       // Calculate how many more to load - aim for a batch size that balances performance
-      const batchSize = Math.min(15, filteredCharacters.length - displayedCount);
+      const batchSize = Math.min(15, sortedAndFilteredCharacters.length - displayedCount);
 
       if (batchSize > 0) {
         setDisplayedCount(prev => prev + batchSize);
@@ -174,7 +205,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setIsLoadingMore(false);
     }, 100); // Small delay to allow UI to update
 
-  }, [isLoadingMore, displayedCount, filteredCharacters.length]);
+  }, [isLoadingMore, displayedCount, sortedAndFilteredCharacters.length]);
 
   // Set up Intersection Observer for infinite scrolling
   useEffect(() => {
@@ -188,7 +219,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
     const observer = new IntersectionObserver((entries) => {
       const [entry] = entries;
-      if (entry.isIntersecting && !isLoading && filteredCharacters.length > displayedCount) {
+      if (entry.isIntersecting && !isLoading && sortedAndFilteredCharacters.length > displayedCount) {
         loadMore();
       }
     }, options);
@@ -200,7 +231,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         observer.unobserve(loadMoreTriggerRef.current);
       }
     };
-  }, [loadMore, isLoading, filteredCharacters.length, displayedCount, activeContainerRef]);
+  }, [loadMore, isLoading, sortedAndFilteredCharacters.length, displayedCount, activeContainerRef]);
 
   // Legacy scroll handler for browsers that might not support Intersection Observer
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -208,10 +239,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     const scrollBottom = container.scrollTop + container.clientHeight;
     const threshold = container.scrollHeight - 300;
 
-    if (scrollBottom >= threshold && !isLoading && !isLoadingMore && displayedCount < filteredCharacters.length) {
+    if (scrollBottom >= threshold && !isLoading && !isLoadingMore && displayedCount < sortedAndFilteredCharacters.length) {
       loadMore();
     }
-  }, [loadMore, isLoading, isLoadingMore, displayedCount, filteredCharacters.length]);
+  }, [loadMore, isLoading, isLoadingMore, displayedCount, sortedAndFilteredCharacters.length]);
 
   // Load characters with database-first optimization and persistent cache
   const loadFromDirectory = useCallback(async (directory: string) => {
@@ -258,7 +289,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               name: char.name,
               path: char.png_file_path,
               size: 0, // Size not critical for display
-              modified: new Date(char.updated_at).getTime() / 1000
+              modified: new Date(char.updated_at).getTime() / 1000,
+              character_uuid: char.character_uuid,
+              description: char.description,
+              is_incomplete: char.is_incomplete || false
             }));
 
             // OPTIMIZATION 2: Update persistent cache
@@ -290,18 +324,21 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       }
 
       data = await response.json();
+
+      // Support both old directory-scan response shapes (exists/files) and new API shape (success/characters)
       if (data.success === false || data.exists === false) {
         setError(data.message || "Directory not found or inaccessible.");
         setCharacters([]);
         setCurrentDirectory(data.directory || directory);
         // Clear cache on error
         setCharacterCache(null);
-      } else if (data.exists) {
-        console.log(`[${componentId.current}] Directory scan loaded ${data.files.length} characters`);
+      } else if (Array.isArray(data.characters) || Array.isArray(data.files)) {
+        const charList = data.characters || data.files || [];
+        console.log(`[${componentId.current}] Directory scan loaded ${charList.length} characters`);
 
         // OPTIMIZATION 3: Update persistent cache with directory scan results
         // Check for standardized response (data.characters) or legacy response (data.files)
-        const characters = data.characters || data.files || [];
+        const characters = charList;
         const hasCharacters = characters.length > 0;
 
         // Use normalized directory from response if available, or the requested one
@@ -447,7 +484,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const getCharacterImage = (char: CharacterFile) => {
     // Priority 1: Use UUID if available (most robust, works for DB characters)
     if (char.character_uuid) {
-      return `/api/characters/${char.character_uuid}/image`;
+      return `/api/character-image/${char.character_uuid}`;
     }
 
     // Priority 2: Use file path (legacy/fallback for non-indexed files)
@@ -537,11 +574,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
       console.log(`Performing API delete for: ${characterToDelete.path}`);
 
-      // Use our improved path encoding function
-      const encodedPath = encodeFilePath(characterToDelete.path);
-      const response = await fetch(`/api/character/${encodedPath}`, {
-        method: 'DELETE',
-      });
+      // Prefer UUID deletion (DB-backed), fall back to path deletion for legacy/non-indexed entries
+      const deleteUrl = characterToDelete.character_uuid
+        ? `/api/character/${encodeURIComponent(characterToDelete.character_uuid)}?delete_png=true`
+        : `/api/character-by-path/${encodeFilePath(characterToDelete.path)}?delete_png=true`;
+
+      const response = await fetch(deleteUrl, { method: 'DELETE' });
 
       // Improved error handling
       let result;
@@ -559,14 +597,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
         // Add more context for specific error codes
         if (response.status === 404) {
-          errorMessage = `File not found: ${fileName}. The file may have been moved or deleted already.`;
+          // Treat as idempotent success from the UI perspective (file/row may already be gone)
+          console.warn(`Delete returned 404 for ${fileName}; treating as already deleted.`);
+          errorMessage = '';
         } else if (response.status === 403) {
           errorMessage = `Permission denied when deleting: ${fileName}. Check file permissions.`;
         } else if (response.status >= 500) {
           errorMessage = `Server error while deleting: ${fileName}. Please try again later.`;
         }
 
-        throw new Error(errorMessage);
+        if (errorMessage) {
+          throw new Error(errorMessage);
+        }
       }
 
       console.log(`Successfully deleted via API: ${characterToDelete.path}`);
@@ -607,16 +649,62 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   return (
     <div className="h-full flex flex-col bg-stone-900 text-white">
       {/* Header Section */}
-      <div className="flex-none border-b border-stone-700 shadow-md">
-        <div className="p-4">
-          <h2 className="text-lg font-semibold">
-            {isSecondarySelector ? "Select Character for Comparison" : `Character Gallery ${filteredCharacters.length > 0 ? `(${filteredCharacters.length})` : ''}`}
-          </h2>
-          {currentDirectory && (
-            <div className="mt-2 text-sm text-slate-400 truncate" title={currentDirectory}>
-              Directory: {currentDirectory}
-            </div>
-          )}
+      <div className="flex-none border-b border-stone-700 shadow-md bg-stone-900 z-20">
+        <div className="p-4 flex justify-between items-start">
+          <div>
+            <h2 className="text-lg font-semibold">
+              {isSecondarySelector ? "Select Character for Comparison" : `Character Gallery ${sortedAndFilteredCharacters.length > 0 ? `(${sortedAndFilteredCharacters.length})` : ''}`}
+            </h2>
+            {currentDirectory && (
+              <div className="mt-2 text-sm text-slate-400 truncate" title={currentDirectory}>
+                Directory: {currentDirectory}
+              </div>
+            )}
+          </div>
+          
+          {/* Sort Dropdown */}
+          <div className="relative" ref={sortDropdownRef}>
+            <button
+              onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+              className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-slate-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Sort characters"
+            >
+              <ArrowUpDown size={16} className="text-slate-400" />
+              <span>{sortLabel}</span>
+              <ChevronDown size={14} className="text-slate-500" />
+            </button>
+            
+            {isSortDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="py-1">
+                  <button
+                    onClick={() => { setSortOption('name_asc'); setIsSortDropdownOpen(false); }}
+                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_asc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                  >
+                    <span className="w-5 mr-2 text-center">A</span> Name (A-Z)
+                  </button>
+                  <button
+                    onClick={() => { setSortOption('name_desc'); setIsSortDropdownOpen(false); }}
+                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_desc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                  >
+                    <span className="w-5 mr-2 text-center">Z</span> Name (Z-A)
+                  </button>
+                  <button
+                    onClick={() => { setSortOption('date_newest'); setIsSortDropdownOpen(false); }}
+                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_newest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                  >
+                    <Calendar size={14} className="mr-2" /> Newest First
+                  </button>
+                  <button
+                    onClick={() => { setSortOption('date_oldest'); setIsSortDropdownOpen(false); }}
+                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_oldest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                  >
+                    <Calendar size={14} className="mr-2" /> Oldest First
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="px-4 pb-4">
           <input
@@ -679,9 +767,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         )}
 
         {/* Character Grid using GalleryGrid - Only render when we have items or user is searching */}
-        {(filteredCharacters.length > 0 || (searchTerm && !isLoading)) && (
+        {(sortedAndFilteredCharacters.length > 0 || (searchTerm && !isLoading)) && (
           <GalleryGrid
-            items={filteredCharacters.slice(0, displayedCount)}
+            items={sortedAndFilteredCharacters.slice(0, displayedCount)}
             emptyMessage="No matching characters found."
             renderItem={(character) => {
               const isDeleting = deletingPath === character.path;
@@ -733,7 +821,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                       onError={(e) => {
                         // Fallback or error handling
                         const target = e.target as HTMLImageElement;
-                        target.src = '/placeholder_card.png'; // Add a designated placeholder if needed
+                        target.src = '/pngPlaceholder.png'; // Add a designated placeholder if needed
                       }}
                     />
                   </div>
@@ -752,14 +840,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         <div
           ref={loadMoreTriggerRef}
           className={`p-4 flex justify-center items-center transition-opacity duration-300
-            ${(isLoadingMore || displayedCount < filteredCharacters.length) ? 'opacity-100 h-16' : 'opacity-0 h-0'}`}
+            ${(isLoadingMore || displayedCount < sortedAndFilteredCharacters.length) ? 'opacity-100 h-16' : 'opacity-0 h-0'}`}
         >
           {isLoadingMore && (
             <div className="flex items-center text-blue-400">
               <LoadingSpinner size={20} className="mr-2" text="Loading more characters..." />
             </div>
           )}
-          {!isLoadingMore && displayedCount < filteredCharacters.length && (
+          {!isLoadingMore && displayedCount < sortedAndFilteredCharacters.length && (
             <div className="p-1 text-sm text-slate-500">
               Scroll to load more
             </div>

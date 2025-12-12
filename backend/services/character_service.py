@@ -423,6 +423,30 @@ class CharacterService:
     def get_character_by_path(self, png_file_path: str, db: Session) -> Optional[CharacterModel]:
         return db.query(CharacterModel).filter(CharacterModel.png_file_path == str(Path(png_file_path).resolve())).first()
 
+    def delete_character_by_path(self, png_file_path: str, delete_png_file: bool = False) -> bool:
+        """Deletes a character by its PNG file path. If not found in DB, optionally deletes the file."""
+        resolved_path = str(Path(png_file_path).resolve())
+
+        # First try DB deletion (by UUID) to ensure cascades happen properly
+        with self._get_session_context() as db:
+            db_char = self.get_character_by_path(resolved_path, db)
+            uuid_to_delete = db_char.character_uuid if db_char else None
+
+        if uuid_to_delete:
+            return self.delete_character(uuid_to_delete, delete_png_file=delete_png_file)
+
+        # If no DB row exists, optionally delete the file directly
+        if delete_png_file:
+            try:
+                Path(resolved_path).unlink(missing_ok=True)
+                self.logger.log_info(f"Deleted PNG file by path (no DB row found): {resolved_path}")
+                return True
+            except Exception as e:
+                self.logger.log_error(f"Failed to delete PNG file by path {resolved_path}: {e}")
+                return False
+
+        return False
+
     @contextlib.contextmanager
     def _get_session_context(self):
         """

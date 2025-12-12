@@ -285,7 +285,8 @@ async def list_characters(
                                 "name": char_path.stem,
                                 "path": str(char_path),
                                 "size": char_path.stat().st_size,
-                                "modified": datetime.fromtimestamp(char_path.stat().st_mtime, tz=timezone.utc)
+                                "modified": datetime.fromtimestamp(char_path.stat().st_mtime, tz=timezone.utc),
+                                "character_uuid": db_char.character_uuid
                             })
                     except Exception as char_error:
                         logger.warning(f"Error processing character {db_char.character_uuid}: {char_error}")
@@ -338,10 +339,12 @@ async def list_characters(
             # This is a simplified representation, as full metadata isn't available from file system scan
             characters_from_files = []
             for f_info in files:
-                # Create a minimal CharacterAPIBase from FileInfo
-                # This might not have all fields, but will satisfy the basic structure
+                # If this file is in DB (directory mode DB listing), return its real UUID.
+                # Otherwise return empty UUID so the frontend uses path-based endpoints.
+                char_uuid = f_info.get("character_uuid", "")
+
                 characters_from_files.append(CharacterAPIBase(
-                    character_uuid=str(uuid.uuid4()), # Generate a dummy UUID for files not in DB
+                    character_uuid=char_uuid,
                     name=f_info["name"],
                     png_file_path=f_info["path"],
                     created_at=f_info["modified"],
@@ -477,6 +480,51 @@ async def delete_character_by_uuid_endpoint(
     except Exception as e:
         logger.error(f"Error deleting character {character_uuid}: {str(e)}")
         raise handle_generic_error(e, "deleting character")
+
+@router.delete("/character-by-path/{path:path}", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Delete a character by PNG file path (legacy)")
+async def delete_character_by_path_endpoint(
+    path: str,
+    delete_png: bool = Query(True, description="Whether to also delete the character's PNG file from disk."),
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency),
+    db: Session = Depends(get_db_dependency)
+):
+    """Delete a character by path: delete DB row if present (matched by png_file_path) and delete file if requested."""
+    try:
+        logger.info(f"DELETE /api/character-by-path/{path} with delete_png: {delete_png}")
+
+        # Decode and normalize in a Windows-friendly way
+        decoded_path = urllib.parse.unquote(path)
+        fixed_path = decoded_path.replace('/', os.sep) if os.name == 'nt' else decoded_path
+
+        # Resolve similarly to the metadata endpoint for robustness
+        try:
+            file_path = Path(fixed_path)
+            if not file_path.is_absolute():
+                app_root = Path(__file__).parent.parent.parent
+                file_path = (app_root / fixed_path)
+        except Exception:
+            file_path = Path(fixed_path)
+
+        # Delete DB row if it exists (even if file missing), and optionally delete file (missing_ok)
+        resolved_str = str(file_path.resolve())
+        db_char = char_service.get_character_by_path(resolved_str, db)
+
+        deleted_any = False
+        if db_char:
+            deleted_any = char_service.delete_character(db_char.character_uuid, delete_png_file=delete_png) or deleted_any
+        elif delete_png:
+            deleted_any = char_service.delete_character_by_path(resolved_str, delete_png_file=True) or deleted_any
+
+        # Idempotent semantics: if nothing exists, treat as already deleted
+        if not deleted_any:
+            return create_data_response({"success": True, "message": "Character already deleted or not found"})
+
+        return create_data_response({"success": True, "message": "Character deleted successfully"})
+
+    except Exception as e:
+        logger.error(f"Error deleting character by path {path}: {str(e)}")
+        raise handle_generic_error(e, "deleting character by path")
 
 @router.post("/character/{character_uuid}/duplicate", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Duplicate a character by UUID")
 async def duplicate_character_endpoint(
