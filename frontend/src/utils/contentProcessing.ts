@@ -49,23 +49,28 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
     return trimmedText;
   }
   
-  // Check if the text already ends with a sentence ending
-  const endsWithSentence = /[.!?]['"""'']?[)\]"'"""'\s]*$/.test(trimmedText);
-  console.log('[removeIncompleteSentences] Already ends with sentence:', endsWithSentence);
+  // Check if the text already ends with a sentence ending or a complete markdown block (image/link)
+  // This prevents trimming valid markdown content at the end of a message
+  // Allow *, **, and ) as valid endings
+  const endsWithSentence = /(?:[.!?*)]+['"""'']?[)\]"'"""'\s]*|!?\[[^\]]*\]\([^)]*\)\s*)$/.test(trimmedText);
+  console.log('[removeIncompleteSentences] Already ends with sentence or markdown:', endsWithSentence);
   if (endsWithSentence) {
     return trimmedText;
   }
   
   // Find the last sentence ending anywhere in the text
-  const sentenceEndingRegex = /[.!?]['"""'']?/g;
+  // We use an enhanced regex that matches:
+  // 1. Markdown images/links: prevents splitting inside URLs and treats them as valid endings
+  // 2. Standard sentence endings: [.!?] followed optionally by quotes, but ONLY if followed by whitespace, EOF, or closing delimiters
+  const safeEndingsRegex = /(?:!?\[[^\]]*\]\([^)]*\)|[.!?*)]+['"""'']?(?=\s|$|['"”’)]))/g;
   let lastIndex = -1;
   let match;
   
-  while ((match = sentenceEndingRegex.exec(trimmedText)) !== null) {
+  while ((match = safeEndingsRegex.exec(trimmedText)) !== null) {
     lastIndex = match.index + match[0].length;
   }
   
-  console.log('[removeIncompleteSentences] Last sentence ending found at index:', lastIndex);
+  console.log('[removeIncompleteSentences] Last safe ending found at index:', lastIndex);
   
   // If we found a sentence ending, trim the text to that point
   if (lastIndex > 0) {
@@ -76,7 +81,7 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
   
   // If no sentence ending is found, check if the entire text appears to be an incomplete sentence
   // This handles cases where the whole response is one incomplete sentence
-  const isEntirelyIncomplete = !/[.!?]['"""'']?[)\]"'"""'\s]*$/.test(trimmedText) &&
+  const isEntirelyIncomplete = !/[.!?*)]+['"""'']?[)\]"'"""'\s]*$/.test(trimmedText) &&
     trimmedText.length > 10 && // Avoid removing very short responses
     !/^(yes|no|okay?|sure|fine|good|bad|maybe|perhaps?|alright?|thanks?|please|sorry|hello|hi|hey|bye|goodbye|thanks?|welcome)$/i.test(trimmedText.trim()) && // Don't remove common short complete responses
     /\w$/.test(trimmedText); // Ends with a word character (not punctuation)
