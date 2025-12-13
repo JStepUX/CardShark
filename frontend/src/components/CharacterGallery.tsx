@@ -1,9 +1,8 @@
-// frontend/src/components/CharacterGallery.tsx
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useComparison } from '../contexts/ComparisonContext';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users } from 'lucide-react';
 import LoadingSpinner from './common/LoadingSpinner';
 import GalleryGrid from './GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
@@ -24,6 +23,7 @@ interface CharacterFile {
   character_uuid?: string;
   description?: string;
   is_incomplete?: boolean; // True if character has no valid metadata (needs editing)
+  extensions?: Record<string, any>; // Extension data including card_type
 }
 
 // Props for the CharacterGallery component
@@ -110,6 +110,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // State for the currently loaded directory and search term
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Filter state for World/Character cards
+  const [filterType, setFilterType] = useState<'all' | 'character' | 'world'>('all');
 
   // State for character deletion using DeleteConfirmationDialog
   const [characterToDelete, setCharacterToDelete] = useState<CharacterFile | null>(null);
@@ -165,18 +168,29 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
   // Memoized filtering - MOVED UP before it's used
   const filteredCharacters = useMemo(() => {
+    let result = characters;
+    
+    // Type Filter
+    if (filterType !== 'all') {
+        result = result.filter(char => {
+            const type = char.extensions?.card_type || 'character';
+            return type === filterType;
+        });
+    }
+
+    // Search Filter
     const searchLower = searchTerm.toLowerCase().trim();
-    if (!searchLower) return characters;
-    return characters.filter(char =>
+    if (!searchLower) return result;
+    return result.filter(char =>
       char.name.toLowerCase().includes(searchLower)
     );
-  }, [characters, searchTerm]);
+  }, [characters, searchTerm, filterType]);
 
   // Apply sorting hook
   const { 
     sortedItems: sortedAndFilteredCharacters, 
     sortOption, 
-    setSortOption,
+    setSortOption, 
     sortLabel 
   } = useCharacterSort(
     filteredCharacters, 
@@ -292,7 +306,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               modified: new Date(char.updated_at).getTime() / 1000,
               character_uuid: char.character_uuid,
               description: char.description,
-              is_incomplete: char.is_incomplete || false
+              is_incomplete: char.is_incomplete || false,
+              extensions: char.extensions_json || {}
             }));
 
             // OPTIMIZATION 2: Update persistent cache
@@ -362,7 +377,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             // Add other fields as needed
             character_uuid: c.character_uuid,
             description: c.description,
-            is_incomplete: c.is_incomplete || false
+            is_incomplete: c.is_incomplete || false,
+            extensions: c.extensions_json || {}
           }));
 
           setCharacterCache({
@@ -498,6 +514,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const handleCharacterClick = async (character: CharacterFile) => {
     // Prevent selection if card is animating out
     if (deletingPath === character.path) return;
+
+    // Check if it is a World Card
+    if (character.extensions?.card_type === 'world' && character.character_uuid) {
+        navigate(`/world/${character.character_uuid}/launcher`);
+        return;
+    }
 
     // If a custom click handler is provided, use it for selection (e.g., NPC selection)
     if (typeof onCharacterClick === 'function') {
@@ -650,70 +672,113 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     <div className="h-full flex flex-col bg-stone-900 text-white">
       {/* Header Section */}
       <div className="flex-none border-b border-stone-700 shadow-md bg-stone-900 z-20">
-        <div className="p-4 flex justify-between items-start">
-          <div>
-            <h2 className="text-lg font-semibold">
-              {isSecondarySelector ? "Select Character for Comparison" : `Character Gallery ${sortedAndFilteredCharacters.length > 0 ? `(${sortedAndFilteredCharacters.length})` : ''}`}
-            </h2>
-            {currentDirectory && (
-              <div className="mt-2 text-sm text-slate-400 truncate" title={currentDirectory}>
-                Directory: {currentDirectory}
-              </div>
-            )}
-          </div>
-          
-          {/* Sort Dropdown */}
-          <div className="relative" ref={sortDropdownRef}>
-            <button
-              onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-              className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-slate-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label="Sort characters"
-            >
-              <ArrowUpDown size={16} className="text-slate-400" />
-              <span>{sortLabel}</span>
-              <ChevronDown size={14} className="text-slate-500" />
-            </button>
-            
-            {isSortDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
-                <div className="py-1">
-                  <button
-                    onClick={() => { setSortOption('name_asc'); setIsSortDropdownOpen(false); }}
-                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_asc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                  >
-                    <span className="w-5 mr-2 text-center">A</span> Name (A-Z)
-                  </button>
-                  <button
-                    onClick={() => { setSortOption('name_desc'); setIsSortDropdownOpen(false); }}
-                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_desc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                  >
-                    <span className="w-5 mr-2 text-center">Z</span> Name (Z-A)
-                  </button>
-                  <button
-                    onClick={() => { setSortOption('date_newest'); setIsSortDropdownOpen(false); }}
-                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_newest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                  >
-                    <Calendar size={14} className="mr-2" /> Newest First
-                  </button>
-                  <button
-                    onClick={() => { setSortOption('date_oldest'); setIsSortDropdownOpen(false); }}
-                    className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_oldest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                  >
-                    <Calendar size={14} className="mr-2" /> Oldest First
-                  </button>
+        <div className="p-4 flex flex-col gap-4">
+          <div className="flex justify-between items-start">
+            <div>
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                {isSecondarySelector ? "Select Character for Comparison" : `Character Gallery`}
+                <span className="text-slate-500 text-sm font-normal">
+                    ({sortedAndFilteredCharacters.length} {sortedAndFilteredCharacters.length === 1 ? 'item' : 'items'})
+                </span>
+                </h2>
+                {currentDirectory && (
+                <div className="mt-2 text-sm text-slate-400 truncate" title={currentDirectory}>
+                    Directory: {currentDirectory}
                 </div>
-              </div>
-            )}
+                )}
+            </div>
+            
+            {/* Sort Dropdown */}
+            <div className="relative" ref={sortDropdownRef}>
+                <button
+                onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-slate-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="Sort characters"
+                >
+                <ArrowUpDown size={16} className="text-slate-400" />
+                <span>{sortLabel}</span>
+                <ChevronDown size={14} className="text-slate-500" />
+                </button>
+                
+                {isSortDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                    <div className="py-1">
+                    <button
+                        onClick={() => { setSortOption('name_asc'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_asc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                    >
+                        <span className="w-5 mr-2 text-center">A</span> Name (A-Z)
+                    </button>
+                    <button
+                        onClick={() => { setSortOption('name_desc'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_desc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                    >
+                        <span className="w-5 mr-2 text-center">Z</span> Name (Z-A)
+                    </button>
+                    <button
+                        onClick={() => { setSortOption('date_newest'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_newest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                    >
+                        <Calendar size={14} className="mr-2" /> Newest First
+                    </button>
+                    <button
+                        onClick={() => { setSortOption('date_oldest'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_oldest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                    >
+                        <Calendar size={14} className="mr-2" /> Oldest First
+                    </button>
+                    </div>
+                </div>
+                )}
+            </div>
           </div>
-        </div>
-        <div className="px-4 pb-4">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search characters by name..."
-            className="w-full px-4 py-2 bg-stone-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
+
+          <div className="flex gap-4">
+              {/* Type Filter Buttons */}
+              <div className="flex rounded-lg bg-stone-800 p-1 border border-stone-700 flex-shrink-0">
+                  <button
+                      onClick={() => setFilterType('all')}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                          filterType === 'all' 
+                              ? 'bg-stone-600 text-white shadow-sm' 
+                              : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                      }`}
+                  >
+                      All
+                  </button>
+                  <button
+                      onClick={() => setFilterType('character')}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                          filterType === 'character' 
+                              ? 'bg-stone-600 text-white shadow-sm' 
+                              : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                      }`}
+                  >
+                      <Users size={14} /> Characters
+                  </button>
+                  <button
+                      onClick={() => setFilterType('world')}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                          filterType === 'world' 
+                              ? 'bg-emerald-600/80 text-white shadow-sm' 
+                              : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                      }`}
+                  >
+                      <MapIcon size={14} /> Worlds
+                  </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="flex-grow">
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search characters by name..."
+                    className="w-full px-4 py-2 bg-stone-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+          </div>
         </div>
       </div>
 
@@ -773,6 +838,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             emptyMessage="No matching characters found."
             renderItem={(character) => {
               const isDeleting = deletingPath === character.path;
+              const isWorld = character.extensions?.card_type === 'world';
+              
               return (
                 <div
                   key={character.path}
@@ -786,7 +853,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   onClick={() => handleCharacterClick(character)}
                   role="button"
                   tabIndex={0}
-                  aria-label={`Select character ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
+                  aria-label={`Select ${isWorld ? 'world' : 'character'} ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
                 >
                   {/* Incomplete Character Indicator */}
                   {character.is_incomplete && (
@@ -795,6 +862,16 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                       title="New character - needs basic info setup"
                     >
                       <AlertTriangle size={16} />
+                    </div>
+                  )}
+
+                  {/* World Badge */}
+                  {isWorld && (
+                    <div
+                      className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-emerald-600/80 text-white rounded-full shadow-lg backdrop-blur-sm border border-emerald-500/30`}
+                      title="World Card"
+                    >
+                      <MapIcon size={16} />
                     </div>
                   )}
                   

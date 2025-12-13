@@ -281,12 +281,24 @@ async def list_characters(
                         normalized_char_dir = normalize_path(str(char_path.parent))
                         
                         if normalized_char_dir == normalized_directory and char_path.exists():
+                            # Parse extensions safely
+                            extensions = {}
+                            if db_char.extensions_json:
+                                if isinstance(db_char.extensions_json, str):
+                                    try:
+                                        extensions = json.loads(db_char.extensions_json)
+                                    except:
+                                        extensions = {}
+                                elif isinstance(db_char.extensions_json, dict):
+                                    extensions = db_char.extensions_json
+
                             db_files_in_dir.append({
                                 "name": char_path.stem,
                                 "path": str(char_path),
                                 "size": char_path.stat().st_size,
                                 "modified": datetime.fromtimestamp(char_path.stat().st_mtime, tz=timezone.utc),
-                                "character_uuid": db_char.character_uuid
+                                "character_uuid": db_char.character_uuid,
+                                "extensions_json": extensions
                             })
                     except Exception as char_error:
                         logger.warning(f"Error processing character {db_char.character_uuid}: {char_error}")
@@ -352,7 +364,7 @@ async def list_characters(
                     db_metadata_last_synced_at=f_info["modified"],
                     # Default other optional fields
                     description="", personality="", scenario="", first_mes="", mes_example="",
-                    creator_comment="", tags=[], spec_version="2.0", extensions_json={},
+                    creator_comment="", tags=[], spec_version="2.0", extensions_json=f_info.get("extensions_json", {}),
                     original_character_id=None
                 ))
             return CharacterListResponse(characters=characters_from_files, total=len(characters_from_files))
@@ -411,6 +423,35 @@ async def get_character_by_uuid_endpoint(
     except Exception as e:
         logger.error(f"Error retrieving character {character_uuid}: {str(e)}")
         raise handle_generic_error(e, "retrieving character")
+
+@router.put("/character/{character_uuid}", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Update character metadata")
+async def update_character_endpoint(
+    character_uuid: str,
+    data_wrapper: Dict[str, Any] = Body(...),
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Update character metadata without file upload."""
+    try:
+        logger.info(f"PUT /api/character/{character_uuid}")
+        
+        # Extract actual data from wrapper if present (CharacterData structure)
+        # The frontend sends { data: { ... } } structure usually
+        update_data = data_wrapper.get("data", data_wrapper)
+        
+        updated_char = char_service.update_character(character_uuid, update_data)
+        
+        if not updated_char:
+            raise NotFoundException(f"Character {character_uuid} not found")
+            
+        api_char = to_api_model(updated_char, logger)
+        return create_data_response({"character": api_char})
+        
+    except NotFoundException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating character {character_uuid}: {str(e)}")
+        raise handle_generic_error(e, "updating character")
 
 @router.post("/characters/save-card", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Save/Update character card (PNG+DB)")
 async def save_character_card_endpoint(
@@ -526,15 +567,19 @@ async def delete_character_by_path_endpoint(
         logger.error(f"Error deleting character by path {path}: {str(e)}")
         raise handle_generic_error(e, "deleting character by path")
 
+class DuplicateCharacterRequest(BaseModel):
+    new_name: Optional[str] = None
+
 @router.post("/character/{character_uuid}/duplicate", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Duplicate a character by UUID")
 async def duplicate_character_endpoint(
     character_uuid: str,
-    new_name: Optional[str] = Body(None, description="Optional new name for the duplicated character"),
+    request: DuplicateCharacterRequest,
     char_service: CharacterService = Depends(get_character_service_dependency),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Duplicate a character by UUID, creating a copy with a new UUID and filename."""
     try:
+        new_name = request.new_name
         logger.info(f"POST /api/character/{character_uuid}/duplicate with new_name: {new_name}")
         
         # Duplicate the character using the service
