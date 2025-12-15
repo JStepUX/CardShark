@@ -42,10 +42,9 @@ const AppRoutes: React.FC = () => (
       <APIConfigProvider>
         <TemplateProvider>
           <CharacterProvider>
-            <ChatProvider>
-              <KoboldCPPProvider pollInterval={120000}>
-                <Routes>
-            <Route path="/" element={<Layout />}>
+            <KoboldCPPProvider pollInterval={120000}>
+              <Routes>
+          <Route path="/" element={<Layout />}>
             {/* Default view redirects to gallery */}
             <Route index element={<Navigate to="/gallery" replace />} />
             
@@ -72,9 +71,11 @@ const AppRoutes: React.FC = () => (
               
               {/* World Cards Play route needs chat providers */}
               <Route path=":worldId/play" element={
-                <LazyRoute routeName="World Play">
-                  <WorldCardsPlayView />
-                </LazyRoute>
+                <ChatProvider>
+                  <LazyRoute routeName="World Play">
+                    <WorldCardsPlayView />
+                  </LazyRoute>
+                </ChatProvider>
               } />
             </Route>
 
@@ -116,10 +117,12 @@ const AppRoutes: React.FC = () => (
             
             {/* Chat route with chat-specific providers - LAZY LOADED */}
             <Route path="chat" element={
-              <LazyRoute routeName="Chat">
-                <HighlightStylesUpdater />
-                <ChatView />
-              </LazyRoute>
+              <ChatProvider>
+                <LazyRoute routeName="Chat">
+                  <HighlightStylesUpdater />
+                  <ChatView />
+                </LazyRoute>
+              </ChatProvider>
             } />
             
             {/* Settings view with API configuration */}
@@ -132,9 +135,8 @@ const AppRoutes: React.FC = () => (
             {/* Fallback route - Redirects to gallery if no match */}
             <Route path="*" element={<Navigate to="/gallery" replace />} />
           </Route>
-          </Routes>
-              </KoboldCPPProvider>
-            </ChatProvider>
+        </Routes>
+            </KoboldCPPProvider>
           </CharacterProvider>
         </TemplateProvider>
       </APIConfigProvider>

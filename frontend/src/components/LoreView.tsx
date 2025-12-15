@@ -110,10 +110,10 @@ const LoreView: React.FC = () => {
         try {
           const importedNewEntries = await importLogicCallback(selectedFile);
 
-          // For PNG and JSON, the respective import handlers (importPng, importJson)
+          // For PNG, JSON, and TSV, the respective import handlers (importPng, importJson, importTsv)
           // already update characterData via setCharacterData.
-          // For TSV (and potentially other future types), we merge entries here.
-          if (fileTypeNameForError !== 'PNG' && fileTypeNameForError !== 'JSON') {
+          // We don't need manual merging here for these types anymore.
+          if (fileTypeNameForError !== 'PNG' && fileTypeNameForError !== 'JSON' && fileTypeNameForError !== 'TSV') {
             const currentBookEntries = characterData.data?.character_book?.entries || [];
             // Ensure currentBookEntries is an array of LoreEntry and filter out invalid items
             const validCurrentEntries = Array.isArray(currentBookEntries)
@@ -133,7 +133,7 @@ const LoreView: React.FC = () => {
             ];
             updateCharacterData(combinedEntries);
           }
-          // If it was a PNG import, characterData was updated by importPng,
+          // If it was a supported import type, characterData was updated by the handler,
           // and 'entries' (derived from useMemo) will reflect this.
           setError(null); // Clear any previous error
         } catch (importError) {
@@ -151,9 +151,8 @@ const LoreView: React.FC = () => {
   };
 
   const tsvFileImportLogic = (file: File): Promise<LoreEntry[]> => {
-    const currentBookEntries = characterData?.data?.character_book?.entries || [];
-    const validCurrentEntries = Array.isArray(currentBookEntries) ? currentBookEntries.filter(isLoreEntry) : [];
-    return importTsv(file, validCurrentEntries.length); // importTsv is from '../handlers/importHandlers'
+    // importTsv now expects the file object and characterContext, similar to importJson
+    return importTsv(file, characterContext); 
   };
 
   const pngFileImportLogic = (file: File): Promise<LoreEntry[]> => {

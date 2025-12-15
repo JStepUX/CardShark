@@ -422,7 +422,73 @@ class CharacterService:
             self.logger.log_info(f"Creating new lore entry (JSON ID: {original_json_id}) for book {lore_book.id}")
             new_db_entry = LoreEntryModel(**lore_entry_model_data)
             db.add(new_db_entry)        # self.db.commit() will be called by the calling function (e.g. sync_character_directories or save_uploaded_character_card)
-        
+
+    def add_lore_entries(self, character_uuid: str, entries_data: List[Dict], write_to_png: bool = True):
+        """
+        Adds multiple lore entries to a character's lore book.
+        Appends to existing entries instead of replacing them.
+        """
+        self.logger.log_info(f"Adding {len(entries_data)} lore entries to character: {character_uuid}")
+
+        with self._get_session_context() as db:
+            # Ensure the character exists
+            character = db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
+            if not character:
+                self.logger.log_error(f"Cannot add lore entries. Character {character_uuid} not found.")
+                return False
+
+            # Find or create LoreBook
+            lore_book = db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
+            if not lore_book:
+                self.logger.log_info(f"Creating new lore book for {character_uuid}")
+                lore_book = LoreBookModel(character_uuid=character_uuid, name=f"{character.name}'s Lorebook")
+                db.add(lore_book)
+                db.flush()
+
+            # Add entries
+            for entry_data in entries_data:
+                if not isinstance(entry_data, dict):
+                    continue
+                
+                # Determine insertion order (append to end)
+                # This could be optimized by query but for now relying on provided or default
+                # Ideally we check max existing order but let's trust the input or default
+                
+                lore_entry_model_data = {
+                    "lore_book_id": lore_book.id,
+                    "keys_json": json.dumps(entry_data.get("keys", [])),
+                    "secondary_keys_json": json.dumps(entry_data.get("secondary_keys", [])),
+                    "content": entry_data.get("content", ""),
+                    "comment": entry_data.get("comment", ""),
+                    "enabled": entry_data.get("enabled", True),
+                    "position": entry_data.get("position", "before_char"),
+                    "selective": entry_data.get("selective", False),
+                    "insertion_order": entry_data.get("insertion_order", 0), # Caller should set this ideally
+                    "image_uuid": entry_data.get("image_uuid"),
+                    "extensions_json": json.dumps(entry_data.get("extensions", {}))
+                }
+
+                new_db_entry = LoreEntryModel(**lore_entry_model_data)
+                db.add(new_db_entry)
+            
+            db.commit()
+            
+            # Write back to PNG if requested
+            if write_to_png:
+                # We need to reload the character to get full state including new lore
+                # Actually update_character calls _sync_character_lore if data is passed,
+                # but here we just want to serialize existing DB state to PNG.
+                # update_character already has logic to write to PNG from DB state.
+                # So we can just call it with empty update?
+                # Or reuse the logic.
+                
+                # Let's reuse the logic from update_character but without changing fields
+                # We'll just trigger a "dummy" update to force PNG sync
+                # Or better, replicate the PNG writing part since update_character takes a dict of updates
+                self.update_character(character_uuid, {}, write_to_png=True)
+                
+            return True
+
     def get_character_by_uuid(self, character_uuid: str, db: Session) -> Optional[CharacterModel]:
         return db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
 
@@ -530,7 +596,7 @@ class CharacterService:
             if db_char.name and (db_char.description or db_char.first_mes):
                 db_char.is_incomplete = False
 
-        # Sync lore if provided in character_data
+            # Sync lore if provided in character_data
             if "character_book" in character_data and isinstance(character_data["character_book"], dict):
                 self._sync_character_lore(character_uuid, character_data["character_book"], db)
 
@@ -584,12 +650,12 @@ class CharacterService:
                         "entries": entries_for_png
                     }
 
-            try:
-                self.png_handler.write_metadata_to_png(db_char.png_file_path, png_metadata_to_write)
-                self.logger.log_info(f"Successfully wrote metadata back to PNG: {db_char.png_file_path}")
-            except Exception as e:
-                self.logger.log_error(f"Failed to write metadata to PNG {db_char.png_file_path}: {e}")
-                # Decide if DB commit should proceed if PNG write fails. For now, it will.
+                try:
+                    self.png_handler.write_metadata_to_png(db_char.png_file_path, png_metadata_to_write)
+                    self.logger.log_info(f"Successfully wrote metadata back to PNG: {db_char.png_file_path}")
+                except Exception as e:
+                    self.logger.log_error(f"Failed to write metadata to PNG {db_char.png_file_path}: {e}")
+                    # Decide if DB commit should proceed if PNG write fails. For now, it will.
 
             db.commit()
             db.refresh(db_char)
@@ -944,37 +1010,6 @@ class CharacterService:
         except Exception as e:
             self.logger.log_error(f"Error duplicating character {character_uuid}: {e}")
             return None
-
-# FastAPI Dependency for CharacterService
-# This needs to be accessible by endpoint files.
-# It might be better placed in main.py or a dedicated dependencies.py
-# if PngMetadataHandler, SettingsManager, LogManager are globally available there.
-# For now, defining it here and assuming those handlers can be imported or accessed.
-
-# To make this work, PngMetadataHandler, SettingsManager, LogManager instances
-# need to be globally accessible or passed through a more complex dependency chain.
-# Let's assume for now they are initialized in main.py and can be imported,
-# which is a simplification. A better approach might involve app.state or a shared context.
-
-# Simplified dependency for now - assumes global handlers from main.py
-# This will require adjustments in main.py to make these handlers available for import,
-# or this dependency function needs to be in main.py itself.
-# For now, this illustrates the structure.
-
-# from fastapi import Depends
-# from backend.database import get_db
-# from backend.main import png_handler as global_png_handler # This creates a circular import risk if not careful
-# from backend.main import settings_manager as global_settings_manager
-# from backend.main import logger as global_logger
-
-# def get_character_service(db: Session = Depends(get_db)):
-#     # This is a placeholder showing the intent.
-#     # Actual instantiation will need access to initialized handlers.
-#     # This function will likely need to be defined in `main.py` or a `dependencies.py`
-#     # where `png_handler`, `settings_manager`, and `logger` are in scope.
-#     # For the purpose of this step, we acknowledge its need.
-#     # The actual implementation of this dependency will be done when refactoring endpoints.
-#     pass
 
     def clear_all_characters(self) -> bool:
         """

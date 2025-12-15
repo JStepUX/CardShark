@@ -5,9 +5,10 @@ import os
 import uuid
 from fastapi import APIRouter, Request, Depends, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import urllib.parse
 from pathlib import Path
+from pydantic import BaseModel
 
 from backend.log_manager import LogManager
 # Don't import logger from main - this creates a circular import
@@ -509,20 +510,6 @@ async def delete_lore_image_with_fallback(
         raise handle_generic_error(e, logger, "deleting lore image")
 
 
-# Endpoint for serving lore images - this should align with how main.py serves /uploads
-# This might be redundant if /uploads/{character_uuid}/{filename} is already handled by StaticFiles in main.py
-# However, having an explicit endpoint can be useful for specific logic or auth in the future.
-# For now, we assume main.py's StaticFiles mount for `/uploads` will cover this.
-# If not, a route like this would be needed:
-# @router.get("/images/{character_uuid}/{image_filename}")
-# async def get_lore_image_file(character_uuid: str, image_filename: str, logger: LogManager = Depends(get_logger)):
-#     lore_image_dir = get_lore_image_dir(character_uuid, logger)
-#     image_path = lore_image_dir / image_filename
-#     if not image_path.is_file():
-#         raise HTTPException(status_code=404, detail="Image not found")
-#     return FileResponse(str(image_path))
-
-
 # Original /extract-lore endpoint, now prefixed under /api/lore
 @router.post("/extract", response_model=DataResponse[dict]) # Changed from /extract-lore to just /extract (relative to /api/lore)
 async def extract_lore_entries( # Renamed function for clarity
@@ -563,3 +550,39 @@ async def extract_lore_entries( # Renamed function for clarity
         logger.log_error(f"Error extracting lore: {str(e)}")
         logger.log_error(traceback.format_exc())
         raise handle_generic_error(e, logger, "extracting lore")
+
+class LoreBatchRequest(BaseModel):
+    lore_entries: List[Dict[str, Any]]
+
+@router.post("/character/{character_uuid}/batch", response_model=DataResponse[dict])
+async def batch_save_lore_entries(
+    character_uuid: str,
+    payload: LoreBatchRequest,
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """
+    Batch save (append) lore entries to a character.
+    """
+    try:
+        if not payload.lore_entries:
+            return create_data_response({"success": True, "message": "No entries to save", "count": 0})
+
+        logger.log_info(f"Batch saving {len(payload.lore_entries)} lore entries for character {character_uuid}")
+        
+        success = character_service.add_lore_entries(character_uuid, payload.lore_entries)
+        
+        if success:
+            return create_data_response({
+                "success": True, 
+                "message": "Lore entries saved successfully", 
+                "count": len(payload.lore_entries)
+            })
+        else:
+            raise ValidationException(f"Failed to save lore entries for character {character_uuid}")
+            
+    except ValidationException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Error batch saving lore entries: {e}")
+        raise handle_generic_error(e, logger, "saving lore entries")

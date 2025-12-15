@@ -45,10 +45,58 @@ async function parseTsvContent(content: string, startIndex: number): Promise<Lor
 /**
  * Import TSV file
  */
-export async function importTsv(file: File, startIndex: number): Promise<LoreEntry[]> {
+export async function importTsv(
+  file: File,
+  characterContext: ReturnType<typeof useCharacter>
+): Promise<LoreEntry[]> {
   try {
+    const { characterData, setCharacterData } = characterContext;
+    
+    // Calculate start index based on existing entries
+    const currentEntries = characterData?.data?.character_book?.entries || [];
+    // Ensure we handle array or object correctly (though normally it's normalized to array in UI)
+    const startIndex = Array.isArray(currentEntries) ? currentEntries.length : Object.keys(currentEntries).length;
+
     const content = await file.text();
-    return parseTsvContent(content, startIndex);
+    const extractedLoreEntries = await parseTsvContent(content, startIndex);
+
+    if (extractedLoreEntries.length > 0) {
+      if (characterData?.data?.character_uuid) {
+        try {
+          await apiService.saveLoreEntries(characterData.data.character_uuid, extractedLoreEntries);
+          
+          setCharacterData(prevCharacterData => {
+            if (!prevCharacterData) return null;
+
+            const charData = prevCharacterData.data || {};
+            const charBook = charData.character_book || { entries: [] };
+            const existingEntries = charBook.entries || [];
+
+            const updatedBook = {
+              ...charBook,
+              entries: [
+                ...existingEntries,
+                ...extractedLoreEntries
+              ]
+            };
+            return {
+              ...prevCharacterData,
+              data: {
+                ...charData,
+                character_book: updatedBook
+              }
+            };
+          });
+          console.log('TSV Lore entries saved successfully.');
+        } catch (saveError) {
+          console.error('Failed to save TSV lore entries:', saveError);
+          throw new Error(`Failed to save TSV lore entries: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
+        }
+      } else {
+        console.warn('Cannot save TSV lore entries: Character UUID is missing.');
+      }
+    }
+    return extractedLoreEntries;
   } catch (error) {
     console.error('TSV import failed:', error);
     throw new Error(`Failed to import TSV: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -276,7 +324,7 @@ export async function importPng(file: File, characterContext: ReturnType<typeof 
     formData.append('file', file);
 
     // Use timeout utility for fetch request
-    const response = await fetchWithTimeout('/api/characters/extract-metadata', {
+    const response = await fetchWithTimeout('/api/characters/extract-lore', {
       method: 'POST',
       body: formData
     }, 30000); // 30 second timeout for image processing
@@ -285,21 +333,21 @@ export async function importPng(file: File, characterContext: ReturnType<typeof 
       throw new Error(`Failed to extract lore from PNG: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const responseData = await response.json();
 
-    if (!data.success) {
-      throw new Error(data.message || 'Unknown error extracting lore from PNG');
+    if (!responseData.success) {
+      throw new Error(responseData.message || 'Unknown error extracting lore from PNG');
     }
 
+    const resultData = responseData.data;
     let extractedLoreEntries: LoreEntry[] = [];
-    // Look for 'lore_book' property which is what the backend sends
-    if (data.lore_book && Array.isArray(data.lore_book)) {
-      extractedLoreEntries = extractEntriesFromJson(data.lore_book);
-    } else if (data.success && data.lore_book === null) {
+
+    // The backend returns lore_book within the data object
+    if (resultData && resultData.lore_book) {
+      extractedLoreEntries = extractEntriesFromJson(resultData.lore_book);
+    } else {
       // No lore found, which is a valid success case
       extractedLoreEntries = [];
-    } else {
-      throw new Error('Invalid lore items format in PNG response');
     }
 
     // Save the extracted lore entries to the character
