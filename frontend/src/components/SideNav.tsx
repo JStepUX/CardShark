@@ -25,12 +25,12 @@ import usePrefetchRoute from '../hooks/usePrefetchRoute';
 import logo from '../assets/cardshark_justfin.png';
 
 // Route component imports for prefetching
-const importCharacterGallery = () => import('./CharacterGallery');
-const importCharacterInfoView = () => import('./CharacterInfoView');
+const importCharacterGallery = () => import('./character/CharacterGallery');
+const importCharacterInfoView = () => import('./character/CharacterInfoView');
 const importLoreView = () => import('./LoreView');
 const importMessagesView = () => import('./MessagesView');
-const importChatView = () => import('./ChatView');
-const importAPISettingsView = () => import('./APISettingsView');
+const importChatView = () => import('./chat/ChatView');
+const importAPISettingsView = () => import('./settings/APISettingsView');
 const importWorldCardsView = () => import('../views/WorldCardsView');
 
 const NAV_ICONS = {

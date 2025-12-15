@@ -1,3 +1,9 @@
+"""
+@file world_service.py
+@description Service for managing world data, state, and card operations.
+@dependencies database, world_data models
+@consumers world_endpoints.py
+"""
 from sqlalchemy.orm import Session
 from backend import sql_models # Adjusted import
 from backend import schemas # Adjusted import

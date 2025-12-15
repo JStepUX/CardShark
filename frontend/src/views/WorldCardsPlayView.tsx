@@ -1,15 +1,21 @@
+/**
+ * @file WorldCardsPlayView.tsx
+ * @description View for playing within a world. Manages world state, location navigation, and NPC interactions.
+ * @dependencies useCharacter, useChatMessages, WorldMap, NpcCard
+ * @consumers AppRoutes.tsx
+ */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Send, User } from 'lucide-react';
 import GameWorldIconBar from '../components/GameWorldIconBar';
 import { useCharacter } from '../contexts/CharacterContext';
-import { Dialog } from '../components/Dialog';
+import { Dialog } from '../components/common/Dialog';
 import { CharacterCard } from '../types/schema';
 import { NpcGridItem } from '../types/worldState';
 import { Location as WorldLocation } from '../types/world';
 import worldStateApi from '../utils/worldStateApi';
 import { apiService } from '../services/apiService';
-import ChatBubble from '../components/ChatBubble';
+import ChatBubble from '../components/chat/ChatBubble';
 import ThoughtBubble from '../components/ThoughtBubble';
 import UserSelect from '../components/UserSelect';
 import MoodIndicator from '../components/MoodIndicator';
@@ -19,7 +25,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import { generateUUID } from '../utils/uuidUtils';
 import ErrorMessage from '../components/ErrorMessage';
 import GalleryGrid from '../components/GalleryGrid';
-import NpcCard from '../components/NpcCard';
+import NpcCard from '../components/character/NpcCard';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import MapDialog from '../components/MapDialog';
 import { formatWorldName } from '../utils/formatters';
@@ -508,7 +514,7 @@ const WorldCardsPlayView: React.FC = () => {
               isGenerating={isGenerating}
               currentUser={currentUser}
               onUserSelect={() => setShowUserSelect(true)}
-              emotion={null}
+              emotion={{ primary: 'neutral', intensity: 50, valence: 0, arousal: 50 }}
             />
           </div>
         </div>

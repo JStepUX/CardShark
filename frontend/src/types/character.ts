@@ -1,4 +1,5 @@
 // frontend/src/types/character.ts
+import { WorldData } from './worldV2';
 
 /**
  * Defines the combat statistics for an NPC.
@@ -14,6 +15,15 @@ export interface NpcCombatStats {
   crit_chance: number; // Percentage (0.0 to 1.0)
   crit_multiplier: number; // e.g., 1.5 for 150%
   // Add other relevant stats corresponding to the backend model
+}
+
+/**
+ * Extension data for the character card, including World Card extensions.
+ */
+export interface CharacterExtensions {
+  card_type?: "character" | "world";
+  world_data?: WorldData;
+  [key: string]: any;
 }
 
 /**
@@ -35,6 +45,7 @@ export interface CharacterCoreData {
   tags?: string[] | null;
   creator?: string | null;
   character_version?: string | null;
+  extensions?: CharacterExtensions;
   // World Card Specific Additions
   combat_stats?: NpcCombatStats | null;
 }

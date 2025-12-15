@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 class WorldInfoPosition(str, Enum):
+    """Matches TypeScript WorldInfoPosition enum"""
     BEFORE_CHAR = "BEFORE_CHAR"
     AFTER_CHAR = "AFTER_CHAR"
     AN_TOP = "AN_TOP"
@@ -75,55 +76,36 @@ class CharacterValidator:
         self.logger = logger
         self.next_uid = int(time.time() * 1000)
 
-    def create_empty_character(self) -> Dict:
+    def create_empty_character(self, card_type: str = "character") -> Dict:
         """Creates empty character structure matching the new JSON format"""
-        return {
-            "name": "",
-            "description": "",
-            "personality": "",
-            "scenario": "",
-            "first_mes": "",
-            "mes_example": "",
-            "creatorcomment": "",
-            "avatar": "none",
-            "chat": "",
-            "talkativeness": "0.5",
-            "fav": False,
-            "tags": [],
-            "spec": "chara_card_v2",
-            "spec_version": "2.0",
-            "data": {
-                "name": "",
-                "description": "",
-                "personality": "",
-                "scenario": "",
-                "first_mes": "",
-                "mes_example": "",
-                "creator_notes": "",
-                "system_prompt": "",
-                "post_history_instructions": "",
-                "tags": [],
-                "creator": "",
-                "character_version": "",
-                "alternate_greetings": [],
-                "extensions": {
-                    "talkativeness": "0.5",
-                    "fav": False,
-                    "world": "",
-                    "depth_prompt": {
-                        "prompt": "",
-                        "depth": 4,
-                        "role": "system"
-                    }
+        char_data = self._create_empty_character()
+        
+        # Set card_type in extensions
+        if "extensions" not in char_data["data"]:
+            char_data["data"]["extensions"] = {}
+        
+        char_data["data"]["extensions"]["card_type"] = card_type
+        
+        # Initialize world_data if card_type is world
+        if card_type == "world":
+            char_data["data"]["extensions"]["world_data"] = {
+                "rooms": [],
+                "settings": {
+                    "narrator_voice": "default",
+                    "time_system": "turn_based",
+                    "entry_room_id": None,
+                    "global_scripts": []
                 },
-                "group_only_greetings": [],
-                "character_book": {
-                    "entries": [],
-                    "name": ""
+                "player_state": {
+                    "current_room_id": None,
+                    "inventory": [],
+                    "health": 100,
+                    "stats": {},
+                    "flags": {}
                 }
-            },
-            "create_date": ""
-        }
+            }
+            
+        return char_data
     
     def _generate_uid(self) -> int:
         """Generates unique numeric ID"""
@@ -218,7 +200,7 @@ class CharacterValidator:
                 return self.create_empty_character()
 
             # Create a copy of the empty character and update it with the provided data
-            normalized = self.create_empty_character()
+            normalized = self._create_empty_character()
 
             # Update top-level fields
             normalized.update({
@@ -263,7 +245,13 @@ class CharacterValidator:
                 "talkativeness": str(extensions.get("talkativeness", "0.5")),
                 "fav": bool(extensions.get("fav", False)),
                 "world": str(extensions.get("world", "")),
+                "card_type": str(extensions.get("card_type", "character")), # Normalize card_type
             })
+
+            # Preserve world_data if present
+            if "world_data" in extensions:
+                 normalized["data"]["extensions"]["world_data"] = extensions["world_data"]
+
 
             depth_prompt = extensions.get("depth_prompt", {})
             normalized["data"]["extensions"]["depth_prompt"] = {
@@ -329,6 +317,7 @@ class CharacterValidator:
                     "talkativeness": "0.5",
                     "fav": False,
                     "world": "",
+                    "card_type": "character", # Default
                     "depth_prompt": {
                         "prompt": "",
                         "depth": 4,

@@ -1,3 +1,9 @@
+/**
+ * @file CharacterContext.tsx
+ * @description Global context for currently selected character data and state.
+ * @dependencies characterService
+ * @consumers App wide
+ */
 import React, { createContext, useContext, useState } from 'react';
 import { CharacterCard } from '../types/schema';
 import { generateUUID } from '../utils/uuidUtils';

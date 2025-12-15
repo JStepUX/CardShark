@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { X, ArrowLeft, Save } from 'lucide-react';
 import { useComparison } from '../contexts/ComparisonContext';
-import CharacterInfoView from './CharacterInfoView';
-import CharacterGallery from './CharacterGallery';
+import CharacterInfoView from './character/CharacterInfoView';
+import CharacterGallery from './character/CharacterGallery';
 
 interface ComparisonPanelProps {
   settingsChangeCount: number;

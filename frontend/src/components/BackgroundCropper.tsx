@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import { Ratio } from 'lucide-react';
 import ImageCropperModal from './ImageCropperModal';
 

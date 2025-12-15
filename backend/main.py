@@ -1,3 +1,9 @@
+"""
+@file main.py
+@description Entry point for the FastAPI backend application. Configures middleware, routes, and startup/shutdown events.
+@dependencies fastapi, uvicorn, various routers
+@consumers Dockerfile, start scripts
+"""
 # backend/main.py
 # Main application file for CardShark
 import os
@@ -151,6 +157,8 @@ from backend.utils.user_dirs import get_users_dir # type: ignore
 # Import various handlers
 from backend.handlers.world_state_handler import WorldStateHandler
 from backend.handlers.world_card_chat_handler import WorldCardChatHandler
+from backend.world_asset_handler import WorldAssetHandler
+from backend.world_card_handler import WorldCardHandler
 
 # Global configuration
 VERSION = "0.1.0"
@@ -188,6 +196,14 @@ async def lifespan(app: FastAPI):
             settings_manager=settings_manager,
             logger=logger,
             # character_indexing_service=character_indexing_service # Add this if CharacterService needs it
+        )
+        
+        # Initialize World Handlers
+        app.state.world_asset_handler = WorldAssetHandler(logger)
+        app.state.world_card_handler = WorldCardHandler(
+            character_service=app.state.character_service,
+            asset_handler=app.state.world_asset_handler,
+            logger=logger
         )
         
         # Synchronize character directories using the initialized service

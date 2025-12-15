@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import { CharacterCard } from '../types/schema';
 
 interface FindReplaceDialogProps {

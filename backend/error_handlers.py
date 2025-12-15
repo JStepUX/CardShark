@@ -2,6 +2,7 @@
 # Standardized error handling utilities for FastAPI endpoints
 
 from fastapi import HTTPException, Request
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from pydantic import ValidationError
@@ -217,7 +218,7 @@ async def cardshark_exception_handler(request: Request, exc: CardSharkException)
     
     return JSONResponse(
         status_code=status_code,
-        content=response.model_dump_json(),
+        content=response.model_dump(mode='json'),
         media_type="application/json"
     )
 
@@ -237,7 +238,7 @@ async def validation_exception_handler(request: Request, exc: ValidationError) -
     
     return JSONResponse(
         status_code=422,
-        content=response.model_dump_json(),
+        content=response.model_dump(mode='json'),
         media_type="application/json"
     )
 
@@ -255,7 +256,7 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError) -
     
     return JSONResponse(
         status_code=status_code,
-        content=response.model_dump_json(),
+        content=response.model_dump(mode='json'),
         media_type="application/json"
     )
 
@@ -270,7 +271,42 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     
     return JSONResponse(
         status_code=500,
-        content=response.model_dump_json(),
+        content=response.model_dump(mode='json'),
+        media_type="application/json"
+    )
+
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """Global exception handler for HTTP exceptions to ensure consistent JSON response."""
+    # If detail is already a dict (potentially from our helper functions), use it directly if possible,
+    # but we should wrap it in our standard ErrorResponse if it's not one already.
+    # However, if it's a dict, it might be { "error": "...", "error_code": "..." } from handle_cardshark_exception.
+    
+    if isinstance(exc.detail, dict):
+        # Check if it matches our structure
+        if "error" in exc.detail:
+             return JSONResponse(
+                status_code=exc.status_code,
+                content=exc.detail, # Assume it's already JSON-serializable if it came from our helpers
+                media_type="application/json"
+            )
+        else:
+             # Wrap arbitrary dict
+             response = ErrorResponse(
+                error="HTTP Error",
+                details=exc.detail,
+                success=False
+             )
+    else:
+        # Wrap string detail
+        response = ErrorResponse(
+            error=str(exc.detail),
+            error_code=f"HTTP_{exc.status_code}",
+            success=False
+        )
+        
+    return JSONResponse(
+        status_code=exc.status_code, 
+        content=response.model_dump(mode='json'),
         media_type="application/json"
     )
 
@@ -304,6 +340,7 @@ def register_exception_handlers(app):
     app.add_exception_handler(CardSharkException, cardshark_exception_handler)
     app.add_exception_handler(ValidationError, validation_exception_handler)
     app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler) # Register HTTP exception handler
     app.add_exception_handler(Exception, generic_exception_handler)
 
 def handle_generic_error(e: Exception, operation: str = "operation") -> HTTPException:

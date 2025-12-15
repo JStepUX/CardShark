@@ -17,21 +17,23 @@ import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
 
 // Lazily load route components
 // Character and Gallery views
-const CharacterGallery = lazy(() => import('./CharacterGallery'));
-const CharacterInfoView = lazy(() => import('./CharacterInfoView'));
+const CharacterGallery = lazy(() => import('./character/CharacterGallery'));
+const CharacterInfoView = lazy(() => import('./character/CharacterInfoView'));
 const LoreView = lazy(() => import('./LoreView'));
 const MessagesView = lazy(() => import('./MessagesView'));
 
 // Chat view
-const ChatView = lazy(() => import('./ChatView'));
+const ChatView = lazy(() => import('./chat/ChatView'));
 
 // Settings view
-const APISettingsView = lazy(() => import('./APISettingsView'));
+const APISettingsView = lazy(() => import('./settings/APISettingsView'));
 
 // World-related views (grouped by feature)
 const WorldCardsView = lazy(() => import('../views/WorldCardsView'));
 const WorldBuilderView = lazy(() => import('../views/WorldBuilderView'));
 const WorldCardsPlayView = lazy(() => import('../views/WorldCardsPlayView'));
+const WorldLauncher = lazy(() => import('../views/WorldLauncher'));
+const WorldBuilder = lazy(() => import('../views/WorldBuilder'));
 
 const AppRoutes: React.FC = () => (
   // Global providers needed by most features - only essential ones
@@ -54,6 +56,7 @@ const AppRoutes: React.FC = () => (
               </LazyRoute>
             } />
             
+            {/* Legacy World Cards Routes */}
             <Route path="worldcards">
               <Route index element={
                 <LazyRoute routeName="World Cards">
@@ -74,6 +77,21 @@ const AppRoutes: React.FC = () => (
                 </LazyRoute>
               } />
             </Route>
+
+            {/* NEW World Card V2 Routes */}
+            <Route path="world/:uuid/launcher" element={
+              <LazyRoute routeName="World Launcher">
+                <WorldLauncher />
+              </LazyRoute>
+            } />
+            <Route path="world/:uuid/builder" element={
+               <LazyRoute routeName="World Builder V2">
+                 <WorldBuilder />
+               </LazyRoute>
+            } />
+            <Route path="world/:uuid/play" element={
+               <div className="flex items-center justify-center h-full text-white">World Play V2 Coming Soon</div>
+            } />
             
             {/* Character routes with ImageHandler - basic editing, no chat needed */}
             <Route path="info" element={

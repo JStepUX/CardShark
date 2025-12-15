@@ -20,7 +20,7 @@ export const worldStateApi = {
       }
       
       const data = await response.json();
-      return data.worlds || [];
+      return data.data || [];
     } catch (error) {
       console.error('Error in listWorlds:', error);
       throw error;
@@ -77,9 +77,9 @@ export const worldStateApi = {
       }
       
       const data = await response.json();
-      if (data && data.success && data.state) {
-        console.log(`Successfully loaded world state with ${Object.keys(data.state.locations || {}).length} locations`);
-        return data.state;
+      if (data && data.success && data.data) {
+        console.log(`Successfully loaded world state with ${Object.keys(data.data.locations || {}).length} locations`);
+        return data.data;
       } else {
         throw new Error('Invalid response format from server');
       }

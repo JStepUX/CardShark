@@ -229,6 +229,37 @@ class PngMetadataHandler:
             self.logger.log_error(f"Failed to read metadata: {str(e)}")
             raise
 
+    def write_metadata_to_png(self, file_path: Union[str, Path], metadata: Dict, create_if_not_exists: bool = False):
+        """
+        Writes metadata to a PNG file at the specified path.
+        If the file exists, it preserves the image content.
+        If the file does not exist and create_if_not_exists is True, it creates a blank image.
+        """
+        path = Path(file_path)
+        
+        if path.exists():
+            with open(path, "rb") as f:
+                image_data = f.read()
+        elif create_if_not_exists:
+            self.logger.log_step(f"File {path} does not exist. Creating new blank image.")
+            # Create a basic blank image (e.g., 512x512 transparent)
+            # Use RGBA for transparency support
+            img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
+            bio = BytesIO()
+            img.save(bio, format='PNG')
+            image_data = bio.getvalue()
+        else:
+            raise FileNotFoundError(f"PNG file not found at {path} and create_if_not_exists is False")
+
+        # Use the existing write_metadata method to embed the metadata
+        new_image_data = self.write_metadata(image_data, metadata)
+        
+        # Write the new image data back to the file
+        with open(path, "wb") as f:
+            f.write(new_image_data)
+        
+        self.logger.log_step(f"Successfully wrote metadata to {path}")
+
     def write_metadata(self, image_data: bytes, metadata: Dict) -> bytes:
         """Write character metadata to a PNG file with improved error handling and metadata preservation."""
         try:

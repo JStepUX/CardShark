@@ -8,7 +8,7 @@ import { CharacterCard } from '../types/schema';
 import { Room } from '../types/room';
 import GridRoomMap from '../components/GridRoomMap'; // Only keep the GridRoomMap component we're using
 import RoomEditor from '../components/RoomEditor';
-import { Dialog } from '../components/Dialog';
+import { Dialog } from '../components/common/Dialog';
 import GalleryGrid from '../components/GalleryGrid';
 import NpcCard from '../components/NpcCard';
 

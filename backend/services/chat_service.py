@@ -1,3 +1,9 @@
+"""
+@file chat_service.py
+@description Service handling chat logic, message generation, and interaction with LLM backends.
+@dependencies chat_db_manager, character_service, koboldcpp_handler
+@consumers chat_endpoints.py
+"""
 from sqlalchemy.orm import Session
 from backend import sql_models, schemas as pydantic_models # Use schemas for Pydantic models
 import uuid
@@ -117,7 +123,7 @@ def create_chat_message(db: Session, chat_session_uuid: str, role: str, content:
 def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_data: List[dict]) -> List[sql_models.ChatMessage]:
     """
     Atomically replaces all messages in a chat session with the provided list.
-    Preserves message IDs if provided in the payload.
+    Preserves message IDs if provided in the payload, unless they collide with existing IDs from other sessions.
     """
     try:
         # 1. Delete existing messages
@@ -125,13 +131,42 @@ def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_
             sql_models.ChatMessage.chat_session_uuid == chat_session_uuid
         ).delete(synchronize_session=False)
 
+        # 2. Identify potential ID collisions with other sessions
+        # Since we just deleted all messages for THIS session, any ID that still exists
+        # belongs to another session and must not be reused.
+        input_ids = [
+            m.get('id') or m.get('message_id') 
+            for m in messages_data 
+            if (m.get('id') or m.get('message_id'))
+        ]
+        
+        existing_ids = set()
+        if input_ids:
+            # Chunk queries to avoid SQLite variable limit
+            chunk_size = 500
+            for i in range(0, len(input_ids), chunk_size):
+                chunk = input_ids[i:i + chunk_size]
+                found = db.query(sql_models.ChatMessage.message_id).filter(
+                    sql_models.ChatMessage.message_id.in_(chunk)
+                ).all()
+                existing_ids.update(r[0] for r in found)
+
         new_messages = []
+        seen_ids = set()
+
         for message_data in messages_data:
             # Extract fields
             # Frontend often sends 'id' or 'message_id'
             msg_id = message_data.get('id') or message_data.get('message_id')
             if not msg_id:
                 msg_id = str(uuid.uuid4())
+            
+            # Prevent duplicate IDs within the same payload or collisions with DB
+            if msg_id in seen_ids or msg_id in existing_ids:
+                # If we encounter a duplicate/colliding ID, generate a new one
+                msg_id = str(uuid.uuid4())
+            
+            seen_ids.add(msg_id)
                 
             role = message_data.get('role', 'user')
             content = message_data.get('content', '') or message_data.get('text', '')

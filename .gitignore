@@ -57,6 +57,7 @@ Characters/
 site-Home/
 koboldcpp/
 worlds/
+docs/docs/archivedOLD
 
 *.spec
 crawlsite.py

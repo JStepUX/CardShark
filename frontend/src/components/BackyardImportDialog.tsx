@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import { Link } from 'lucide-react';
 
 interface BackyardImportDialogProps {

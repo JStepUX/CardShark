@@ -1,6 +1,6 @@
 // frontend/src/components/WorldCreationModal.tsx
 import React, { useState, useEffect } from 'react';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import Button from './common/Button';
 import CharacterGallery from './CharacterGallery';
 import { worldStateApi } from '../utils/worldStateApi';

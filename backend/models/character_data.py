@@ -29,6 +29,7 @@ class CharacterCoreData(BaseModel):
     tags: Optional[List[str]] = Field(default=None, description="Tags associated with the character.")
     creator: Optional[str] = Field(default=None, description="Creator of the character card.")
     character_version: Optional[str] = Field(default=None, description="Version of the character card.")
+    extensions: Dict[str, Any] = Field(default_factory=dict, description="Extension data, including card_type and world_data.")
     # World Card Specific Additions
     combat_stats: Optional[NpcCombatStats] = Field(default=None, description="Combat statistics for use in World Cards.")
 

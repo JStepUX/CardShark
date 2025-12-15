@@ -1,3 +1,9 @@
+/**
+ * @file useChatMessages.ts
+ * @description Hook for managing chat messages, streaming responses, and interaction history.
+ * @dependencies chatService, useCharacter
+ * @consumers WorldCardsPlayView.tsx
+ */
 // useChatMessages.ts (refactored)
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { CharacterData } from '../contexts/CharacterContext';
@@ -1127,9 +1133,14 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       if (!effectiveCharacterData?.data?.character_uuid) {
         console.warn("[ChatLoad useEffect] No character_uuid available. Showing greeting or empty.");
         if (effectiveCharacterData?.data?.first_mes) {
+            const firstMsg = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
+            if (effectiveCharacterData.data.alternate_greetings && Array.isArray(effectiveCharacterData.data.alternate_greetings) && effectiveCharacterData.data.alternate_greetings.length > 0) {
+                 firstMsg.variations = [firstMsg.content, ...effectiveCharacterData.data.alternate_greetings];
+                 firstMsg.currentVariation = 0;
+            }
             setState(prev => ({
                 ...prev,
-                messages: [createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete')],
+                messages: [firstMsg],
                 chatSessionUuid: null, 
                 isLoading: false,
                 error: "Character has no UUID, showing greeting only."
@@ -1174,7 +1185,12 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           toast.error(`Error loading chat: ${result?.error || 'Could not load chat history.'}`);
           let fallbackMessages: Message[] = [];
           if (effectiveCharacterData.data.first_mes) {
-              fallbackMessages.push(createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete'));
+              const firstMsg = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
+              if (effectiveCharacterData.data.alternate_greetings && Array.isArray(effectiveCharacterData.data.alternate_greetings) && effectiveCharacterData.data.alternate_greetings.length > 0) {
+                 firstMsg.variations = [firstMsg.content, ...effectiveCharacterData.data.alternate_greetings];
+                 firstMsg.currentVariation = 0;
+              }
+              fallbackMessages.push(firstMsg);
           }
           setState(prev => ({ 
               ...prev, 

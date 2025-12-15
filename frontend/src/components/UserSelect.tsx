@@ -1,8 +1,8 @@
 // frontend/src/components/UserSelect.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, UserPlus, ImagePlus, Trash2 } from 'lucide-react';
-import { Dialog } from './Dialog';
-import DeleteConfirmationDialog from './DeleteConfirmationDialog';
+import { Dialog } from './common/Dialog';
+import DeleteConfirmationDialog from './common/DeleteConfirmationDialog';
 import { createEmptyCharacterCard } from '../types/schema';
 import { UserProfile } from '../types/messages'; // *** IMPORT the shared type ***
 

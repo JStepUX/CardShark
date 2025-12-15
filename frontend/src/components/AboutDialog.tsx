@@ -1,4 +1,4 @@
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import { Heart } from 'lucide-react';
 
 interface AboutDialogProps {

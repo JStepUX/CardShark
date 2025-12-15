@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useImperativeHandle, forwardRef } from 'react';
 import { VariableSizeList as List } from 'react-window';
 import { Message, UserProfile } from '../types/messages';
-import ChatBubble from './ChatBubble';
+import ChatBubble from './chat/ChatBubble';
 import ThoughtBubble from './ThoughtBubble';
 
 interface ReasoningSettings {

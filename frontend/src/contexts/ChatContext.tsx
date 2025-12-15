@@ -1,3 +1,9 @@
+/**
+ * @file ChatContext.tsx
+ * @description Global state management for chat sessions, messages, and generation status.
+ * @dependencies useCharacter, useEnhancedChatSession
+ * @consumers ChatView.tsx, WorldCardsPlayView.tsx
+ */
 // contexts/ChatContext.tsx
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { Message, UserProfile } from '../types/messages';
@@ -178,20 +184,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       const result = response.ok ? await response.json() : { success: false, error: 'Save failed' };
+      
+      const success = result?.success;
+      // Handle wrapped data (DataResponse) or direct response
+      const data = result?.data || result;
 
-      if (result?.success) {
-        if (result.chat_session_uuid && result.chat_session_uuid !== chatToSaveId) { // Backend might return a consolidated/different ID
-           setCurrentChatId(result.chat_session_uuid);
-           console.debug(`Save successful, chat ID (from backend) updated to: ${result.chat_session_uuid}`);
-        } else if (result.chatId && result.chatId !== chatToSaveId) { // Fallback for older chatId field
-            setCurrentChatId(result.chatId);
-            console.debug(`Save successful, chat ID (from backend chatId field) updated to: ${result.chatId}`);
-        }
-         else {
+      if (success) {
+        const returnedId = data?.chat_session_uuid || data?.chatId;
+        if (returnedId && returnedId !== chatToSaveId) {
+           setCurrentChatId(returnedId);
+           console.debug(`Save successful, chat ID (from backend) updated to: ${returnedId}`);
+        } else {
            console.debug(`Save successful for chat ID: ${chatToSaveId}`);
         }
       } else {
-        console.debug('Save result:', result?.success ? 'success' : `failed (chatId: ${chatToSaveId})`, result?.error);
+        console.debug('Save result:', success ? 'success' : `failed (chatId: ${chatToSaveId})`, result?.error);
       }
       return result?.success || false;
     } catch (err) {
@@ -239,13 +246,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(null);
         if (!characterData) throw new Error('No character data available');        const response = await ChatStorage.loadLatestChat(characterData);
         
-        if (response.success && response.data && response.data.messages && Array.isArray(response.data.messages) && response.data.messages.length > 0) {
-          setMessages(response.data.messages);
-          const loadedChatSessionId = response.data.chat_session_uuid || response.data.chatId || response.data.metadata?.chat_metadata?.chat_id || null;
-          setCurrentChatId(loadedChatSessionId);          if (response.data.metadata?.chat_metadata?.lastUser) setCurrentUser(response.data.metadata.chat_metadata.lastUser);
+        // Handle potentially unwrapped response from ChatStorage or raw DataResponse
+        const sessionData = response.data || response;
+        const messages = sessionData.messages;
+
+        if (response.success && messages && Array.isArray(messages) && messages.length > 0) {
+          setMessages(messages);
+          const loadedChatSessionId = sessionData.chat_session_uuid || sessionData.chatId || sessionData.metadata?.chat_metadata?.chat_id || null;
+          setCurrentChatId(loadedChatSessionId);          if (sessionData.metadata?.chat_metadata?.lastUser) setCurrentUser(sessionData.metadata.chat_metadata.lastUser);
           
-          let loadedTrigLoreImgs: TriggeredLoreImage[] = [];          if (response.data.metadata?.chat_metadata?.triggeredLoreImages) {
-            loadedTrigLoreImgs = response.data.metadata.chat_metadata.triggeredLoreImages;
+          let loadedTrigLoreImgs: TriggeredLoreImage[] = [];          if (sessionData.metadata?.chat_metadata?.triggeredLoreImages) {
+            loadedTrigLoreImgs = sessionData.metadata.chat_metadata.triggeredLoreImages;
             setTriggeredLoreImages(loadedTrigLoreImgs); 
           }
           
@@ -254,8 +265,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const newAvailImgs = getAvailableImagesForPreview(charImgP);
           setAvailablePreviewImages(newAvailImgs);
  
-          if (response.data.metadata?.chat_metadata?.currentDisplayedImage && newAvailImgs.length > 0) {
-            const savedDisp = response.data.metadata.chat_metadata.currentDisplayedImage;
+          if (sessionData.metadata?.chat_metadata?.currentDisplayedImage && newAvailImgs.length > 0) {
+            const savedDisp = sessionData.metadata.chat_metadata.currentDisplayedImage;
             const foundIdx = newAvailImgs.findIndex(img =>
               img.type === savedDisp.type &&
               (img.type === 'character' || (img.entryId === savedDisp.entryId && img.imageUuid === savedDisp.imageUuid))
@@ -266,7 +277,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }          setLastContextWindow({
             type: 'loaded_chat', timestamp: new Date().toISOString(),
             characterName: characterData?.data?.name, chatId: loadedChatSessionId || 'unknown',
-            messageCount: response.data.messages.length
+            messageCount: messages.length
           });
           setError(null);
         } else if (response.isRecoverable && characterData?.data?.first_mes) {
@@ -275,6 +286,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const uName = currentUser?.name || 'User';
           const subContent = characterData.data.first_mes.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName);
           const firstMsg = MessageUtils.createAssistantMessage(subContent);
+
+          // Populate variations with alternate greetings if available
+          if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
+            const alternates = characterData.data.alternate_greetings.map(alt => 
+              alt.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName)
+            );
+            firstMsg.variations = [subContent, ...alternates];
+            firstMsg.currentVariation = 0;
+          }
+
           setMessages([firstMsg]);
           setLastContextWindow({
             type: 'initial_message_used', timestamp: new Date().toISOString(),
@@ -445,6 +466,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userN = currentUser?.name || 'User';
         const subContent = characterData.data.first_mes.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN);
         const firstM = MessageUtils.createAssistantMessage(subContent);
+
+        // Populate variations with alternate greetings if available
+        if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
+          const alternates = characterData.data.alternate_greetings.map(alt => 
+            alt.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN)
+          );
+          firstM.variations = [subContent, ...alternates];
+          firstM.currentVariation = 0;
+        }
+
         initMsgs = [firstM];
         setLastContextWindow({
           type: 'new_chat_first_message', timestamp: new Date().toISOString(),
@@ -890,23 +921,27 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       } else {
         response = { success: false, error: 'Load failed' };
       }
-      if (response.success && response.messages) {
-        setMessages(response.messages);
-        const loadedChatSessId = response.chat_session_uuid || response.chatId || chatIdToLoad;
+      // Handle potential data wrapper from backend (DataResponse)
+      const sessionData = response.data || response;
+      const messages = sessionData.messages || response.messages;
+
+      if (response.success && messages) {
+        setMessages(messages);
+        const loadedChatSessId = sessionData.chat_session_uuid || sessionData.chatId || chatIdToLoad;
         setCurrentChatId(loadedChatSessId);
-        if (response.metadata?.chat_metadata?.lastUser) setCurrentUser(response.metadata.chat_metadata.lastUser);
+        if (sessionData.metadata?.chat_metadata?.lastUser) setCurrentUser(sessionData.metadata.chat_metadata.lastUser);
 
         let loadedTrigLoreImgs: TriggeredLoreImage[] = [];
-        if (response.metadata?.chat_metadata?.triggeredLoreImages) {
-          loadedTrigLoreImgs = response.metadata.chat_metadata.triggeredLoreImages;
+        if (sessionData.metadata?.chat_metadata?.triggeredLoreImages) {
+          loadedTrigLoreImgs = sessionData.metadata.chat_metadata.triggeredLoreImages;
           setTriggeredLoreImages(loadedTrigLoreImgs); 
         }        const charImgP = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
           ? `/api/character-image/${characterData.data.character_uuid}.png` : '';
         const newAvailImgs = getAvailableImagesForPreview(charImgP);
         setAvailablePreviewImages(newAvailImgs);
 
-        if (response.metadata?.chat_metadata?.currentDisplayedImage && newAvailImgs.length > 0) {
-          const savedDisp = response.metadata.chat_metadata.currentDisplayedImage;
+        if (sessionData.metadata?.chat_metadata?.currentDisplayedImage && newAvailImgs.length > 0) {
+          const savedDisp = sessionData.metadata.chat_metadata.currentDisplayedImage;
           const foundIdx = newAvailImgs.findIndex(img => img.type === savedDisp.type && (img.type === 'character' || (img.entryId === savedDisp.entryId && img.imageUuid === savedDisp.imageUuid)));
           setCurrentPreviewImageIndex(foundIdx !== -1 ? foundIdx : 0);
         } else { setCurrentPreviewImageIndex(newAvailImgs.length > 0 ? 0 : 0); }
@@ -914,7 +949,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
         setLastContextWindow({
           type: 'loaded_specific_chat', timestamp: new Date().toISOString(),
           characterName: characterData?.data?.name, chatId: loadedChatSessId,
-          messageCount: response.messages.length
+          messageCount: messages.length
         });
         setError(null);
       } else {

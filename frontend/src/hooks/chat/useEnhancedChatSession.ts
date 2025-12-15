@@ -325,7 +325,12 @@ export function useEnhancedChatSession(
           }));
         } else if (targetCharacterData.data.first_mes) {
           // Create initial greeting if no messages but character has greeting
-          messages = [createAssistantMessage(targetCharacterData.data.first_mes, 'complete')];
+          const firstMsg = createAssistantMessage(targetCharacterData.data.first_mes, 'complete');
+          if (targetCharacterData.data.alternate_greetings && Array.isArray(targetCharacterData.data.alternate_greetings) && targetCharacterData.data.alternate_greetings.length > 0) {
+             firstMsg.variations = [firstMsg.content, ...targetCharacterData.data.alternate_greetings];
+             firstMsg.currentVariation = 0;
+          }
+          messages = [firstMsg];
         }
         
         setState(prev => ({
@@ -351,7 +356,12 @@ export function useEnhancedChatSession(
         const newSessionUuid = await createNewSession(false);
         
         if (newSessionUuid && targetCharacterData.data.first_mes) {
-          const initialMessages = [createAssistantMessage(targetCharacterData.data.first_mes, 'complete')];
+          const firstMsg = createAssistantMessage(targetCharacterData.data.first_mes, 'complete');
+          if (targetCharacterData.data.alternate_greetings && Array.isArray(targetCharacterData.data.alternate_greetings) && targetCharacterData.data.alternate_greetings.length > 0) {
+             firstMsg.variations = [firstMsg.content, ...targetCharacterData.data.alternate_greetings];
+             firstMsg.currentVariation = 0;
+          }
+          const initialMessages = [firstMsg];
           return {
             sessionUuid: newSessionUuid,
             messages: initialMessages

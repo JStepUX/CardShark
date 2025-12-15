@@ -1,6 +1,6 @@
 // frontend/src/views/WorldCardsNewModal.tsx
 import React, { useRef, useState } from "react";
-import { Dialog } from "../components/Dialog";
+import { Dialog } from "../components/common/Dialog";
 
 interface WorldCardsNewModalProps {
   isOpen: boolean;

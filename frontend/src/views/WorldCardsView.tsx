@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom"; // Import useNavigate
 import WorldCreationModal from "../components/WorldCreationModal";
 import GalleryGrid from "../components/GalleryGrid";
 import WorldCardImage from "../components/WorldCardImage";
-import DeleteConfirmationDialog from "../components/DeleteConfirmationDialog";
+import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
 import { worldStateApi } from "../utils/worldStateApi";
 import { WorldMetadata } from "../types/world";
 import { formatWorldName } from "../utils/formatters"; // Import our formatter function

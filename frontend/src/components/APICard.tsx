@@ -13,7 +13,7 @@ import { Template } from '../types/templateTypes';
 import { templateService } from '../services/templateService';
 import { useSettings } from '../contexts/SettingsContext';
 import APIConfigurationPanel from './APIConfigurationPanel';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import { ModelSelector } from './ModelSelector'; // Import the new ModelSelector
 
 interface APICardProps {

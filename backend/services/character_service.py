@@ -1,3 +1,9 @@
+"""
+@file character_service.py
+@description Service for managing character data, persistence, and image handling.
+@dependencies database, png_metadata_handler, character_data models
+@consumers character_endpoints.py
+"""
 import asyncio
 import contextlib
 import json
@@ -494,6 +500,17 @@ class CharacterService:
             db_char = self.get_character_by_uuid(character_uuid, db)
             if not db_char:
                 return None
+
+            # Map frontend keys to DB keys if present
+            key_mapping = {
+                "extensions": "extensions_json",
+                "alternate_greetings": "alternate_greetings_json",
+                "combat_stats": "combat_stats_json"
+            }
+            
+            for frontend_key, db_key in key_mapping.items():
+                if frontend_key in character_data:
+                    character_data[db_key] = character_data.pop(frontend_key)
 
             # Update DB fields
             json_fields = ["tags", "extensions_json", "alternate_greetings_json", "combat_stats_json"]

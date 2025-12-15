@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import { Save, X } from 'lucide-react';
 import Cropper, { ReactCropperElement } from 'react-cropper';
 import 'cropperjs/dist/cropper.css';

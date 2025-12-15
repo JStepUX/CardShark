@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { WordSwapRule } from '../utils/contentProcessing';
 import { AlertCircle, Plus, Trash, Check, X, ArrowUpDown } from 'lucide-react';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 
 interface SubstitutionManagerProps {
   rules: WordSwapRule[];

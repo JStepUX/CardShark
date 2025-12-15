@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Dialog } from './Dialog';
+import { Dialog } from './common/Dialog';
 import GridRoomMap from './GridRoomMap'; // Keep only the GridRoomMap import
 import { Room } from '../types/room';
 import { FullWorldState } from '../types/worldState';
