@@ -294,7 +294,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     <div className="w-full rounded-lg transition-colors bg-stone-800 text-white performance-contain performance-transform">
       {/* Message header - shows name and buttons */}
       <div className="px-4 pt-2 flex justify-between items-center performance-contain">
-        <div className="font-medium text-sm">
+        <div className="font-medium text-sm text-white/50">
           {message.role === 'assistant' ? characterName : formattedUserName}
         </div>
 

@@ -68,7 +68,7 @@ export const MarkdownSyntaxHighlighter = Extension.create({
                 }
                 
                 // Quotes ("text")
-                const quoteRegex = /"([^"\\]|\\.)*"/g;
+                const quoteRegex = /["\u2033]([^"\u2033\\]|\\.)*["\u2033]/g;
                 while ((match = quoteRegex.exec(text)) !== null) {
                   decorations.push(
                     Decoration.inline(
