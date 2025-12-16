@@ -490,7 +490,8 @@ def list_character_chats_endpoint(
                 "chat_session_uuid": session.chat_session_uuid,
                 "title": session.title,
                 "last_message_time": session.last_message_time,
-                "message_count": session.message_count
+                "message_count": session.message_count,
+                "start_time": session.start_time
             })
         
         return create_data_response(session_list)
@@ -791,7 +792,8 @@ def reliable_list_chats_endpoint(
                 "chat_session_uuid": session.chat_session_uuid,
                 "title": session.title,
                 "last_message_time": session.last_message_time,
-                "message_count": session.message_count
+                "message_count": session.message_count,
+                "start_time": session.start_time
             })
         
         return create_data_response(session_list)

@@ -104,8 +104,13 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             charName, 
             chat.user_name
           );
-          const lastModified = chat.last_updated || chat.last_modified || chat.start_time || chat.create_date;
+          const lastModified = chat.last_message_time || chat.last_updated || chat.last_modified || chat.start_time || chat.create_date;
           const messageCount = chat.message_count || 0;
+          
+          // Skip chats with less than 2 messages (likely just system prompt/first message)
+          if (messageCount < 2) {
+            return null;
+          }
           
           // Clean up preview text
           const rawPreview = chat.preview || chat.last_message || 'No messages';
@@ -127,7 +132,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             messageCount,
             preview: finalPreview
           };
-        });
+        }).filter((chat): chat is ChatInfo => chat !== null);
         
         setAvailableChats(chatInfoList);
       } else {
@@ -388,12 +393,10 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       // Guard against invalid dates
       if (!dateString) return 'Unknown date';
       
-      // Try to parse as ISO date
-      if (dateString.includes('T') && dateString.includes('Z')) {
-        const date = new Date(dateString);
-        if (!isNaN(date.getTime())) {
-          return date.toLocaleString();
-        }
+      // Try to parse as Date object directly first (covers ISO with/without Z, and other standard formats)
+      const date = new Date(dateString);
+      if (!isNaN(date.getTime()) && date.getFullYear() > 1990) {
+        return date.toLocaleString();
       }
       
       // Try to parse as timestamp
