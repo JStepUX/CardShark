@@ -8,9 +8,8 @@ import { CharacterCard } from '../types/schema';
 import { Room } from '../types/room';
 import GridRoomMap from '../components/world/GridRoomMap'; // Only keep the GridRoomMap component we're using
 import RoomEditor from '../components/RoomEditor';
-import { Dialog } from '../components/common/Dialog';
-import GalleryGrid from '../components/GalleryGrid';
-import NpcCard from '../components/character/NpcCard';
+import CharacterSelect from '../components/character/CharacterSelect'; // Import CharacterSelect instead of Dialog/GalleryGrid
+// Removed Dialog, GalleryGrid, NpcCard imports as they are replaced by CharacterSelect
 
 function posKey(x: number, y: number): string {
   return `${x},${y}`;
@@ -56,12 +55,12 @@ const WorldBuilderView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // State for builder specific data
+  // State for builder specific data
   const [roomsById, setRoomsById] = useState<Record<string, Room>>({});
   const [posToId, setPosToId] = useState<Record<string, string>>({});
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [npcModalOpen, setNpcModalOpen] = useState(false);
-  const [availableNpcs, setAvailableNpcs] = useState<NpcGridItem[]>([]);
-  // const [characterDirectory, setCharacterDirectory] = useState<string | null>(null); // Remove unused state
+  const [characterSelectOpen, setCharacterSelectOpen] = useState(false); // Renamed from npcModalOpen
+  // removed availableNpcs state as CharacterSelect fetches its own data
 
   const selectedRoom = selectedRoomId ? roomsById[selectedRoomId] : null;
 
@@ -235,53 +234,7 @@ const WorldBuilderView: React.FC = () => {
     fetchWorldDetails();
   }, [worldId]);
 
-  useEffect(() => {
-    // Fetch settings first to get the character directory
-    const fetchSettingsAndNpcs = async () => {
-      let dirPath: string | null = null;
-      try {
-        const settingsResponse = await fetch('/api/settings');
-        if (!settingsResponse.ok) throw new Error('Failed to load settings');
-        const settingsData = await settingsResponse.json();
-        if (settingsData.success && settingsData.data && settingsData.data.settings && settingsData.data.settings.character_directory) {
-          dirPath = settingsData.data.settings.character_directory;
-          // setCharacterDirectory(dirPath); // Remove unused state update
-        } else {
-          console.error("Character directory not set in settings.");
-          // Optionally set an error state here to inform the user
-          return; // Stop if directory is not set
-        }
-      } catch (error) {
-        console.error("Failed to fetch settings:", error);
-        // Optionally set an error state here
-        return; // Stop if settings fetch fails
-      }
-
-      // Now fetch NPCs using the obtained directory path
-      if (dirPath) {
-        try {
-          const response = await fetch(`/api/characters?directory=${encodeURIComponent(dirPath)}`); // Add directory param
-          if (!response.ok) { // Check for non-2xx responses
-            const errorData = await response.json().catch(() => ({ message: `Server error (${response.status})` }));
-            throw new Error(errorData.message || `Failed to load characters. Status: ${response.status}`);
-          }
-          const data = await response.json();
-          if (data && Array.isArray(data.files)) {
-            const npcs = data.files.map((file: any) => normalizeNpc(file.path || file.name));
-            setAvailableNpcs(npcs);
-          } else if (data.success === false) {
-            throw new Error(data.message || 'Backend indicated failure to list characters.');
-          }
-        } catch (error) {
-          console.error("Failed to fetch available NPCs:", error);
-          // Optionally set an error state here
-          setAvailableNpcs([]); // Clear NPCs on error
-        }
-      }
-    };
-
-    fetchSettingsAndNpcs();
-  }, []); // Dependency array remains empty as we only want this on mount
+  // Removed useEffect for fetching availableNpcs as CharacterSelect handles it now
 
 
   const handlePlayHere = (roomId: string | null) => {
@@ -474,7 +427,7 @@ const WorldBuilderView: React.FC = () => {
 
   const handleOpenNpcModal = () => {
     if (!selectedRoomId) return;
-    setNpcModalOpen(true);
+    setCharacterSelectOpen(true);
   };
 
   // Update handleAddNpcToRoom to handle path resolution more robustly
@@ -659,37 +612,11 @@ const WorldBuilderView: React.FC = () => {
         </div>
       </div>
 
-      <Dialog
-        isOpen={npcModalOpen}
-        onClose={() => setNpcModalOpen(false)}
-        title={`Add NPC to ${selectedRoom?.name || 'Room'}`}
-        className="max-w-3xl"
-      >
-        <p className="text-sm text-stone-400 mb-4">
-          Select an NPC character card to add to this location.
-        </p>
-        <div className="max-h-[60vh] overflow-y-auto pr-2 -mr-2 mb-4">
-          <GalleryGrid
-            items={availableNpcs}
-            emptyMessage="No character cards found."
-            renderItem={(npc, idx) => (
-              <NpcCard
-                key={npc.path || idx}
-                npc={npc}
-                onClick={() => handleAddNpcToRoom(npc)}
-              />
-            )}
-          />
-        </div>
-        <div className="flex justify-end mt-4">
-          <button
-            onClick={() => setNpcModalOpen(false)}
-            className="px-4 py-2 bg-stone-600 hover:bg-stone-500 text-white rounded text-sm"
-          >
-            Done
-          </button>
-        </div>
-      </Dialog>
+      <CharacterSelect
+        isOpen={characterSelectOpen}
+        onClose={() => setCharacterSelectOpen(false)}
+        onSelect={handleAddNpcToRoom}
+      />
     </div>
   );
 };
