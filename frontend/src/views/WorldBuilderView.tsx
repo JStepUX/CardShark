@@ -6,11 +6,11 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { FullWorldState, WorldLocation, NpcGridItem } from '../types/worldState';
 import { CharacterCard } from '../types/schema';
 import { Room } from '../types/room';
-import GridRoomMap from '../components/GridRoomMap'; // Only keep the GridRoomMap component we're using
+import GridRoomMap from '../components/world/GridRoomMap'; // Only keep the GridRoomMap component we're using
 import RoomEditor from '../components/RoomEditor';
 import { Dialog } from '../components/common/Dialog';
 import GalleryGrid from '../components/GalleryGrid';
-import NpcCard from '../components/NpcCard';
+import NpcCard from '../components/character/NpcCard';
 
 function posKey(x: number, y: number): string {
   return `${x},${y}`;
@@ -22,20 +22,20 @@ const normalizeNpc = (npc: any): NpcGridItem => {
   if (typeof npc === 'object' && npc !== null && typeof npc.name === 'string' && typeof npc.path === 'string') {
     return npc as NpcGridItem;
   }
-  
+
   // If npc is a string (path), create an object with path and derived name
   if (typeof npc === 'string') { // Corrected 'is' to '==='
     const pathParts = npc.split(/[\/\\]/);
     const fileName = pathParts[pathParts.length - 1];
     const name = fileName.replace(/\.\w+$/, ''); // Remove file extension
-    
+
     return {
       character_id: npc, // Use the path as character_id
       name: name || 'Unknown Character',
       path: npc
     };
   }
-  
+
   // Default fallback for unknown formats
   return {
     character_id: typeof npc === 'string' ? npc : 'unknown',
@@ -77,10 +77,10 @@ const WorldBuilderView: React.FC = () => {
       setError(null);
       try {
         const data: FullWorldState = await worldStateApi.getWorldState(worldId);
-        
+
         // Log the original data for debugging
         console.log(`Loaded world data with ${Object.keys(data.locations || {}).length} locations`);
-        
+
         // Add explicit connected=true to each location if not explicitly set to false
         // This ensures all locations can be displayed on the map
         const processedData = { ...data };
@@ -92,7 +92,7 @@ const WorldBuilderView: React.FC = () => {
             }
           });
         }
-        
+
         setWorldData(processedData);
 
         const initialRooms: Record<string, Room> = {};
@@ -106,28 +106,28 @@ const WorldBuilderView: React.FC = () => {
         if (locationKeys.length > 0) {
           // Log number of locations for debugging
           console.log(`Processing ${locationKeys.length} locations from world data`);
-          
+
           // Track locations with invalid coordinates for debugging
           const invalidLocations: string[] = [];
-          
+
           locationKeys.forEach((coordKey) => {
             const loc: WorldLocation = locationsSource[coordKey];
-            
+
             // Skip locations that are explicitly marked as not connected
             // (but process all others, including those with no connected property)
             if (loc.connected === false) {
               console.log(`Skipping location ${loc.name} as it's marked as not connected`);
               return;
             }
-            
+
             if (!loc || !loc.location_id) {
               console.warn("Skipping location due to missing location_id:", loc);
               return;
             }
-            
+
             // Handle potentially missing coordinates by parsing from the coordinate key
             let x = 0, y = 0;
-            
+
             if (loc.coordinates && Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
               // Use coordinates from location object if available
               x = loc.coordinates[0];
@@ -161,15 +161,15 @@ const WorldBuilderView: React.FC = () => {
               neighbors: (loc as any).neighbors || {},
               npcs: (loc.npcs || []).map(normalizeNpc).map((npc: NpcGridItem) => ({ path: npc.path, name: npc.name }))
             };
-            
+
             const roomPosKey = posKey(x, y);
             initialRooms[room.id] = room;
             initialPosToId[roomPosKey] = room.id;
-            
+
             // Log for debugging
             console.log(`Processed location: ${room.name} at (${x},${y}) with ID ${room.id}`);
           });
-          
+
           // Log any locations with invalid coordinates
           if (invalidLocations.length > 0) {
             console.warn(`${invalidLocations.length} locations had invalid coordinates and were skipped:`, invalidLocations);
@@ -196,7 +196,7 @@ const WorldBuilderView: React.FC = () => {
           console.log("No locations found in world data, creating default starting room");
           defaultRoomCreated = true;
         }
-        
+
         // Create a default room if needed (no valid locations or empty world)
         if (defaultRoomCreated) {
           const defaultRoom: Room = {
@@ -209,10 +209,10 @@ const WorldBuilderView: React.FC = () => {
             npcs: []
           };
           initialRooms[defaultRoom.id] = defaultRoom;
-          initialPosToId[posKey(0,0)] = defaultRoom.id;
+          initialPosToId[posKey(0, 0)] = defaultRoom.id;
           initialSelectedRoomId = defaultRoom.id;
         }
-        
+
         // Log summary of processed data
         console.log(`Processed world data: ${Object.keys(initialRooms).length} rooms created`);
 
@@ -270,7 +270,7 @@ const WorldBuilderView: React.FC = () => {
             const npcs = data.files.map((file: any) => normalizeNpc(file.path || file.name));
             setAvailableNpcs(npcs);
           } else if (data.success === false) {
-             throw new Error(data.message || 'Backend indicated failure to list characters.');
+            throw new Error(data.message || 'Backend indicated failure to list characters.');
           }
         } catch (error) {
           console.error("Failed to fetch available NPCs:", error);
@@ -368,13 +368,13 @@ const WorldBuilderView: React.FC = () => {
   useEffect(() => {
     // Skip the initial render
     if (Object.keys(roomsById).length === 0) return;
-    
+
     // Create a debounced save function to prevent saving too frequently
     const saveTimeout = setTimeout(() => {
       console.log("Auto-saving world state...");
       handleSaveWorld();
     }, 1000); // 1-second debounce
-    
+
     // Clean up timeout on unmount or when dependencies change
     return () => clearTimeout(saveTimeout);
   }, [roomsById]); // Depend on roomsById to trigger save when rooms change
@@ -388,10 +388,10 @@ const WorldBuilderView: React.FC = () => {
       // Modern browsers require returnValue to be set
       e.returnValue = '';
     };
-    
+
     // Add the event listener
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     // Clean up the event listener on unmount
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -418,7 +418,7 @@ const WorldBuilderView: React.FC = () => {
     setRoomsById(prev => ({ ...prev, [newRoomId]: newRoom }));
     setPosToId(prev => ({ ...prev, [newPosKey]: newRoomId }));
     setSelectedRoomId(newRoomId);
-    
+
     // Schedule an immediate save after creating a room
     setTimeout(() => handleSaveWorld(), 100);
   };
@@ -431,14 +431,14 @@ const WorldBuilderView: React.FC = () => {
       // Ensure NPCs are preserved if not part of the update
       const updatedRoom = { ...roomToUpdate, ...updates };
       if (!updates.npcs) {
-         updatedRoom.npcs = roomToUpdate.npcs;
+        updatedRoom.npcs = roomToUpdate.npcs;
       }
       return {
         ...prev,
         [roomId]: updatedRoom
       };
     });
-    
+
     // Schedule a save after room update
     setTimeout(() => handleSaveWorld(), 100);
   };
@@ -490,13 +490,13 @@ const WorldBuilderView: React.FC = () => {
     setRoomsById(prev => {
       const room = prev[selectedRoomId];
       if (!room) return prev;
-      
+
       // Check if this NPC is already in the room to avoid duplicates
       if (room.npcs.some(n => n.path === npc.path)) {
         console.log(`NPC ${npc.name} is already in this room`);
         return prev;
       }
-      
+
       return {
         ...prev,
         [selectedRoomId]: {
@@ -505,7 +505,7 @@ const WorldBuilderView: React.FC = () => {
         }
       };
     });
-    
+
     // Provide visual feedback that NPC was added
     // You could display a toast or other notification here
     console.log(`Added ${npc.name} to room ${selectedRoomId}`);
@@ -536,10 +536,10 @@ const WorldBuilderView: React.FC = () => {
     const locations: Record<string, WorldLocation> = {};
     Object.values(roomsById).forEach(room => {
       const coordKey = `${room.x},${room.y},0`;
-      
+
       // Preserve any existing location data
       const existingLocation = worldData.locations?.[coordKey];
-      
+
       locations[coordKey] = {
         location_id: room.id,
         name: room.name,
@@ -581,7 +581,7 @@ const WorldBuilderView: React.FC = () => {
       console.error("Cannot save world: Invalid world state or missing world ID");
       return;
     }
-    
+
     try {
       const success = await worldStateApi.saveWorldState(worldId, worldStateToSave);
       if (success) {
@@ -603,7 +603,7 @@ const WorldBuilderView: React.FC = () => {
     return <div className="p-6 text-red-500">Error: {error}</div>;
   }
   if (!worldData || !selectedRoom) {
-     return <div className="p-6">World data could not be loaded or no room selected.</div>;
+    return <div className="p-6">World data could not be loaded or no room selected.</div>;
   }
 
   return (
