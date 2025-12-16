@@ -21,7 +21,8 @@ export class BackgroundService {
       }
       
       const data = await response.json();
-      return data.success && data.backgrounds ? data.backgrounds : [];
+      // Backend returns ListResponse where the array is in 'data' property
+      return data.success && Array.isArray(data.data) ? data.data : [];
     } catch (error) {
       console.error('Error getting backgrounds:', error);
       return [];
@@ -54,7 +55,9 @@ export class BackgroundService {
         return null;
       }
       
-      return await response.json();
+      const data = await response.json();
+      // Backend returns DataResponse where the object is in 'data' property
+      return data.success ? data.data : null;
     } catch (error) {
       console.error('Error uploading background:', error);
       return null;

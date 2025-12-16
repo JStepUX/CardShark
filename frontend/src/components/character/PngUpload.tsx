@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import CharacterPreview from './CharacterPreview';
 import { NewCharacterDialog } from './NewCharacterDialog';
 import { CharacterCard, createEmptyCharacterCard } from '../../types/schema';
 import { generateUUID } from '../../utils/uuidUtils';
+import { ImageUploader } from '../media/ImageUploader';
 
 export interface NewCharacterDialogProps {
   isOpen: boolean;
@@ -15,41 +15,39 @@ export interface NewCharacterDialogProps {
 const PngUpload: React.FC = () => {
   const [status, setStatus] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [filename, setFilename] = useState<string>('');
   const [characterData, setCharacterData] = useState<CharacterCard | null>(null);
   const [showNewCharacterDialog, setShowNewCharacterDialog] = useState<boolean>(false);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
-  
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+
+  const handleFileSelect = async (file: File) => {
     if (!file) return;
-    
+
+    // Safety check just in case validator missed it (ImageUploader handles this though)
     if (!file.type.includes('png')) {
       setStatus('Please select a PNG file');
       return;
     }
-    
+
     try {
       setIsLoading(true);
-      setFilename(file.name);
-      
+      setCurrentFile(file);
+
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await fetch('/api/characters/extract-metadata', {
         method: 'POST',
         body: formData,
       });
-        const data = await response.json();
-      
+      const data = await response.json();
+
       if (response.ok) {
         const metadata = data.metadata;
-        
+
         // Check if the PNG contains character metadata
         if (!metadata || Object.keys(metadata).length === 0 || !metadata.data) {
           // No character metadata found - offer to create new character
           setStatus('No character data found in PNG. Would you like to create a new character?');
-          setCurrentFile(file);
           setShowNewCharacterDialog(true);
           toast.info('No character metadata found in this PNG. You can create a new character instead.');
         } else {
@@ -82,10 +80,12 @@ const PngUpload: React.FC = () => {
     setShowNewCharacterDialog(false);
     setCurrentFile(null);
     setStatus('Operation cancelled');
-  };  const handleNewCharacter = () => {
+  };
+
+  const handleNewCharacter = () => {
     // Create new empty character using the helper function
     const emptyCharacter = createEmptyCharacterCard();
-    
+
     // Add UUID for new character
     emptyCharacter.data.character_uuid = generateUUID();
 
@@ -94,50 +94,35 @@ const PngUpload: React.FC = () => {
     toast.success('New character template created. Please fill in the details.');
     setShowNewCharacterDialog(false);
   };
-  
+
   return (
-    <div>
-      <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg">
-        <div className="flex items-center mb-4">
-          <Upload className={`w-6 h-6 mr-2 ${isLoading ? 'animate-bounce' : ''}`} />
-          <label 
-            htmlFor="png-upload" 
-            className="text-lg font-medium cursor-pointer hover:text-blue-600 transition-colors"
-          >
-            {isLoading ? 'Uploading...' : 'Upload PNG'}
-          </label>
-        </div>
-        
-        <input
-          id="png-upload"
-          type="file"
-          accept=".png"
-          onChange={handleFileUpload}
-          className="hidden"
+    <div className="space-y-6">
+      <div className="bg-stone-900/50 p-6 rounded-xl border border-stone-800">
+        <h3 className="text-lg font-medium text-stone-300 mb-4">Import Character</h3>
+
+        <ImageUploader
+          onFileSelect={handleFileSelect}
+          acceptedTypes={['image/png']}
+          label="Upload PNG Character Card"
+          isLoading={isLoading}
+          className="bg-stone-900"
         />
-        
-        {filename && (
-          <p className="text-sm text-gray-600 mb-2">
-            File: {filename}
-          </p>
-        )}
-        
+
         {status && (
-          <p className={`mt-2 text-sm ${
-            status.includes('Error') 
-              ? 'text-red-500' 
-              : status.includes('success') || status.includes('found')
-                ? 'text-green-500'
-                : 'text-blue-500'
-          }`}>
+          <div className={`mt-4 p-3 rounded-lg text-sm border ${status.includes('Error')
+              ? 'bg-red-900/20 border-red-900/50 text-red-300'
+              : status.includes('success') || status.includes('found') || status.includes('Loaded') || status.includes('Created')
+                ? 'bg-green-900/20 border-green-900/50 text-green-300'
+                : 'bg-blue-900/20 border-blue-900/50 text-blue-300'
+            }`}>
             {status}
-          </p>
+          </div>
         )}
       </div>
 
       <CharacterPreview data={characterData} imageFile={currentFile} />
 
-      <NewCharacterDialog 
+      <NewCharacterDialog
         isOpen={showNewCharacterDialog}
         onDiscard={handleDiscard}
         onNewCharacter={handleNewCharacter}
