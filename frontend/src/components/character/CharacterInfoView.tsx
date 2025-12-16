@@ -83,15 +83,15 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   const navigate = useNavigate();
   const primaryContext = useCharacter();
   const { isCompareMode, setCompareMode, secondaryCharacterData, setSecondaryCharacterData } = useComparison();
-  
+
   // Determine which data to use based on isSecondary prop
-  const { characterData, setCharacterData } = isSecondary 
+  const { characterData, setCharacterData } = isSecondary
     ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
     : primaryContext;
-  
+
   // Always get imageUrl from primary context (not used in secondary/compare mode)
   const { imageUrl } = primaryContext;
-    const [showFindReplace, setShowFindReplace] = useState(false);
+  const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
   // Smart change tracking state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -99,7 +99,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
   const [originalCharacterData, setOriginalCharacterData] = useState<CharacterCard | null>(null);
   const changeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
   // State for deletion
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -132,7 +132,8 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
       if (changeTimeoutRef.current) {
         clearTimeout(changeTimeoutRef.current);
       }
-    };  }, [characterData, originalCharacterData]);
+    };
+  }, [characterData, originalCharacterData]);
   // Navigation blocking using beforeunload and improved popstate handling
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -170,17 +171,17 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   }, [hasUnsavedChanges]);// Save function
   const handleSave = async () => {
     if (!characterData) return;
-    
+
     try {
       // Create a simple image blob for saving (we could enhance this later with actual image)
       const response = await fetch(imageUrl || '/api/placeholder-image');
       const imageBlob = await response.blob();
-      
+
       await saveCharacterCardToPng(characterData, imageBlob);
       setOriginalCharacterData(JSON.parse(JSON.stringify(characterData)));
       setHasUnsavedChanges(false);
       setShowUnsavedModal(false);
-      
+
       // Execute pending navigation if any
       if (pendingNavigation) {
         pendingNavigation();
@@ -203,7 +204,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
       setHasUnsavedChanges(false);
     }
     setShowUnsavedModal(false);
-    
+
     // Execute pending navigation if any
     if (pendingNavigation) {
       pendingNavigation();
@@ -259,90 +260,90 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
   const handleConvertToWorld = async () => {
     if (!characterData) return;
-    
+
     try {
-        // Prepare updated data with world type
-        const updatedExtensions = {
-            ...characterData.data.extensions,
-            card_type: 'world',
-            // Ensure world_data stub exists
-            world_data: characterData.data.extensions?.world_data || {
-                rooms: [],
-                settings: { narrator_voice: 'default', time_system: 'turn_based', global_scripts: [] },
-                player_state: { inventory: [], health: 100, stats: {}, flags: {} }
-            }
-        };
+      // Prepare updated data with world type
+      const updatedExtensions = {
+        ...characterData.data.extensions,
+        card_type: 'world',
+        // Ensure world_data stub exists
+        world_data: (characterData.data.extensions as any)?.world_data || {
+          rooms: [],
+          settings: { narrator_voice: 'default', time_system: 'turn_based', global_scripts: [] },
+          player_state: { inventory: [], health: 100, stats: {}, flags: {} }
+        }
+      };
 
-        const payload = {
-            ...characterData.data,
-            extensions: updatedExtensions
-        };
+      const payload = {
+        ...characterData.data,
+        extensions: updatedExtensions
+      };
 
-        // We'll duplicate the character first with a new name indicating it's a world
-        // Then update the duplicate to be a world card
-        // This preserves the original character
-        
-        const duplicateResponse = await fetch(`/api/character/${characterData.data.character_uuid}/duplicate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ new_name: `${characterData.data.name} (World)` })
-        });
+      // We'll duplicate the character first with a new name indicating it's a world
+      // Then update the duplicate to be a world card
+      // This preserves the original character
 
-        if (!duplicateResponse.ok) throw new Error('Failed to duplicate character');
-        
-        const duplicateData = await duplicateResponse.json();
-        const newUuid = duplicateData.data.character.character_uuid;
+      const duplicateResponse = await fetch(`/api/character/${characterData.data.character_uuid}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_name: `${characterData.data.name} (World)` })
+      });
 
-        // Now update the duplicate to be a world
-        const updateResponse = await fetch(`/api/character/${newUuid}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                data: {
-                    ...payload,
-                    name: `${characterData.data.name} (World)`, // Ensure name match
-                    character_uuid: newUuid // Ensure UUID match
-                }
-            })
-        });
+      if (!duplicateResponse.ok) throw new Error('Failed to duplicate character');
 
-        if (!updateResponse.ok) throw new Error('Failed to convert duplicate to world');
+      const duplicateData = await duplicateResponse.json();
+      const newUuid = duplicateData.data.character.character_uuid;
 
-        // Navigate to the new world launcher
-        navigate(`/world/${newUuid}/launcher`);
+      // Now update the duplicate to be a world
+      const updateResponse = await fetch(`/api/character/${newUuid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: {
+            ...payload,
+            name: `${characterData.data.name} (World)`, // Ensure name match
+            character_uuid: newUuid // Ensure UUID match
+          }
+        })
+      });
+
+      if (!updateResponse.ok) throw new Error('Failed to convert duplicate to world');
+
+      // Navigate to the new world launcher
+      navigate(`/world/${newUuid}/launcher`);
 
     } catch (error) {
-        console.error('Failed to convert to world:', error);
-        alert('Failed to convert to world: ' + (error instanceof Error ? error.message : String(error)));
+      console.error('Failed to convert to world:', error);
+      alert('Failed to convert to world: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
   const handleDelete = async () => {
     if (!characterData?.data?.character_uuid) return;
-    
+
     setIsDeleting(true);
     try {
-        const response = await fetch(`/api/character/${characterData.data.character_uuid}?delete_png=true`, {
-            method: 'DELETE',
-        });
-        
-        if (!response.ok) {
-            const result = await response.json();
-            throw new Error(result.message || 'Failed to delete character');
-        }
-        
-        // Invalidate cache and navigate to gallery
-        if (primaryContext.invalidateCharacterCache) {
-            primaryContext.invalidateCharacterCache();
-        }
-        navigate('/');
-        
+      const response = await fetch(`/api/character/${characterData.data.character_uuid}?delete_png=true`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to delete character');
+      }
+
+      // Invalidate cache and navigate to gallery
+      if (primaryContext.invalidateCharacterCache) {
+        primaryContext.invalidateCharacterCache();
+      }
+      navigate('/');
+
     } catch (error) {
-        console.error('Error deleting character:', error);
-        alert('Failed to delete character: ' + (error instanceof Error ? error.message : String(error)));
+      console.error('Error deleting character:', error);
+      alert('Failed to delete character: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
-        setIsDeleting(false);
-        setIsDeleteConfirmOpen(false);
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
     }
   };
 
@@ -369,11 +370,10 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           {!isSecondary && (
             <button
               onClick={toggleCompareMode}
-              className={`flex items-center gap-2 px-4 py-2 ${
-                isCompareMode 
-                  ? 'bg-stone-700 text-white' 
+              className={`flex items-center gap-2 px-4 py-2 ${isCompareMode
+                  ? 'bg-stone-700 text-white'
                   : 'bg-transparent hover:bg-stone-800 text-white'
-              } rounded-lg transition-colors`}
+                } rounded-lg transition-colors`}
               title={isCompareMode ? "Close comparison" : "Compare with another character"}
             >
               <SplitSquareVertical className="w-4 h-4" />
@@ -383,16 +383,16 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
           {/* Convert to World Button - Primary View Only */}
           {!isSecondary && (
-             <button
-                onClick={handleConvertToWorld}
-                className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
-                title="Convert this character to a World Card (duplicates character)"
-             >
-                <Globe className="w-4 h-4" />
-                Convert to World
-             </button>
+            <button
+              onClick={handleConvertToWorld}
+              className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
+              title="Convert this character to a World Card (duplicates character)"
+            >
+              <Globe className="w-4 h-4" />
+              Convert to World
+            </button>
           )}
-          
+
           {/* Find & Replace button */}
           <button
             onClick={() => setShowFindReplace(true)}
@@ -401,7 +401,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             <Search className="w-4 h-4" />
             Find & Replace
           </button>
-          
+
           {/* JSON Viewer Button */}
           <button
             onClick={() => setShowJsonModal(true)}
@@ -434,7 +434,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               </div>
             </div>
           )}
-          
+
           <div className="space-y-6">
             {/* Name Field */}            <div>
               <label className="block text-sm font-medium mb-2">Name</label>
@@ -545,9 +545,9 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           className="max-w-4xl w-2/3" // Added width control here
         >
           <div className="w-full h-[70vh]">
-            <JsonViewerModal 
-              characterData={characterData} 
-              setCharacterData={setCharacterData} 
+            <JsonViewerModal
+              characterData={characterData}
+              setCharacterData={setCharacterData}
             />
           </div>
         </Dialog>
@@ -570,7 +570,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 <p className="text-gray-400 text-sm">Would you like to save before continuing?</p>
               </div>
             </div>
-            
+
             <div className="flex gap-3 justify-end">
               <button
                 onClick={handleCancelNavigation}

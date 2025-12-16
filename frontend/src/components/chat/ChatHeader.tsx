@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { Eye, Wallpaper, MessageSquare, Plus } from 'lucide-react';
-import { CharacterCard } from '../../types/schema';
+// CharacterCard import removed
 
 interface ReasoningSettings {
   enabled: boolean;

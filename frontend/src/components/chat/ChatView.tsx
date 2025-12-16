@@ -99,7 +99,8 @@ const ChatView: React.FC = () => {
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
 
   const isWorldCard = useMemo(() => {
-    return characterData?.data?.tags?.includes('world') || !!characterData?.data?.extensions?.world;
+    // Only open if strictly defined as a world type card
+    return characterData?.data?.extensions?.card_type === 'world';
   }, [characterData]);
 
   const worldId = useMemo(() => {

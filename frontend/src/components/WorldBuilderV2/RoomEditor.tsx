@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Room, RoomConnection, RoomNPC } from '../../types/worldV2';
+import { Room, RoomConnection } from '../../types/worldV2';
 import { Upload, Save, Trash2, Plus, X, Image as ImageIcon } from 'lucide-react';
 
 interface RoomEditorProps {
@@ -24,20 +24,20 @@ const RoomEditor: React.FC<RoomEditorProps> = ({ room, worldId, onSave, onCancel
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
-        
+
         const file = e.target.files[0];
         const formData = new FormData();
         formData.append('file', file);
-        
+
         try {
             setUploading(true);
             const response = await fetch(`/api/world-assets/${worldId}`, {
                 method: 'POST',
                 body: formData
             });
-            
+
             if (!response.ok) throw new Error('Upload failed');
-            
+
             const data = await response.json();
             if (data.success && data.data) {
                 // Store relative path returned by backend
@@ -84,7 +84,7 @@ const RoomEditor: React.FC<RoomEditorProps> = ({ room, worldId, onSave, onCancel
                 <h3 className="text-xl font-bold text-stone-200">Edit Room</h3>
                 <div className="flex gap-2">
                     {onDelete && (
-                        <button 
+                        <button
                             onClick={onDelete}
                             className="p-2 text-red-400 hover:bg-red-900/20 rounded transition-colors"
                             title="Delete Room"
@@ -92,7 +92,7 @@ const RoomEditor: React.FC<RoomEditorProps> = ({ room, worldId, onSave, onCancel
                             <Trash2 size={20} />
                         </button>
                     )}
-                    <button 
+                    <button
                         onClick={onCancel}
                         className="p-2 text-stone-400 hover:bg-stone-800 rounded transition-colors"
                         title="Cancel"
@@ -129,9 +129,9 @@ const RoomEditor: React.FC<RoomEditorProps> = ({ room, worldId, onSave, onCancel
                     <div className="flex items-start gap-4">
                         <div className="w-32 h-32 bg-stone-950 border border-stone-800 rounded overflow-hidden flex items-center justify-center relative group">
                             {editedRoom.image_path ? (
-                                <img 
-                                    src={`/api/world-assets/${worldId}/${editedRoom.image_path.split('/').pop()}`} 
-                                    alt="Room background" 
+                                <img
+                                    src={`/api/world-assets/${worldId}/${editedRoom.image_path.split('/').pop()}`}
+                                    alt="Room background"
                                     className="w-full h-full object-cover"
                                 />
                             ) : (
@@ -147,10 +147,10 @@ const RoomEditor: React.FC<RoomEditorProps> = ({ room, worldId, onSave, onCancel
                             <label className="cursor-pointer inline-flex items-center px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded transition-colors border border-stone-700">
                                 <Upload size={16} className="mr-2" />
                                 {uploading ? 'Uploading...' : 'Upload Image'}
-                                <input 
-                                    type="file" 
-                                    accept="image/png,image/jpeg,image/webp" 
-                                    className="hidden" 
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp"
+                                    className="hidden"
                                     onChange={handleImageUpload}
                                     disabled={uploading}
                                 />
@@ -165,14 +165,14 @@ const RoomEditor: React.FC<RoomEditorProps> = ({ room, worldId, onSave, onCancel
                 <div className="border-t border-stone-800 pt-4">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-sm font-medium text-stone-400">Connections</label>
-                        <button 
+                        <button
                             onClick={addConnection}
                             className="text-emerald-400 hover:text-emerald-300 text-sm flex items-center"
                         >
                             <Plus size={14} className="mr-1" /> Add Connection
                         </button>
                     </div>
-                    
+
                     <div className="space-y-3">
                         {editedRoom.connections.map((conn, idx) => (
                             <div key={idx} className="flex gap-2 items-start bg-stone-950 p-2 rounded border border-stone-800">
@@ -194,7 +194,7 @@ const RoomEditor: React.FC<RoomEditorProps> = ({ room, worldId, onSave, onCancel
                                         />
                                     </div>
                                 </div>
-                                <button 
+                                <button
                                     onClick={() => removeConnection(idx)}
                                     className="text-stone-500 hover:text-red-400 p-1"
                                 >

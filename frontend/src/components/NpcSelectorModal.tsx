@@ -1,5 +1,5 @@
 import React from "react";
-import CharacterGallery from "./CharacterGallery";
+import CharacterGallery from "./character/CharacterGallery";
 
 interface NpcSelectorModalProps {
   isOpen: boolean;

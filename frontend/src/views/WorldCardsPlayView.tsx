@@ -23,7 +23,7 @@ import { useChatMessages } from '../hooks/useChatMessages';
 import { Message, UserProfile } from '../types/messages';
 import RichTextEditor from '../components/RichTextEditor';
 import { generateUUID } from '../utils/uuidUtils';
-import ErrorMessage from '../components/ErrorMessage';
+import ErrorMessage from '../components/common/ErrorMessage';
 import GalleryGrid from '../components/GalleryGrid';
 import NpcCard from '../components/character/NpcCard';
 import { useAPIConfig } from '../contexts/APIConfigContext';
@@ -92,7 +92,7 @@ const InputArea: React.FC<{
   isGenerating: boolean;
   currentUser: UserProfile | null;
   onUserSelect: () => void;
-  emotion: any; 
+  emotion: any;
 }> = ({ onSend, isGenerating, currentUser, onUserSelect, emotion }) => {
   const [inputValue, setInputValue] = useState('');
   const [imageError, setImageError] = useState(false);
@@ -105,7 +105,7 @@ const InputArea: React.FC<{
       <div className="flex items-end gap-4">
         <div onClick={onUserSelect} className="w-16 h-16 sm:w-20 sm:h-24 rounded-lg cursor-pointer overflow-hidden flex-shrink-0">
           {currentUser && !imageError ? (<img src={`/api/user-image/${encodeURIComponent(currentUser.filename)}`} alt={currentUser.name} className="w-full h-full object-cover" onError={() => { console.error('User image load failed'); setImageError(true); }} />)
-           : (<div className="w-full h-full bg-transparent border border-gray-700 rounded-lg flex items-center justify-center"><User className="text-gray-400" size={24} /></div>)}
+            : (<div className="w-full h-full bg-transparent border border-gray-700 rounded-lg flex items-center justify-center"><User className="text-gray-400" size={24} /></div>)}
         </div>
         <div className="flex-1 h-24 sm:h-28 flex flex-col overflow-hidden">
           <RichTextEditor content={inputValue} onChange={setInputValue} className="bg-stone-950 border border-stone-800 rounded-lg flex-1 overflow-y-auto" placeholder="Type your message..." onKeyDown={handleKeyPress} preserveWhitespace={true} />
@@ -186,8 +186,8 @@ const WorldCardsPlayView: React.FC = () => {
     const saveWorldChat = async () => {
       if (!worldId || !chatId || messages.length === 0) return;
       try {
-        console.log("Saving chat messages:", messages.length, 
-          messages.map(m => ({id: m.id.substring(0, 6), role: m.role, preview: m.content.substring(0, 20)})));
+        console.log("Saving chat messages:", messages.length,
+          messages.map(m => ({ id: m.id.substring(0, 6), role: m.role, preview: m.content.substring(0, 20) })));
         await worldStateApi.saveChat(worldId, chatId, {
           messages: messages,
           metadata: {
@@ -231,7 +231,7 @@ const WorldCardsPlayView: React.FC = () => {
         const processedWorldData = ensureAllLocationsConnected(initialWorldData);
         setWorldState(processedWorldData);
 
-        const { room: currentLoc } = worldDataService.getCurrentRoom(processedWorldData); 
+        const { room: currentLoc } = worldDataService.getCurrentRoom(processedWorldData);
         if (!currentLoc) {
           setWorldLoadError('No locations found in this world state or current position is invalid. Please add a location or check world state.');
           setCurrentRoom(null);
@@ -245,15 +245,15 @@ const WorldCardsPlayView: React.FC = () => {
         const worldSystemDescription = currentLoc.description ||
           `This location is part of the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`;
         const worldUserIntroduction = currentLoc.introduction ||
-          `You find yourself in ${currentLoc.name || 'an interesting place'}.`; 
+          `You find yourself in ${currentLoc.name || 'an interesting place'}.`;
         const characterBookEntries = worldDataService.processWorldItems(processedWorldData);
 
         const characterCardForContext: CharacterCard = {
           name: processedWorldData.name || "World Narrator",
-          description: worldSystemDescription, 
-          personality: "", 
+          description: worldSystemDescription,
+          personality: "",
           scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`,
-          first_mes: worldUserIntroduction, 
+          first_mes: worldUserIntroduction,
           mes_example: "",
           creatorcomment: "",
           avatar: "none",
@@ -266,10 +266,10 @@ const WorldCardsPlayView: React.FC = () => {
           create_date: "",
           data: {
             name: processedWorldData.name || "World Narrator",
-            description: worldSystemDescription, 
-            personality: "", 
+            description: worldSystemDescription,
+            personality: "",
             scenario: `The user is exploring ${currentLoc.name || 'this location'} in the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`,
-            first_mes: worldUserIntroduction, 
+            first_mes: worldUserIntroduction,
             mes_example: "",
             creator_notes: "",
             system_prompt: `You are the narrator describing the world of ${formatWorldName(processedWorldData.name) || 'Unknown'}.`,
@@ -303,7 +303,7 @@ const WorldCardsPlayView: React.FC = () => {
       }
     };
     loadWorldForPlay();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worldId, setCharacterData, apiConfig]);
 
   useEnhancedGenerationTimeout(isGenerating, stopGeneration);
@@ -326,22 +326,22 @@ const WorldCardsPlayView: React.FC = () => {
   useEffect(() => {
     const currentMessageCount = messages.length;
     const wasGenerating = prevGeneratingRef.current;
-    
+
     // Scroll only when:
     // 1. New messages are added (message count increased)
     // 2. Generation just started (isGenerating became true)
     // 3. Last message is being streamed (content updated during generation)
-    const shouldScroll = 
+    const shouldScroll =
       currentMessageCount > prevMessageCountRef.current || // New message added
       (!wasGenerating && isGenerating) || // Generation just started
       (isGenerating && generatingId && messages.some(msg => msg.id === generatingId && msg.status === 'streaming')); // Streaming update
-    
+
     if (shouldScroll) {
       scrollToBottom();
       const timer = setTimeout(scrollToBottom, 100);
       setTimeout(() => clearTimeout(timer), 200);
     }
-    
+
     // Update refs for next comparison
     prevMessageCountRef.current = currentMessageCount;
     prevGeneratingRef.current = isGenerating;
@@ -359,8 +359,8 @@ const WorldCardsPlayView: React.FC = () => {
       const updatedState = {
         ...currentState,
         current_position: position,
-        visited_positions: currentState.visited_positions.includes(position) 
-          ? currentState.visited_positions 
+        visited_positions: currentState.visited_positions.includes(position)
+          ? currentState.visited_positions
           : [...currentState.visited_positions, position]
       };
       await worldDataService.saveWorldState(worldId, updatedState);
@@ -368,8 +368,8 @@ const WorldCardsPlayView: React.FC = () => {
       setWorldState(updatedState);
       setCurrentRoom(selectedRoom);
       setCurrentRoomName(selectedRoom.name || "Unnamed Room");
-      const roomIntroduction = selectedRoom.introduction || 
-        selectedRoom.description || 
+      const roomIntroduction = selectedRoom.introduction ||
+        selectedRoom.description ||
         `You've entered ${selectedRoom.name || "a new room"}.`;
       const previousRoomName = previousRoom?.name || "the previous area";
       const message = `You leave ${previousRoomName} and enter ${selectedRoom.name || "a new area"}. ${roomIntroduction}`;
@@ -414,7 +414,7 @@ const WorldCardsPlayView: React.FC = () => {
         if (npcCharacterCard.avatar && npcCharacterCard.avatar !== 'none') {
           setImageUrl(`/api/character-image/${encodeURIComponent(npcCharacterCard.avatar)}`);
         } else {
-          setImageUrl(undefined); 
+          setImageUrl(undefined);
         }
         const introContext = `The user, ${currentUser?.name || 'Adventurer'}, encounters ${npcCharacterCard.name} in ${currentRoomName || 'this area'}. ${npcCharacterCard.first_mes || npcCharacterCard.data.first_mes || ''}`;
         await generateNpcIntroduction(npcCharacterCard, undefined, introContext);
@@ -465,9 +465,9 @@ const WorldCardsPlayView: React.FC = () => {
           </nav>
           <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-opacity-75 bg-stone-950 scrollbar-thin scrollbar-thumb-stone-700 scrollbar-track-transparent">
             {chatError && (
-            <div className="relative z-10 px-8 py-2">
-              <ErrorMessage message={chatError} onDismiss={clearChatError} />
-            </div>
+              <div className="relative z-10 px-8 py-2">
+                <ErrorMessage message={chatError} onDismiss={clearChatError} />
+              </div>
             )}
             {messages.map((message: Message) => (
               <React.Fragment key={message.id}>
@@ -553,7 +553,7 @@ const WorldCardsPlayView: React.FC = () => {
       {isMapDialogOpen && worldId && (
         <MapDialog
           worldId={worldId}
-          isOpen={isMapDialogOpen} 
+          isOpen={isMapDialogOpen}
           onClose={() => setIsMapDialogOpen(false)}
           onRoomSelect={(_, position) => handleRoomSelect(position)}
           playMode={true}

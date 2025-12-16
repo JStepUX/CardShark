@@ -30,7 +30,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  
+
   // Search and filtering state
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'messages'>('date');
@@ -45,7 +45,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   // Load available chats when character changes
   useEffect(() => {
     if (!characterData) return;
-    
+
     loadAvailableChats();
   }, [characterData]);
 
@@ -65,12 +65,12 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
 
   const loadAvailableChats = async () => {
     if (!characterData) return;
-    
+
     try {
       setLoading(true);
       setError(null);
       setDeleteError(null);
-      
+
       // Use the new database-centric API endpoint
       const characterUuid = characterData.data?.character_uuid;
       if (!characterUuid) {
@@ -91,7 +91,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
 
       const data = await response.json();
       const chats = data.data || [];
-      
+
       if (Array.isArray(chats)) {
         // Transform the database response into our ChatInfo format
         const charName = characterData?.data?.name;
@@ -99,19 +99,19 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           // Handle both old JSONL format and new database format
           const chatId = chat.chat_session_uuid || chat.id || chat.chat_id;
           const title = chat.title || formatChatTitle(
-            chat.start_time || chat.create_date || chat.display_date, 
-            chat.preview || chat.last_message, 
-            charName, 
+            chat.start_time || chat.create_date || chat.display_date,
+            chat.preview || chat.last_message,
+            charName,
             chat.user_name
           );
           const lastModified = chat.last_message_time || chat.last_updated || chat.last_modified || chat.start_time || chat.create_date;
           const messageCount = chat.message_count || 0;
-          
+
           // Skip chats with less than 2 messages (likely just system prompt/first message)
           if (messageCount < 2) {
             return null;
           }
-          
+
           // Clean up preview text
           const rawPreview = chat.preview || chat.last_message || 'No messages';
           let cleanPreview = rawPreview.replace(/<[^>]*>/g, '');
@@ -131,9 +131,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             lastModified: formatDate(lastModified),
             messageCount,
             preview: finalPreview
-          };
+          } as ChatInfo;
         }).filter((chat): chat is ChatInfo => chat !== null);
-        
+
         setAvailableChats(chatInfoList);
       } else {
         setError('Failed to load chats');
@@ -152,7 +152,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     try {
       setLoading(true);
       await createNewChat();
-      
+
       // If there's an onClose callback (e.g., closing the dialog after creating a new chat)
       if (onClose) {
         onClose();
@@ -172,12 +172,12 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     try {
       setLoading(true);
       await loadExistingChat(chatId);
-      
+
       // If there's an onSelect callback, call it
       if (onSelect) {
         onSelect(chatId);
       }
-      
+
       // If there's an onClose callback (e.g., closing the dialog after selecting a chat)
       if (onClose) {
         onClose();
@@ -189,19 +189,19 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       setLoading(false);
     }
   };
-  
+
   const handleDeleteClick = (e: React.MouseEvent, chat: ChatInfo) => {
     e.stopPropagation(); // Prevent the chat from being selected
     setDeletingChat(chat);
     setIsDeleteConfirmOpen(true);
   };
-  
+
   const handleConfirmDelete = async () => {
     if (!deletingChat || !characterData) return;
-    
+
     setIsDeleting(true);
     setDeleteError(null);
-    
+
     try {
       // Use the new database-centric API endpoint for deleting chats
       const response = await fetch(`/api/reliable-delete-chat/${deletingChat.id}`, {
@@ -217,19 +217,19 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       }
 
       const result = await response.json();
-      
+
       if (result.success) {
         // Remove the deleted chat from the list
         setAvailableChats(prev => prev.filter(chat => chat.id !== deletingChat.id));
         setIsDeleteConfirmOpen(false);
-        
+
         // If we deleted the current chat, create a new one automatically
         if (deletingChat.id === currentChatId) {
-             setDeletingChat(null);
-             await handleCreateNewChat();
-             return;
+          setDeletingChat(null);
+          await handleCreateNewChat();
+          return;
         }
-        
+
         setDeletingChat(null);
       } else {
         throw new Error(result.message || 'Failed to delete chat');
@@ -241,7 +241,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       setIsDeleting(false);
     }
   };
-  
+
   const handleCancelDelete = () => {
     setIsDeleteConfirmOpen(false);
     setDeletingChat(null);
@@ -257,7 +257,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(chat => 
+      filtered = filtered.filter(chat =>
         chat.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (chat.preview && chat.preview.toLowerCase().includes(searchTerm.toLowerCase()))
       );
@@ -267,7 +267,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     if (dateFilter !== 'all') {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
+
       filtered = filtered.filter(chat => {
         const chatDate = new Date(chat.lastModified);
         switch (dateFilter) {
@@ -326,11 +326,11 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   // Export functionality - Updated for database-centric approach
   const handleExportChats = async (format: 'json' | 'jsonl' = 'json') => {
     if (!characterData) return;
-    
+
     setIsExporting(true);
     try {
       const chatsToExport = filteredAndSortedChats.length > 0 ? filteredAndSortedChats : availableChats;
-      
+
       if (format === 'jsonl') {
         // Use the new bulk export endpoint for JSONL format
         const response = await fetch('/api/export-chats-bulk', {
@@ -376,7 +376,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             preview: chat.preview
           }))
         };
-        
+
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -400,13 +400,13 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     try {
       // Guard against invalid dates
       if (!dateString) return 'Unknown date';
-      
+
       // Try to parse as Date object directly first (covers ISO with/without Z, and other standard formats)
       const date = new Date(dateString);
       if (!isNaN(date.getTime()) && date.getFullYear() > 1990) {
         return date.toLocaleString();
       }
-      
+
       // Try to parse as timestamp
       const timestamp = parseInt(dateString);
       if (!isNaN(timestamp)) {
@@ -416,7 +416,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           return date.toLocaleString();
         }
       }
-      
+
       // Try different date formats
       // For "YYYY-MM-DD HH:MM:SS" format
       if (dateString.includes('-') && dateString.includes(':')) {
@@ -432,30 +432,30 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           }
         }
       }
-      
+
       // Try to parse from YYYYMMDD_HHMMSS format (used in filenames)
-      const filenamePattern = /(\d{8})_(\d{6})/;  
+      const filenamePattern = /(\d{8})_(\d{6})/;
       const filenameMatch = dateString.match(filenamePattern);
       if (filenameMatch) {
         const datePart = filenameMatch[1];
         const timePart = filenameMatch[2];
-        
+
         if (datePart && timePart) {
           const year = parseInt(datePart.substring(0, 4));
           const month = parseInt(datePart.substring(4, 6)) - 1;
           const day = parseInt(datePart.substring(6, 8));
-          
+
           const hour = parseInt(timePart.substring(0, 2));
           const minute = parseInt(timePart.substring(2, 4));
           const second = parseInt(timePart.substring(4, 6));
-          
+
           const date = new Date(year, month, day, hour, minute, second);
           if (!isNaN(date.getTime())) {
             return date.toLocaleString();
           }
         }
       }
-      
+
       // Fallback for simpler formatting
       return dateString.substring(0, 19).replace('T', ' ');
     } catch (e) {
@@ -468,11 +468,11 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   const formatChatTitle = (dateString: string, lastMessage?: string, characterName?: string, userName?: string): string => {
     try {
       const formattedDate = formatDate(dateString);
-      
+
       if (lastMessage && lastMessage.length > 0) {
         // Strip any HTML tags for cleaner display
         const cleanMessage = lastMessage.replace(/<[^>]*>/g, '');
-        
+
         let substitutedMessage = cleanMessage;
         if (characterName) {
           substitutedMessage = substitutedMessage.replace(/\{\{char\}\}/g, characterName);
@@ -480,13 +480,13 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         if (userName) {
           substitutedMessage = substitutedMessage.replace(/\{\{user\}\}/g, userName);
         }
-        
+
         // Use a snippet from the last message as part of the title
         const messagePreview = substitutedMessage.substring(0, 30).trim();
-        
+
         return `Chat from ${formattedDate}${messagePreview ? ` - "${messagePreview}${messagePreview.length < substitutedMessage.length ? '...' : ''}"` : ''}`;
       }
-      
+
       return `Chat from ${formattedDate}`;
     } catch (e) {
       console.error('Title formatting error:', e);
@@ -507,7 +507,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           </div>
         </div>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={loadAvailableChats}
             className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors"
             disabled={loading}
@@ -515,17 +515,16 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button 
+          <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`p-2 rounded-full transition-colors ${
-              showFilters ? 'bg-orange-700 hover:bg-orange-600' : 'bg-stone-800 hover:bg-stone-700'
-            }`}
+            className={`p-2 rounded-full transition-colors ${showFilters ? 'bg-orange-700 hover:bg-orange-600' : 'bg-stone-800 hover:bg-stone-700'
+              }`}
             title="Toggle filters"
           >
             <Filter size={16} />
           </button>
           <div className="relative" ref={exportDropdownRef}>
-            <button 
+            <button
               onClick={() => setShowExportDropdown(!showExportDropdown)}
               className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
               disabled={isExporting || availableChats.length === 0}
@@ -534,7 +533,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
               <Download size={16} className={isExporting ? 'animate-pulse' : ''} />
               <ChevronDown size={12} />
             </button>
-            
+
             {showExportDropdown && (
               <div className="absolute right-0 top-full mt-1 bg-stone-800 border border-stone-600 rounded-lg shadow-lg z-50 min-w-[160px]">
                 <button
@@ -562,7 +561,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
               </div>
             )}
           </div>
-          <button 
+          <button
             onClick={handleCreateNewChat}
             className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
@@ -689,10 +688,10 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       ) : availableChats.length === 0 ? (
         <div className="no-chats p-8 text-center text-stone-400">
           <p>
-            {currentChatId ? 
-              "No other chats found for this character" : 
+            {currentChatId ?
+              "No other chats found for this character" :
               "No previous chats found"}
-          </p>          <button 
+          </p>          <button
             onClick={handleCreateNewChat}
             className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
@@ -705,56 +704,54 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           {filteredAndSortedChats.map((chat) => {
             const isCurrentChat = chat.id === currentChatId;
             return (
-            <li 
-              key={chat.id}
-              className={`p-3 rounded-lg cursor-pointer transition-colors group relative ${
-                isCurrentChat 
-                  ? 'bg-orange-900/40 border border-orange-700/50' 
-                  : 'bg-stone-800 hover:bg-stone-700'
-              }`}
-              onClick={() => !isCurrentChat && handleLoadChat(chat.id)}
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-1">
-                  <MessageSquare size={20} className={isCurrentChat ? "text-orange-400" : "text-orange-500"} />
-                </div>
-                <div className="flex-grow">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium">{chat.title}</h3>
-                    {isCurrentChat && (
-                      <span className="px-2 py-0.5 text-xs bg-orange-600 text-white rounded-full">
-                        Current
-                      </span>
+              <li
+                key={chat.id}
+                className={`p-3 rounded-lg cursor-pointer transition-colors group relative ${isCurrentChat
+                    ? 'bg-orange-900/40 border border-orange-700/50'
+                    : 'bg-stone-800 hover:bg-stone-700'
+                  }`}
+                onClick={() => !isCurrentChat && handleLoadChat(chat.id)}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-1">
+                    <MessageSquare size={20} className={isCurrentChat ? "text-orange-400" : "text-orange-500"} />
+                  </div>
+                  <div className="flex-grow">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{chat.title}</h3>
+                      {isCurrentChat && (
+                        <span className="px-2 py-0.5 text-xs bg-orange-600 text-white rounded-full">
+                          Current
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-stone-400">
+                      {chat.messageCount} messages • Last updated: {chat.lastModified}
+                    </p>
+                    {chat.preview && (
+                      <p className="text-sm text-stone-300 mt-1 truncate">
+                        {chat.preview}
+                      </p>
                     )}
                   </div>
-                  <p className="text-sm text-stone-400">
-                    {chat.messageCount} messages • Last updated: {chat.lastModified}
-                  </p>
-                  {chat.preview && (
-                    <p className="text-sm text-stone-300 mt-1 truncate">
-                      {chat.preview}
-                    </p>
-                  )}
+
+                  {/* Delete button that shows on hover */}
+                  <button
+                    className={`absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 ${isCurrentChat ? 'z-10' : ''
+                      }`}
+                    onClick={(e) => handleDeleteClick(e, chat)}
+                    aria-label="Delete chat"
+                    title="Delete chat"
+                  >
+                    <Trash2 size={16} className="text-stone-300 hover:text-white" />
+                  </button>
                 </div>
-                
-                {/* Delete button that shows on hover */}
-                <button
-                  className={`absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 ${
-                    isCurrentChat ? 'z-10' : ''
-                  }`}
-                  onClick={(e) => handleDeleteClick(e, chat)}
-                  aria-label="Delete chat"
-                  title="Delete chat"
-                >
-                  <Trash2 size={16} className="text-stone-300 hover:text-white" />
-                </button>
-              </div>
-            </li>
-          );
-        })}
+              </li>
+            );
+          })}
         </ul>
       )}
-      
+
       {/* Delete confirmation dialog */}
       <DeleteConfirmationDialog
         isOpen={isDeleteConfirmOpen}

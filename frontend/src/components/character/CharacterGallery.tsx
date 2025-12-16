@@ -8,12 +8,12 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from '../KoboldCPPDrawerManager';
-import { useCharacterSort, SortOption, getSortLabel } from '../../hooks/useCharacterSort';
+import { useCharacterSort } from '../../hooks/useCharacterSort';
 
 // Track API calls across component instances - simplified
 const apiRequestCache = {
@@ -116,7 +116,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // State for the currently loaded directory and search term
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   // Filter state for World/Character cards
   const [filterType, setFilterType] = useState<'all' | 'character' | 'world'>('all');
 
@@ -175,13 +175,13 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // Memoized filtering - MOVED UP before it's used
   const filteredCharacters = useMemo(() => {
     let result = characters;
-    
+
     // Type Filter
     if (filterType !== 'all') {
-        result = result.filter(char => {
-            const type = char.extensions?.card_type || 'character';
-            return type === filterType;
-        });
+      result = result.filter(char => {
+        const type = char.extensions?.card_type || 'character';
+        return type === filterType;
+      });
     }
 
     // Search Filter
@@ -193,13 +193,13 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   }, [characters, searchTerm, filterType]);
 
   // Apply sorting hook
-  const { 
-    sortedItems: sortedAndFilteredCharacters, 
-    sortOption, 
-    setSortOption, 
-    sortLabel 
+  const {
+    sortedItems: sortedAndFilteredCharacters,
+    sortOption,
+    setSortOption,
+    sortLabel
   } = useCharacterSort(
-    filteredCharacters, 
+    filteredCharacters,
     {
       getName: (c) => c.name,
       getDate: (c) => c.modified
@@ -516,19 +516,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
     return '';
   };
-  // Handle character selection
-  const handleCharacterClick = async (character: CharacterFile) => {
+  // Common function to load character data and navigate
+  const selectCharacter = async (character: CharacterFile, targetRoute?: string, isInfoRequest: boolean = false) => {
     // Prevent selection if card is animating out
     if (deletingPath === character.path) return;
 
-    // Check if it is a World Card
-    if (character.extensions?.card_type === 'world' && character.character_uuid) {
-        navigate(`/world/${character.character_uuid}/launcher`);
-        return;
-    }
-
-    // If a custom click handler is provided, use it for selection (e.g., NPC selection)
-    if (typeof onCharacterClick === 'function') {
+    // If a custom click handler is provided (e.g. valid for standard clicks only), use it
+    // But skipped for info requests
+    if (!isInfoRequest && typeof onCharacterClick === 'function') {
       onCharacterClick(character);
       return;
     }
@@ -537,12 +532,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     const setLoading = isSecondarySelector ? setSecondaryIsLoading : setPrimaryLoading;
     setLoading(true);
     setError(null);
+
     try {
       const imageResponse = await fetch(getCharacterImage(character));
       if (!imageResponse.ok) throw new Error(`Failed to load image (${imageResponse.status})`);
       const blob = await imageResponse.blob();
 
-      // Fetch metadata separately using the new endpoint
       const metadataResponse = await fetch(`/api/character-metadata/${encodeFilePath(character.path)}`);
       if (!metadataResponse.ok) {
         const errorData = await metadataResponse.json().catch(() => ({ message: `Failed to load metadata (${metadataResponse.status})` }));
@@ -550,25 +545,30 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       }
 
       const data = await metadataResponse.json();
-      // Handle both formats: either {success: true, data: {...}} or just the raw metadata object
       const metadata = data.success && data.data ? data.data : data;
 
       if (metadata) {
         const newImageUrl = URL.createObjectURL(blob);
-        if (isSecondarySelector) {
+        if (isSecondarySelector && !isInfoRequest) {
           setSecondaryCharacterData(metadata);
           setSecondaryImageUrl(newImageUrl);
           if (onCharacterSelected) onCharacterSelected();
         } else {
           setCharacterData(metadata);
           setImageUrl(newImageUrl);
-          // Navigate based on character completeness:
-          // - Complete characters with valid metadata -> Chat
-          // - Incomplete characters without metadata -> Basic Info & Greetings for editing
-          if (character.is_incomplete) {
-            navigate('/info');
+
+          // Navigation Logic
+          if (targetRoute) {
+            navigate(targetRoute);
           } else {
-            navigate('/chat');
+            // Default logic (Chat vs Info)
+            // If incomplete, go to info. Otherwise chat.
+            // Note: World cards might go to Chat now.
+            if (character.is_incomplete) {
+              navigate('/info');
+            } else {
+              navigate('/chat');
+            }
           }
         }
       } else {
@@ -578,6 +578,27 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       setError(err instanceof Error ? err.message : 'Error selecting character.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle character selection (Main Click)
+  const handleCharacterClick = (character: CharacterFile) => {
+    // For World Cards, we now go to ChatView (World Mode)
+    // For Characters, ChatView
+    selectCharacter(character);
+  };
+
+  // Handle info button click
+  const handleInfoIconClick = (event: React.MouseEvent, character: CharacterFile) => {
+    event.stopPropagation();
+
+    // Logic:
+    // World Card -> Launcher (Splash)
+    // Character -> Info View
+    if (character.extensions?.card_type === 'world' && character.character_uuid) {
+      navigate(`/world/${character.character_uuid}/launcher`);
+    } else {
+      selectCharacter(character, '/info', true);
     }
   };
 
@@ -681,109 +702,106 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         <div className="p-4 flex flex-col gap-4">
           <div className="flex justify-between items-start">
             <div>
-                <h2 className="text-lg font-semibold flex items-center gap-2">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
                 {isSecondarySelector ? "Select Character for Comparison" : `Character Gallery`}
                 <span className="text-slate-500 text-sm font-normal">
-                    ({sortedAndFilteredCharacters.length} {sortedAndFilteredCharacters.length === 1 ? 'item' : 'items'})
+                  ({sortedAndFilteredCharacters.length} {sortedAndFilteredCharacters.length === 1 ? 'item' : 'items'})
                 </span>
-                </h2>
-                {currentDirectory && (
+              </h2>
+              {currentDirectory && (
                 <div className="mt-2 text-sm text-slate-400 truncate" title={currentDirectory}>
-                    Directory: {currentDirectory}
+                  Directory: {currentDirectory}
                 </div>
-                )}
+              )}
             </div>
-            
+
             {/* Sort Dropdown */}
             <div className="relative" ref={sortDropdownRef}>
-                <button
+              <button
                 onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
                 className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-slate-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Sort characters"
-                >
+              >
                 <ArrowUpDown size={16} className="text-slate-400" />
                 <span>{sortLabel}</span>
                 <ChevronDown size={14} className="text-slate-500" />
-                </button>
-                
-                {isSortDropdownOpen && (
+              </button>
+
+              {isSortDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
-                    <div className="py-1">
+                  <div className="py-1">
                     <button
-                        onClick={() => { setSortOption('name_asc'); setIsSortDropdownOpen(false); }}
-                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_asc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      onClick={() => { setSortOption('name_asc'); setIsSortDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_asc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
                     >
-                        <span className="w-5 mr-2 text-center">A</span> Name (A-Z)
+                      <span className="w-5 mr-2 text-center">A</span> Name (A-Z)
                     </button>
                     <button
-                        onClick={() => { setSortOption('name_desc'); setIsSortDropdownOpen(false); }}
-                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_desc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      onClick={() => { setSortOption('name_desc'); setIsSortDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_desc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
                     >
-                        <span className="w-5 mr-2 text-center">Z</span> Name (Z-A)
+                      <span className="w-5 mr-2 text-center">Z</span> Name (Z-A)
                     </button>
                     <button
-                        onClick={() => { setSortOption('date_newest'); setIsSortDropdownOpen(false); }}
-                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_newest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      onClick={() => { setSortOption('date_newest'); setIsSortDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_newest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
                     >
-                        <Calendar size={14} className="mr-2" /> Newest First
+                      <Calendar size={14} className="mr-2" /> Newest First
                     </button>
                     <button
-                        onClick={() => { setSortOption('date_oldest'); setIsSortDropdownOpen(false); }}
-                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_oldest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      onClick={() => { setSortOption('date_oldest'); setIsSortDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_oldest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
                     >
-                        <Calendar size={14} className="mr-2" /> Oldest First
+                      <Calendar size={14} className="mr-2" /> Oldest First
                     </button>
-                    </div>
+                  </div>
                 </div>
-                )}
+              )}
             </div>
           </div>
 
           <div className="flex gap-4">
-              {/* Type Filter Buttons */}
-              <div className="flex rounded-lg bg-stone-800 p-1 border border-stone-700 flex-shrink-0">
-                  <button
-                      onClick={() => setFilterType('all')}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                          filterType === 'all' 
-                              ? 'bg-stone-600 text-white shadow-sm' 
-                              : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                      }`}
-                  >
-                      All
-                  </button>
-                  <button
-                      onClick={() => setFilterType('character')}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                          filterType === 'character' 
-                              ? 'bg-stone-600 text-white shadow-sm' 
-                              : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                      }`}
-                  >
-                      <Users size={14} /> Characters
-                  </button>
-                  <button
-                      onClick={() => setFilterType('world')}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                          filterType === 'world' 
-                              ? 'bg-emerald-600/80 text-white shadow-sm' 
-                              : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                      }`}
-                  >
-                      <MapIcon size={14} /> Worlds
-                  </button>
-              </div>
+            {/* Type Filter Buttons */}
+            <div className="flex rounded-lg bg-stone-800 p-1 border border-stone-700 flex-shrink-0">
+              <button
+                onClick={() => setFilterType('all')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterType === 'all'
+                  ? 'bg-stone-600 text-white shadow-sm'
+                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                  }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFilterType('character')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${filterType === 'character'
+                  ? 'bg-stone-600 text-white shadow-sm'
+                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                  }`}
+              >
+                <Users size={14} /> Characters
+              </button>
+              <button
+                onClick={() => setFilterType('world')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${filterType === 'world'
+                  ? 'bg-emerald-600/80 text-white shadow-sm'
+                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                  }`}
+              >
+                <MapIcon size={14} /> Worlds
+              </button>
+            </div>
 
-              {/* Search Bar */}
-              <div className="flex-grow">
-                <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search characters by name..."
-                    className="w-full px-4 py-2 bg-stone-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+            {/* Search Bar */}
+            <div className="flex-grow">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search characters by name..."
+                className="w-full px-4 py-2 bg-stone-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -845,7 +863,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             renderItem={(character) => {
               const isDeleting = deletingPath === character.path;
               const isWorld = character.extensions?.card_type === 'world';
-              
+
               return (
                 <div
                   key={character.path}
@@ -880,7 +898,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                       <MapIcon size={16} />
                     </div>
                   )}
-                  
+
                   {/* Delete Button - Only show if not in comparison selection mode */}
                   {!isSecondarySelector && (
                     <button
@@ -893,6 +911,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                       <Trash2 size={16} />
                     </button>
                   )}
+
+                  {/* Info Button - Always show */}
+                  <button
+                    onClick={(e) => handleInfoIconClick(e, character)}
+                    className={`absolute top-2 ${!isSecondarySelector ? 'right-10' : 'right-2'} z-10 p-1.5 bg-black/50 text-white rounded-full 
+                               opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600
+                               focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-stone-800`}
+                    aria-label={`Info for ${character.name}`}
+                    title={character.extensions?.card_type === 'world' ? "World Splash Screen" : "Basic Info & Greetings"}
+                  >
+                    <Info size={16} />
+                  </button>
 
                   {/* Character Image Container */}
                   <div className="w-full h-full bg-stone-950">

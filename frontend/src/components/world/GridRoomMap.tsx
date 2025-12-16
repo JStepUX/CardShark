@@ -1,5 +1,5 @@
 import React from 'react';
-import { Room } from '../types/room';
+import { Room } from '../../types/room';
 
 interface GridRoomMapProps {
   roomsById: Record<string, Room>;
@@ -24,17 +24,17 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
 }) => {
   // Calculate grid center
   const center = Math.floor(gridSize / 2);
-  
+
   // Find existing rooms by coordinates
   const roomByCoords: Record<string, Room> = {};
-  
+
   // Map both from roomsById values and posToId to ensure we catch all rooms
   // First approach - map directly from roomsById values
   Object.values(roomsById).forEach(room => {
     const key = `${room.x},${room.y}`;
     roomByCoords[key] = room;
   });
-  
+
   // Second approach - ensure posToId mapping is used as well
   // This is critical for locations that might be in posToId but not directly mapped in roomByCoords
   Object.entries(posToId).forEach(([pos, roomId]) => {
@@ -52,10 +52,10 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
       }
     }
   });
-  
+
   // Check if we have any rooms at all
   const roomCount = Object.keys(roomsById).length;
-  
+
   // If no rooms at all, we'll create a different starting state
   // with just the center cell ready to be initialized
   if (roomCount === 0 && !playMode) {
@@ -68,13 +68,13 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
             const y = Math.floor(index / gridSize) - center;
             const isCenter = x === 0 && y === 0;
             const coordKey = `${x},${y}`;
-            
+
             return (
               <div
                 key={`cell-${coordKey}`}
                 className={`aspect-square flex items-center justify-center 
-                  ${isCenter ? 
-                    'border-2 border-green-400 bg-green-800/40 cursor-pointer hover:bg-green-700/60' : 
+                  ${isCenter ?
+                    'border-2 border-green-400 bg-green-800/40 cursor-pointer hover:bg-green-700/60' :
                     'border-2 border-dashed border-stone-700 bg-stone-900/60 opacity-50'
                   } rounded`}
                 onClick={isCenter ? () => onCreateRoom(x, y) : undefined}
@@ -93,15 +93,15 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
       </div>
     );
   }
-  
+
   // Create grid for rooms
   return (
-    <div className="relative bg-stone-900/90 rounded-lg p-4">      
+    <div className="relative bg-stone-900/90 rounded-lg p-4">
       <div className="mb-4 text-center text-white text-lg">Room Map</div>
-      
-      <div className="grid gap-2" style={{ 
+
+      <div className="grid gap-2" style={{
         gridTemplateColumns: `repeat(${gridSize}, minmax(5rem, 1fr))`,
-        gridTemplateRows: `repeat(${gridSize}, minmax(5rem, 1fr))` 
+        gridTemplateRows: `repeat(${gridSize}, minmax(5rem, 1fr))`
       }}>
         {Array.from({ length: gridSize * gridSize }).map((_, index) => {
           const x = index % gridSize - center;
@@ -109,17 +109,17 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
           const coordKey = `${x},${y}`;
           const room = roomByCoords[coordKey];
           const isCenter = x === 0 && y === 0;
-          
+
           if (room) {
             // This cell has a room
             const isSelected = room.id === selectedRoomId;
-            
+
             return (
               <div
                 key={`room-${coordKey}`}
                 className={`aspect-square flex items-center justify-center border-2 transition cursor-pointer rounded relative
-                  ${isSelected 
-                    ? 'border-white bg-blue-800 text-white shadow-lg' 
+                  ${isSelected
+                    ? 'border-white bg-blue-800 text-white shadow-lg'
                     : isCenter
                       ? 'border-green-400 bg-green-800 text-white'
                       : 'border-stone-400 bg-stone-700 text-white hover:border-stone-100'
@@ -157,8 +157,8 @@ const GridRoomMap: React.FC<GridRoomMapProps> = ({
             } else {
               // In play mode, just show empty space
               return (
-                <div 
-                  key={`empty-${coordKey}`} 
+                <div
+                  key={`empty-${coordKey}`}
                   className="aspect-square bg-stone-900/30"
                 />
               );

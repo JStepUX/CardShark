@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from './common/Dialog';
 import Button from './common/Button';
-import CharacterGallery from './CharacterGallery';
+import CharacterGallery from './character/CharacterGallery';
 import { worldStateApi } from '../utils/worldStateApi';
 
 interface CharacterFile {
@@ -17,10 +17,10 @@ interface WorldCreationModalProps {
   onSuccess: (worldName: string) => void;
 }
 
-const WorldCreationModal: React.FC<WorldCreationModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  onSuccess 
+const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess
 }) => {
   const [worldName, setWorldName] = useState("");
   const [createType, setCreateType] = useState<"empty" | "character">("empty");
@@ -59,7 +59,7 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
       setSelectedImage(null);
       setImagePreview(null);
       if (file) { // Only show error if a file was selected but wasn't PNG
-          setError("Please select a PNG file for the world card.");
+        setError("Please select a PNG file for the world card.");
       }
     }
   };
@@ -84,7 +84,7 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
         worldName,
         createType === "character" ? selectedCharacter?.path : undefined
       );
-      
+
       if (result.success) {
         const createdWorldName = result.world_name; // Get the actual name used by backend
 
@@ -104,11 +104,11 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
               console.warn(`World created, but failed to upload card image: ${imageUploadResponse.statusText}`);
               setError(`World created, but image upload failed: ${imageUploadResponse.statusText}`); // Show non-blocking error
             } else {
-               console.log(`Successfully uploaded world card image for ${createdWorldName}`);
+              console.log(`Successfully uploaded world card image for ${createdWorldName}`);
             }
           } catch (imgErr) {
-             console.warn(`World created, but encountered error uploading card image:`, imgErr);
-             setError(`World created, but image upload failed: ${imgErr instanceof Error ? imgErr.message : 'Unknown error'}`); // Show non-blocking error
+            console.warn(`World created, but encountered error uploading card image:`, imgErr);
+            setError(`World created, but image upload failed: ${imgErr instanceof Error ? imgErr.message : 'Unknown error'}`); // Show non-blocking error
           }
         }
         // --- End Image Upload ---
@@ -143,7 +143,7 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
         className="max-w-4xl h-[80vh]"
       >
         <div className="h-full">
-          <CharacterGallery 
+          <CharacterGallery
             onCharacterClick={handleCharacterClick}
             lazyLoad={true}
           />
@@ -206,7 +206,7 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
         {/* Image Upload Input */}
         <div className="mt-2">
           <label className="text-slate-700 dark:text-slate-300 block mb-2">World Card Image (Optional PNG)</label>
-          <input 
+          <input
             type="file"
             accept="image/png"
             onChange={handleImageChange}
@@ -226,7 +226,7 @@ const WorldCreationModal: React.FC<WorldCreationModalProps> = ({
               <div className="flex items-center justify-between p-3 bg-stone-800 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 rounded-md overflow-hidden">
-                    <img 
+                    <img
                       src={`/api/character-image/${encodeURIComponent(selectedCharacter.path)}`}
                       alt={selectedCharacter.name}
                       className="w-full h-full object-cover"

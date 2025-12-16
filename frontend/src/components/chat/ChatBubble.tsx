@@ -13,7 +13,7 @@ import { Message, UserProfile } from '../../types/messages';
 import RichTextEditor from '../RichTextEditor';
 import { formatUserName } from '../../utils/formatters';
 import { markdownToHtml } from '../../utils/contentUtils';  // Import markdownToHtml directly
-import { removeIncompleteSentences } from '../../utils/contentProcessing'; // Import the utility function
+// removeIncompleteSentences removed
 import { useSettings } from '../../contexts/SettingsContext'; // Import the settings context hook
 
 interface ChatBubbleProps {
@@ -58,7 +58,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const hasReceivedContent = useRef(false);
   const generationStartTime = useRef<number | null>(null);
   const { settings } = useSettings(); // Get settings from context
-  
+
   // Initialize generation start time
   useEffect(() => {
     if (isGenerating && !generationStartTime.current) {
@@ -76,36 +76,36 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     // 4. Message status is not streaming (it's done)
     // 5. It's an assistant message
     // 6. Feature is enabled
-    
+
     // We disable this during active editing because we can't reliably distinguish between
     // "AI finished generating" and "User is editing and paused typing".
     // If the user edits the message, we assume they are taking control and we shouldn't
     // interfere with their text, even if it looks incomplete.
-    
-    if (!isGenerating && 
-        !isRegeneratingGreeting && 
-        previousContent.current !== message.content && 
-        message.status !== 'streaming' &&
-        message.role === 'assistant' && 
-        settings.remove_incomplete_sentences && 
-        message.content) {
-          
-       // Commented out to prevent interfering with user edits.
-       // The cleanup of incomplete sentences should ideally happen only at the exact moment
-       // generation finishes, but doing it in this effect risks catching manual edits too.
-       
-       /*
-       if (DEBUG_CHAT_PROCESSING) {
-         console.debug('[ChatBubble] Applying incomplete sentence removal to:', message.content);
-       }
-       const processedContent = removeIncompleteSentences(message.content);
-       if (DEBUG_CHAT_PROCESSING) {
-         console.debug('[ChatBubble] Processed content:', processedContent);
-       }
-       if (processedContent !== message.content) {
-         onContentChange(processedContent);
-       }
-       */
+
+    if (!isGenerating &&
+      !isRegeneratingGreeting &&
+      previousContent.current !== message.content &&
+      message.status !== 'streaming' &&
+      message.role === 'assistant' &&
+      settings.remove_incomplete_sentences &&
+      message.content) {
+
+      // Commented out to prevent interfering with user edits.
+      // The cleanup of incomplete sentences should ideally happen only at the exact moment
+      // generation finishes, but doing it in this effect risks catching manual edits too.
+
+      /*
+      if (DEBUG_CHAT_PROCESSING) {
+        console.debug('[ChatBubble] Applying incomplete sentence removal to:', message.content);
+      }
+      const processedContent = removeIncompleteSentences(message.content);
+      if (DEBUG_CHAT_PROCESSING) {
+        console.debug('[ChatBubble] Processed content:', processedContent);
+      }
+      if (processedContent !== message.content) {
+        onContentChange(processedContent);
+      }
+      */
     }
     previousContent.current = message.content;
   }, [isGenerating, isRegeneratingGreeting, message.content, message.role, message.status, onContentChange, settings.remove_incomplete_sentences]);
@@ -146,18 +146,18 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       if (!streamingStarted) {
         setStreamingStarted(true);
       }
-      
+
       // Track if we've received non-empty content
       if (text && text.trim() !== '') {
         hasReceivedContent.current = true;
       }
-      
+
       // Return the content we have so far, even if it's empty
       // This ensures we start showing content as soon as it arrives
       // First sanitize the text, then trim leading newlines
       const sanitizedText = sanitizeChatOutput(text || '');
       const trimmedContent = trimLeadingNewlines(sanitizedText);
-      
+
       // Create a cache key based on content and variables
       const cacheKey = `${trimmedContent}_${currentUser || ''}_${characterName || ''}`;
 
@@ -179,24 +179,24 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
 
       return processedText;
     }
-    
+
     // Non-generating messages should always be processed without special handling
-    
+
     // Handle completely empty content for non-streaming cases
     if ((!text || text.trim() === '') && !isGenerating) {
       // For completed messages with no content, return an empty space
       // This ensures the bubble renders properly
-      return ' '; 
+      return ' ';
     }
     // Regular processing for non-generating messages
     // First sanitize the text, then trim leading newlines
     const sanitizedText = sanitizeChatOutput(text || '');
     const trimmedContent = trimLeadingNewlines(sanitizedText);
     const cacheKey = `${trimmedContent}_${currentUser || ''}_${characterName || ''}`;
-    
+
     if (highlightCache.current.has(cacheKey)) {
       return highlightCache.current.get(cacheKey)!;
-    }    
+    }
     let processedText = trimmedContent;
     if (currentUser) {
       const userName = typeof currentUser === 'object' ? formatUserName(currentUser) : currentUser;
@@ -210,49 +210,49 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     // 3. The feature is enabled in settings
     // 4. The message status is 'complete' (not 'streaming')
     // 5. IMPORTANT: We skip this for processed text derived from edits (handled elsewhere) or if we want to be more conservative
-    if (message.role === 'assistant' && 
-        !isGenerating && 
-        settings.remove_incomplete_sentences && 
-        message.status !== 'streaming') {
+    if (message.role === 'assistant' &&
+      !isGenerating &&
+      settings.remove_incomplete_sentences &&
+      message.status !== 'streaming') {
       // Re-running this on every render can be problematic if it prunes content that was just edited.
       // Ideally, incomplete sentence removal should only happen ONCE after generation finishes.
       // However, processContent is called during render. 
-      
+
       // FIX: We should rely on the effect at lines 71-93 to update the message content permanently 
       // rather than doing it on-the-fly here, which affects display but not the underlying message if not saved back.
       // OR, we must ensure this doesn't fight with user edits.
-      
+
       // Current behavior: It modifies 'processedText' which is displayed.
       // If the user edits the text, 'message.content' updates.
       // Then this runs again on the NEW content. If the user just added a sentence but didn't finish it (e.g. typing), 
       // this might visually clip it if it weren't for the fact that this is inside 'processContent'.
       // But 'processContent' is called on render.
-      
+
       // If the user is editing, they are using RichTextEditor with 'htmlContent'.
       // 'htmlContent' is initialized from 'processContent(message.content)'.
       // When the user types, 'onChange' updates 'htmlContent' locally and calls 'onContentChange' debounced.
       // 'onContentChange' updates the parent 'message.content'.
       // When 'message.content' changes, 'processContent' runs again, creating a NEW 'htmlContent'.
-      
+
       // If 'removeIncompleteSentences' strips the end of the user's edit because they haven't typed the period yet,
       // it will feel like the text is disappearing.
-      
+
       // To fix this, we should NOT apply removeIncompleteSentences inside processContent if we can avoid it,
       // or at least be very careful.
       // The Effect at line 71 handles the post-generation cleanup. 
       // Doing it here as well seems redundant and dangerous for edits.
-      
+
       // Disabling this call here to prevent fighting with edits.
       // processedText = removeIncompleteSentences(processedText);
     }
 
     // Cache the result
-    highlightCache.current.set(cacheKey, processedText);    
+    highlightCache.current.set(cacheKey, processedText);
     return processedText;
   }, [currentUser, characterName, isGenerating, message.role, streamingStarted, trimLeadingNewlines, sanitizeChatOutput, settings.remove_incomplete_sentences]);  // Process the message content with variables replaced
   useEffect(() => {
     const processedContent = processContent(message.content);
-    
+
     // Process any markdown images that might be in the content
     // This ensures images render properly in both editing and generating states
     let contentWithImages = processedContent;
@@ -260,7 +260,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       // Use the existing markdownToHtml function from your utils
       contentWithImages = markdownToHtml(processedContent);
     }
-    
+
     setHtmlContent(contentWithImages);
     previousContent.current = message.content;
   }, [message.content, processContent]);
@@ -282,7 +282,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const variationCount = message.variations ? message.variations.length : 0;
   // Helper to get user name display - already using formatUserName function which handles both string and UserProfile objects
   const formattedUserName = currentUser ? formatUserName(currentUser) : 'User';
-    // Debug log for empty messages - only warn for non-assistant messages or completed assistant messages
+  // Debug log for empty messages - only warn for non-assistant messages or completed assistant messages
   if (!message.content && !isGenerating && message.role !== 'assistant') {
     console.warn(`[ChatBubble] Rendering bubble with empty content: ID=${message.id}, Role=${message.role}`);
   }
@@ -311,7 +311,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                 <Copy size={16} />
                 {copied && <span className="sr-only">Copied!</span>}
               </button>
-              
+
               {/* Regeneration buttons */}
               {isFirstMessage && onRegenerateGreeting && !isGenerating && (
                 <button
@@ -323,7 +323,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                   <Sparkles size={16} />
                 </button>
               )}
-              
+
               {/* Try again button for non-greeting messages */}
               {!isFirstMessage && onTryAgain && !isGenerating && (
                 <button
@@ -334,7 +334,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                   <RotateCw size={16} />
                 </button>
               )}
-              
+
               {/* Continue button */}
               {onContinue && !isGenerating && (
                 <button
@@ -345,7 +345,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                   <StepForward size={16} />
                 </button>
               )}
-              
+
               {/* Variation controls */}
               {hasVariations && !isGenerating && (
                 <div className="flex items-center">
@@ -357,11 +357,11 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                   >
                     <ArrowLeft size={16} />
                   </button>
-                  
+
                   <span className="text-xs text-stone-500 mx-1">
                     {variationIndex + 1}/{variationCount}
                   </span>
-                  
+
                   <button
                     onClick={onNextVariation}
                     disabled={variationIndex >= variationCount - 1}
@@ -372,7 +372,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                   </button>
                 </div>
               )}
-              
+
               {/* Stop generation button */}
               {isGenerating && onStop && (
                 <button
@@ -402,7 +402,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
         {isGenerating || isRegeneratingGreeting ? (
           /* Show non-editable content with cursor while generating */
           <div className="streaming-content whitespace-pre-wrap break-words performance-contain performance-transform">
-            <div 
+            <div
               className="prose prose-invert max-w-none performance-contain"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
@@ -417,7 +417,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
               if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
               }
-              
+
               // Debounce saving changes
               saveTimeoutRef.current = setTimeout(() => {
                 if (html !== htmlContent) {
@@ -427,7 +427,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                   onContentChange(html);
                 }
               }, 1000);
-              
+
               setHtmlContent(html);
             }}
             className="chat-bubble-editor"

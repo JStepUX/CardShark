@@ -41,12 +41,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   useEffect(() => {
     onKeyDownRef.current = onKeyDown;
   }, [onKeyDown]);
-  
+
   // Pre-process content for initial rendering
-  const initialContent = content?.includes('![') 
+  const initialContent = content?.includes('![')
     ? markdownToHtml(content)
     : content;
-    const editor = useEditor({
+  const editor = useEditor({
     extensions: [
       StarterKit.configure({
         // Disable built-in markdown parsing features
@@ -86,13 +86,13 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     autofocus,
     parseOptions: {
       preserveWhitespace: preserveWhitespace ? 'full' : undefined, // Use undefined for default behavior when false
-    },onUpdate: ({ editor }: { editor: Editor }) => {
+    }, onUpdate: ({ editor }: { editor: Editor }) => {
       // Save cursor position before content update
       cursorPosRef.current = editor.state.selection;
-      
+
       // Get HTML content directly - let TipTap handle proper paragraph structure
       const html = editor.getHTML();
-      
+
       onChange(html);
     },
     // Ensure newlines are properly preserved when pasting
@@ -101,7 +101,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         // Preserve newlines in pasted text
         return text;
       },
-      handleKeyDown: (view, event) => {
+      handleKeyDown: (_view, event) => {
         if (onKeyDownRef.current) {
           onKeyDownRef.current(event as unknown as React.KeyboardEvent<HTMLDivElement>);
           return event.defaultPrevented;
@@ -116,23 +116,23 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       if (editor.isFocused) {
         cursorPosRef.current = editor.state.selection;
       }
-      
+
       // Process content for update
       let contentToSet = content;
-      
+
       // Convert plain text with newlines to proper HTML paragraphs
       if (!contentToSet.includes('<p>') && !contentToSet.includes('<br>') && contentToSet.includes('\n')) {
         contentToSet = textToHtmlParagraphs(contentToSet);
       }
-      
+
       // Process markdown images
       if (contentToSet.includes('![')) {
         contentToSet = markdownToHtml(contentToSet);
       }
-      
+
       // Set content
       editor.commands.setContent(contentToSet);
-      
+
       // Restore cursor position after content update
       if (cursorPosRef.current && editor.isFocused) {
         const { from, to } = cursorPosRef.current;
@@ -155,7 +155,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   };
   return (
-    <div 
+    <div
       className={`tiptap-editor ${className} performance-contain performance-transform`}
       onClick={handleContainerClick}
       ref={editorContainerRef}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog } from './common/Dialog';
-import GridRoomMap from './GridRoomMap'; // Keep only the GridRoomMap import
+import GridRoomMap from './world/GridRoomMap'; // Keep only the GridRoomMap import
 import { Room } from '../types/room';
 import { FullWorldState } from '../types/worldState';
 import worldStateApi from '../utils/worldStateApi';
@@ -24,18 +24,18 @@ const MapDialog: React.FC<MapDialogProps> = ({
   const [worldData, setWorldData] = useState<FullWorldState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Room state for the map
   const [roomsById, setRoomsById] = useState<Record<string, Room>>({});
   const [posToId, setPosToId] = useState<Record<string, string>>({});
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  
+
   // Process the world data with useMemo to prevent recalculations on every render
   const processedData = useMemo(() => {
     // Create empty collections
     const processedRoomsById: Record<string, Room> = {};
     const processedPosToId: Record<string, string> = {};
-    
+
     // Process locations if we have world data
     if (worldData?.locations) {
       Object.entries(worldData.locations).forEach(([position, location]) => {
@@ -49,11 +49,11 @@ const MapDialog: React.FC<MapDialogProps> = ({
         const coords = position.split(',').map(Number);
         const x = coords[0] || 0;
         const y = coords[1] || 0;
-        
+
         // The issue was in the lookup mechanism - we need to create various position keys
         const posKey = `${x},${y}`; // This is the key format used in the RoomMap component
         const pos3DKey = position; // Original 3D position from world state
-        
+
         // Create a Room object from the WorldLocation
         const room: Room = {
           id: location.location_id,
@@ -75,12 +75,12 @@ const MapDialog: React.FC<MapDialogProps> = ({
         processedPosToId[pos3DKey] = location.location_id;
       });
     }
-    
+
     // Get the currently selected room ID from the current position
     const currentPosition = worldData?.current_position || '';
     // First try the full position format
     let selectedId = currentPosition ? processedPosToId[currentPosition] : null;
-    
+
     // If that doesn't work, try extracting the x,y coords only
     if (!selectedId && currentPosition) {
       const coords = currentPosition.split(',').map(Number);
@@ -89,14 +89,14 @@ const MapDialog: React.FC<MapDialogProps> = ({
       const simplifiedPos = `${x},${y}`;
       selectedId = processedPosToId[simplifiedPos];
     }
-    
+
     // Check if we have rooms to display
     const hasRooms = Object.keys(processedRoomsById).length > 0;
-    
-    return { 
-      processedRoomsById, 
-      processedPosToId, 
-      selectedId, 
+
+    return {
+      processedRoomsById,
+      processedPosToId,
+      selectedId,
       hasRooms
     };
   }, [worldData]); // Only recalculate when worldData changes
@@ -109,29 +109,29 @@ const MapDialog: React.FC<MapDialogProps> = ({
       setSelectedRoomId(processedData.selectedId);
     }
   }, [processedData, worldData]);
-  
+
   // Load world data when the dialog opens
   useEffect(() => {
     if (isOpen && worldId) {
       setIsLoading(true);
       setError(null);
-      
+
       worldStateApi.getWorldState(worldId)
         .then(data => {
           console.log("World data loaded:", data);
           setWorldData(data);
-          
+
           // Create debug info about locations
           if (data?.locations) {
             const locationCount = Object.keys(data.locations).length;
-            
+
             if (locationCount === 0) {
               setError("No locations found in this world");
             }
           } else {
             setError("World has no locations defined");
           }
-          
+
           setIsLoading(false);
         })
         .catch(err => {
@@ -146,7 +146,7 @@ const MapDialog: React.FC<MapDialogProps> = ({
   const handleSelectRoom = (roomId: string) => {
     // Find the position for this room id
     const position = Object.entries(posToId).find(([_, id]) => id === roomId)?.[0];
-    
+
     if (position && onRoomSelect) {
       // Call the parent handler with the room ID and position
       onRoomSelect(roomId, position);
@@ -154,7 +154,7 @@ const MapDialog: React.FC<MapDialogProps> = ({
       onClose();
     }
   };
-  
+
   // Prevent updates during loading
   const handleCreateRoom = () => {
     // No-op in play mode - we don't allow room creation
@@ -201,7 +201,7 @@ const MapDialog: React.FC<MapDialogProps> = ({
       ) : (
         <>
           <div className="text-sm text-stone-400 mb-4">
-            {playMode 
+            {playMode
               ? "Select a room to travel there. Your current location is highlighted."
               : "Navigate and manage rooms in your world."}
           </div>
