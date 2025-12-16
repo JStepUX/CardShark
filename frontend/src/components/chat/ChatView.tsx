@@ -5,7 +5,7 @@
  * @consumers AppRoutes.tsx, SideNav.tsx
  */
 // frontend/src/components/chat/ChatView.tsx
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useCharacter } from '../../contexts/CharacterContext';
 import ChatBubble from './ChatBubble';
 import ThoughtBubble from '../ThoughtBubble';
@@ -14,7 +14,7 @@ import ChatSelectorDialog from './ChatSelectorDialog';
 import ContextWindowModal from './ContextWindowModal';
 import ChatBackgroundSettings, { BackgroundSettings } from './ChatBackgroundSettings';
 import { useEmotionDetection } from '../../hooks/useEmotionDetection';
-import { Message, UserProfile } from '../../types/messages';
+import { Message } from '../../types/messages';
 import { substituteVariables } from '../../utils/variableUtils';
 import ErrorMessage from '../common/ErrorMessage';
 import { useScrollToBottom } from '../../hooks/useScrollToBottom';
@@ -24,6 +24,12 @@ import { useChat } from '../../contexts/ChatContext';
 import ChatBackgroundLayer from './ChatBackgroundLayer';
 import ChatHeader from './ChatHeader';
 import ChatInputArea from './ChatInputArea';
+import WorldSidePanel from './WorldSidePanel';
+
+// Types and Utilities
+import { Room } from '../../types/room';
+import { FullWorldState } from '../../types/worldState';
+import { formatWorldName } from '../../utils/formatters';
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -84,16 +90,27 @@ export const useStallDetection = (
 
 // Main ChatView component
 const ChatView: React.FC = () => {
-  const { characterData } = useCharacter();
+  const { characterData, setCharacterData } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
+
+  // World Card State
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+
+  const isWorldCard = useMemo(() => {
+    return characterData?.data?.tags?.includes('world') || !!characterData?.data?.extensions?.world;
+  }, [characterData]);
+
+  const worldId = useMemo(() => {
+    return characterData?.data?.extensions?.world || characterData?.data?.name || '';
+  }, [characterData]);
   const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const { endRef: messagesEndRef, containerRef: messagesContainerRef, scrollToBottom } = useScrollToBottom();
-  
+
   const {
     messages,
     isGenerating,
@@ -218,20 +235,20 @@ const ChatView: React.FC = () => {
 
   const prevMessageCountRef = useRef(messages.length);
   const prevGeneratingRef = useRef(isGenerating);
-  
+
   useEffect(() => {
     const currentMessageCount = messages.length;
     const wasGenerating = prevGeneratingRef.current;
-    
-    const shouldScroll = 
+
+    const shouldScroll =
       currentMessageCount > prevMessageCountRef.current ||
       (!wasGenerating && isGenerating) ||
       (isGenerating && generatingId && messages.some(msg => msg.id === generatingId && msg.status === 'streaming'));
-    
+
     if (shouldScroll) {
       scrollToBottomUnified();
     }
-    
+
     prevMessageCountRef.current = currentMessageCount;
     prevGeneratingRef.current = isGenerating;
   }, [messages, isGenerating, generatingId, scrollToBottomUnified]);
@@ -277,6 +294,62 @@ const ChatView: React.FC = () => {
     generateResponse(content);
   };
 
+  // Handle Room Navigation (World Cards)
+  const handleRoomChange = useCallback((room: Room, _position: string, worldState: FullWorldState) => {
+    if (!characterData) return;
+
+    // Check if this is a navigation event (vs initial sync)
+    // We determine this by checking if we already have a room set and it's different
+    const isNavigation = currentRoom && currentRoom.id !== room.id;
+
+    // Update local state
+    setCurrentRoom(room);
+
+    // Update Character Context for the AI
+    // We create a new character card with updated scenario/system prompt reflecting the location
+    const worldUserIntroduction = room.introduction ||
+      `You find yourself in ${room.name || 'an interesting place'}.`;
+
+    // Helper to check if we actually need to update the card content to avoid loops
+    // In a real implementation we would do a deep comparison or just update properties
+    // For now we mutate the current object reference copy carefully or use setCharacterData
+    // NOTE: setCharacterData triggers re-render.
+
+    // Logic adapted from WorldCardsPlayView
+    const newCard = { ...characterData };
+    if (!newCard.data) return;
+
+    const newScenario = `The user is exploring ${room.name || 'this location'} in the world of ${formatWorldName(worldState.name) || 'Unknown'}.`;
+    const newSystemPrompt = `You are the narrator describing the world of ${formatWorldName(worldState.name) || 'Unknown'}.`;
+
+    // Only update if changed
+    if (newCard.data.scenario !== newScenario) {
+      newCard.data.scenario = newScenario;
+      newCard.data.system_prompt = newSystemPrompt;
+      newCard.data.first_mes = worldUserIntroduction; // Update greeting for new chats?
+
+      // Use setCharacterData to update global context
+      // This ensures the NEXT generation uses these values
+      setCharacterData(newCard);
+    }
+
+    // Generate response if navigation
+    if (isNavigation && !isGenerating) {
+      const previousRoomName = currentRoom?.name || "the previous area";
+      const roomIntroduction = room.introduction || room.description || `You've entered ${room.name || "a new room"}.`;
+      const message = `You leave ${previousRoomName} and enter ${room.name || "a new area"}. ${roomIntroduction}`;
+
+      // Trigger generation
+      generateResponse(message);
+    }
+  }, [characterData, currentRoom, isGenerating, generateResponse, setCharacterData]);
+
+  // Handle NPC interactions from the side panel
+  const handleNpcClick = useCallback(() => {
+    // Placeholder for now, or open NPC dialog if needed
+    console.log("NPC icon clicked in ChatView");
+  }, []);
+
   // Compute emotion here to pass to InputArea
   const { currentEmotion: emotion } = useEmotionDetection(messages, characterData?.data?.name);
 
@@ -287,14 +360,14 @@ const ChatView: React.FC = () => {
   return (
     <div className="h-full relative flex flex-col overflow-hidden">
       {/* Background Layer */}
-      <ChatBackgroundLayer 
+      <ChatBackgroundLayer
         backgroundSettings={backgroundSettings}
         messages={messages}
         characterName={characterData.data.name || 'Character'}
       />
 
       {/* Header */}
-      <ChatHeader 
+      <ChatHeader
         characterName={characterData.data.name || ''}
         reasoningSettings={reasoningSettings}
         onReasoningSettingsChange={handleReasoningSettingsChange}
@@ -304,61 +377,79 @@ const ChatView: React.FC = () => {
         onNewChat={handleNewChat}
       />
 
-      {/* Error Display */}
-      <div className="relative z-10 px-8 py-2">
-        <ErrorMessage
-          message={combinedError}
-          onDismiss={handleDismissError}
-        />
-      </div>
+      <div className="flex-1 overflow-hidden relative z-10 flex flex-row">
+        {/* Main Chat Column */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+          {/* Error Display */}
+          <div className="relative z-10 px-8 py-2">
+            <ErrorMessage
+              message={combinedError}
+              onDismiss={handleDismissError}
+            />
+          </div>
 
-      {/* Messages Area */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-hidden relative z-10">
-        <div className="h-full overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => (
-            <React.Fragment key={message.id}>
-              {message.role === 'thinking' && reasoningSettings.visible ? (
-                <ThoughtBubble
-                  message={message}
-                  isGenerating={message.status === 'streaming'}
-                  onContentChange={(newContent) => console.log('Thought changed (not implemented):', newContent)}
-                  onDelete={() => console.log('Delete thought (not implemented)')}
-                  characterName={characterData.data.name}
-                />
-              ) : null}
-              {message.role !== 'thinking' && (
-                <ChatBubble
-                  message={message}
-                  characterName={characterData.data.name || 'Character'}
-                  currentUser={currentUser || undefined}
-                  isGenerating={isGenerating && generatingId === message.id}
-                  onTryAgain={() => regenerateMessage(message)}
-                  onContinue={() => handleContinueResponse(message)}
-                  onDelete={() => deleteMessage(message.id)}
-                  onContentChange={(newContent) => updateMessage(message.id, newContent)}
-                  onStop={getStopHandler(message)}
-                  isFirstMessage={isFirstAssistantMessage(message.id)}
-                  onRegenerateGreeting={handleRegenerateGreeting}
-                  isRegeneratingGreeting={isGenerating && isFirstAssistantMessage(message.id)}
-                  onNextVariation={() => cycleVariation(message.id, 'next')}
-                  onPrevVariation={() => cycleVariation(message.id, 'prev')}
-                />
-              )}
-            </React.Fragment>
-          ))}
-          <div ref={messagesEndRef} />
+          {/* Messages Area */}
+          <div ref={messagesContainerRef} className="flex-1 overflow-hidden relative z-10">
+            <div className="h-full overflow-y-auto p-4 space-y-4">
+              {messages.map((message) => (
+                <React.Fragment key={message.id}>
+                  {message.role === 'thinking' && reasoningSettings.visible ? (
+                    <ThoughtBubble
+                      message={message}
+                      isGenerating={message.status === 'streaming'}
+                      onContentChange={(newContent) => console.log('Thought changed (not implemented):', newContent)}
+                      onDelete={() => console.log('Delete thought (not implemented)')}
+                      characterName={characterData.data.name}
+                    />
+                  ) : null}
+                  {message.role !== 'thinking' && (
+                    <ChatBubble
+                      message={message}
+                      characterName={characterData.data.name || 'Character'}
+                      currentUser={currentUser || undefined}
+                      isGenerating={isGenerating && generatingId === message.id}
+                      onTryAgain={() => regenerateMessage(message)}
+                      onContinue={() => handleContinueResponse(message)}
+                      onDelete={() => deleteMessage(message.id)}
+                      onContentChange={(newContent) => updateMessage(message.id, newContent)}
+                      onStop={getStopHandler(message)}
+                      isFirstMessage={isFirstAssistantMessage(message.id)}
+                      onRegenerateGreeting={handleRegenerateGreeting}
+                      isRegeneratingGreeting={isGenerating && isFirstAssistantMessage(message.id)}
+                      onNextVariation={() => cycleVariation(message.id, 'next')}
+                      onPrevVariation={() => cycleVariation(message.id, 'prev')}
+                    />
+                  )}
+                </React.Fragment>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* Input Area */}
+          <div className="relative z-10">
+            <ChatInputArea
+              onSend={handleSendMessage}
+              isGenerating={isGenerating}
+              currentUser={currentUser}
+              onUserSelect={() => setShowUserSelect(true)}
+              emotion={emotion}
+            />
+          </div>
         </div>
-      </div>
 
-      {/* Input Area */}
-      <div className="relative z-10">
-        <ChatInputArea
-          onSend={handleSendMessage}
-          isGenerating={isGenerating}
-          currentUser={currentUser}
-          onUserSelect={() => setShowUserSelect(true)}
-          emotion={emotion}
-        />
+        {/* World Side Panel (3rd Column) */}
+        {isWorldCard && worldId && (
+          <WorldSidePanel
+            worldId={worldId}
+            currentRoomId={currentRoom?.id || null}
+            onRoomChange={handleRoomChange}
+            onNpcClick={handleNpcClick}
+            onInventoryClick={() => console.log('Inventory clicked')}
+            onSpellsClick={() => console.log('Spells clicked')}
+            onMeleeClick={() => console.log('Melee clicked')}
+          />
+        )}
       </div>
 
       {/* Modals and Dialogs */}
