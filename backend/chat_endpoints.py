@@ -134,6 +134,7 @@ def load_latest_chat_endpoint(
         # Convert database messages to Pydantic models
         message_responses = [
             pydantic_models.ChatMessageRead(
+                id=msg.message_id,
                 message_id=msg.message_id,
                 chat_session_uuid=msg.chat_session_uuid,
                 role=msg.role,
@@ -196,6 +197,7 @@ def load_chat_endpoint(
         # Convert database messages to Pydantic models
         message_responses = [
             pydantic_models.ChatMessageRead(
+                id=msg.message_id,
                 message_id=msg.message_id,
                 chat_session_uuid=msg.chat_session_uuid,
                 role=msg.role,
@@ -257,6 +259,7 @@ def save_chat_endpoint(
         message_reads = []
         for db_message in new_db_messages:
             message_reads.append(pydantic_models.ChatMessageRead(
+                id=db_message.message_id,
                 message_id=db_message.message_id,
                 chat_session_uuid=db_message.chat_session_uuid,
                 role=db_message.role,
@@ -356,6 +359,7 @@ def append_chat_message_endpoint(
         # Convert database messages to Pydantic models
         message_responses = [
             pydantic_models.ChatMessageRead(
+                id=msg.message_id,
                 message_id=msg.message_id,
                 chat_session_uuid=msg.chat_session_uuid,
                 role=msg.role,
@@ -656,6 +660,7 @@ def reliable_load_chat_endpoint(
         # Convert database messages to Pydantic models
         message_responses = [
             pydantic_models.ChatMessageRead(
+                id=msg.message_id,
                 message_id=msg.message_id,
                 chat_session_uuid=msg.chat_session_uuid,
                 role=msg.role,

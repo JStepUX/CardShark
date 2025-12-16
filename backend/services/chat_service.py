@@ -93,11 +93,20 @@ def update_chat_session(db: Session, chat_session_uuid: str, chat_update: pydant
 
 def create_chat_message(db: Session, chat_session_uuid: str, role: str, content: str, 
                        status: str = "complete", reasoning_content: Optional[str] = None,
-                       metadata_json: Optional[dict] = None, message_id: Optional[str] = None) -> sql_models.ChatMessage:
+                       metadata_json: Optional[dict] = None, message_id: Optional[str] = None,
+                       sequence_number: Optional[int] = None) -> sql_models.ChatMessage:
     """Create a new chat message in the database."""
     if not message_id:
         message_id = str(uuid.uuid4())
     
+    # If sequence_number is not provided, find the next one
+    if sequence_number is None:
+        last_msg = db.query(sql_models.ChatMessage)\
+            .filter(sql_models.ChatMessage.chat_session_uuid == chat_session_uuid)\
+            .order_by(sql_models.ChatMessage.sequence_number.desc())\
+            .first()
+        sequence_number = (last_msg.sequence_number + 1) if last_msg else 0
+
     db_message = sql_models.ChatMessage(
         message_id=message_id,
         chat_session_uuid=chat_session_uuid,
@@ -105,7 +114,8 @@ def create_chat_message(db: Session, chat_session_uuid: str, role: str, content:
         content=content,
         status=status,
         reasoning_content=reasoning_content,
-        metadata_json=metadata_json
+        metadata_json=metadata_json,
+        sequence_number=sequence_number
     )
     
     db.add(db_message)
@@ -215,10 +225,10 @@ def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_
 
 def get_chat_messages(db: Session, chat_session_uuid: str, 
                      skip: int = 0, limit: int = 1000) -> List[sql_models.ChatMessage]:
-    """Get messages for a chat session, ordered by timestamp."""
+    """Get messages for a chat session, ordered by sequence_number then timestamp."""
     return db.query(sql_models.ChatMessage)\
         .filter(sql_models.ChatMessage.chat_session_uuid == chat_session_uuid)\
-        .order_by(sql_models.ChatMessage.timestamp.asc())\
+        .order_by(sql_models.ChatMessage.sequence_number.asc(), sql_models.ChatMessage.timestamp.asc())\
         .offset(skip).limit(limit).all()
 
 def get_chat_message(db: Session, message_id: str) -> Optional[sql_models.ChatMessage]:

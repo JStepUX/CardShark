@@ -175,6 +175,7 @@ class ChatMessage(Base):
     status = Column(String, nullable=False, default="complete")  # complete/generating/error
     reasoning_content = Column(Text, nullable=True)
     metadata_json = Column(JSON, nullable=True)
+    sequence_number = Column(Integer, default=0) # For strict ordering
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

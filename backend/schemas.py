@@ -160,6 +160,7 @@ class ChatMessageUpdate(BaseModel):
     metadata_json: Optional[dict] = None
 
 class ChatMessageRead(ChatMessageBase):
+    id: str # Frontend expects 'id'
     message_id: str
     chat_session_uuid: str
     timestamp: dt.datetime
