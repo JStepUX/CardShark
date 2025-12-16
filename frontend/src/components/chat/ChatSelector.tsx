@@ -222,6 +222,14 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         // Remove the deleted chat from the list
         setAvailableChats(prev => prev.filter(chat => chat.id !== deletingChat.id));
         setIsDeleteConfirmOpen(false);
+        
+        // If we deleted the current chat, create a new one automatically
+        if (deletingChat.id === currentChatId) {
+             setDeletingChat(null);
+             await handleCreateNewChat();
+             return;
+        }
+        
         setDeletingChat(null);
       } else {
         throw new Error(result.message || 'Failed to delete chat');
@@ -729,17 +737,17 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
                   )}
                 </div>
                 
-                {/* Delete button that shows on hover (disabled for current chat to avoid confusion) */}
-                {!isCurrentChat && (
-                  <button
-                    className="absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
-                    onClick={(e) => handleDeleteClick(e, chat)}
-                    aria-label="Delete chat"
-                    title="Delete chat"
-                  >
-                    <Trash2 size={16} className="text-stone-300 hover:text-white" />
-                  </button>
-                )}
+                {/* Delete button that shows on hover */}
+                <button
+                  className={`absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 ${
+                    isCurrentChat ? 'z-10' : ''
+                  }`}
+                  onClick={(e) => handleDeleteClick(e, chat)}
+                  aria-label="Delete chat"
+                  title="Delete chat"
+                >
+                  <Trash2 size={16} className="text-stone-300 hover:text-white" />
+                </button>
               </div>
             </li>
           );
