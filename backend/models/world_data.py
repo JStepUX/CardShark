@@ -64,3 +64,4 @@ class WorldData(BaseModel):
     player_state: PlayerState = Field(default_factory=PlayerState, description="Current state of the player.")
 
 
+
