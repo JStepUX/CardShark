@@ -707,8 +707,8 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
               <li
                 key={chat.id}
                 className={`p-3 rounded-lg cursor-pointer transition-colors group relative ${isCurrentChat
-                    ? 'bg-orange-900/40 border border-orange-700/50'
-                    : 'bg-stone-800 hover:bg-stone-700'
+                  ? 'bg-orange-900/40 border border-orange-700/50'
+                  : 'bg-stone-800 hover:bg-stone-700'
                   }`}
                 onClick={() => !isCurrentChat && handleLoadChat(chat.id)}
               >

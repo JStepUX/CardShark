@@ -753,9 +753,19 @@ def reliable_create_chat_endpoint(
                  # This prevents UNIQUE constraint failed: characters.png_file_path
                  existing_char_path = character_service.get_character_by_path(str(png_path), db)
                  if existing_char_path:
-                     logger.info(f"Collision detected: Found existing character at {png_path} with UUID {existing_char_path.character_uuid}. Deleting it to enforce correct Generic Assistant UUID.")
+                     logger.info(f"Collision detected: Found existing character at {png_path} with UUID {existing_char_path.character_uuid}. Deleting both DB record and file to enforce correct Generic Assistant UUID.")
+                     # Delete the database record
                      db.delete(existing_char_path)
-                     # db.commit() # Removed to allow atomic transaction with creation
+                     db.flush()  # Flush to make deletion visible in this transaction
+                     
+                     # Delete the physical file if it exists
+                     if png_path.exists():
+                         try:
+                             png_path.unlink()
+                             logger.info(f"Deleted existing PNG file at {png_path}")
+                         except Exception as file_err:
+                             logger.warning(f"Could not delete existing PNG file at {png_path}: {file_err}")
+                             # Continue anyway - the DB record is deleted, file will be overwritten
                  
                  # Create the character
                  character = character_service.create_character(

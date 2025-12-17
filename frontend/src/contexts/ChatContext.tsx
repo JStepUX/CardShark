@@ -53,8 +53,8 @@ interface ChatContextType {
   deleteMessage: (messageId: string) => void;
   addMessage: (message: Message) => void;
   cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
-  generateResponse: (prompt: string) => Promise<void>;
-  regenerateMessage: (message: Message) => Promise<void>;
+  generateResponse: (prompt: string, retryCount?: number) => Promise<void>;
+  regenerateMessage: (message: Message, retryCount?: number) => Promise<void>;
   regenerateGreeting: () => Promise<void>;
   continueResponse: (message: Message) => Promise<void>;
   stopGeneration: () => void;
@@ -73,9 +73,9 @@ const ChatContext = createContext<ChatContextType | null>(null);
 export { ChatContext }; // Export the context for optional usage
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { characterData } = useCharacter();  const apiConfigContext = useContext(APIConfigContext);
+  const { characterData } = useCharacter(); const apiConfigContext = useContext(APIConfigContext);
   const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesRef = useRef<Message[]>(messages);
 
@@ -116,8 +116,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) { console.error('Error loading context window:', err); }
     };
     loadCtxWindow();
-  }, []);  
-  
+  }, []);
+
   useEffect(() => {
     if (lastContextWindow) {
       ChatStorage.saveContextWindow(lastContextWindow).catch(err => console.error('Error saving context window:', err));
@@ -133,7 +133,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAvailablePreviewImages(defaultAvailImages);
     setCurrentPreviewImageIndex(0);
   }, [characterData]);
-  
+
   const saveChat = useCallback(async (messageList: Message[]) => {
     if (!characterData?.data?.name || !autoSaveEnabled.current) {
       console.debug('Save aborted: no character data name or autoSave disabled');
@@ -149,10 +149,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('Cannot create new chat session: characterData is null.');
           setError('Cannot create new chat session: No character selected.');
           return false;
-        }        const newChatResponse = await ChatStorage.createNewChat(characterData);
+        } const newChatResponse = await ChatStorage.createNewChat(characterData);
         if (newChatResponse.success && newChatResponse.chat_session_uuid) {
           chatToSaveId = newChatResponse.chat_session_uuid;
-          setCurrentChatId(chatToSaveId); 
+          setCurrentChatId(chatToSaveId);
           console.debug(`New chat session created with ID: ${chatToSaveId}`);
         } else {
           console.error('Failed to create new chat session before saving:', newChatResponse.error);
@@ -164,11 +164,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.debug(`Executing save for chat ID ${chatToSaveId} with ${messageList.length} messages`);
       const messagesToSave = JSON.parse(JSON.stringify(messageList));
 
-      
 
 
 
- 
+
+
       // Save chat using database-centric API
       const response = await fetch('/api/reliable-save-chat', {
         method: 'POST',
@@ -182,9 +182,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
         })
       });
-      
+
       const result = response.ok ? await response.json() : { success: false, error: 'Save failed' };
-      
+
       const success = result?.success;
       // Handle wrapped data (DataResponse) or direct response
       const data = result?.data || result;
@@ -192,10 +192,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (success) {
         const returnedId = data?.chat_session_uuid || data?.chatId;
         if (returnedId && returnedId !== chatToSaveId) {
-           setCurrentChatId(returnedId);
-           console.debug(`Save successful, chat ID (from backend) updated to: ${returnedId}`);
+          setCurrentChatId(returnedId);
+          console.debug(`Save successful, chat ID (from backend) updated to: ${returnedId}`);
         } else {
-           console.debug(`Save successful for chat ID: ${chatToSaveId}`);
+          console.debug(`Save successful for chat ID: ${chatToSaveId}`);
         }
       } else {
         console.debug('Save result:', success ? 'success' : `failed (chatId: ${chatToSaveId})`, result?.error);
@@ -206,23 +206,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(err instanceof Error ? err.message : 'An unexpected error occurred during save.');
       return false;
     }
-  }, [characterData, currentUser, apiConfig, availablePreviewImages, currentPreviewImageIndex, triggeredLoreImages, currentChatId]);  useEffect(() => {
+  }, [characterData, currentUser, apiConfig, availablePreviewImages, currentPreviewImageIndex, triggeredLoreImages, currentChatId]); useEffect(() => {
     if (!characterData?.data?.name) {
       console.log('ChatContext useEffect: No character data name, returning');
       return;
     }
-    
+
     const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
     console.log('ChatContext useEffect: currentCharacterFileId:', currentCharacterFileId, 'lastCharacterId:', lastCharacterId.current, 'currentChatId:', currentChatId);
-    
+
     // Always load the most recent chat for any character selection
     // This ensures we get the latest chat from the database even if returning to the same character
-    
+
     if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) {
       console.log('Character changed, clearing context window');
       ChatStorage.clearContextWindow();
     }
-    
+
     console.log('Loading most recent chat for character:', characterData.data.name);
 
     // Only reset currentChatId if this is a character change or first load
@@ -239,13 +239,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     resetTriggeredLoreImagesState();
-    
+
     async function loadChatForCharacterInternal() {
       try {
         setIsLoading(true);
         setError(null);
-        if (!characterData) throw new Error('No character data available');        const response = await ChatStorage.loadLatestChat(characterData);
-        
+        if (!characterData) throw new Error('No character data available'); const response = await ChatStorage.loadLatestChat(characterData);
+
         // Handle potentially unwrapped response from ChatStorage or raw DataResponse
         const sessionData = response.data || response;
         const messages = sessionData.messages;
@@ -253,18 +253,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (response.success && messages && Array.isArray(messages) && messages.length > 0) {
           setMessages(messages);
           const loadedChatSessionId = sessionData.chat_session_uuid || sessionData.chatId || sessionData.metadata?.chat_metadata?.chat_id || null;
-          setCurrentChatId(loadedChatSessionId);          if (sessionData.metadata?.chat_metadata?.lastUser) setCurrentUser(sessionData.metadata.chat_metadata.lastUser);
-          
-          let loadedTrigLoreImgs: TriggeredLoreImage[] = [];          if (sessionData.metadata?.chat_metadata?.triggeredLoreImages) {
+          setCurrentChatId(loadedChatSessionId); if (sessionData.metadata?.chat_metadata?.lastUser) setCurrentUser(sessionData.metadata.chat_metadata.lastUser);
+
+          let loadedTrigLoreImgs: TriggeredLoreImage[] = []; if (sessionData.metadata?.chat_metadata?.triggeredLoreImages) {
             loadedTrigLoreImgs = sessionData.metadata.chat_metadata.triggeredLoreImages;
-            setTriggeredLoreImages(loadedTrigLoreImgs); 
+            setTriggeredLoreImages(loadedTrigLoreImgs);
           }
-          
+
           const charImgP = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
             ? `/api/character-image/${characterData.data.character_uuid}.png` : '';
           const newAvailImgs = getAvailableImagesForPreview(charImgP);
           setAvailablePreviewImages(newAvailImgs);
- 
+
           if (sessionData.metadata?.chat_metadata?.currentDisplayedImage && newAvailImgs.length > 0) {
             const savedDisp = sessionData.metadata.chat_metadata.currentDisplayedImage;
             const foundIdx = newAvailImgs.findIndex(img =>
@@ -274,7 +274,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCurrentPreviewImageIndex(foundIdx !== -1 ? foundIdx : 0);
           } else {
             setCurrentPreviewImageIndex(newAvailImgs.length > 0 ? 0 : 0);
-          }          setLastContextWindow({
+          } setLastContextWindow({
             type: 'loaded_chat', timestamp: new Date().toISOString(),
             characterName: characterData?.data?.name, chatId: loadedChatSessionId || 'unknown',
             messageCount: messages.length
@@ -289,7 +289,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Populate variations with alternate greetings if available
           if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
-            const alternates = characterData.data.alternate_greetings.map(alt => 
+            const alternates = characterData.data.alternate_greetings.map(alt =>
               alt.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName)
             );
             firstMsg.variations = [subContent, ...alternates];
@@ -304,13 +304,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           const saveOk = await saveChat([firstMsg]); // saveChat will create ID if null
           setError(saveOk ? null : "Failed to save initial message.");
-          
+
           const charImgP = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
             ? `/api/character-image/${characterData.data.character_uuid}.png` : '';
           const defAvail = getAvailableImagesForPreview(charImgP);
           setAvailablePreviewImages(defAvail);
           setCurrentPreviewImageIndex(0);
-          setTriggeredLoreImages([]);        } else {
+          setTriggeredLoreImages([]);
+        } else {
           console.error('Failed to load chat. Resp:', response, 'Has first_mes:', !!characterData?.data?.first_mes);
           setError(response.error || 'Failed to load chat & no initial message.');
           setMessages([]);
@@ -323,7 +324,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.error('Unexpected error during chat loading:', err);
         setError(err instanceof Error ? err.message : 'Unexpected error loading chat.');
-        setMessages([]); 
+        setMessages([]);
         setLastContextWindow({
           type: 'unexpected_load_error', timestamp: new Date().toISOString(),
           characterName: characterData?.data?.name,
@@ -333,18 +334,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(false);
         // Always update the last character ID to prevent infinite loops
         lastCharacterId.current = currentCharacterFileId;
-      }    }
+      }
+    }
     loadChatForCharacterInternal();
   }, [characterData, resetTriggeredLoreImagesState]); // Remove currentUser from deps
-  
+
   const debouncedSave = MessageUtils.createDebouncedSave(
     (msgs: Message[]): Promise<boolean> => saveChat(msgs).catch(e => { console.error("Debounced saveChat err:", e); throw e; }), 500
   );
-  
+
   const appendMessage = useCallback(async (message: Message) => {
     if (!characterData?.data?.name) { console.debug('Append abort: no char name'); return null; }
     if (!currentChatId) { console.error('Append abort: currentChatId null.'); setError('No active chat session.'); return null; }
-    
+
     try {
       console.debug(`Appending msg ${message.id} (${message.role}) to chat ${currentChatId}`);
       const msgToAppend = { ...message, id: message.id || crypto.randomUUID(), timestamp: message.timestamp || Date.now() };
@@ -358,9 +360,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     }
   }, [characterData, currentChatId]);
-  
+
   const { getRequestParameters, filterText, shouldUseClientFiltering } = useContentFilter();
-  
+
   const prepareAPIConfig = useCallback((config?: APIConfig | null): APIConfig => {
     const defaultConfigSettings = {
       max_length: 220, max_context_length: 6144, temperature: 1.05, top_p: 0.92, top_k: 100,
@@ -380,17 +382,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {
       id: 'default', provider: APIProvider.KOBOLD, url: 'http://localhost:5001',
       enabled: false, templateId: 'mistral', generation_settings: defaultConfigSettings,
-      ...getRequestParameters() 
+      ...getRequestParameters()
     };
   }, [getRequestParameters]);
-  
+
 
   const updateMessage = useCallback((messageId: string, content: string) => {
     setMessages((prev: Message[]) => {
       const updatedMsgs = prev.map(msg => {
         if (msg.id === messageId) {
           const variations = msg.variations ? [...msg.variations] : [msg.content];
-          const currentVarIdx = msg.currentVariation ?? variations.length -1;
+          const currentVarIdx = msg.currentVariation ?? variations.length - 1;
           variations[currentVarIdx] = content;
           return { ...msg, content: content, variations: variations, currentVariation: currentVarIdx };
         }
@@ -413,7 +415,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const msgWithId = { ...message, id: message.id || crypto.randomUUID() };
     setMessages((prev: Message[]) => {
       const newMsgs = [...prev, msgWithId];
-      if (message.role === 'user') debouncedSave(newMsgs); 
+      if (message.role === 'user') debouncedSave(newMsgs);
       return newMsgs;
     });
     if (message.role === 'user' && currentChatId) appendMessage(msgWithId);
@@ -426,7 +428,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMessages((prev: Message[]) => prev.map(msg => {
       if (msg.id === messageId) {
         if (msg.variations && msg.variations.length > 1 && typeof msg.currentVariation === 'number' && msg.currentVariation > 0) {
-          const prevVarIdx = msg.currentVariation -1;
+          const prevVarIdx = msg.currentVariation - 1;
           return { ...msg, role: 'assistant', content: msg.variations[prevVarIdx], currentVariation: prevVarIdx, error: errorMsg };
         }
         return { ...msg, role: 'system', content: `Generation failed: ${errorMsg}` };
@@ -434,32 +436,32 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return msg;
     }));
     setMessages(currentMsgs => { saveChat(currentMsgs); return currentMsgs; });
-  }, [saveChat]);    const createNewChat = useCallback(async (): Promise<string | null> => {
+  }, [saveChat]); const createNewChat = useCallback(async (): Promise<string | null> => {
     if (!characterData) return null;
-    
+
     // Prevent concurrent chat creation
     if (isCreatingChatRef.current) {
       console.log('Chat creation already in progress, skipping duplicate request');
       return null;
     }
-    
+
     isCreatingChatRef.current = true;
     console.log('Creating new chat');
-    setIsLoading(true); setError(null); setCurrentChatId(null); 
+    setIsLoading(true); setError(null); setCurrentChatId(null);
 
     try {
-      await ChatStorage.clearContextWindow();      const newChatResp = await ChatStorage.createNewChat(characterData);
+      await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(characterData);
       if (!newChatResp.success || !newChatResp.chat_session_uuid) {
         console.error('Failed to create new chat session backend:', newChatResp.error);
         setError(newChatResp.error || 'Failed to create new chat session.');
-        setIsLoading(false); 
+        setIsLoading(false);
         isCreatingChatRef.current = false; // Reset flag on early return
         return null;
       }
       const newCId = newChatResp.chat_session_uuid;
-      setCurrentChatId(newCId); 
+      setCurrentChatId(newCId);
       console.log(`New chat session created with ID: ${newCId}`);
-      
+
       let initMsgs: Message[] = [];
       if (characterData?.data.first_mes) {
         const charN = characterData.data.name || 'Character';
@@ -469,7 +471,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Populate variations with alternate greetings if available
         if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
-          const alternates = characterData.data.alternate_greetings.map(alt => 
+          const alternates = characterData.data.alternate_greetings.map(alt =>
             alt.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN)
           );
           firstM.variations = [subContent, ...alternates];
@@ -490,7 +492,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMessages(initMsgs);
       const saveOk = await saveChat(initMsgs);
       if (!saveOk) console.warn(`Initial save for new chat ${newCId} failed.`);
-      
+
       return newCId; // Return the new chat ID
     } catch (err) {
       console.error('Error creating new chat:', err);
@@ -501,124 +503,26 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: err instanceof Error ? err.message : 'Failed to create new chat'
       });
       return null;
-    } finally { 
-      setIsLoading(false); 
+    } finally {
+      setIsLoading(false);
       isCreatingChatRef.current = false; // Reset the creation flag
     }
   }, [characterData, currentUser, saveChat]);
-  
+
   useEffect(() => { createNewChatRef.current = createNewChat; }, [createNewChat]);
-  
-  const generateResponse = useCallback(async (prompt: string) => {
-    if (!characterData) { setError('No character data for response.'); return; }
-    
-    let effectiveChatId = currentChatId;
-    if (!effectiveChatId) {
-      console.log("No currentChatId, creating new chat for response.");
-      if (createNewChatRef.current) {
-        effectiveChatId = await createNewChatRef.current(); // Get the chat ID directly from the function
-        if (!effectiveChatId && !messagesRef.current.find(m => m.role === 'assistant')) { // Still no ID and no initial message
-           console.error("Failed to establish chat session for response.");
-           setError("Failed to establish chat. Try creating a new chat.");
-           return;
-        }
-      } else { setError("Chat creation fn not available."); return; }
-    }
-    if (!effectiveChatId) { setError("Failed to get valid chat ID for response."); return; }
 
-    const userMsg = MessageUtils.createUserMessage(prompt);
-    addMessage(userMsg); 
-    const assistantMsgId = crypto.randomUUID();
-    const assistantMsg = MessageUtils.createAssistantMessage('', assistantMsgId);
-    setMessages((prev: Message[]) => [...prev, assistantMsg]);
-    setIsGenerating(true); setGeneratingId(assistantMsgId); setError(null);
-
-    const abortCtrl = new AbortController();    currentGenerationRef.current = abortCtrl;    try {
-      // Build context using shared utility - handles async state bug
-      const ctxMsgs = buildContextMessages({
-        existingMessages: messagesRef.current,
-        newUserMessage: userMsg,
-        excludeMessageId: assistantMsgId
-      });
-      const fmtAPIConfig = prepareAPIConfig(apiConfig);
-      const response = await PromptHandler.generateChatResponse(
-        effectiveChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
-      );
-
-      let fullContent = ''; 
-      let buffer = '';
-      // Use a fixed buffer interval for consistent streaming
-      const bufferInterval = 50; // 50ms buffer for smooth streaming
-
-      let bufTimer: NodeJS.Timeout | null = null;      const updateAssistantMsgContent = (chunk: string, isFinal = false) => {
-        buffer += chunk;
-        
-        // Always clear existing timer and set a new one for responsive streaming
-        if (bufTimer) clearTimeout(bufTimer);          
-        bufTimer = setTimeout(() => {
-          const curBuf = buffer; 
-          buffer = ''; 
-          fullContent += curBuf;
-          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            // Update the UI with the new content
-          setMessages((prevMsgs: Message[]) => {
-            const updatedMsgs = prevMsgs.map((msg: Message) =>
-              msg.id === assistantMsgId ? { 
-                ...msg, 
-                content: filtContent, 
-                variations: [filtContent], 
-                currentVariation: 0,
-                status: 'streaming' as const                } : msg
-            );
-            return updatedMsgs;
-          });
-          
-          if (isFinal) {
-            setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
-          }
-        }, isFinal ? 0 : bufferInterval); // Immediate update for final content
-      };for await (const chunk of PromptHandler.streamResponse(response)) {
-        if (abortCtrl.signal.aborted) {
-          console.log('Gen aborted by user.');
-          if (bufTimer) clearTimeout(bufTimer);
-          if (buffer.length > 0) updateAssistantMsgContent('', true);
-          break;
-        }
-        updateAssistantMsgContent(chunk);
-      }
-        if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
-      
-      // Update the message status to complete and apply to React state
-      const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? { 
-        ...msg, 
-        content: shouldUseClientFiltering ? filterText(fullContent) : fullContent,
-        status: 'complete' as const
-      } : msg);
-      setMessages(finalMsgs); // Apply the final status update to React state
-      saveChat(finalMsgs);
-      setLastContextWindow((curWin: any) => ({ ...curWin, type: 'response_generated', lastPrompt: prompt, responseLength: fullContent.length }));} catch (err) {
-      if (!abortCtrl.signal.aborted) handleGenerationError(err, assistantMsgId);      else {
-        console.log("Gen aborted, error handling skipped.");
-        const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? { ...msg, content: shouldUseClientFiltering ? filterText(msg.content) : msg.content } : msg);
-        saveChat(finalMsgs);
-      }
-    } finally {
-      if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
-      currentGenerationRef.current = null;
-    }
-  }, [characterData, addMessage, prepareAPIConfig, apiConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, createNewChat]);
-
-  const regenerateMessage = useCallback(async (message: Message) => {
+  const regenerateMessage = useCallback(async (message: Message, retryCount: number = 0) => {
     if (!characterData || message.role !== 'assistant') return;
     if (!currentChatId) { setError("Cannot regen: No active chat."); return; }
 
     const msgIdx = messagesRef.current.findIndex(m => m.id === message.id);
-    if (msgIdx <= 0) return; 
+    if (msgIdx <= 0) return;
     const lastUserMsg = messagesRef.current[msgIdx - 1];
     if (!lastUserMsg || lastUserMsg.role !== 'user') return;
 
     const origContent = message.content;
     const origVariations = message.variations ? [...message.variations] : [origContent];
-    const origVarIdx = message.currentVariation ?? origVariations.length -1;
+    const origVarIdx = message.currentVariation ?? origVariations.length - 1;
 
     setMessages((prev: Message[]) => prev.map(m => m.id === message.id ? { ...m, content: '...', role: 'assistant' } : m));
     setIsGenerating(true); setGeneratingId(message.id); setError(null);
@@ -637,20 +541,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
       );
 
-      let fullContent = ''; let buffer = ''; const bufferInt = 50; 
-      let bufTimer: NodeJS.Timeout | null = null;      const updateRegenMsgContent = (chunk: string, isFinal = false) => {
+      let fullContent = ''; let buffer = ''; const bufferInt = 50;
+      let bufTimer: NodeJS.Timeout | null = null; const updateRegenMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
         // Always clear existing timer and set a new one for responsive streaming
-        if (bufTimer) clearTimeout(bufTimer);          
+        if (bufTimer) clearTimeout(bufTimer);
         bufTimer = setTimeout(() => {
           const curBuf = buffer; buffer = ''; fullContent += curBuf;
-          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {if (msg.id === message.id) {
+          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent; setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {
+            if (msg.id === message.id) {
               const newVars = [...origVariations, filtContent];
-              return { 
-                ...msg, 
-                content: filtContent, 
-                variations: newVars, 
-                currentVariation: newVars.length - 1, 
+              return {
+                ...msg,
+                content: filtContent,
+                variations: newVars,
+                currentVariation: newVars.length - 1,
                 role: 'assistant' as const,
                 status: isFinal ? 'complete' as const : 'streaming' as const
               };
@@ -665,20 +570,35 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateRegenMsgContent(chunk);
       }
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateRegenMsgContent('', true);
-        const finalMsgs = messagesRef.current.map(msg => {        if (msg.id === message.id) {
+      const finalMsgs = messagesRef.current.map(msg => {
+        if (msg.id === message.id) {
           const finalFiltContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
           const newVars = [...origVariations, finalFiltContent];
-          return { 
-            ...msg, 
-            content: finalFiltContent, 
-            variations: newVars, 
-            currentVariation: newVars.length - 1, 
+          return {
+            ...msg,
+            content: finalFiltContent,
+            variations: newVars,
+            currentVariation: newVars.length - 1,
             role: 'assistant' as const,
             status: 'complete' as const
           };
         } return msg;
       });
       saveChat(finalMsgs);
+
+      // Auto-retry on empty response
+      if (!abortCtrl.signal.aborted && fullContent.trim().length === 0) {
+        if (retryCount < 2) {
+          console.warn(`Empty response detected during regen, retrying (attempt ${retryCount + 1})...`);
+          const msgToRegen = finalMsgs.find(m => m.id === message.id) || message;
+          await regenerateMessage(msgToRegen, retryCount + 1);
+          return;
+        } else {
+          console.error("Empty response received after max retries (regen)");
+          setError("Received empty response from the model. Please try again.");
+        }
+      }
+
       setLastContextWindow((prev: any) => ({ ...prev, type: 'message_regenerated', regeneratedMessageId: message.id }));
     } catch (err) {
       if (!abortCtrl.signal.aborted) handleGenerationError(err, message.id);
@@ -692,6 +612,135 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentGenerationRef.current = null;
     }
   }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat]);
+
+  const generateResponse = useCallback(async (prompt: string, retryCount: number = 0) => {
+    if (!characterData) { setError('No character data for response.'); return; }
+
+    let effectiveChatId = currentChatId;
+    if (!effectiveChatId) {
+      console.log("No currentChatId, creating new chat for response.");
+      if (createNewChatRef.current) {
+        effectiveChatId = await createNewChatRef.current(); // Get the chat ID directly from the function
+        if (!effectiveChatId && !messagesRef.current.find(m => m.role === 'assistant')) { // Still no ID and no initial message
+          console.error("Failed to establish chat session for response.");
+          setError("Failed to establish chat. Try creating a new chat.");
+          return;
+        }
+      } else { setError("Chat creation fn not available."); return; }
+    }
+    if (!effectiveChatId) { setError("Failed to get valid chat ID for response."); return; }
+
+    const userMsg = MessageUtils.createUserMessage(prompt);
+
+    // Add to UI state
+    const msgWithId = { ...userMsg, id: userMsg.id || crypto.randomUUID() };
+    setMessages((prev: Message[]) => [...prev, msgWithId]);
+
+    // Persist directly with known-good chat ID (fixes closure stale state bug)
+    try {
+      console.debug(`Appending user msg ${msgWithId.id} to chat ${effectiveChatId}`);
+      await ChatStorage.appendMessage(effectiveChatId, msgWithId);
+    } catch (err) {
+      console.error('Failed to persist user message:', err);
+    }
+    const assistantMsgId = crypto.randomUUID();
+    const assistantMsg = MessageUtils.createAssistantMessage('', assistantMsgId);
+    setMessages((prev: Message[]) => [...prev, assistantMsg]);
+    setIsGenerating(true); setGeneratingId(assistantMsgId); setError(null);
+
+    const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl; try {
+      // Build context using shared utility - handles async state bug
+      const ctxMsgs = buildContextMessages({
+        existingMessages: messagesRef.current,
+        newUserMessage: userMsg,
+        excludeMessageId: assistantMsgId
+      });
+      const fmtAPIConfig = prepareAPIConfig(apiConfig);
+      const response = await PromptHandler.generateChatResponse(
+        effectiveChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
+      );
+
+      let fullContent = '';
+      let buffer = '';
+      // Use a fixed buffer interval for consistent streaming
+      const bufferInterval = 50; // 50ms buffer for smooth streaming
+
+      let bufTimer: NodeJS.Timeout | null = null; const updateAssistantMsgContent = (chunk: string, isFinal = false) => {
+        buffer += chunk;
+
+        // Always clear existing timer and set a new one for responsive streaming
+        if (bufTimer) clearTimeout(bufTimer);
+        bufTimer = setTimeout(() => {
+          const curBuf = buffer;
+          buffer = '';
+          fullContent += curBuf;
+          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;            // Update the UI with the new content
+          setMessages((prevMsgs: Message[]) => {
+            const updatedMsgs = prevMsgs.map((msg: Message) =>
+              msg.id === assistantMsgId ? {
+                ...msg,
+                content: filtContent,
+                variations: [filtContent],
+                currentVariation: 0,
+                status: 'streaming' as const
+              } : msg
+            );
+            return updatedMsgs;
+          });
+
+          if (isFinal) {
+            setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
+          }
+        }, isFinal ? 0 : bufferInterval); // Immediate update for final content
+      }; for await (const chunk of PromptHandler.streamResponse(response)) {
+        if (abortCtrl.signal.aborted) {
+          console.log('Gen aborted by user.');
+          if (bufTimer) clearTimeout(bufTimer);
+          if (buffer.length > 0) updateAssistantMsgContent('', true);
+          break;
+        }
+        updateAssistantMsgContent(chunk);
+      }
+      if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
+
+      // Update the message status to complete and apply to React state
+      const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? {
+        ...msg,
+        content: shouldUseClientFiltering ? filterText(fullContent) : fullContent,
+        status: 'complete' as const
+      } : msg);
+      setMessages(finalMsgs); // Apply the final status update to React state
+      saveChat(finalMsgs);
+
+      // Auto-retry on empty response
+      if (!abortCtrl.signal.aborted && fullContent.trim().length === 0) {
+        if (retryCount < 2) {
+          console.warn(`Empty response detected, retrying (attempt ${retryCount + 1})...`);
+          const msgToRegen = finalMsgs.find(m => m.id === assistantMsgId);
+          if (msgToRegen) {
+            await regenerateMessage(msgToRegen, retryCount + 1);
+            return;
+          }
+        } else {
+          console.error("Empty response received after max retries");
+          setError("Received empty response from the model. Please try again.");
+        }
+      }
+
+      setLastContextWindow((curWin: any) => ({ ...curWin, type: 'response_generated', lastPrompt: prompt, responseLength: fullContent.length }));
+    } catch (err) {
+      if (!abortCtrl.signal.aborted) handleGenerationError(err, assistantMsgId); else {
+        console.log("Gen aborted, error handling skipped.");
+        const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? { ...msg, content: shouldUseClientFiltering ? filterText(msg.content) : msg.content } : msg);
+        saveChat(finalMsgs);
+      }
+    } finally {
+      if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
+      currentGenerationRef.current = null;
+    }
+  }, [characterData, addMessage, prepareAPIConfig, apiConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, createNewChat, regenerateMessage]);
+
+
 
   const regenerateGreeting = useCallback(async () => {
     if (!characterData || isGenerating) return;
@@ -708,33 +757,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const origVariations = greetingMsg.variations ? [...greetingMsg.variations] : [origContent];
 
     setIsGenerating(true); setGeneratingId(greetingMsg.id); setError(null);
-    
+
     // We don't support aborting this specific call easily since ChatStorage.generateGreetingStream handles it internally or doesn't expose abort signal
     // But we set state to prevent concurrent actions.
-    
+
     try {
       let fullGreeting = '';
-      
+
       const result = await ChatStorage.generateGreetingStream(
-        characterData, 
+        characterData,
         apiConfig,
         (chunk) => {
           fullGreeting += chunk;
-          
+
           setMessages(prevMsgs => prevMsgs.map(msg => {
             if (msg.id === greetingMsg.id) {
               const newVars = [...origVariations, fullGreeting];
-              return { 
-                ...msg, 
-                content: fullGreeting, 
-                variations: newVars, 
-                currentVariation: newVars.length - 1 
+              return {
+                ...msg,
+                content: fullGreeting,
+                variations: newVars,
+                currentVariation: newVars.length - 1
               };
             }
             return msg;
           }));
         }
-      ); 
+      );
 
       if (result.success && result.greeting) {
         // Final update to ensure consistency and save
@@ -742,11 +791,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const updatedMsgs = prevMsgs.map(msg => {
             if (msg.id === greetingMsg.id) {
               const newVars = [...origVariations, result.greeting!];
-              return { 
-                ...msg, 
-                content: result.greeting!, 
-                variations: newVars, 
-                currentVariation: newVars.length - 1 
+              return {
+                ...msg,
+                content: result.greeting!,
+                variations: newVars,
+                currentVariation: newVars.length - 1
               };
             }
             return msg;
@@ -760,7 +809,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error regenerating greeting:", err);
       setError(err instanceof Error ? err.message : 'Failed to regenerate greeting');
-      
+
       // Revert to original content on error if needed, or just leave the partial generation
       // For now, we leave partial generation as it might be useful, or user can cycle back
     } finally {
@@ -774,7 +823,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentChatId) { setError("Cannot continue: No active chat."); return; }
 
     const msgIdx = messagesRef.current.findIndex(m => m.id === message.id);
-    if (msgIdx === -1) return;    const origContent = message.content;
+    if (msgIdx === -1) return; const origContent = message.content;
 
     setIsGenerating(true); setGeneratingId(message.id); setError(null);
     const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl;
@@ -784,9 +833,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const ctxMsgs = messagesRef.current.slice(0, msgIdx + 1)
         .filter(msg => msg.role !== 'thinking')
-        .map(msg => ({ 
-          role: (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system' ? msg.role : 'system') as 'user' | 'assistant' | 'system', 
-          content: msg.id === message.id ? origContent : msg.content 
+        .map(msg => ({
+          role: (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system' ? msg.role : 'system') as 'user' | 'assistant' | 'system',
+          content: msg.id === message.id ? origContent : msg.content
         }));
 
       // Get the last part of the message to help the model identify where to continue
@@ -796,25 +845,25 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         content: `The assistant's response was cut off. The last part was: "...${lastPart}"
 Continue the response from exactly that point. Do not repeat the existing text. Do not start a new paragraph unless necessary.`
       };
-      
+
       ctxMsgs.push(continuationPrompt);
 
-      const fmtAPIConfig = prepareAPIConfig(apiConfig);      const response = await PromptHandler.generateChatResponse(
+      const fmtAPIConfig = prepareAPIConfig(apiConfig); const response = await PromptHandler.generateChatResponse(
         currentChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
       );
 
       let buffer = ''; const bufferInt = 50;
-      let bufTimer: NodeJS.Timeout | null = null;      const updateContinueMsgContent = (chunk: string, isFinal = false) => {
+      let bufTimer: NodeJS.Timeout | null = null; const updateContinueMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
         // Always clear existing timer and set a new one for responsive streaming
         if (bufTimer) clearTimeout(bufTimer);
         bufTimer = setTimeout(() => {
           const curBuf = buffer; buffer = ''; appendedContent += curBuf;
-          const combinedContent = origContent + appendedContent;            const filtContent = shouldUseClientFiltering ? filterText(combinedContent) : combinedContent;
+          const combinedContent = origContent + appendedContent; const filtContent = shouldUseClientFiltering ? filterText(combinedContent) : combinedContent;
           setMessages(prevMsgs => prevMsgs.map(msg => {
             if (msg.id === message.id) {
               const newVars = msg.variations ? [...msg.variations] : [origContent];
-              newVars[msg.currentVariation ?? newVars.length -1] = filtContent;
+              newVars[msg.currentVariation ?? newVars.length - 1] = filtContent;
               return { ...msg, content: filtContent, variations: newVars };
             } return msg;
           }));
@@ -825,14 +874,14 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       for await (const chunk of PromptHandler.streamResponse(response)) {
         if (abortCtrl.signal.aborted) { console.log('Continuation aborted.'); if (bufTimer) clearTimeout(bufTimer); if (buffer.length > 0) updateContinueMsgContent('', true); break; }
         updateContinueMsgContent(chunk);
-      }      if (!abortCtrl.signal.aborted && buffer.length > 0) updateContinueMsgContent('', true);
+      } if (!abortCtrl.signal.aborted && buffer.length > 0) updateContinueMsgContent('', true);
 
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
           const finalCombined = origContent + appendedContent;
           const finalFilt = shouldUseClientFiltering ? filterText(finalCombined) : finalCombined;
           const newVars = msg.variations ? [...msg.variations] : [origContent];
-          newVars[msg.currentVariation ?? newVars.length -1] = finalFilt;
+          newVars[msg.currentVariation ?? newVars.length - 1] = finalFilt;
           return { ...msg, content: finalFilt, variations: newVars };
         } return msg;
       });
@@ -840,12 +889,12 @@ Continue the response from exactly that point. Do not repeat the existing text. 
     } catch (err) {
       if (!abortCtrl.signal.aborted) handleGenerationError(err, message.id);
       else {
-        console.log("Continuation aborted, saving current.");        const finalMsgs = messagesRef.current.map(msg => {
+        console.log("Continuation aborted, saving current."); const finalMsgs = messagesRef.current.map(msg => {
           if (msg.id === message.id) {
             const finalCombined = origContent + appendedContent;
             const finalFilt = shouldUseClientFiltering ? filterText(finalCombined) : finalCombined;
             const newVars = msg.variations ? [...msg.variations] : [origContent];
-            newVars[msg.currentVariation ?? newVars.length -1] = finalFilt;
+            newVars[msg.currentVariation ?? newVars.length - 1] = finalFilt;
             return { ...msg, content: finalFilt, variations: newVars };
           } return msg;
         });
@@ -862,7 +911,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       currentGenerationRef.current.abort();
       console.log('Gen stop requested.');
       setIsGenerating(false); setGeneratingId(null);
-      saveChat(messagesRef.current); 
+      saveChat(messagesRef.current);
       setLastContextWindow((prev: any) => ({ ...prev, type: 'generation_stopped', timestamp: new Date().toISOString() }));
     }
   }, [saveChat]);
@@ -888,8 +937,8 @@ Continue the response from exactly that point. Do not repeat the existing text. 
   const loadExistingChat = useCallback(async (chatIdToLoad: string) => {
     if (!characterData) { setError("No char data to load chat."); return; }
     console.log(`Loading existing chat: ${chatIdToLoad}`);
-    setIsLoading(true); setError(null); setCurrentChatId(null); 
-    autoSaveEnabled.current = false; 
+    setIsLoading(true); setError(null); setCurrentChatId(null);
+    autoSaveEnabled.current = false;
 
     try {
       // Load chat using database-centric API
@@ -903,7 +952,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
           character_uuid: characterData.data.character_uuid
         })
       });
-      
+
       let response;
       if (apiResponse.ok) {
         const contentType = apiResponse.headers.get('content-type');
@@ -934,8 +983,8 @@ Continue the response from exactly that point. Do not repeat the existing text. 
         let loadedTrigLoreImgs: TriggeredLoreImage[] = [];
         if (sessionData.metadata?.chat_metadata?.triggeredLoreImages) {
           loadedTrigLoreImgs = sessionData.metadata.chat_metadata.triggeredLoreImages;
-          setTriggeredLoreImages(loadedTrigLoreImgs); 
-        }        const charImgP = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
+          setTriggeredLoreImages(loadedTrigLoreImgs);
+        } const charImgP = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
           ? `/api/character-image/${characterData.data.character_uuid}.png` : '';
         const newAvailImgs = getAvailableImagesForPreview(charImgP);
         setAvailablePreviewImages(newAvailImgs);
@@ -987,15 +1036,15 @@ Continue the response from exactly that point. Do not repeat the existing text. 
     if (!characterData || characterData.data.character_uuid !== characterUuidFromHook) {
       console.warn("Char mismatch in trackLoreImages or no char data."); return;
     }
-    
+
     // Process lore entries for image tracking
     processLoreEntriesForImageTracking(matchedEntries, characterUuidFromHook);
-    
+
     // Get updated available images including character image
     const charImgPath = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
       ? `/api/character-image/${characterData.data.character_uuid}.png` : '';
     const allAvailableImages = getAvailableImagesForPreview(charImgPath);
-    
+
     setAvailablePreviewImages(allAvailableImages);
 
     if (currentPreviewImageIndex >= allAvailableImages.length) setCurrentPreviewImageIndex(0);
@@ -1014,7 +1063,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
   const contextValue: ChatContextType = {
     messages, isLoading, isGenerating, error, currentUser, lastContextWindow,
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
-    currentPreviewImageIndex, currentChatId: currentChatId, 
+    currentPreviewImageIndex, currentChatId: currentChatId,
     updateMessage, deleteMessage, addMessage, cycleVariation,
     generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
