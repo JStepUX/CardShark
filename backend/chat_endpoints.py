@@ -755,7 +755,7 @@ def reliable_create_chat_endpoint(
                  if existing_char_path:
                      logger.info(f"Collision detected: Found existing character at {png_path} with UUID {existing_char_path.character_uuid}. Deleting it to enforce correct Generic Assistant UUID.")
                      db.delete(existing_char_path)
-                     db.commit()
+                     # db.commit() # Removed to allow atomic transaction with creation
                  
                  # Create the character
                  character = character_service.create_character(
@@ -768,6 +768,7 @@ def reliable_create_chat_endpoint(
                  
              except Exception as e:
                  logger.error(f"Failed to create Generic Assistant character: {e}")
+                 db.rollback() # Rollback any pending deletion if creation failed
                  # Fall through to the NotFoundException if creation failed
         
         if not character:
