@@ -661,9 +661,11 @@ class CharacterService:
             db.refresh(db_char)
             return db_char
 
-    def create_character(self, character_data: Dict[str, Any], png_file_path_str: str, write_to_png: bool = True) -> CharacterModel:
+    def create_character(self, character_data: Dict[str, Any], png_file_path_str: str, write_to_png: bool = True, db: Optional[Session] = None) -> CharacterModel:
         """Creates a new character in DB and saves a new PNG."""
-        with self._get_session_context() as db:
+        
+        # Define the logic to run within the session
+        def _create_logic(session: Session):
             abs_png_path = str(Path(png_file_path_str).resolve())
             
             # Ensure character_uuid is present, generate if not
@@ -695,12 +697,27 @@ class CharacterService:
                 updated_at=datetime.datetime.utcnow(),
                 created_at=datetime.datetime.utcnow()
             )
-            db.add(db_char)
-            db.flush() # Ensure the row is visible to subsequent queries
+            session.add(db_char)
+            session.flush() # Ensure the row is visible to subsequent queries
             
             # Handle lore book from character_data if present
             if "character_book" in character_data and isinstance(character_data["character_book"], dict):
-                self._sync_character_lore(char_uuid, character_data["character_book"], db)
+                self._sync_character_lore(char_uuid, character_data["character_book"], session)
+                
+            return db_char
+
+        # Execute logic with appropriate session context
+        if db:
+            db_char = _create_logic(db)
+            # When using external session, we typically don't commit here unless expected, 
+            # but original implementation did commit. To maintain behavior safely:
+            db.commit() 
+            db.refresh(db_char)
+        else:
+            with self._get_session_context() as session:
+                db_char = _create_logic(session)
+                session.commit()
+                session.refresh(db_char)
 
         if write_to_png:
             # Prepare metadata for PNG with all fields
@@ -736,16 +753,15 @@ class CharacterService:
             # For simplicity, assume PngMetadataHandler can create/overwrite
             try:
                 # Ensure parent directory exists for the new PNG
+                abs_png_path = str(Path(png_file_path_str).resolve())
                 Path(abs_png_path).parent.mkdir(parents=True, exist_ok=True)
                 self.png_handler.write_metadata_to_png(abs_png_path, png_metadata_to_write, create_if_not_exists=True)
                 self.logger.log_info(f"Successfully created/updated PNG: {abs_png_path}")
             except Exception as e:
-                self.logger.log_error(f"Failed to create/write PNG {abs_png_path}: {e}")
+                self.logger.log_error(f"Failed to create/write PNG {png_file_path_str}: {e}")
             # If PNG write fails, should we roll back DB? For now, DB commit will proceed.
         
-            db.commit()
-            db.refresh(db_char)
-            return db_char
+        return db_char
 
     def delete_character(self, character_uuid: str, delete_png_file: bool = False) -> bool:
         """Deletes a character from DB and optionally its PNG file."""

@@ -707,7 +707,69 @@ def reliable_create_chat_endpoint(
     """Alias for create-new-chat endpoint."""
     try:
         # 1. Validate character exists
+        # 1. Validate character exists
         character = character_service.get_character_by_uuid(payload.character_uuid, db)
+        
+        # Special handling for Generic Assistant: Create on demand if missing
+        if not character and payload.character_uuid == "cardshark-general-assistant-v1":
+             logger.info("Generic Assistant character not found in DB. Creating it now.")
+             try:
+                 # Define default assistant data
+                 assistant_data = {
+                     "name": "CardShark",
+                     "description": "Your helpful AI assistant.",
+                     "personality": "Helpful, collaborative, insightful.",
+                     "scenario": "Helping the user with their tasks.",
+                     "first_mes": "How can I help you?",
+                     "mes_example": "",
+                     "creator_notes": "",
+                     "system_prompt": "You are CardShark, a snarky collaborator and playful co-conspirator with {{user}} who would like very much for you to help them with their most burning issues.",
+                     "post_history_instructions": "",
+                     "tags": ["Assistant"],
+                     "creator": "System",
+                     "character_version": "1.0",
+                     "character_uuid": "cardshark-general-assistant-v1",
+                     "extensions": {
+                         "talkativeness": "0.5",
+                         "fav": True,
+                         "world": "CardShark"
+                     }
+                 }
+                 
+                 # Determine path (ensure it ends up in characters directory)
+                 # We assume get_character_dirs()[0] gives us a valid characters directory
+                 char_dirs = character_service._get_character_dirs()
+                 if char_dirs:
+                     target_dir = Path(char_dirs[0])
+                 else:
+                     # Fallback relative path
+                     from backend.utils.path_utils import get_application_base_path
+                     target_dir = get_application_base_path() / "characters"
+                 
+                 # Create the file path
+                 png_path = target_dir / "CardShark_Assistant.png"
+                 
+                 # Check for collision with existing character at this path (different UUID)
+                 # This prevents UNIQUE constraint failed: characters.png_file_path
+                 existing_char_path = character_service.get_character_by_path(str(png_path), db)
+                 if existing_char_path:
+                     logger.info(f"Collision detected: Found existing character at {png_path} with UUID {existing_char_path.character_uuid}. Deleting it to enforce correct Generic Assistant UUID.")
+                     db.delete(existing_char_path)
+                     db.commit()
+                 
+                 # Create the character
+                 character = character_service.create_character(
+                     character_data=assistant_data,
+                     png_file_path_str=str(png_path),
+                     write_to_png=True,
+                     db=db
+                 )
+                 logger.info(f"Created Generic Assistant character at {png_path}")
+                 
+             except Exception as e:
+                 logger.error(f"Failed to create Generic Assistant character: {e}")
+                 # Fall through to the NotFoundException if creation failed
+        
         if not character:
             raise NotFoundException(f"Character not found: {payload.character_uuid}")
 

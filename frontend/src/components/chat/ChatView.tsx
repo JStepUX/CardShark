@@ -19,6 +19,8 @@ import { substituteVariables } from '../../utils/variableUtils';
 import ErrorMessage from '../common/ErrorMessage';
 import { useScrollToBottom } from '../../hooks/useScrollToBottom';
 import { useChat } from '../../contexts/ChatContext';
+import { usePrompts } from '../../hooks/usePrompts';
+import { StandardPromptKey } from '../../types/promptTypes';
 
 // New Components
 import ChatBackgroundLayer from './ChatBackgroundLayer';
@@ -135,6 +137,68 @@ const ChatView: React.FC = () => {
     continueResponse,
     regenerateGreeting
   } = useChat();
+
+  const { getPrompt, getDefaultPrompt, isLoading: isPromptsLoading } = usePrompts();
+
+  // Initialize generic assistant if no character selected
+  useEffect(() => {
+    if (!characterData && !isPromptsLoading) {
+      const assistantPrompt = getPrompt(StandardPromptKey.ASSISTANT_PROMPT) || getDefaultPrompt(StandardPromptKey.ASSISTANT_PROMPT);
+
+      const genericAssistant = {
+        name: "CardShark",
+        description: "Your helpful AI assistant.",
+        personality: "Helpful, collaborative, insightful.",
+        scenario: "Helping the user with their tasks.",
+        first_mes: "How can I help you?",
+        mes_example: "",
+        creatorcomment: "",
+        avatar: "none",
+        chat: "CardShark - Generic Assistant",
+        talkativeness: "0.5",
+        fav: true,
+        tags: ["Assistant"],
+        spec: "chara_card_v2",
+        spec_version: "2.0",
+        data: {
+          name: "CardShark",
+          description: "Your helpful AI assistant.",
+          personality: "Helpful, collaborative, insightful.",
+          scenario: "Helping the user with their tasks.",
+          first_mes: "How can I help you?",
+          mes_example: "",
+          creator_notes: "",
+          system_prompt: assistantPrompt,
+          post_history_instructions: "",
+          tags: ["Assistant"],
+          creator: "System",
+          character_version: "1.0",
+          alternate_greetings: [],
+          character_uuid: "cardshark-general-assistant-v1",
+          extensions: {
+            talkativeness: "0.5",
+            fav: true,
+            world: "CardShark",
+            depth_prompt: {
+              prompt: "",
+              depth: 4,
+              role: "system"
+            }
+          },
+          group_only_greetings: [],
+          character_book: {
+            entries: [],
+            name: ""
+          },
+          spec: ''
+        },
+        create_date: new Date().toISOString()
+      };
+
+      // We cast to any to avoid strict type matching issues with nested optional fields if any
+      setCharacterData(genericAssistant as any);
+    }
+  }, [characterData, isPromptsLoading, getPrompt, getDefaultPrompt, setCharacterData]);
 
   const scrollToBottomUnified = useCallback(() => {
     scrollToBottom();
@@ -355,7 +419,7 @@ const ChatView: React.FC = () => {
   const { currentEmotion: emotion } = useEmotionDetection(messages, characterData?.data?.name);
 
   if (!characterData) {
-    return <div className="flex items-center justify-center h-full text-gray-400">Select a character to start chatting.</div>;
+    return <div className="flex items-center justify-center h-full text-gray-400">{isPromptsLoading ? "Loading Assistant..." : "Initializing Assistant..."}</div>;
   }
 
   return (

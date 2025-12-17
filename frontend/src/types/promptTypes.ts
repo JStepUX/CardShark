@@ -20,13 +20,13 @@ export enum PromptVariable {
   DESCRIPTION = '{{description}}',   // Character description
   PERSONALITY = '{{personality}}',   // Character personality
   SCENARIO = '{{scenario}}',         // Character scenario
-  
+
   // Message variables
   MESSAGE = '{{message}}',           // Current user message
   PREVIOUS_RESPONSE = '{{previous_response}}', // Previous AI response
   FIRST_MESSAGE = '{{first_message}}', // Character's first message
   EXAMPLES = '{{examples}}',         // Example messages/dialogues
-  
+
   // Context variables
   KEY_POINTS = '{{key_points}}',     // Key points from conversation
   CONTEXT = '{{context}}',
@@ -54,14 +54,15 @@ export enum PromptCategory {
 export enum StandardPromptKey {
   // System prompts
   SYSTEM_PROMPT = 'system_prompt',       // Main system prompt
-  
+
   // Chat prompts
   CHAT_STARTER = 'chat_starter',         // Start a conversation
   CHAT_CONTINUE = 'chat_continue',       // Continue a conversation
-  
+  ASSISTANT_PROMPT = 'assistant_prompt', // Generic assistant system prompt
+
   // Reasoning prompts
   REASONING = 'reasoning',               // Thinking/reasoning prompt
-  
+
   // Variation prompts
   REFRESH_VARIATION = 'refresh_variation' // Create variation of response
 }

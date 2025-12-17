@@ -6,9 +6,10 @@ import { RefreshCw, Save, Plus, Download, Upload, AlertCircle, Info, Trash2 } fr
 import RichTextEditor from '../RichTextEditor'; // Import RichTextEditor
 import { StandardPromptKey, PromptVariable, PromptCategory } from '../../types/promptTypes';
 import { Dialog } from '../common/Dialog';
-import { 
-  newPromptSchema, 
-  PromptExportSchema} from '../../types/promptSchemas';
+import {
+  newPromptSchema,
+  PromptExportSchema
+} from '../../types/promptSchemas';
 
 interface PromptEditorProps {
   promptKey: string;
@@ -24,29 +25,29 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
   description,
   availableVariables
 }) => {
-  const { 
-    getPrompt, 
-    updatePrompt, 
-    resetPrompt, 
+  const {
+    getPrompt,
+    updatePrompt,
+    resetPrompt,
     isCustomPrompt,
-    getDefaultPrompt 
+    getDefaultPrompt
   } = usePrompts();
-  
+
   const [value, setValue] = useState('');
   const [isEdited, setIsEdited] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
-  
+
   // Load prompt value on mount and when promptKey changes
   useEffect(() => {
     setValue(getPrompt(promptKey));
     setIsEdited(false);
   }, [promptKey, getPrompt]);
-  
+
   const handleSave = () => {
     updatePrompt(promptKey, value);
     setIsEdited(false);
   };
-  
+
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset this prompt to its default?')) {
       resetPrompt(promptKey);
@@ -54,7 +55,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
       setIsEdited(false);
     }
   };
-  
+
   return (
     <div className="bg-stone-900 p-6 rounded-lg mb-8">
       <div className="flex justify-between items-start mb-4">
@@ -96,7 +97,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
           </Button>
         </div>
       </div>
-      
+
       {showInfo && (
         <div className="bg-stone-800 p-4 rounded-lg mb-4">
           <h4 className="text-sm font-medium mb-2">Available Variables</h4>
@@ -109,7 +110,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
           </div>
         </div>
       )}
-      
+
       <RichTextEditor
         content={value}
         onChange={(html) => { // Use html from editor
@@ -139,7 +140,7 @@ const NewPromptDialog: React.FC<NewPromptDialogProps> = ({
   const [key, setKey] = useState('');
   const [template, setTemplate] = useState('');
   const [error, setError] = useState('');
-  
+
   useEffect(() => {
     if (isOpen) {
       setKey('');
@@ -147,26 +148,26 @@ const NewPromptDialog: React.FC<NewPromptDialogProps> = ({
       setError('');
     }
   }, [isOpen]);
-  
+
   const handleSubmit = () => {
     try {
       // Use Zod to validate the input
       const result = newPromptSchema.safeParse({ key, template });
-      
+
       if (!result.success) {
         // Extract the first error message
         const errorMessage = result.error.issues[0]?.message || 'Invalid input';
         setError(errorMessage);
         return;
       }
-      
+
       onCreate(key, template);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create prompt');
     }
   };
-  
+
   return (
     <Dialog
       isOpen={isOpen}
@@ -191,7 +192,7 @@ const NewPromptDialog: React.FC<NewPromptDialogProps> = ({
             <div>{error}</div>
           </div>
         )}
-        
+
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Prompt Key
@@ -207,7 +208,7 @@ const NewPromptDialog: React.FC<NewPromptDialogProps> = ({
             Use only letters, numbers, and underscores. This is how you'll reference the prompt in code.
           </p>
         </div>
-        
+
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Prompt Template
@@ -243,7 +244,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
 }) => {
   const [data, setData] = useState('');
   const [error, setError] = useState('');
-  
+
   useEffect(() => {
     if (isOpen) {
       if (mode === 'export' && exportData) {
@@ -254,19 +255,19 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       setError('');
     }
   }, [isOpen, mode, exportData]);
-  
+
   const handleImport = () => {
     try {
       if (!data) {
         setError('No data to import');
         return;
       }
-      
+
       // Parse and validate JSON with Zod
       try {
         const parsedData = JSON.parse(data);
         const validationResult = PromptExportSchema.safeParse(parsedData);
-        
+
         if (!validationResult.success) {
           const errorMessage = validationResult.error.issues[0]?.message || 'Invalid prompt data format';
           setError(`Invalid import format: ${errorMessage}`);
@@ -276,14 +277,14 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         setError('Invalid JSON format');
         return;
       }
-      
+
       onImport(data);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to import prompts');
     }
   };
-  
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(data);
@@ -292,7 +293,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       setError('Failed to copy to clipboard');
     }
   };
-  
+
   return (
     <Dialog
       isOpen={isOpen}
@@ -325,7 +326,7 @@ const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             <div>{error}</div>
           </div>
         )}
-        
+
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             {mode === 'import' ? 'Paste JSON Data' : 'Export Data'}
@@ -389,6 +390,7 @@ const PROMPT_CATEGORIES = [
       }
     ]
   },
+
   {
     id: PromptCategory.CHAT,
     title: 'Chat Prompts',
@@ -417,6 +419,14 @@ const PROMPT_CATEGORIES = [
           PromptVariable.DESCRIPTION,
           PromptVariable.PERSONALITY
         ]
+      },
+      {
+        key: StandardPromptKey.ASSISTANT_PROMPT,
+        title: 'Assistant Prompt',
+        description: 'System prompt for the generic CardShark assistant',
+        variables: [
+          PromptVariable.USER_NAME
+        ]
       }
     ]
   },
@@ -443,30 +453,30 @@ const PROMPT_CATEGORIES = [
 ];
 
 const PromptSettings: React.FC = () => {
-  const { 
-    createCustomPrompt, 
+  const {
+    createCustomPrompt,
     deleteCustomPrompt,
     exportPrompts,
     importPrompts,
     getCustomPromptKeys
   } = usePrompts();
-  
+
   const [isNewPromptDialogOpen, setIsNewPromptDialogOpen] = useState(false);
   const [isImportExportDialogOpen, setIsImportExportDialogOpen] = useState(false);
   const [importExportMode, setImportExportMode] = useState<'import' | 'export'>('export');
   const [customPromptKeys, setCustomPromptKeys] = useState<string[]>([]);
-  
+
   // Load custom prompts on mount
   useEffect(() => {
     setCustomPromptKeys(getCustomPromptKeys());
   }, [getCustomPromptKeys]);
-  
+
   // Handle creating a new custom prompt
   const handleCreatePrompt = (key: string, template: string) => {
     createCustomPrompt(key, template);
     setCustomPromptKeys(getCustomPromptKeys());
   };
-  
+
   // Handle deleting a custom prompt
   const handleDeletePrompt = (key: string) => {
     if (window.confirm(`Are you sure you want to delete the custom prompt "${key}"?`)) {
@@ -474,19 +484,19 @@ const PromptSettings: React.FC = () => {
       setCustomPromptKeys(getCustomPromptKeys());
     }
   };
-  
+
   // Handle exporting prompts
   const handleExport = () => {
     setImportExportMode('export');
     setIsImportExportDialogOpen(true);
   };
-  
+
   // Handle importing prompts
   const handleImport = () => {
     setImportExportMode('import');
     setIsImportExportDialogOpen(true);
   };
-  
+
   // Process prompt import with better error handling using Zod
   const processImport = (data: string) => {
     try {
@@ -498,7 +508,7 @@ const PromptSettings: React.FC = () => {
       alert('Failed to import prompts. Please check the format of your data.');
     }
   };
-  
+
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-8">
@@ -541,7 +551,7 @@ const PromptSettings: React.FC = () => {
           </Button>
         </div>
       </div>
-      
+
       {/* Standard prompt categories */}
       {PROMPT_CATEGORIES.map(category => (
         <div key={category.id} className="mb-12">
@@ -549,7 +559,7 @@ const PromptSettings: React.FC = () => {
             <h3 className="text-xl font-semibold">{category.title}</h3>
             <p className="text-gray-400 text-sm">{category.description}</p>
           </div>
-          
+
           {category.prompts.map(prompt => (
             <PromptEditor
               key={prompt.key}
@@ -561,7 +571,7 @@ const PromptSettings: React.FC = () => {
           ))}
         </div>
       ))}
-      
+
       {/* Custom prompts section */}
       {customPromptKeys.length > 0 && (
         <div className="mb-12">
@@ -571,7 +581,7 @@ const PromptSettings: React.FC = () => {
               User-defined prompts that you've created for specific purposes
             </p>
           </div>
-          
+
           {customPromptKeys.map(key => (
             <div key={key} className="relative">
               <Button
@@ -592,14 +602,14 @@ const PromptSettings: React.FC = () => {
           ))}
         </div>
       )}
-      
+
       {/* Dialogs */}
       <NewPromptDialog
         isOpen={isNewPromptDialogOpen}
         onClose={() => setIsNewPromptDialogOpen(false)}
         onCreate={handleCreatePrompt}
       />
-      
+
       <ImportExportDialog
         isOpen={isImportExportDialogOpen}
         onClose={() => setIsImportExportDialogOpen(false)}
