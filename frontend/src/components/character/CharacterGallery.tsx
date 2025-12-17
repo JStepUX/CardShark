@@ -504,14 +504,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
   // Helper to get image URL with proper encoding
   const getCharacterImage = (char: CharacterFile) => {
+    const timestamp = typeof char.modified === 'number'
+      ? char.modified
+      : new Date(char.modified).getTime();
+
     // Priority 1: Use UUID if available (most robust, works for DB characters)
     if (char.character_uuid) {
-      return `/api/character-image/${char.character_uuid}`;
+      return `/api/character-image/${char.character_uuid}?t=${timestamp}`;
     }
 
     // Priority 2: Use file path (legacy/fallback for non-indexed files)
     if (char.path) {
-      return `/api/character-image/${encodeFilePath(char.path)}`;
+      return `/api/character-image/${encodeFilePath(char.path)}?t=${timestamp}`;
     }
 
     return '';
