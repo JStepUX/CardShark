@@ -490,8 +490,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
       setMessages(initMsgs);
-      const saveOk = await saveChat(initMsgs);
-      if (!saveOk) console.warn(`Initial save for new chat ${newCId} failed.`);
+      try {
+        await fetch('/api/reliable-save-chat', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_session_uuid: newCId,
+            messages: initMsgs,
+            title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
+          })
+        });
+      } catch (err) {
+        console.warn(`Initial save for new chat ${newCId} failed:`, err);
+      }
 
       return newCId; // Return the new chat ID
     } catch (err) {
