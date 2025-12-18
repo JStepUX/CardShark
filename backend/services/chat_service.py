@@ -164,7 +164,7 @@ def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_
         new_messages = []
         seen_ids = set()
 
-        for message_data in messages_data:
+        for idx, message_data in enumerate(messages_data):
             # Extract fields
             # Frontend often sends 'id' or 'message_id'
             msg_id = message_data.get('id') or message_data.get('message_id')
@@ -192,8 +192,8 @@ def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_
                 status=status,
                 reasoning_content=reasoning_content,
                 metadata_json=metadata_json,
-                timestamp=datetime.utcnow() # Reset timestamp? Or keep? Usually reset on save/re-insert implies "now", but maybe we should try to preserve if available. 
-                # For now, let's use utcnow() as the model defaults to server_default=func.now()
+                timestamp=datetime.utcnow(),
+                sequence_number=idx # Assign sequence number to preserve order
             )
             
             # If timestamp is provided in ms (frontend standard), convert it
@@ -204,7 +204,13 @@ def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_
                         db_message.timestamp = datetime.fromtimestamp(ts / 1000.0)
                     elif isinstance(ts, str):
                         # Try to parse string ISO?
-                        pass 
+                        # Using fromisoformat if it looks like one, but keep it simple
+                        try:
+                            # Strip Z and handle space/T
+                            clean_ts = ts.replace('Z', '').replace(' ', 'T')
+                            db_message.timestamp = datetime.fromisoformat(clean_ts)
+                        except:
+                            pass 
                 except:
                     pass
 
@@ -215,7 +221,11 @@ def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_
         chat_session = get_chat_session(db, chat_session_uuid)
         if chat_session:
             chat_session.message_count = len(new_messages)
-            chat_session.last_message_time = datetime.utcnow()
+            if new_messages:
+                # Use the timestamp of the last message as the session's last_message_time
+                chat_session.last_message_time = new_messages[-1].timestamp
+            else:
+                chat_session.last_message_time = datetime.utcnow()
         
         db.commit()
         return new_messages

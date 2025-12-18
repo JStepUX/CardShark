@@ -9,6 +9,7 @@ interface ChatInfo {
   id: string;
   title: string;
   lastModified: string;
+  rawLastModified: string | number; // For reliable sorting
   messageCount: number;
   preview?: string;
   filename?: string; // For deletion and reference
@@ -129,6 +130,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             filename: chat.filename || `chat_${chatId}.jsonl`, // Fallback for database entries
             title,
             lastModified: formatDate(lastModified),
+            rawLastModified: lastModified,
             messageCount,
             preview: finalPreview
           } as ChatInfo;
@@ -314,7 +316,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           break;
         case 'date':
         default:
-          comparison = new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
+          const timeA = new Date(a.rawLastModified).getTime();
+          const timeB = new Date(b.rawLastModified).getTime();
+          comparison = (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
           break;
       }
       return sortOrder === 'asc' ? comparison : -comparison;
