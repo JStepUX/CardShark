@@ -22,6 +22,8 @@ import { useChat } from '../../contexts/ChatContext';
 import { usePrompts } from '../../hooks/usePrompts';
 import { StandardPromptKey } from '../../types/promptTypes';
 
+import { ArrowDown } from 'lucide-react';
+
 // New Components
 import ChatBackgroundLayer from './ChatBackgroundLayer';
 import ChatHeader from './ChatHeader';
@@ -113,6 +115,7 @@ const ChatView: React.FC = () => {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const { endRef: messagesEndRef, containerRef: messagesContainerRef, scrollToBottom } = useScrollToBottom();
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
   const {
     messages,
@@ -359,6 +362,13 @@ const ChatView: React.FC = () => {
     generateResponse(content);
   };
 
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    // Show button if we are more than 150px from the bottom
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
+    setShowScrollButton(!isAtBottom);
+  }, []);
+
   // Handle Room Navigation (World Cards)
   const handleRoomChange = useCallback((room: Room, _position: string, worldState: FullWorldState) => {
     if (!characterData) return;
@@ -454,8 +464,12 @@ const ChatView: React.FC = () => {
           </div>
 
           {/* Messages Area */}
-          <div ref={messagesContainerRef} className="flex-1 overflow-hidden relative z-10">
-            <div className="h-full overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-hidden relative z-10">
+            <div
+              ref={messagesContainerRef}
+              className="h-full overflow-y-auto p-4 space-y-4 scroll-smooth"
+              onScroll={handleScroll}
+            >
               {messages.map((message) => (
                 <React.Fragment key={message.id}>
                   {message.role === 'thinking' && reasoningSettings.visible ? (
@@ -489,6 +503,21 @@ const ChatView: React.FC = () => {
               ))}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Scroll to Bottom Button */}
+            {showScrollButton && (
+              <button
+                onClick={() => scrollToBottomUnified()}
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 
+                           bg-stone-950/80 hover:bg-purple-500 backdrop-blur-sm text-white 
+                           px-4 py-1.5 rounded-full shadow-lg border border-purple-400/30
+                           flex items-center gap-2 transition-all duration-300 animate-in fade-in zoom-in-95 group"
+                title="Scroll to bottom"
+              >
+                <ArrowDown size={14} className="group-hover:translate-y-0.5 transition-transform" />
+                <span className="text-xs font-bold uppercase tracking-tight">Recent Messages</span>
+              </button>
+            )}
           </div>
 
           {/* Input Area */}
