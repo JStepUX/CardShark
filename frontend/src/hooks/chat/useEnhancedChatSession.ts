@@ -28,7 +28,7 @@ export interface UseEnhancedChatSessionReturn {
   isLoading: boolean;
   error: string | null;
   isDirty: boolean;
-  
+
   // Session operations
   ensureChatSession: () => Promise<string | null>;
   createNewSession: (preserveCurrent?: boolean) => Promise<string | null>;
@@ -37,15 +37,15 @@ export interface UseEnhancedChatSessionReturn {
     messages: Message[];
   } | null>;
   clearSession: () => void;
-  
+
   // Auto-save operations
   markDirty: (messages: Message[]) => void;
   saveIfDirty: () => Promise<boolean>;
   forceNavigationSave: () => Promise<boolean>;
-  
+
   // User management
   setCurrentUser: (user: UserProfile | null) => void;
-  
+
   // Error handling
   clearError: () => void;
 }
@@ -59,9 +59,9 @@ export function useEnhancedChatSession(
   isGenericAssistant: boolean = false,
   currentMessages: Message[] = []
 ): UseEnhancedChatSessionReturn {
-    const location = useLocation();
+  const location = useLocation();
   const effectiveCharacterData = characterData || DEFAULT_ASSISTANT_CHARACTER;
-  
+
   // Initialize state with current user from storage
   const [state, setState] = useState<EnhancedChatSessionState>(() => {
     const storedUser = ChatStorage.getCurrentUser();
@@ -75,7 +75,7 @@ export function useEnhancedChatSession(
       lastActivity: Date.now()
     };
   });
-    // Refs for stable references
+  // Refs for stable references
   const hasInitializedSession = useRef<boolean>(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isNavigatingRef = useRef<boolean>(false);
@@ -84,7 +84,7 @@ export function useEnhancedChatSession(
   const messagesRef = useRef<Message[]>(currentMessages);
   const isDirtyRef = useRef<boolean>(false);
   const isGenericAssistantRef = useRef<boolean>(isGenericAssistant);
-  
+
   // Update refs when values change
   useEffect(() => {
     messagesRef.current = currentMessages;
@@ -92,7 +92,7 @@ export function useEnhancedChatSession(
     isDirtyRef.current = state.isDirty;
     isGenericAssistantRef.current = isGenericAssistant;
   }, [currentMessages, state.chatSessionUuid, state.isDirty, isGenericAssistant]);
-  
+
   /**
    * Auto-save with debouncing
    */
@@ -100,14 +100,13 @@ export function useEnhancedChatSession(
     if (isGenericAssistant || !sessionUuid || !effectiveCharacterData?.data?.name) {
       return false;
     }
-    
+
     try {
       console.log(`[EnhancedChatSession] Auto-saving ${messages.length} messages for session ${sessionUuid}`);
-      
+
       // Save chat using database-centric API
       const response = await fetch('/api/reliable-save-chat', {
         method: 'POST',
-        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -117,9 +116,9 @@ export function useEnhancedChatSession(
           title: effectiveCharacterData.data?.name ? `Chat with ${effectiveCharacterData.data.name}` : undefined
         })
       });
-      
+
       const result = response.ok ? await response.json() : { success: false, error: 'Save failed' };
-      
+
       if (result.success) {
         setState(prev => ({
           ...prev,
@@ -138,24 +137,24 @@ export function useEnhancedChatSession(
       return false;
     }
   }, [isGenericAssistant, effectiveCharacterData, state.currentUser]);
-  
+
   /**
    * Mark session as dirty and schedule auto-save
    */
   const markDirty = useCallback((messages: Message[]) => {
     if (isGenericAssistant) return;
-    
+
     setState(prev => ({
       ...prev,
       isDirty: true,
       lastActivity: Date.now()
     }));
-    
+
     // Clear existing timeout and schedule new one
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-    
+
     saveTimeoutRef.current = setTimeout(() => {
       const sessionUuid = currentSessionUuidRef.current;
       if (sessionUuid) {
@@ -163,7 +162,7 @@ export function useEnhancedChatSession(
       }
     }, 2000); // 2 second debounce
   }, [isGenericAssistant, performAutoSave]);
-  
+
   /**
    * Save if there are unsaved changes
    */
@@ -171,11 +170,11 @@ export function useEnhancedChatSession(
     if (!state.isDirty || isGenericAssistant || !state.chatSessionUuid) {
       return true;
     }
-    
+
     const currentMessages = messagesRef.current;
     return await performAutoSave(currentMessages, state.chatSessionUuid);
   }, [state.isDirty, state.chatSessionUuid, isGenericAssistant, performAutoSave]);
-  
+
   /**
    * Force save for navigation scenarios
    */
@@ -183,16 +182,16 @@ export function useEnhancedChatSession(
     if (isGenericAssistant || !state.chatSessionUuid) {
       return true;
     }
-    
+
     // Clear any pending auto-save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    
+
     console.log(`[EnhancedChatSession] Force saving for navigation`);
     const currentMessages = messagesRef.current;
-    
+
     try {
       const result = await performAutoSave(currentMessages, state.chatSessionUuid);
       if (result) {
@@ -206,14 +205,14 @@ export function useEnhancedChatSession(
       return false;
     }
   }, [isGenericAssistant, state.chatSessionUuid, performAutoSave]);
-  
+
   /**
    * Clear any error state
    */
   const clearError = useCallback(() => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
-  
+
   /**
    * Set the current user and persist to storage
    */
@@ -221,7 +220,7 @@ export function useEnhancedChatSession(
     ChatStorage.saveCurrentUser(user);
     setState(prev => ({ ...prev, currentUser: user }));
   }, []);
-  
+
   /**
    * Clear the current session
    */
@@ -231,7 +230,7 @@ export function useEnhancedChatSession(
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    
+
     setState(prev => ({
       ...prev,
       chatSessionUuid: null,
@@ -242,7 +241,7 @@ export function useEnhancedChatSession(
     }));
     hasInitializedSession.current = false;
   }, []);
-  
+
   /**
    * Create a new chat session
    */
@@ -251,23 +250,23 @@ export function useEnhancedChatSession(
       setState(prev => ({ ...prev, error: "No character data available for new session" }));
       return null;
     }
-    
+
     // Save current session if needed and requested
     if (preserveCurrent && state.chatSessionUuid && state.isDirty) {
       console.log(`[EnhancedChatSession] Preserving current chat before creating new session`);
       await saveIfDirty();
     }
-    
+
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       console.log(`[EnhancedChatSession] Creating new session for character: ${effectiveCharacterData.data.name}`);
-      
+
       const result = await ChatStorage.createNewChat(effectiveCharacterData);
-      
+
       if (result.success && result.chat_session_uuid) {
         console.log(`[EnhancedChatSession] New session created: ${result.chat_session_uuid}`);
-        
+
         setState(prev => ({
           ...prev,
           chatSessionUuid: result.chat_session_uuid,
@@ -276,7 +275,7 @@ export function useEnhancedChatSession(
           isDirty: false,
           lastActivity: Date.now()
         }));
-        
+
         hasInitializedSession.current = true;
         return result.chat_session_uuid;
       } else {
@@ -292,7 +291,7 @@ export function useEnhancedChatSession(
       return null;
     }
   }, [effectiveCharacterData, state.chatSessionUuid, state.isDirty, saveIfDirty]);
-  
+
   /**
    * Load an existing session for a character
    */
@@ -304,17 +303,17 @@ export function useEnhancedChatSession(
       setState(prev => ({ ...prev, error: "Character data not available for loading" }));
       return null;
     }
-    
+
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+
     try {
       console.log(`[EnhancedChatSession] Loading latest chat for character: ${targetCharacterData.data.name}`);
-      
+
       const result = await ChatStorage.loadLatestChat(targetCharacterData);
-      
+
       if (result && result.success && result.chat_session_uuid) {
         let messages: Message[] = [];
-        
+
         // Process loaded messages or create first message
         if (result.messages && result.messages.length > 0) {
           messages = result.messages.map((msg: any) => ({
@@ -327,12 +326,12 @@ export function useEnhancedChatSession(
           // Create initial greeting if no messages but character has greeting
           const firstMsg = createAssistantMessage(targetCharacterData.data.first_mes, 'complete');
           if (targetCharacterData.data.alternate_greetings && Array.isArray(targetCharacterData.data.alternate_greetings) && targetCharacterData.data.alternate_greetings.length > 0) {
-             firstMsg.variations = [firstMsg.content, ...targetCharacterData.data.alternate_greetings];
-             firstMsg.currentVariation = 0;
+            firstMsg.variations = [firstMsg.content, ...targetCharacterData.data.alternate_greetings];
+            firstMsg.currentVariation = 0;
           }
           messages = [firstMsg];
         }
-        
+
         setState(prev => ({
           ...prev,
           chatSessionUuid: result.chat_session_uuid,
@@ -341,11 +340,11 @@ export function useEnhancedChatSession(
           isDirty: false,
           lastActivity: Date.now()
         }));
-        
+
         hasInitializedSession.current = true;
-        
+
         console.log(`[EnhancedChatSession] Loaded session ${result.chat_session_uuid} with ${messages.length} messages`);
-        
+
         return {
           sessionUuid: result.chat_session_uuid,
           messages
@@ -354,12 +353,12 @@ export function useEnhancedChatSession(
         // No chat found but can create new one
         console.log(`[EnhancedChatSession] No existing chat found, will create new session`);
         const newSessionUuid = await createNewSession(false);
-        
+
         if (newSessionUuid && targetCharacterData.data.first_mes) {
           const firstMsg = createAssistantMessage(targetCharacterData.data.first_mes, 'complete');
           if (targetCharacterData.data.alternate_greetings && Array.isArray(targetCharacterData.data.alternate_greetings) && targetCharacterData.data.alternate_greetings.length > 0) {
-             firstMsg.variations = [firstMsg.content, ...targetCharacterData.data.alternate_greetings];
-             firstMsg.currentVariation = 0;
+            firstMsg.variations = [firstMsg.content, ...targetCharacterData.data.alternate_greetings];
+            firstMsg.currentVariation = 0;
           }
           const initialMessages = [firstMsg];
           return {
@@ -382,7 +381,7 @@ export function useEnhancedChatSession(
       return null;
     }
   }, [createNewSession]);
-  
+
   /**
    * Ensure a chat session exists (load existing or create new)
    */
@@ -390,7 +389,7 @@ export function useEnhancedChatSession(
     if (state.chatSessionUuid && hasInitializedSession.current) {
       return state.chatSessionUuid;
     }
-    
+
     if (isGenericAssistant) {
       // Generic assistant doesn't need persistent sessions
       const tempUuid = generateUUID();
@@ -398,19 +397,19 @@ export function useEnhancedChatSession(
       hasInitializedSession.current = true;
       return tempUuid;
     }
-    
+
     if (!effectiveCharacterData?.data?.character_uuid) {
       setState(prev => ({ ...prev, error: "No character data available for session" }));
       return null;
     }
-    
+
     try {
       // Try to load existing session first
       const sessionData = await loadExistingSession(effectiveCharacterData);
       if (sessionData) {
         return sessionData.sessionUuid;
       }
-      
+
       // If no existing session, create new one
       return await createNewSession(false);
     } catch (error) {
@@ -418,17 +417,17 @@ export function useEnhancedChatSession(
       return null;
     }
   }, [state.chatSessionUuid, isGenericAssistant, effectiveCharacterData, loadExistingSession, createNewSession]);
-  
+
   // Navigation detection and auto-save
   useEffect(() => {
     const currentPath = location.pathname;
     const previousPath = lastLocationRef.current;
-    
+
     // If we're navigating away from chat and have unsaved changes
     if (previousPath !== currentPath && previousPath === '/chat' && state.isDirty) {
       console.log(`[EnhancedChatSession] Navigation detected from ${previousPath} to ${currentPath}, auto-saving...`);
       isNavigatingRef.current = true;
-      
+
       // Immediately save without waiting for debounce
       forceNavigationSave().then((success) => {
         if (success) {
@@ -439,10 +438,10 @@ export function useEnhancedChatSession(
         isNavigatingRef.current = false;
       });
     }
-    
+
     lastLocationRef.current = currentPath;
   }, [location.pathname, state.isDirty, forceNavigationSave]);
-  
+
   // Page unload protection
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -454,29 +453,29 @@ export function useEnhancedChatSession(
         return message;
       }
     };
-    
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && state.isDirty) {
         // Page is being hidden (tab switch, minimize, etc.)
         forceNavigationSave();
       }
     };
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [state.isDirty, state.chatSessionUuid, isGenericAssistant, forceNavigationSave]);
-    // Cleanup on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      
+
       // Final save attempt if dirty - use refs to avoid stale closures
       if (isDirtyRef.current && currentSessionUuidRef.current && !isGenericAssistantRef.current) {
         // This is fire-and-forget since component is unmounting
@@ -484,7 +483,7 @@ export function useEnhancedChatSession(
       }
     };
   }, []); // Empty deps - only on unmount, using refs for current values
-  
+
   return {
     // State
     chatSessionUuid: state.chatSessionUuid,
@@ -492,21 +491,21 @@ export function useEnhancedChatSession(
     isLoading: state.isLoading,
     error: state.error,
     isDirty: state.isDirty,
-    
+
     // Session operations
     ensureChatSession,
     createNewSession,
     loadExistingSession,
     clearSession,
-    
+
     // Auto-save operations
     markDirty,
     saveIfDirty,
     forceNavigationSave,
-    
+
     // User management
     setCurrentUser,
-    
+
     // Error handling
     clearError
   };

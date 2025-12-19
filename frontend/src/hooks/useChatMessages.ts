@@ -18,9 +18,9 @@ import { useChat } from '../contexts/ChatContext';
 import { apiService } from '../services/apiService';
 
 // Import types from our new centralized type definitions
-import { 
-  Message, 
-  UserProfile, 
+import {
+  Message,
+  UserProfile,
   ReasoningSettings,
   EnhancedChatState,
   PromptContextMessage,
@@ -58,7 +58,7 @@ const CONTEXT_WINDOW_KEY = 'cardshark_context_window';
 // --- Main Hook ---
 export function useChatMessages(characterData: CharacterData | null, _options?: { isWorldPlay?: boolean }) {
   const effectiveCharacterData = characterData || DEFAULT_ASSISTANT_CHARACTER;
-  const isGenericAssistant = !characterData; 
+  const isGenericAssistant = !characterData;
   const { apiConfig: globalApiConfig } = useAPIConfig();
   const { trackLoreImages } = useChat();
   // Phase 2: Initialize message state hook first (gradual migration)
@@ -73,9 +73,9 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     autoSaveEnabled: !isGenericAssistant,
     isGenericAssistant
   });
-  
+
   const messageStateHook = useMessageState(messageStateParams);
-  
+
   // Use the enhanced session management hook
   const {
     chatSessionUuid,
@@ -89,7 +89,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     saveIfDirty,
     forceNavigationSave
   } = useEnhancedChatSession(effectiveCharacterData, isGenericAssistant, messageStateHook.messages);
-  
+
   // Update message state params when session changes
   useEffect(() => {
     setMessageStateParams(prev => ({
@@ -102,12 +102,12 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
 
   // Use the stream processor hook
   const streamProcessor = useStreamProcessor();
-  
+
   useEffect(() => {
-    if (characterData && characterData.data?.name) { 
+    if (characterData && characterData.data?.name) {
       toast.info(`Chatting with ${characterData.data.name}`);
     }
-  }, [characterData?.data?.name]);   const [state, setState] = useState<EnhancedChatState>(() => {
+  }, [characterData?.data?.name]); const [state, setState] = useState<EnhancedChatState>(() => {
     let persistedContextWindow = null;
     let reasoningSettings: ReasoningSettings;
 
@@ -131,8 +131,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       console.error("Error initializing state from localStorage:", err);
       // Fallback to defaults, ensuring reasoning is off and not visible.
       reasoningSettings = { ...DEFAULT_REASONING_SETTINGS, enabled: false, visible: false };
-    }    
-    
+    }
+
     return {
       messages: [],
       isLoading: false,
@@ -142,8 +142,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       generatingId: null,
       reasoningSettings, // This will now always have enabled: false, visible: false
     };
-  });  const lastCharacterId = useRef<string | null>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);  
+  }); const lastCharacterId = useRef<string | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoSaveEnabled = useRef(!isGenericAssistant);
   const hasInitializedChat = useRef<boolean>(false);
   const isInitialLoad = useRef<boolean>(true);
@@ -156,49 +156,50 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     if (!config) return defaultConfig;
     const fullConfig = JSON.parse(JSON.stringify(config));
     fullConfig.generation_settings = { ...defaultConfig.generation_settings, ...(fullConfig.generation_settings || {}) };
-    return { ...defaultConfig, ...fullConfig };  }, []);  const setGeneratingStart = (userMessage: Message | null, assistantMessage: Message) => {
+    return { ...defaultConfig, ...fullConfig };
+  }, []); const setGeneratingStart = (userMessage: Message | null, assistantMessage: Message) => {
     console.log(`[setGeneratingStart] Setting generation for assistant message ID: ${assistantMessage.id}`);
-    
+
     // Add messages using message state hook
     if (userMessage) {
       messageStateHook.addMessage(userMessage);
     }
     messageStateHook.addMessage(assistantMessage);
-    
+
     // Set generation state using message state hook
     messageStateHook.setGenerationState(true, assistantMessage.id);
     messageStateHook.clearError();
-    
+
     // Mark as dirty for auto-save
     markDirty(messageStateHook.messages);
-    
+
     console.log(`[setGeneratingStart] State updated with generatingId: ${assistantMessage.id}`);
-  };const updateGeneratingMessageContent = (messageId: string, chunk: string) => {
+  }; const updateGeneratingMessageContent = (messageId: string, chunk: string) => {
     console.log(`[updateGeneratingMessageContent] Updating message ${messageId} with chunk: "${chunk}"`);
-    
+
     // Check if we're generating and this is the correct message
     if (!messageStateHook.isGenerating || messageStateHook.generatingId !== messageId) {
       console.log(`[updateGeneratingMessageContent] Skipping update - not generating or wrong ID. isGenerating: ${messageStateHook.isGenerating}, generatingId: ${messageStateHook.generatingId}, messageId: ${messageId}`);
       return;
     }
-    
+
     // Use the message state hook's appendToMessage method
     messageStateHook.appendToMessage(messageId, chunk);
     messageStateHook.updateMessageStatus(messageId, 'streaming');
-    
+
     console.log(`[updateGeneratingMessageContent] Updated message ${messageId} with chunk`);
-  };  const updateThinkingMessageContent = (messageId: string, chunk: string) => {
+  }; const updateThinkingMessageContent = (messageId: string, chunk: string) => {
     // Check if we're generating and this is the correct message
     if (!messageStateHook.isGenerating || messageStateHook.generatingId !== messageId) {
       return;
     }
-    
+
     // Use the message state hook's appendToMessage method
     messageStateHook.appendToMessage(messageId, chunk);
-  };  const setGenerationComplete = (
-      messageId: string, finalContent: string, contextWindowType: string,
-      receivedChunks: number, originalContentForVariation?: string
-    ) => {
+  }; const setGenerationComplete = (
+    messageId: string, finalContent: string, contextWindowType: string,
+    receivedChunks: number, originalContentForVariation?: string
+  ) => {
     // Check if we're generating and this is the correct message
     if (!messageStateHook.isGenerating || messageStateHook.generatingId !== messageId) {
       console.log(`Completion ignored: Generation for ${messageId} already stopped/changed.`);
@@ -226,8 +227,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     // Prepare variations
     const sanitizedFinalContent = sanitizeMessageContent(finalContent);
     const currentVariations = currentMessage.variations?.map(sanitizeMessageContent) ||
-                              (originalContentForVariation ? [sanitizeMessageContent(originalContentForVariation)] : 
-                               (currentMessage.content ? [sanitizeMessageContent(currentMessage.content)] : []));
+      (originalContentForVariation ? [sanitizeMessageContent(originalContentForVariation)] :
+        (currentMessage.content ? [sanitizeMessageContent(currentMessage.content)] : []));
     const variations = [...currentVariations, sanitizedFinalContent];
     const uniqueVariations = Array.from(new Set(variations));
     const newVariationIndex = uniqueVariations.length - 1;
@@ -248,15 +249,15 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     const finalContextWindow = { ...state.lastContextWindow, type: contextWindowType, finalResponse: sanitizedFinalContent, completionTime: new Date().toISOString(), totalChunks: receivedChunks };
     setState(prev => ({ ...prev, lastContextWindow: finalContextWindow }));
 
-    streamProcessor.clearStreamTimeout(); 
-    
+    streamProcessor.clearStreamTimeout();
+
     // Handle lore trigger extraction
     if (effectiveCharacterData?.data?.character_uuid && finalContent) {
       apiService.extractLoreTriggers(effectiveCharacterData, finalContent)
         .then((response: { success: boolean; matched_entries: LoreEntry[] }) => {
           if (response && response.success && response.matched_entries && response.matched_entries.length > 0) {
-            if (effectiveCharacterData.data.character_uuid) { 
-               trackLoreImages(response.matched_entries, effectiveCharacterData.data.character_uuid);
+            if (effectiveCharacterData.data.character_uuid) {
+              trackLoreImages(response.matched_entries, effectiveCharacterData.data.character_uuid);
             }
           }
         })
@@ -264,19 +265,19 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           console.error("Error extracting lore triggers:", err);
         });
     }
-  };  const stopGeneration = useCallback(() => {
+  }; const stopGeneration = useCallback(() => {
     if (!messageStateHook.isGenerating || !streamProcessor.isStreamActive()) {
-      if (messageStateHook.isGenerating) messageStateHook.setGenerationState(false, null); 
+      if (messageStateHook.isGenerating) messageStateHook.setGenerationState(false, null);
       return;
     }
     console.log("Attempting to stop generation...");
-    streamProcessor.abortCurrentStream(); 
+    streamProcessor.abortCurrentStream();
   }, [messageStateHook.isGenerating, streamProcessor, messageStateHook]);
 
   const resetStreamTimeout = useCallback(() => {
     streamProcessor.resetStreamTimeout(() => {
       console.warn(`Stream timed out after ${STREAM_SETTINGS.INACTIVITY_TIMEOUT_MS / 1000}s. Aborting.`);
-      stopGeneration(); 
+      stopGeneration();
     });
   }, [streamProcessor, stopGeneration]);
 
@@ -284,32 +285,32 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     const isAbort = err instanceof DOMException && err.name === 'AbortError';
     const errorMessage = isAbort ? `${operationType} cancelled.` : (err instanceof Error ? err.message : `Unknown ${operationType} error`);
     if (!isAbort) {
-        console.error(`Error during ${operationType}${messageId ? ` for message ${messageId}` : ''}:`, err);
+      console.error(`Error during ${operationType}${messageId ? ` for message ${messageId}` : ''}:`, err);
     } else {
-        console.log(`${operationType} aborted for message ${messageId}`);
+      console.log(`${operationType} aborted for message ${messageId}`);
     }
 
     setState(prev => {
       if (messageId === null || prev.generatingId === messageId) {
-          let updatedMessages = prev.messages;
-          if (messageId) {
-              updatedMessages = prev.messages.map(msg => {
-                if (msg.id === messageId) {
-                  if (msg.role === 'thinking') return null; 
-                  const finalContent = msg.content || (isAbort ? "" : `[${operationType} Error]`);
-                  return { ...msg, status: (isAbort ? 'aborted' : 'error') as Message['status'], content: finalContent };
-                }
-                return msg;
-              }).filter(msg => msg !== null) as Message[];
-          }
-          return {
-            ...prev, messages: updatedMessages, error: isAbort ? null : errorMessage, 
-            isGenerating: false, generatingId: null,            lastContextWindow: { ...prev.lastContextWindow, type: `${operationType}_${isAbort ? 'aborted' : 'error'}`, timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data?.name || 'Unknown', messageId: messageId, error: errorMessage }
-          };
+        let updatedMessages = prev.messages;
+        if (messageId) {
+          updatedMessages = prev.messages.map(msg => {
+            if (msg.id === messageId) {
+              if (msg.role === 'thinking') return null;
+              const finalContent = msg.content || (isAbort ? "" : `[${operationType} Error]`);
+              return { ...msg, status: (isAbort ? 'aborted' : 'error') as Message['status'], content: finalContent };
+            }
+            return msg;
+          }).filter(msg => msg !== null) as Message[];
+        }
+        return {
+          ...prev, messages: updatedMessages, error: isAbort ? null : errorMessage,
+          isGenerating: false, generatingId: null, lastContextWindow: { ...prev.lastContextWindow, type: `${operationType}_${isAbort ? 'aborted' : 'error'}`, timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data?.name || 'Unknown', messageId: messageId, error: errorMessage }
+        };
       }
       return prev;
     });
-    streamProcessor.clearStreamTimeout(); 
+    streamProcessor.clearStreamTimeout();
   }, [effectiveCharacterData, streamProcessor]);
 
   const clearError = useCallback(() => {
@@ -324,7 +325,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       }
       return;
     }
-    
+
     const sanitizedMessagesToSave = messageListFromState
       .filter(msg => msg.role !== 'thinking')
       .map(msg => ({
@@ -338,7 +339,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       try {
         if (effectiveCharacterData && chatSessionUuidFromState) {
           const chatTitle = effectiveCharacterData.data?.name ? `Chat with ${effectiveCharacterData.data.name}` : undefined;
-          const uuidForSave: string = chatSessionUuidFromState; 
+          const uuidForSave: string = chatSessionUuidFromState;
           const messagesForSave: Message[] = sanitizedMessagesToSave;
 
           // --- BEGIN DIAGNOSTIC LOGS ---
@@ -349,11 +350,10 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
             console.log('[useChatMessages] First message object in messages array:', messagesForSave[0], 'Type of first message:', typeof messagesForSave[0]);
           }
           // --- END DIAGNOSTIC LOGS ---
-          
+
           // Save chat using database-centric API
           await fetch('/api/reliable-save-chat', {
             method: 'POST',
-            keepalive: true,
             headers: {
               'Content-Type': 'application/json',
             },
@@ -369,7 +369,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       }
       finally { saveTimeoutRef.current = null; }
     }, 1000);
-  }, [effectiveCharacterData, globalApiConfig, isGenericAssistant]); 
+  }, [effectiveCharacterData, globalApiConfig, isGenericAssistant]);
 
   const appendMessageDirect = useCallback(async (chatSessionUuid: string | null, message: Message) => {
     if (isGenericAssistant || message.role === 'thinking' || !effectiveCharacterData.data?.name || !chatSessionUuid) return;
@@ -382,107 +382,108 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     debounce(async (chatSessionUuid: string | null, message: Message) => {
       await appendMessageDirect(chatSessionUuid, message);
     }, DEBOUNCE_DELAY),
-    [appendMessageDirect] 
-  );  const processStream = useCallback(async (
+    [appendMessageDirect]
+  ); const processStream = useCallback(async (
     response: Response, messageId: string, isThinking: boolean, onComplete: (content: string, chunks: number) => void, onError: (error: any) => void
   ) => {
     console.log(`[processStream] Starting stream processing for message ${messageId}, isThinking: ${isThinking}`);
     console.log(`[processStream] Current state.isGenerating: ${state.isGenerating}, state.generatingId: ${state.generatingId}`);
     let accumulatedContent = '';
     let receivedChunks = 0;
-    
+
     try {
-        // Use the stream processor's abort controller and timeout functionality
-        for await (const chunk of PromptHandler.streamResponse(response)) {
-            console.log(`[processStream] Received chunk ${receivedChunks + 1}: "${chunk}" (length: ${chunk.length})`);
-            console.log(`[processStream] About to call ${isThinking ? 'updateThinkingMessageContent' : 'updateGeneratingMessageContent'} with messageId: ${messageId}`);
-            
-            // Check if stream was aborted
-            if (!streamProcessor.isStreamActive()) {
-              console.log(`[processStream] Stream aborted for message ${messageId}`);
-              throw new DOMException('Aborted by user', 'AbortError');
-            }
-            
-            // Reset timeout for each chunk received
-            resetStreamTimeout(); 
-            accumulatedContent += chunk;
-            receivedChunks++;
-            console.log(`[processStream] Accumulated content so far: "${accumulatedContent}" (total length: ${accumulatedContent.length})`);
-            
-            // Update message content based on type
-            if (isThinking) {
-                updateThinkingMessageContent(messageId, chunk);
-            } else {
-                updateGeneratingMessageContent(messageId, chunk);
-            }
-            
-            // Yield control back to React for rendering
-            await new Promise(resolve => setTimeout(resolve, 0));
+      // Use the stream processor's abort controller and timeout functionality
+      for await (const chunk of PromptHandler.streamResponse(response)) {
+        console.log(`[processStream] Received chunk ${receivedChunks + 1}: "${chunk}" (length: ${chunk.length})`);
+        console.log(`[processStream] About to call ${isThinking ? 'updateThinkingMessageContent' : 'updateGeneratingMessageContent'} with messageId: ${messageId}`);
+
+        // Check if stream was aborted
+        if (!streamProcessor.isStreamActive()) {
+          console.log(`[processStream] Stream aborted for message ${messageId}`);
+          throw new DOMException('Aborted by user', 'AbortError');
         }
-        console.log(`[processStream] Stream complete for message ${messageId}. Final content: "${accumulatedContent}", chunks: ${receivedChunks}`);
-        onComplete(accumulatedContent, receivedChunks);
+
+        // Reset timeout for each chunk received
+        resetStreamTimeout();
+        accumulatedContent += chunk;
+        receivedChunks++;
+        console.log(`[processStream] Accumulated content so far: "${accumulatedContent}" (total length: ${accumulatedContent.length})`);
+
+        // Update message content based on type
+        if (isThinking) {
+          updateThinkingMessageContent(messageId, chunk);
+        } else {
+          updateGeneratingMessageContent(messageId, chunk);
+        }
+
+        // Yield control back to React for rendering
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      console.log(`[processStream] Stream complete for message ${messageId}. Final content: "${accumulatedContent}", chunks: ${receivedChunks}`);
+      onComplete(accumulatedContent, receivedChunks);
     } catch (err) {
-        console.error(`[processStream] Stream error for message ${messageId}:`, err);
-        onError(err instanceof Error ? err : new Error('Unknown stream processing error'));
-    }   
+      console.error(`[processStream] Stream error for message ${messageId}:`, err);
+      onError(err instanceof Error ? err : new Error('Unknown stream processing error'));
+    }
   }, [streamProcessor, resetStreamTimeout, updateGeneratingMessageContent, updateThinkingMessageContent, state.isGenerating, state.generatingId]);
 
   const getContextMessages = useCallback((currentState: EnhancedChatState, excludeId?: string): Message[] => {
-    const MAX_CONTEXT_MESSAGES = 20; 
+    const MAX_CONTEXT_MESSAGES = 20;
     return currentState.messages
       .filter(msg => msg.role !== 'thinking' && msg.id !== excludeId)
       .slice(-MAX_CONTEXT_MESSAGES)
-      .map((msg): Message => { 
+      .map((msg): Message => {
         const content = (msg.variations && typeof msg.currentVariation === 'number')
           ? msg.variations[msg.currentVariation]
           : msg.content;
         return {
           id: msg.id,
           role: msg.role,
-          content: content || '', 
+          content: content || '',
           timestamp: msg.timestamp,
           status: msg.status,
           ...(msg.variations && { variations: msg.variations }),
           ...(typeof msg.currentVariation === 'number' && { currentVariation: msg.currentVariation }),
         };
       });
-  }, []); 
+  }, []);
   const generateReasoning = useCallback(async (userInput: string, baseContextMessages: Message[]): Promise<string | null> => {
     if (!state.reasoningSettings.enabled || !effectiveCharacterData?.data) {
-      return null; 
+      return null;
     }
-    
-    const currentChatSessionUuidForReasoning = await ensureChatSession(); 
-    if (!currentChatSessionUuidForReasoning && !isGenericAssistant) { 
-        console.warn("generateReasoning: Could not ensure chat session for reasoning for a non-generic assistant.");
-        toast.error("Reasoning failed: Chat session not available.");
-        return null;
-    }    const reasoningApiConfig = prepareAPIConfig(globalApiConfig); 
-    const reasoningMessage = createThinkingMessage();
-    setState(prev => ({ ...prev, isGenerating: true, generatingId: reasoningMessage.id })); 
 
-    const currentAbortController = streamProcessor.createAbortController(); 
+    const currentChatSessionUuidForReasoning = await ensureChatSession();
+    if (!currentChatSessionUuidForReasoning && !isGenericAssistant) {
+      console.warn("generateReasoning: Could not ensure chat session for reasoning for a non-generic assistant.");
+      toast.error("Reasoning failed: Chat session not available.");
+      return null;
+    } const reasoningApiConfig = prepareAPIConfig(globalApiConfig);
+    const reasoningMessage = createThinkingMessage();
+    setState(prev => ({ ...prev, isGenerating: true, generatingId: reasoningMessage.id }));
+
+    const currentAbortController = streamProcessor.createAbortController();
     const { signal } = currentAbortController;
 
-    try {      const reasoningPromptString = PromptHandler.formatPromptWithContextMessages(
-        effectiveCharacterData, 
-        `${state.reasoningSettings.instructions}\nUser asks: ${userInput}`, 
+    try {
+      const reasoningPromptString = PromptHandler.formatPromptWithContextMessages(
+        effectiveCharacterData,
+        `${state.reasoningSettings.instructions}\nUser asks: ${userInput}`,
         baseContextMessages.filter(msg => msg.role !== 'thinking') as Message[], // Pass Message[]
         currentUser?.name || 'User',
-        reasoningApiConfig.templateId 
+        reasoningApiConfig.templateId
       );
-      
+
       if (!reasoningPromptString) {
         console.warn("Reasoning prompt construction failed or returned empty.");
         setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
         return null;
       }
-      
+
       setState(prev => ({ ...prev, lastContextWindow: { ...prev.lastContextWindow, type: 'reasoning_start', prompt: reasoningPromptString, timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data.name, messageId: reasoningMessage.id } }));
       resetStreamTimeout();
-      
+
       // PromptHandler.generateChatResponse expects PromptContextMessage[], so filter and cast
-      const reasoningContextForApi = [{role: 'user', content: reasoningPromptString}].filter(
+      const reasoningContextForApi = [{ role: 'user', content: reasoningPromptString }].filter(
         (msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'
       );
 
@@ -491,16 +492,16 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         throw new Error("Chat session UUID is missing, cannot generate reasoning.");
       }
       const response = await PromptHandler.generateChatResponse(
-          currentChatSessionUuidForReasoning,
-          reasoningContextForApi,
-          reasoningApiConfig,
-          signal,
-          effectiveCharacterData
+        currentChatSessionUuidForReasoning,
+        reasoningContextForApi,
+        reasoningApiConfig,
+        signal,
+        effectiveCharacterData
       );
 
       let finalReasoning: string | null = null;
       await processStream(
-        response, reasoningMessage.id, true, 
+        response, reasoningMessage.id, true,
         (finalContent, receivedChunks) => {
           finalReasoning = finalContent;
           setState(prev => ({
@@ -511,47 +512,47 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         },
         (error) => {
           handleGenerationError(error, reasoningMessage.id, 'reasoning');
-          finalReasoning = null; 
+          finalReasoning = null;
         }
       );
-      return finalReasoning; 
+      return finalReasoning;
     } catch (err) {
-      handleGenerationError(err, reasoningMessage.id, 'reasoning'); 
-      return null; 
+      handleGenerationError(err, reasoningMessage.id, 'reasoning');
+      return null;
     } finally {
-        setState(prev => {
-            if (prev.generatingId === reasoningMessage.id) { 
-                return { ...prev, messages: prev.messages.filter(msg => msg.id !== reasoningMessage.id), isGenerating: false, generatingId: null };
-            }
-            return { ...prev, messages: prev.messages.filter(msg => msg.id !== reasoningMessage.id) }; 
-        });
+      setState(prev => {
+        if (prev.generatingId === reasoningMessage.id) {
+          return { ...prev, messages: prev.messages.filter(msg => msg.id !== reasoningMessage.id), isGenerating: false, generatingId: null };
+        }
+        return { ...prev, messages: prev.messages.filter(msg => msg.id !== reasoningMessage.id) };
+      });
     }
   }, [effectiveCharacterData, state.reasoningSettings, currentUser, state.messages, globalApiConfig, handleGenerationError, prepareAPIConfig, processStream, resetStreamTimeout, ensureChatSession, isGenericAssistant]);
 
-  const generateResponse = useCallback(async (userInput: string) => { 
+  const generateResponse = useCallback(async (userInput: string) => {
     if (state.isGenerating) {
       console.warn("Generation already in progress.");
       return;
     }
     if (!globalApiConfig || !globalApiConfig.enabled) {
-        handleGenerationError(new Error("No active API configuration is enabled."), null, 'setup');
-        return;
+      handleGenerationError(new Error("No active API configuration is enabled."), null, 'setup');
+      return;
     }
-    clearError(); 
+    clearError();
 
-    const preparedApiConfig = prepareAPIConfig(globalApiConfig); 
+    const preparedApiConfig = prepareAPIConfig(globalApiConfig);
     const userMessage = createUserMessage(userInput);
-    const assistantMessage = createAssistantMessage(); 
+    const assistantMessage = createAssistantMessage();
 
     const currentChatSessionUuid = await ensureChatSession();
     if (!currentChatSessionUuid) {
-      return; 
-    }    setGeneratingStart(userMessage, assistantMessage);
-    if (!isGenericAssistant && autoSaveEnabled.current) { 
-        appendMessageDirect(currentChatSessionUuid, userMessage); 
+      return;
+    } setGeneratingStart(userMessage, assistantMessage);
+    if (!isGenericAssistant && autoSaveEnabled.current) {
+      appendMessageDirect(currentChatSessionUuid, userMessage);
     }
 
-    const currentAbortController = streamProcessor.createAbortController(); 
+    const currentAbortController = streamProcessor.createAbortController();
     const { signal } = currentAbortController;
 
     try {
@@ -563,19 +564,19 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       ];
       let reasoningText: string | null = null;
       if (state.reasoningSettings.enabled) {
-        reasoningText = await generateReasoning(userInput, contextMessagesForReasoning.slice(0, -1)); 
-        if (signal.aborted) { 
-          handleGenerationError(new DOMException('Aborted by user', 'AbortError'), assistantMessage.id, 'reasoning'); 
+        reasoningText = await generateReasoning(userInput, contextMessagesForReasoning.slice(0, -1));
+        if (signal.aborted) {
+          handleGenerationError(new DOMException('Aborted by user', 'AbortError'), assistantMessage.id, 'reasoning');
           return;
         }
         if (reasoningText === null && state.error && !isGenericAssistant) {
-             console.log("Reasoning failed or was aborted, stopping main generation.");
-             setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
-             return;
+          console.log("Reasoning failed or was aborted, stopping main generation.");
+          setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
+          return;
         }
-         setState(prev => ({ ...prev, isGenerating: true, generatingId: assistantMessage.id }));
+        setState(prev => ({ ...prev, isGenerating: true, generatingId: assistantMessage.id }));
       }
-      
+
       // Build context using shared utility - handles async state bug and reasoning placement
       const apiContextMessages = buildContextMessages({
         existingMessages: getContextMessages(state, assistantMessage.id),
@@ -587,19 +588,19 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       const contextWindow = {
         type: 'generation_start', timestamp: new Date().toISOString(),
         characterName: effectiveCharacterData.data?.name || 'Unknown',
-        messageId: assistantMessage.id, 
-        promptUsed: `Context: ${apiContextMessages.map(m=>m.content).join('\n')}`, 
+        messageId: assistantMessage.id,
+        promptUsed: `Context: ${apiContextMessages.map(m => m.content).join('\n')}`,
         contextMessageCount: apiContextMessages.length, config: preparedApiConfig,
         reasoningUsed: reasoningText
       };
       setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
-      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));      console.log(`[generateResponse] About to call PromptHandler.generateChatResponse with:`, {
+      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow)); console.log(`[generateResponse] About to call PromptHandler.generateChatResponse with:`, {
         currentChatSessionUuid,
         apiContextMessagesLength: apiContextMessages.length,
         preparedApiConfig: preparedApiConfig?.provider,
         effectiveCharacterName: effectiveCharacterData?.data?.name
       });
-      
+
       // Log state immediately before calling processStream for the main response
       console.log(`[generateResponse] PRE-STREAM state check for assistantMessage.id: ${assistantMessage.id}. isGenerating: ${state.isGenerating}, generatingId: ${state.generatingId}`);
 
@@ -610,7 +611,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         signal,
         effectiveCharacterData
       );
-      
+
       // Log state immediately before calling processStream for the main response
       console.log(`[generateResponse] PRE-STREAM state check for assistantMessage.id: ${assistantMessage.id}. isGenerating: ${state.isGenerating}, generatingId: ${state.generatingId}`);
 
@@ -637,11 +638,11 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       return;
     }
     if (!globalApiConfig || !globalApiConfig.enabled) {
-       handleGenerationError(new Error("No active API configuration is enabled for regeneration."), messageToRegenerate.id, 'regeneration_setup');
-       return;
+      handleGenerationError(new Error("No active API configuration is enabled for regeneration."), messageToRegenerate.id, 'regeneration_setup');
+      return;
     }
     clearError();
-    const preparedApiConfig = prepareAPIConfig(globalApiConfig); 
+    const preparedApiConfig = prepareAPIConfig(globalApiConfig);
 
     const messageIndex = state.messages.findIndex((msg: Message) => msg.id === messageToRegenerate.id);
     if (messageIndex === -1 || messageIndex === 0) {
@@ -657,37 +658,37 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
 
     const currentChatSessionUuid = await ensureChatSession();
     if (!currentChatSessionUuid) {
-      setState(prev => ({...prev, isGenerating: false, generatingId: null})); 
+      setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
       return;
     }
-      setState(prev => ({
+    setState(prev => ({
       ...prev,
-      messages: prev.messages.map(msg => msg.id === messageToRegenerate.id ? { ...msg, status: 'streaming' as Message['status'], content: '' } : msg), 
+      messages: prev.messages.map(msg => msg.id === messageToRegenerate.id ? { ...msg, status: 'streaming' as Message['status'], content: '' } : msg),
       isGenerating: true, generatingId: messageToRegenerate.id, error: null
     }));
 
-    const currentAbortController = streamProcessor.createAbortController(); 
+    const currentAbortController = streamProcessor.createAbortController();
     const { signal } = currentAbortController;
 
     try {
       // Pass Message[] to generateReasoning
-      const contextForReasoning = getContextMessages(state, messageToRegenerate.id).slice(0, messageIndex -1);
-      
-      let reasoningText: string | null = null; 
+      const contextForReasoning = getContextMessages(state, messageToRegenerate.id).slice(0, messageIndex - 1);
+
+      let reasoningText: string | null = null;
       if (state.reasoningSettings.enabled) {
-        reasoningText = await generateReasoning(precedingUserMessage.content, contextForReasoning); 
-        if (signal.aborted) { 
+        reasoningText = await generateReasoning(precedingUserMessage.content, contextForReasoning);
+        if (signal.aborted) {
           handleGenerationError(new DOMException('Aborted by user', 'AbortError'), messageToRegenerate.id, 'reasoning_regen');
           return;
         }
-        if (reasoningText === null && state.error && !isGenericAssistant) { 
-             console.log("Reasoning failed or was aborted, stopping regeneration.");
-             setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
-             return;
+        if (reasoningText === null && state.error && !isGenericAssistant) {
+          console.log("Reasoning failed or was aborted, stopping regeneration.");
+          setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
+          return;
         }
-        setState(prev => ({ ...prev, generatingId: messageToRegenerate.id })); 
+        setState(prev => ({ ...prev, generatingId: messageToRegenerate.id }));
       }
-      
+
       // Build context using shared utility - for regeneration, we slice to messageIndex
       // which includes history up to and including the preceding user message
       const contextMessagesForAPI = buildContextMessages({
@@ -695,78 +696,79 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         excludeMessageId: messageToRegenerate.id,
         reasoning: reasoningText
       });
-      
+
       const contextWindow = {
-          type: 'regeneration_start', timestamp: new Date().toISOString(),
-          characterName: effectiveCharacterData.data?.name || 'Unknown',
-          messageId: messageToRegenerate.id, 
-          promptUsed: `Context for regen: ${contextMessagesForAPI.map(m=>m.content).join('\n')}`,
-          contextMessageCount: contextMessagesForAPI.length, config: preparedApiConfig,
-          reasoningUsed: reasoningText 
+        type: 'regeneration_start', timestamp: new Date().toISOString(),
+        characterName: effectiveCharacterData.data?.name || 'Unknown',
+        messageId: messageToRegenerate.id,
+        promptUsed: `Context for regen: ${contextMessagesForAPI.map(m => m.content).join('\n')}`,
+        contextMessageCount: contextMessagesForAPI.length, config: preparedApiConfig,
+        reasoningUsed: reasoningText
       };
       setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
       localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
 
       const response = await PromptHandler.generateChatResponse(
-          currentChatSessionUuid,
-          contextMessagesForAPI, 
-          preparedApiConfig, 
-          signal, 
-          effectiveCharacterData
+        currentChatSessionUuid,
+        contextMessagesForAPI,
+        preparedApiConfig,
+        signal,
+        effectiveCharacterData
       );
 
       await processStream(
-        response, messageToRegenerate.id, false, 
+        response, messageToRegenerate.id, false,
         (finalContent, receivedChunks) => {
           const originalContent = messageToRegenerate.variations ? messageToRegenerate.variations[0] : messageToRegenerate.content;
           setGenerationComplete(messageToRegenerate.id, finalContent, 'regeneration_complete', receivedChunks, originalContent);
-          
+
           if (effectiveCharacterData?.data?.character_uuid && finalContent) {
             apiService.extractLoreTriggers(effectiveCharacterData, finalContent)
               .then((res: { success: boolean; matched_entries: LoreEntry[] }) => {
                 if (res && res.success && res.matched_entries && res.matched_entries.length > 0) {
-                  if (effectiveCharacterData.data.character_uuid) { 
-                     trackLoreImages(res.matched_entries, effectiveCharacterData.data.character_uuid);
+                  if (effectiveCharacterData.data.character_uuid) {
+                    trackLoreImages(res.matched_entries, effectiveCharacterData.data.character_uuid);
                   }
                 }
               })
               .catch((err: Error) => {
                 console.error("Error extracting lore triggers after regeneration:", err);
               });
-          }           if (!isGenericAssistant) {
-             setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages);
-                const finalMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
-                if (finalMsg) appendMessage(currentChatSessionUuid, finalMsg);
-                return prev;
-             });
-           }
+          } if (!isGenericAssistant) {
+            setState(prev => {
+              saveChat(currentChatSessionUuid, prev.messages);
+              const finalMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
+              if (finalMsg) appendMessage(currentChatSessionUuid, finalMsg);
+              return prev;
+            });
+          }
         },
         (error) => {
-          handleGenerationError(error, messageToRegenerate.id, 'regeneration');           if (!isGenericAssistant) {
-             setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages);
-                const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
-                if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
-                return prev;
-             });
-           }
+          handleGenerationError(error, messageToRegenerate.id, 'regeneration'); if (!isGenericAssistant) {
+            setState(prev => {
+              saveChat(currentChatSessionUuid, prev.messages);
+              const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
+              if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
+              return prev;
+            });
+          }
         }
       );
     } catch (err) {
       if (signal.aborted && err instanceof DOMException && err.name === 'AbortError') {
         console.log('Regeneration aborted by user (caught in outer try-catch).');
-        handleGenerationError(err, messageToRegenerate.id, 'regeneration_setup_aborted');      } else {
+        handleGenerationError(err, messageToRegenerate.id, 'regeneration_setup_aborted');
+      } else {
         handleGenerationError(err, messageToRegenerate.id, 'regeneration_setup_error');
       }
-       if (!isGenericAssistant) {
-             setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages);
-                const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
-                if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
-                return prev;
-             });
-        }
+      if (!isGenericAssistant) {
+        setState(prev => {
+          saveChat(currentChatSessionUuid, prev.messages);
+          const errorMsg = prev.messages.find(m => m.id === messageToRegenerate.id);
+          if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
+          return prev;
+        });
+      }
     }
   }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, clearError, appendMessage, appendMessageDirect, resetStreamTimeout, stopGeneration, isGenericAssistant, processStream, ensureChatSession, trackLoreImages]);
 
@@ -776,38 +778,38 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       return;
     }
     if (!globalApiConfig || !globalApiConfig.enabled) {
-       handleGenerationError(new Error("No active API configuration is enabled for variation."), messageToVary.id, 'variation_setup');
-       return;
+      handleGenerationError(new Error("No active API configuration is enabled for variation."), messageToVary.id, 'variation_setup');
+      return;
     }
     clearError();
     const preparedApiConfig = prepareAPIConfig(globalApiConfig);
 
     const messageIndex = state.messages.findIndex((msg: Message) => msg.id === messageToVary.id);
-     if (messageIndex === -1 || messageIndex === 0 || messageToVary.role !== 'assistant') {
-       console.error("Cannot generate variation: Message not found, is first message, or not an assistant message.");
-       return;
-     }
-
-    const precedingUserMessage = state.messages[messageIndex - 1];
-     if (precedingUserMessage.role !== 'user') {
-       console.error("Cannot generate variation: Preceding message is not from the user.");
-       return;
-     }
-
-    const currentChatSessionUuid = await ensureChatSession();
-    if (!currentChatSessionUuid) {
-      setState(prev => ({...prev, isGenerating: false, generatingId: null}));
+    if (messageIndex === -1 || messageIndex === 0 || messageToVary.role !== 'assistant') {
+      console.error("Cannot generate variation: Message not found, is first message, or not an assistant message.");
       return;
     }
 
-    const originalContent = messageToVary.variations && messageToVary.variations.length > 0 
-      ? messageToVary.variations[0] 
+    const precedingUserMessage = state.messages[messageIndex - 1];
+    if (precedingUserMessage.role !== 'user') {
+      console.error("Cannot generate variation: Preceding message is not from the user.");
+      return;
+    }
+
+    const currentChatSessionUuid = await ensureChatSession();
+    if (!currentChatSessionUuid) {
+      setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
+      return;
+    }
+
+    const originalContent = messageToVary.variations && messageToVary.variations.length > 0
+      ? messageToVary.variations[0]
       : messageToVary.content;
 
-    const variationProcessId = generateUUID(); 
+    const variationProcessId = generateUUID();
     setState(prev => ({
-      ...prev,      isGenerating: true, 
-      generatingId: variationProcessId, 
+      ...prev, isGenerating: true,
+      generatingId: variationProcessId,
       error: null
     }));
 
@@ -816,9 +818,9 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
 
     try {
       // Pass Message[] to generateReasoning
-      const contextForReasoning = getContextMessages(state, messageToVary.id).slice(0, messageIndex -1);
-      
-      let reasoningText: string | null = null; 
+      const contextForReasoning = getContextMessages(state, messageToVary.id).slice(0, messageIndex - 1);
+
+      let reasoningText: string | null = null;
       if (state.reasoningSettings.enabled) {
         reasoningText = await generateReasoning(precedingUserMessage.content, contextForReasoning);
         if (signal.aborted) {
@@ -831,7 +833,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
           return;
         }
       }
-      
+
       // Build context using shared utility - for variation, we slice to messageIndex
       // which includes history up to and including the preceding user message
       const contextMessagesForAPI = buildContextMessages({
@@ -841,37 +843,37 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       });
 
       const contextWindow = {
-           type: 'variation_start', timestamp: new Date().toISOString(),
-           characterName: effectiveCharacterData.data?.name || 'Unknown',
-           messageId: messageToVary.id, 
-           promptUsed: `Context for variation: ${contextMessagesForAPI.map(m=>m.content).join('\n')}`,
-           contextMessageCount: contextMessagesForAPI.length, config: preparedApiConfig,
-           reasoningUsed: reasoningText
-       };
-       setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
-       localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
+        type: 'variation_start', timestamp: new Date().toISOString(),
+        characterName: effectiveCharacterData.data?.name || 'Unknown',
+        messageId: messageToVary.id,
+        promptUsed: `Context for variation: ${contextMessagesForAPI.map(m => m.content).join('\n')}`,
+        contextMessageCount: contextMessagesForAPI.length, config: preparedApiConfig,
+        reasoningUsed: reasoningText
+      };
+      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
 
       const response = await PromptHandler.generateChatResponse(
-          currentChatSessionUuid,
-          contextMessagesForAPI,
-          preparedApiConfig,
-          signal,
-          effectiveCharacterData
+        currentChatSessionUuid,
+        contextMessagesForAPI,
+        preparedApiConfig,
+        signal,
+        effectiveCharacterData
       );
 
       await processStream(
-        response, 
-        variationProcessId, 
-        false, 
+        response,
+        variationProcessId,
+        false,
         (finalContent, receivedChunks) => {
           setGenerationComplete(messageToVary.id, finalContent, 'variation_complete', receivedChunks, originalContent);
-          
+
           if (effectiveCharacterData?.data?.character_uuid && finalContent) {
             apiService.extractLoreTriggers(effectiveCharacterData, finalContent)
               .then((resp: { success: boolean; matched_entries: LoreEntry[] }) => {
                 if (resp && resp.success && resp.matched_entries && resp.matched_entries.length > 0) {
-                  if (effectiveCharacterData.data.character_uuid) { 
-                     trackLoreImages(resp.matched_entries, effectiveCharacterData.data.character_uuid);
+                  if (effectiveCharacterData.data.character_uuid) {
+                    trackLoreImages(resp.matched_entries, effectiveCharacterData.data.character_uuid);
                   }
                 }
               })
@@ -879,19 +881,19 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
                 console.error("Error extracting lore triggers after variation:", err);
               });
           }
-           if (!isGenericAssistant) {
-             setState(prev => {
-                const updatedMessage = prev.messages.find(m => m.id === messageToVary.id);
-                if (updatedMessage) {
-                    saveChat(currentChatSessionUuid, prev.messages);
-                    appendMessage(currentChatSessionUuid, updatedMessage);
-                }
-                return prev;
-             });
-           }
+          if (!isGenericAssistant) {
+            setState(prev => {
+              const updatedMessage = prev.messages.find(m => m.id === messageToVary.id);
+              if (updatedMessage) {
+                saveChat(currentChatSessionUuid, prev.messages);
+                appendMessage(currentChatSessionUuid, updatedMessage);
+              }
+              return prev;
+            });
+          }
         },
-        (error) => { 
-           handleGenerationError(error, variationProcessId, 'variation'); 
+        (error) => {
+          handleGenerationError(error, variationProcessId, 'variation');
         }
       );
     } catch (err) {
@@ -901,19 +903,19 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       } else {
         handleGenerationError(err, variationProcessId, 'variation_setup_error');
       }
-       if (!isGenericAssistant) {
-             setState(prev => {
-                saveChat(currentChatSessionUuid, prev.messages);
-                const errorMsg = prev.messages.find(m => m.id === messageToVary.id); 
-                if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
-                return prev;
-             });
-        }
+      if (!isGenericAssistant) {
+        setState(prev => {
+          saveChat(currentChatSessionUuid, prev.messages);
+          const errorMsg = prev.messages.find(m => m.id === messageToVary.id);
+          if (errorMsg) appendMessage(currentChatSessionUuid, errorMsg);
+          return prev;
+        });
+      }
     }
   }, [state, globalApiConfig, effectiveCharacterData, saveChat, handleGenerationError, prepareAPIConfig, getContextMessages, clearError, appendMessage, stopGeneration, generateReasoning, isGenericAssistant, processStream, ensureChatSession, trackLoreImages]);
   const cycleVariation = (messageId: string, direction: 'next' | 'prev') => {
     setState(prev => {
-      let chatSessionUuidToSave = chatSessionUuid; 
+      let chatSessionUuidToSave = chatSessionUuid;
 
       const updatedMessages = prev.messages.map(msg => {
         if (msg.id === messageId && msg.variations && msg.variations.length > 0) {
@@ -934,7 +936,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       if (!isGenericAssistant && autoSaveEnabled.current && chatSessionUuidToSave) {
         const changedMessage = updatedMessages.find(m => m.id === messageId);
         if (changedMessage) {
-          ChatStorage.appendMessage(chatSessionUuidToSave, changedMessage) 
+          ChatStorage.appendMessage(chatSessionUuidToSave, changedMessage)
             .then(() => {
               saveChat(chatSessionUuidToSave, updatedMessages);
             })
@@ -946,8 +948,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
   };
 
   const generateNpcIntroduction = useCallback(async (
-    npcCharacterData: CharacterCard, 
-    worldInfo?: { worldName: string; settingDescription: string }, 
+    npcCharacterData: CharacterCard,
+    worldInfo?: { worldName: string; settingDescription: string },
     encounterContext?: string
   ) => {
     if (!npcCharacterData?.data) {
@@ -960,42 +962,42 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     }
     clearError();
 
-    const currentChatSessionUuidForNpc = await ensureChatSession(); 
+    const currentChatSessionUuidForNpc = await ensureChatSession();
     if (!currentChatSessionUuidForNpc && !isGenericAssistant) {
-        toast.error("Cannot generate NPC intro without an active chat session for a non-generic character.");
-        return null;
+      toast.error("Cannot generate NPC intro without an active chat session for a non-generic character.");
+      return null;
     }
-    
-    const introAssistantMessage = createAssistantMessage(`Generating introduction for ${npcCharacterData.data.name}...`, 'streaming');    setState(prev => ({
+
+    const introAssistantMessage = createAssistantMessage(`Generating introduction for ${npcCharacterData.data.name}...`, 'streaming'); setState(prev => ({
       ...prev,
-      messages: [...prev.messages, introAssistantMessage], 
+      messages: [...prev.messages, introAssistantMessage],
       isGenerating: true,
       generatingId: introAssistantMessage.id,
       error: null,
     }));
-    
+
     const currentAbortController = streamProcessor.createAbortController();
     const { signal } = currentAbortController;
 
     try {
       const apiConfigToUse = prepareAPIConfig(globalApiConfig);
-      
+
       const introPromptString = PromptHandler.formatPromptWithContextMessages(
         npcCharacterData,
-        (encounterContext || `Introduce ${npcCharacterData.data.name}.`) + (worldInfo ? `\nWorld: ${worldInfo.worldName}\nSetting: ${worldInfo.settingDescription}` : ""), 
-        [], 
-        currentUser?.name || 'User', 
+        (encounterContext || `Introduce ${npcCharacterData.data.name}.`) + (worldInfo ? `\nWorld: ${worldInfo.worldName}\nSetting: ${worldInfo.settingDescription}` : ""),
+        [],
+        currentUser?.name || 'User',
         apiConfigToUse.templateId
       );
 
       if (!introPromptString) {
         throw new Error("Failed to construct NPC introduction prompt.");
       }
-      
+
       setState(prev => ({ ...prev, lastContextWindow: { type: 'npc_introduction_start', prompt: introPromptString, timestamp: new Date().toISOString(), characterName: npcCharacterData.data.name, messageId: introAssistantMessage.id } }));
       resetStreamTimeout();
-      
-      const introContextForApi = [{role: 'user', content: introPromptString}].filter(
+
+      const introContextForApi = [{ role: 'user', content: introPromptString }].filter(
         (msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'
       );
 
@@ -1015,12 +1017,12 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       await processStream(
         response,
         introAssistantMessage.id,
-        false, 
+        false,
         (finalContent, _receivedChunks) => {
           finalIntro = finalContent;
           setState(prev => ({
             ...prev,
-            messages: prev.messages.map(m => m.id === introAssistantMessage.id ? {...m, content: finalContent, status: 'complete'} : m)
+            messages: prev.messages.map(m => m.id === introAssistantMessage.id ? { ...m, content: finalContent, status: 'complete' } : m)
           }));
         },
         (error) => {
@@ -1032,28 +1034,30 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
 
     } catch (err) {
       handleGenerationError(err, introAssistantMessage.id, 'npc_introduction_setup');
-      return null;    } finally {
+      return null;
+    } finally {
       setState(prev => {
         const newMessages = prev.messages.filter(m => m.id !== introAssistantMessage.id);
         if (prev.generatingId === introAssistantMessage.id) {
           return { ...prev, messages: newMessages, isGenerating: false, generatingId: null };
         }
-        return { ...prev, messages: newMessages }; 
+        return { ...prev, messages: newMessages };
       });
       streamProcessor.clearStreamTimeout();
-    }  }, [state.isGenerating, currentUser, globalApiConfig, clearError, prepareAPIConfig, processStream, setGenerationComplete, handleGenerationError, resetStreamTimeout, streamProcessor, ensureChatSession, isGenericAssistant]);
+    }
+  }, [state.isGenerating, currentUser, globalApiConfig, clearError, prepareAPIConfig, processStream, setGenerationComplete, handleGenerationError, resetStreamTimeout, streamProcessor, ensureChatSession, isGenericAssistant]);
 
   const updateReasoningSettings = useCallback((settings: ReasoningSettings) => {
     setState(prevState => {
       // Merge settings with current settings, but ensure reasoning remains disabled and not visible
       const mergedSettings = { ...prevState.reasoningSettings, ...settings, enabled: false, visible: false };
-      
+
       try {
         localStorage.setItem(REASONING_SETTINGS_KEY, JSON.stringify(mergedSettings));
       } catch (error) {
         console.error('Failed to save reasoning settings to localStorage:', error);
       }
-      
+
       return {
         ...prevState,
         reasoningSettings: mergedSettings
@@ -1080,17 +1084,18 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       } catch (error) {
         console.error('Failed to update stored reasoning settings to disabled state:', error);
       }
-    }  }, []);
-  
+    }
+  }, []);
+
   // Phase 2: Enhanced deleteMessage using message state hook
   const deleteMessage = (messageId: string) => {
     // Use the new message state hook for this operation
     messageStateHook.deleteMessage(messageId);
-    
+
     // Mark as dirty for auto-save
     markDirty(messageStateHook.messages);
   };
-  
+
   // Phase 2: Enhanced updateMessage using message state hook
   const updateMessage = (messageId: string, newContent: string, isStreamingUpdate: boolean = false) => {
     if (isStreamingUpdate) {
@@ -1105,107 +1110,108 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         variations: [sanitizedNewContent],
         currentVariation: 0
       });
-      
+
       // Mark as dirty for auto-save
       markDirty(messageStateHook.messages);
     }
   };
 
 
-   useEffect(() => { 
+  useEffect(() => {
     const currentCharacterId = effectiveCharacterData?.data?.character_uuid || ChatStorage.getCharacterId(effectiveCharacterData);
-    
+
     if ((isGenericAssistant && hasInitializedChat.current) || (lastCharacterId.current === currentCharacterId && hasInitializedChat.current)) {
       return;
     }
-    
+
     lastCharacterId.current = currentCharacterId;
-    hasInitializedChat.current = false; 
-    isInitialLoad.current = false; 
+    hasInitializedChat.current = false;
+    isInitialLoad.current = false;
 
     const loadChatForCharacter = async () => {
       if (isGenericAssistant) {
         setState(prev => ({ ...prev, messages: [], chatSessionUuid: null, isLoading: false, error: null }));
-        hasInitializedChat.current = true; 
+        hasInitializedChat.current = true;
         return;
       }
 
       if (!effectiveCharacterData?.data?.character_uuid) {
         console.warn("[ChatLoad useEffect] No character_uuid available. Showing greeting or empty.");
         if (effectiveCharacterData?.data?.first_mes) {
-            const firstMsg = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
-            if (effectiveCharacterData.data.alternate_greetings && Array.isArray(effectiveCharacterData.data.alternate_greetings) && effectiveCharacterData.data.alternate_greetings.length > 0) {
-                 firstMsg.variations = [firstMsg.content, ...effectiveCharacterData.data.alternate_greetings];
-                 firstMsg.currentVariation = 0;
-            }
-            setState(prev => ({
-                ...prev,
-                messages: [firstMsg],
-                chatSessionUuid: null, 
-                isLoading: false,
-                error: "Character has no UUID, showing greeting only."
-            }));
+          const firstMsg = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
+          if (effectiveCharacterData.data.alternate_greetings && Array.isArray(effectiveCharacterData.data.alternate_greetings) && effectiveCharacterData.data.alternate_greetings.length > 0) {
+            firstMsg.variations = [firstMsg.content, ...effectiveCharacterData.data.alternate_greetings];
+            firstMsg.currentVariation = 0;
+          }
+          setState(prev => ({
+            ...prev,
+            messages: [firstMsg],
+            chatSessionUuid: null,
+            isLoading: false,
+            error: "Character has no UUID, showing greeting only."
+          }));
         } else {
-            setState(prev => ({ ...prev, messages: [], chatSessionUuid: null, isLoading: false, error: "Character data incomplete."}));
+          setState(prev => ({ ...prev, messages: [], chatSessionUuid: null, isLoading: false, error: "Character data incomplete." }));
         }
         hasInitializedChat.current = true;
         return;
       }
-      
+
       setState(prev => ({ ...prev, isLoading: true, error: null }));
       try {
-        const result = await ChatStorage.loadLatestChat(effectiveCharacterData);        if (result && result.success) {
-          if (result.data === null || !result.chat_session_uuid) { 
-            await createNewSession(); 
+        const result = await ChatStorage.loadLatestChat(effectiveCharacterData); if (result && result.success) {
+          if (result.data === null || !result.chat_session_uuid) {
+            await createNewSession();
           } else {
             const messagesWithStatus = (result.messages || []).map((msg: any): Message => ({
-                id: msg.id || generateUUID(),
-                role: msg.role,
-                content: msg.content || "",
-                timestamp: msg.timestamp || Date.now(),
-                status: msg.status || 'complete',
-                variations: msg.variations || (msg.content ? [msg.content] : []),
-                currentVariation: msg.currentVariation !== undefined ? msg.currentVariation : (msg.variations && msg.variations.length > 0 ? msg.variations.length -1 : 0)
+              id: msg.id || generateUUID(),
+              role: msg.role,
+              content: msg.content || "",
+              timestamp: msg.timestamp || Date.now(),
+              status: msg.status || 'complete',
+              variations: msg.variations || (msg.content ? [msg.content] : []),
+              currentVariation: msg.currentVariation !== undefined ? msg.currentVariation : (msg.variations && msg.variations.length > 0 ? msg.variations.length - 1 : 0)
             }));
             setState(prev => ({
               ...prev,
               messages: messagesWithStatus,
-              chatSessionUuid: result.chat_session_uuid, 
+              chatSessionUuid: result.chat_session_uuid,
               isLoading: false,
               error: null,
             }));
             toast.info(`Loaded latest chat for ${effectiveCharacterData.data.name}`);
             hasInitializedChat.current = true;
           }
-        } else if (result && result.isRecoverable && result.first_mes_available) {            console.warn(`[ChatLoad useEffect] loadLatestChat failed but is recoverable. Error: ${result.error}. Attempting new chat.`);
-            toast.info(`No prior chat history found for ${effectiveCharacterData.data.name}. Starting a new chat.`);
-            await createNewSession();
+        } else if (result && result.isRecoverable && result.first_mes_available) {
+          console.warn(`[ChatLoad useEffect] loadLatestChat failed but is recoverable. Error: ${result.error}. Attempting new chat.`);
+          toast.info(`No prior chat history found for ${effectiveCharacterData.data.name}. Starting a new chat.`);
+          await createNewSession();
         } else {
           console.error("[ChatLoad useEffect] Error loading latest chat:", result?.error || "Unknown error");
           toast.error(`Error loading chat: ${result?.error || 'Could not load chat history.'}`);
           let fallbackMessages: Message[] = [];
           if (effectiveCharacterData.data.first_mes) {
-              const firstMsg = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
-              if (effectiveCharacterData.data.alternate_greetings && Array.isArray(effectiveCharacterData.data.alternate_greetings) && effectiveCharacterData.data.alternate_greetings.length > 0) {
-                 firstMsg.variations = [firstMsg.content, ...effectiveCharacterData.data.alternate_greetings];
-                 firstMsg.currentVariation = 0;
-              }
-              fallbackMessages.push(firstMsg);
+            const firstMsg = createAssistantMessage(effectiveCharacterData.data.first_mes, 'complete');
+            if (effectiveCharacterData.data.alternate_greetings && Array.isArray(effectiveCharacterData.data.alternate_greetings) && effectiveCharacterData.data.alternate_greetings.length > 0) {
+              firstMsg.variations = [firstMsg.content, ...effectiveCharacterData.data.alternate_greetings];
+              firstMsg.currentVariation = 0;
+            }
+            fallbackMessages.push(firstMsg);
           }
-          setState(prev => ({ 
-              ...prev, 
-              messages: fallbackMessages, 
-              chatSessionUuid: null, 
-              isLoading: false, 
-              error: result?.error || "Failed to load chat history." 
+          setState(prev => ({
+            ...prev,
+            messages: fallbackMessages,
+            chatSessionUuid: null,
+            isLoading: false,
+            error: result?.error || "Failed to load chat history."
           }));
-          hasInitializedChat.current = true; 
+          hasInitializedChat.current = true;
         }
       } catch (err) {
         console.error("[ChatLoad useEffect] Exception loading latest chat:", err);
         toast.error(`Exception loading chat: ${err instanceof Error ? err.message : String(err)}`);
         setState(prev => ({ ...prev, isLoading: false, error: err instanceof Error ? err.message : String(err) }));
-        hasInitializedChat.current = true; 
+        hasInitializedChat.current = true;
       }
     };
 
@@ -1214,21 +1220,21 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     } else if (isGenericAssistant) {
       setState(prev => ({ ...prev, messages: [], chatSessionUuid: null, isLoading: false, error: null }));
       hasInitializedChat.current = true;
-    }     return () => {
+    } return () => {
       if (streamProcessor.isStreamActive()) {
         streamProcessor.abortCurrentStream();
-        setState(prev => ({...prev, isGenerating: false, generatingId: null}));
+        setState(prev => ({ ...prev, isGenerating: false, generatingId: null }));
       }
     };
-   }, [effectiveCharacterData, isGenericAssistant]); 
+  }, [effectiveCharacterData, isGenericAssistant]);
 
 
-   useEffect(() => {
+  useEffect(() => {
     autoSaveEnabled.current = !isGenericAssistant;
   }, [isGenericAssistant]);
 
 
-   useEffect(() => {
+  useEffect(() => {
     if (state.lastContextWindow) {
       try {
         localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(state.lastContextWindow));
@@ -1238,30 +1244,30 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     }
   }, [state.lastContextWindow]);
 
-   useEffect(() => { 
-     const handleForceStop = () => {
-       if (state.isGenerating) {
-         console.log("Force stop event received, stopping generation.");
-         stopGeneration();
-         if (state.generatingId) {
-             setState(prev => ({
-                 ...prev,
-                 messages: prev.messages.map(msg => msg.id === state.generatingId ? {...msg, status: 'aborted', content: msg.content + " [Cancelled]"} : msg),
-                 isGenerating: false,
-                 generatingId: null,
-                 error: "Generation stopped by user."
-             }));
-         } else {
-            setState(prev => ({...prev, isGenerating: false, generatingId: null, error: "Generation stopped by user."}));
-         }
-       }
-     };
- 
-     window.addEventListener('force-stop-generation', handleForceStop);
-     return () => {
-       window.removeEventListener('force-stop-generation', handleForceStop);
-     };
-   }, [state.isGenerating, state.generatingId, stopGeneration]);   return {
+  useEffect(() => {
+    const handleForceStop = () => {
+      if (state.isGenerating) {
+        console.log("Force stop event received, stopping generation.");
+        stopGeneration();
+        if (state.generatingId) {
+          setState(prev => ({
+            ...prev,
+            messages: prev.messages.map(msg => msg.id === state.generatingId ? { ...msg, status: 'aborted', content: msg.content + " [Cancelled]" } : msg),
+            isGenerating: false,
+            generatingId: null,
+            error: "Generation stopped by user."
+          }));
+        } else {
+          setState(prev => ({ ...prev, isGenerating: false, generatingId: null, error: "Generation stopped by user." }));
+        }
+      }
+    };
+
+    window.addEventListener('force-stop-generation', handleForceStop);
+    return () => {
+      window.removeEventListener('force-stop-generation', handleForceStop);
+    };
+  }, [state.isGenerating, state.generatingId, stopGeneration]); return {
     ...state,
     // Phase 2: Use message state hook for messages while keeping other state
     messages: messageStateHook.messages,

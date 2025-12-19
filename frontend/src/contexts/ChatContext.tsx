@@ -162,23 +162,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       console.debug(`Executing save for chat ID ${chatToSaveId} with ${messageList.length} messages`);
-      const messagesToSave = JSON.parse(JSON.stringify(messageList));
-
-
-
-
-
 
       // Save chat using database-centric API
       const response = await fetch('/api/reliable-save-chat', {
         method: 'POST',
-        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           chat_session_uuid: chatToSaveId,
-          messages: messagesToSave,
+          messages: messageList,
           title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
         })
       });
@@ -493,7 +486,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await fetch('/api/reliable-save-chat', {
           method: 'POST',
-          keepalive: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_session_uuid: newCId,

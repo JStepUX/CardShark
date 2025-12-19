@@ -29,11 +29,11 @@ export class ChatStorage {
 
       // For this endpoint, we expect a direct JSON response rather than a stream
       const data = await response.json();
-      
+
       if (!data.success || !data.greeting) {
         throw new Error(data.message || "Failed to generate greeting");
       }
-      
+
       return {
         success: true,
         greeting: data.greeting
@@ -46,7 +46,7 @@ export class ChatStorage {
       };
     }
   }
-  
+
   /**
    * Generates a greeting for a character using the configured API (STREAMING VERSION)
    * @param characterData The character data to generate a greeting for
@@ -55,8 +55,8 @@ export class ChatStorage {
    * @returns A promise that resolves to the generated greeting
    */
   static async generateGreetingStream(
-    characterData: any, 
-    apiConfig: any, 
+    characterData: any,
+    apiConfig: any,
     onChunk?: (chunk: string) => void
   ): Promise<{ success: boolean; greeting?: string; message?: string }> {
     try {
@@ -92,7 +92,7 @@ export class ChatStorage {
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
         const lines = buffer.split('\n');
-        
+
         // Keep the last potentially incomplete line in the buffer
         buffer = lines.pop() || '';
 
@@ -101,18 +101,18 @@ export class ChatStorage {
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6);
             if (dataStr === '[DONE]') continue;
-            
+
             try {
               const data = JSON.parse(dataStr);
-              
+
               if (data.error) {
-                 throw new Error(data.error.message || "Streaming error");
+                throw new Error(data.error.message || "Streaming error");
               }
-              
+
               if (data.content) {
                 fullGreeting += data.content;
                 if (onChunk) {
-                    onChunk(data.content);
+                  onChunk(data.content);
                 }
               }
             } catch (e) {
@@ -150,14 +150,14 @@ export class ChatStorage {
     if ((character as any).character_id && typeof (character as any).character_id === 'string' && (character as any).character_id.trim() !== '') {
       return (character as any).character_id;
     }
-    
+
     // 3. Fallback to constructing an ID from the character name
     if (character.data?.name && typeof character.data.name === 'string' && character.data.name.trim() !== '') {
       // Use 8 characters of a hash as a simple unique identifier
       const hash = this.simpleHash(character.data.name);
       return `${character.data.name}-${hash}`;
     }
-    
+
     // 4. Final fallback if no usable identifier can be found
     console.warn('Could not determine a valid character ID for:', character);
     return 'unknown-character';
@@ -186,11 +186,11 @@ export class ChatStorage {
 
     try {
       console.log('Listing chats for character:', character.data?.name);
-      
+
       // Extract character ID
       const characterId = this.getCharacterId(character);
       console.log('Using character ID:', characterId);
-      
+
       // Added scanAllFiles parameter to ensure we scan for all JSONL files 
       // regardless of naming convention
       const response = await fetch(`/api/reliable-list-chats/${characterId}`, {
@@ -227,11 +227,11 @@ export class ChatStorage {
 
     try {
       console.log(`Loading chat${chatId ? ` with ID: ${chatId}` : ' (using active chat)'} for character: ${character.data?.name}`);
-      
+
       // Extract character ID
       const characterId = this.getCharacterId(character);
       console.log('Using character ID:', characterId);
-      
+
       const response = await fetch('/api/reliable-load-chat', {
         method: 'POST',
         headers: {
@@ -269,7 +269,7 @@ export class ChatStorage {
 
     try {
       console.log('Creating new chat for character:', character.data?.name);
-      
+
       // Extract character ID
       const characterUuid = character.data?.character_uuid;
       if (!characterUuid) {
@@ -277,7 +277,7 @@ export class ChatStorage {
         return { success: false, error: 'Missing character_uuid' };
       }
       console.log('Using character_uuid:', characterUuid);
-      
+
       const payload: { character_uuid: string; user_uuid?: string; title?: string } = {
         character_uuid: characterUuid
       };
@@ -288,7 +288,6 @@ export class ChatStorage {
 
       const response = await fetch('/api/reliable-create-chat', {
         method: 'POST',
-        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -303,7 +302,7 @@ export class ChatStorage {
 
       const data = await response.json();
       console.log('New chat created:', data);
-      
+
       // The API returns the chat session data wrapped in a DataResponse structure
       if (data.data && data.data.chat_session_uuid) {
         // Extract the needed fields from data.data, excluding any conflicting fields like 'success'
@@ -358,7 +357,7 @@ export class ChatStorage {
 
     try {
       console.log(`Saving chat for session ID: ${chatSessionUuid} with ${messages.length} messages.`);
-      
+
       const payload: {
         chat_session_uuid: string;
         messages: Message[];
@@ -379,7 +378,6 @@ export class ChatStorage {
 
       const response = await fetch('/api/reliable-save-chat', {
         method: 'POST',
-        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -411,14 +409,14 @@ export class ChatStorage {
 
     try {
       console.log('Loading latest chat for character:', character.data?.name);
-      
+
       const characterUuid = character.data?.character_uuid;
       if (!characterUuid) {
         console.error('Cannot load latest chat: Missing character_uuid in character.data');
         return { success: false, error: 'Missing character_uuid', isRecoverable: true, first_mes_available: character?.data?.first_mes ? true : false };
       }
       console.log('Using character_uuid for load-latest-chat:', characterUuid);
-      
+
       const response = await fetch('/api/reliable-load-chat', {
         method: 'POST',
         headers: {
@@ -431,7 +429,7 @@ export class ChatStorage {
 
       // More detailed logging for debugging response issues
       console.log(`Latest chat response status: ${response.status}`);
-      
+
       if (response.status === 404) {
         console.log('Received 404 from /api/reliable-load-chat, treating as "no chats found"');
         return {
@@ -468,8 +466,8 @@ export class ChatStorage {
         data = await response.json();
       } catch (jsonError) {
         console.error('Error parsing JSON response:', jsonError);
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: `Failed to parse response: ${jsonError instanceof Error ? jsonError.message : 'Invalid JSON'}`,
           isRecoverable: true, // Likely recoverable by creating a new chat
           // Add first_mes status information to improve error handling
@@ -492,7 +490,7 @@ export class ChatStorage {
           first_mes_available: character?.data?.first_mes ? true : false
         };
       }
-      
+
       // Handle empty success responses from Featherless
       // This check should now be safe as 'data' is confirmed not to be null.
       if (data.success === true && (!data.messages || (Array.isArray(data.messages) && data.messages.length === 0))) {
@@ -505,11 +503,11 @@ export class ChatStorage {
           first_mes_available: character?.data?.first_mes ? true : false
         };
       }
-      
+
       // Log message details for debugging
       if (data.success && data.messages) {
         console.log(`Successfully loaded chat with ${data.messages.length} messages`);
-        
+
         // Log a summary of the messages
         if (data.messages.length > 0) {
           console.debug('First message:', {
@@ -517,7 +515,7 @@ export class ChatStorage {
             content: data.messages[0].content?.substring(0, 50) + '...',
             id: data.messages[0].id
           });
-          
+
           if (data.messages.length > 1) {
             console.debug('Last message:', {
               role: data.messages[data.messages.length - 1].role,
@@ -531,7 +529,7 @@ export class ChatStorage {
       } else {
         console.warn('Chat loading response format:', data);
       }
-      
+
       // Check if we have a chat_session_uuid and handle response appropriately
       if (data.data && data.data.chat_session_uuid) {
         // If we have messages from the updated endpoint, return success
@@ -539,10 +537,10 @@ export class ChatStorage {
           return { success: true, ...data.data };
         } else {
           // If we only have session metadata (no messages), treat as success but empty
-          return { 
-            success: true, 
-            ...data.data, 
-            messages: [] 
+          return {
+            success: true,
+            ...data.data,
+            messages: []
           };
         }
       } else {
@@ -558,8 +556,8 @@ export class ChatStorage {
       return data; // Return full data which might include error messages
     } catch (error) {
       console.error('Error loading latest chat:', error);
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: `Error: ${error instanceof Error ? error.message : String(error)}`,
         isRecoverable: true // Most network/parsing errors should be recoverable
       };
@@ -581,15 +579,14 @@ export class ChatStorage {
 
     try {
       console.log(`Appending message to chat session ID: ${chatSessionUuid}`);
-      
+
       const payload = {
         chat_session_uuid: chatSessionUuid,
         message: message
       };
-      
+
       const response = await fetch('/api/reliable-append-message', {
         method: 'POST',
-        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -626,10 +623,9 @@ export class ChatStorage {
 
     try {
       console.log('Deleting chat with ID:', chatId, 'for character:', character.data?.name);
-      
+
       const response = await fetch(`/api/reliable-delete-chat/${chatId}`, {
         method: 'DELETE',
-        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
         }
@@ -743,7 +739,7 @@ export class ChatStorage {
 
     try {
       console.log(`Validating chat ${chatId} for character:`, character.data?.name);
-      
+
       const response = await fetch('/api/validate-chat', {
         method: 'POST',
         headers: {
@@ -766,8 +762,8 @@ export class ChatStorage {
       return data;
     } catch (error) {
       console.error('Error validating chat:', error);
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: `Error: ${error}`,
         issues: [`Exception occurred: ${error}`]
       };
@@ -793,7 +789,7 @@ export class ChatStorage {
 
     try {
       console.log(`Repairing chat ${chatId} for character:`, character.data?.name);
-      
+
       const response = await fetch('/api/repair-chat', {
         method: 'POST',
         headers: {
@@ -838,7 +834,7 @@ export class ChatStorage {
 
     try {
       console.log(`Listing backups for chat ${chatId}, character:`, character.data?.name);
-      
+
       // TODO: Backup endpoints not implemented in backend yet
       // const response = await fetch('/api/list-chat-backups', {
       //   method: 'POST',
@@ -850,7 +846,7 @@ export class ChatStorage {
       //     chat_id: chatId
       //   }),
       // });
-      
+
       // Return empty backups list for now
       return { success: true, backups: [] };
     } catch (error) {
@@ -878,7 +874,7 @@ export class ChatStorage {
 
     try {
       console.log(`Creating backup for chat ${chatId}, character:`, character.data?.name);
-      
+
       // TODO: Backup endpoints not implemented in backend yet
       // const response = await fetch('/api/create-chat-backup', {
       //   method: 'POST',
@@ -890,7 +886,7 @@ export class ChatStorage {
       //     chat_id: chatId
       //   }),
       // });
-      
+
       // Return success for now (no-op)
       return { success: true, message: 'Backup feature not yet implemented' };
     } catch (error) {
@@ -919,7 +915,7 @@ export class ChatStorage {
 
     try {
       console.log(`Restoring chat ${chatId} from backup${backupPath ? ': ' + backupPath : ''}`);
-      
+
       // TODO: Backup endpoints not implemented in backend yet
       // const response = await fetch('/api/restore-chat-backup', {
       //   method: 'POST',
@@ -932,7 +928,7 @@ export class ChatStorage {
       //     backup_path: backupPath
       //   }),
       // });
-      
+
       // Return error for now since restore is not implemented
       return { success: false, error: 'Backup restore feature not yet implemented' };
     } catch (error) {
