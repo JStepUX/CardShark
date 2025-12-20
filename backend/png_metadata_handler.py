@@ -221,6 +221,25 @@ class PngMetadataHandler:
                         self.logger.log_error(f"Error processing raw exif data from image.info: {str(e)}")
 
 
+                # No metadata found in primary AI locations, check standard EXIF for tags/desc
+                if exif:
+                    standard_metadata = {}
+                    for tag_id, value in exif.items():
+                        tag_name = ExifTags.TAGS.get(tag_id)
+                        if tag_name == 'XPKeywords': # Windows tags
+                            try:
+                                if isinstance(value, bytes):
+                                    tags_str = value.decode('utf-16le').strip('\x00')
+                                    standard_metadata["tags"] = [t.strip() for t in tags_str.split(';') if t.strip()]
+                            except: pass
+                        elif tag_name == 'ImageDescription':
+                            standard_metadata["description"] = str(value)
+                    
+                    if standard_metadata:
+                        self.logger.log_info(f"Found standard EXIF metadata: {standard_metadata.keys()}")
+                        # Wrap in a 'data' section to satisfy sync services expecting ST structure
+                        return {"data": standard_metadata, "is_standard_exif": True}
+
                 # No metadata found in any location
                 self.logger.log_error("No character metadata found in EXIF, image.info['chara'], image.info['ccv3'], or raw exif data.")
                 return {}

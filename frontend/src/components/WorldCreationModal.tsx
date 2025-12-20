@@ -4,12 +4,8 @@ import { Dialog } from './common/Dialog';
 import Button from './common/Button';
 import CharacterGallery from './character/CharacterGallery';
 import { worldStateApi } from '../utils/worldStateApi';
+import { CharacterFile } from '../types/schema';
 
-interface CharacterFile {
-  name: string;
-  path: string;
-  is_incomplete?: boolean;
-}
 
 interface WorldCreationModalProps {
   isOpen: boolean;

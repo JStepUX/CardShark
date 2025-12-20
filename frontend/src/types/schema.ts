@@ -116,6 +116,19 @@ export interface CharacterCard {
     create_date: string;
 }
 
+// Interface for character file data in the gallery (from /api/characters)
+export interface CharacterFile {
+    name: string;
+    path: string; // Absolute path from backend
+    size: number;
+    modified: string | number;
+    character_uuid?: string;
+    description?: string;
+    is_incomplete?: boolean;
+    extensions?: Record<string, any>;
+    tags?: string[];
+}
+
 // Helper Functions
 export function createEmptyLoreEntry(index: number): LoreEntryInterface {
     return {

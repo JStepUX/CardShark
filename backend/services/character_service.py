@@ -560,6 +560,60 @@ class CharacterService:
         with self._get_session_context() as db:
             return db.query(CharacterModel).count()
 
+    def _normalize_character_data(self, character_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalizes character data from a dictionary, handling both flat updates 
+        and SillyTavern V2/V1 metadata structures.
+        """
+        # If it's a V2 card, the real data is in a 'data' sub-object
+        data_section = character_data.get("data", character_data)
+        
+        normalized = {}
+        
+        # Mapping from frontend/spec keys to DB column names
+        field_mapping = {
+            "name": "name",
+            "description": "description",
+            "personality": "personality",
+            "scenario": "scenario",
+            "first_mes": "first_mes",
+            "mes_example": "mes_example",
+            "creator_notes": "creator_notes",
+            "system_prompt": "system_prompt",
+            "post_history_instructions": "post_history_instructions",
+            "creator": "creator",
+            "character_version": "character_version",
+            "character_uuid": "character_uuid"
+        }
+
+        for spec_key, db_key in field_mapping.items():
+            if spec_key in data_section:
+                normalized[db_key] = data_section[spec_key]
+        
+        # Handle creator_comment separately as it might be at top level or in data
+        normalized["creator_comment"] = character_data.get("creatorcomment") or data_section.get("creator_comment")
+
+        # Handle JSON fields
+        json_field_mapping = {
+            "tags": "tags",
+            "extensions": "extensions_json",
+            "extensions_json": "extensions_json", # Handle if already mapped
+            "alternate_greetings": "alternate_greetings_json",
+            "alternate_greetings_json": "alternate_greetings_json", # Handle if already mapped
+            "combat_stats": "combat_stats_json",
+            "combat_stats_json": "combat_stats_json" # Handle if already mapped
+        }
+
+        for spec_key, db_key in json_field_mapping.items():
+            if spec_key in data_section:
+                normalized[db_key] = _as_json_str(data_section[spec_key])
+
+        # Specials
+        if "spec_version" in character_data:
+            normalized["spec_version"] = character_data["spec_version"]
+            
+        return normalized
+
     def update_character(self, character_uuid: str, character_data: Dict[str, Any], write_to_png: bool = True) -> Optional[CharacterModel]:
         """Updates a character in the DB and optionally writes back to PNG."""
         with self._get_session_context() as db:
@@ -567,37 +621,27 @@ class CharacterService:
             if not db_char:
                 return None
 
-            # Map frontend keys to DB keys if present
-            key_mapping = {
-                "extensions": "extensions_json",
-                "alternate_greetings": "alternate_greetings_json",
-                "combat_stats": "combat_stats_json"
-            }
+            # Normalize data structure (handle V2/V1/flat)
+            normalized_data = self._normalize_character_data(character_data)
             
-            for frontend_key, db_key in key_mapping.items():
-                if frontend_key in character_data:
-                    character_data[db_key] = character_data.pop(frontend_key)
-
             # Update DB fields
-            json_fields = ["tags", "extensions_json", "alternate_greetings_json", "combat_stats_json"]
-            for key, value in character_data.items():
+            for key, value in normalized_data.items():
                 if hasattr(db_char, key):
-                    # Special handling for JSON fields
-                    if key in json_fields:
-                        default = [] if key in ["tags", "alternate_greetings_json"] else {}
-                        setattr(db_char, key, _as_json_str(value if value is not None else default))
-                    else:
-                        setattr(db_char, key, value)
+                    setattr(db_char, key, value)
+            
             db_char.updated_at = datetime.datetime.utcnow()
             db_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
             
             # Clear is_incomplete flag when character is saved with valid metadata
-            # Character is considered complete when it has at least a name and description
             if db_char.name and (db_char.description or db_char.first_mes):
                 db_char.is_incomplete = False
 
-            # Sync lore if provided in character_data
-            if "character_book" in character_data and isinstance(character_data["character_book"], dict):
+            # Sync lore if provided (usually nested in 'data')
+            data_section = character_data.get("data", character_data)
+            if "character_book" in data_section and isinstance(data_section["character_book"], dict):
+                self._sync_character_lore(character_uuid, data_section["character_book"], db)
+            elif "character_book" in character_data and isinstance(character_data["character_book"], dict):
+                # Check top level too just in case
                 self._sync_character_lore(character_uuid, character_data["character_book"], db)
 
             if write_to_png:

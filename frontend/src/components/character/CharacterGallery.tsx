@@ -8,7 +8,9 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info } from 'lucide-react';
+import { CharacterFile } from '../../types/schema';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder } from 'lucide-react';
+import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
@@ -20,17 +22,6 @@ const apiRequestCache = {
   pendingRequests: new Map<string, Promise<any>>()
 };
 
-// Interface for character file data received from the backend
-interface CharacterFile {
-  name: string;
-  path: string; // This should be the full, absolute path from the backend
-  size: number;
-  modified: string | number;
-  character_uuid?: string;
-  description?: string;
-  is_incomplete?: boolean; // True if character has no valid metadata (needs editing)
-  extensions?: Record<string, any>; // Extension data including card_type
-}
 
 // Props for the CharacterGallery component
 interface CharacterGalleryProps {
@@ -119,6 +110,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
   // Filter state for World/Character cards
   const [filterType, setFilterType] = useState<'all' | 'character' | 'world'>('all');
+
+  // View mode state (Grid vs Folders)
+  const [viewMode, setViewMode] = useState<'grid' | 'folder'>('grid');
 
   // State for character deletion using DeleteConfirmationDialog
   const [characterToDelete, setCharacterToDelete] = useState<CharacterFile | null>(null);
@@ -313,7 +307,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               character_uuid: char.character_uuid,
               description: char.description,
               is_incomplete: char.is_incomplete || false,
-              extensions: char.extensions_json || {}
+              extensions: char.extensions_json || {},
+              tags: char.tags || []
             }));
 
             // OPTIMIZATION 2: Update persistent cache
@@ -384,7 +379,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             character_uuid: c.character_uuid,
             description: c.description,
             is_incomplete: c.is_incomplete || false,
-            extensions: c.extensions_json || {}
+            extensions: c.extensions_json || {},
+            tags: c.tags || []
           }));
 
           setCharacterCache({
@@ -698,6 +694,93 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     setDeleteError(null);
   };
 
+  // Function to render a single character card
+  const renderCharacterCard = (character: CharacterFile) => {
+    const isDeleting = deletingPath === character.path;
+    const isWorld = character.extensions?.card_type === 'world';
+
+    return (
+      <div
+        key={`${character.path}-${character.character_uuid || ''}`}
+        className={`
+          relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-[3/5]
+          transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
+          ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
+          ${character.is_incomplete ? 'ring-2 ring-amber-500/70' : ''}
+          hover:shadow-xl 
+        `}
+        onClick={() => handleCharacterClick(character)}
+        role="button"
+        tabIndex={0}
+        aria-label={`Select ${isWorld ? 'world' : 'character'} ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
+      >
+        {/* Incomplete Character Indicator */}
+        {character.is_incomplete && (
+          <div
+            className="absolute top-2 left-2 z-10 p-1.5 bg-amber-500/90 text-white rounded-full shadow-lg"
+            title="New character - needs basic info setup"
+          >
+            <AlertTriangle size={16} />
+          </div>
+        )}
+
+        {/* World Badge */}
+        {isWorld && (
+          <div
+            className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-emerald-600/80 text-white rounded-full shadow-lg backdrop-blur-sm border border-emerald-500/30`}
+            title="World Card"
+          >
+            <MapIcon size={16} />
+          </div>
+        )}
+
+        {/* Delete Button - Only show if not in comparison selection mode */}
+        {!isSecondarySelector && (
+          <button
+            onClick={(e) => handleTrashIconClick(e, character)}
+            className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full 
+                       opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600
+                       focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
+            aria-label={`Delete ${character.name}`}
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+
+        {/* Info Button - Always show */}
+        <button
+          onClick={(e) => handleInfoIconClick(e, character)}
+          className={`absolute top-2 ${!isSecondarySelector ? 'right-10' : 'right-2'} z-10 p-1.5 bg-black/50 text-white rounded-full 
+                     opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600
+                     focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-stone-800`}
+          aria-label={`Info for ${character.name}`}
+          title={character.extensions?.card_type === 'world' ? "World Splash Screen" : "Basic Info & Greetings"}
+        >
+          <Info size={16} />
+        </button>
+
+        {/* Character Image Container */}
+        <div className="w-full h-full bg-stone-950">
+          <img
+            src={getCharacterImage(character)}
+            alt={character.name}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            loading="lazy"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = '/pngPlaceholder.png';
+            }}
+          />
+        </div>
+
+        {/* Character Name Overlay */}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium truncate rounded-b-lg">
+          {character.name}
+        </div>
+      </div>
+    );
+  };
+
   // JSX Rendering
   return (
     <div className="h-full flex flex-col bg-stone-900 text-white">
@@ -719,48 +802,70 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               )}
             </div>
 
-            {/* Sort Dropdown */}
-            <div className="relative" ref={sortDropdownRef}>
-              <button
-                onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-slate-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                aria-label="Sort characters"
-              >
-                <ArrowUpDown size={16} className="text-slate-400" />
-                <span>{sortLabel}</span>
-                <ChevronDown size={14} className="text-slate-500" />
-              </button>
+            <div className="flex items-center gap-2">
+              {/* View Toggle */}
+              <div className="flex bg-stone-800 border border-slate-600 rounded-lg p-1 mr-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                  title="Grid View"
+                  aria-label="Grid View"
+                >
+                  <LayoutGrid size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode('folder')}
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'folder' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                  title="Folder View"
+                  aria-label="Folder View"
+                >
+                  <Folder size={16} />
+                </button>
+              </div>
 
-              {isSortDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
-                  <div className="py-1">
-                    <button
-                      onClick={() => { setSortOption('name_asc'); setIsSortDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_asc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                    >
-                      <span className="w-5 mr-2 text-center">A</span> Name (A-Z)
-                    </button>
-                    <button
-                      onClick={() => { setSortOption('name_desc'); setIsSortDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_desc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                    >
-                      <span className="w-5 mr-2 text-center">Z</span> Name (Z-A)
-                    </button>
-                    <button
-                      onClick={() => { setSortOption('date_newest'); setIsSortDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_newest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                    >
-                      <Calendar size={14} className="mr-2" /> Newest First
-                    </button>
-                    <button
-                      onClick={() => { setSortOption('date_oldest'); setIsSortDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_oldest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
-                    >
-                      <Calendar size={14} className="mr-2" /> Oldest First
-                    </button>
+              {/* Sort Dropdown */}
+              <div className="relative" ref={sortDropdownRef}>
+                <button
+                  onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                  className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-slate-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Sort characters"
+                >
+                  <ArrowUpDown size={16} className="text-slate-400" />
+                  <span>{sortLabel}</span>
+                  <ChevronDown size={14} className="text-slate-500" />
+                </button>
+
+                {isSortDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                    <div className="py-1">
+                      <button
+                        onClick={() => { setSortOption('name_asc'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_asc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      >
+                        <span className="w-5 mr-2 text-center">A</span> Name (A-Z)
+                      </button>
+                      <button
+                        onClick={() => { setSortOption('name_desc'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'name_desc' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      >
+                        <span className="w-5 mr-2 text-center">Z</span> Name (Z-A)
+                      </button>
+                      <button
+                        onClick={() => { setSortOption('date_newest'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_newest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      >
+                        <Calendar size={14} className="mr-2" /> Newest First
+                      </button>
+                      <button
+                        onClick={() => { setSortOption('date_oldest'); setIsSortDropdownOpen(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === 'date_oldest' ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}
+                      >
+                        <Calendar size={14} className="mr-2" /> Oldest First
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
@@ -859,98 +964,22 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           </div>
         )}
 
-        {/* Character Grid using GalleryGrid - Only render when we have items or user is searching */}
+        {/* Character View - Grid or Folder */}
         {(sortedAndFilteredCharacters.length > 0 || (searchTerm && !isLoading)) && (
-          <GalleryGrid
-            items={sortedAndFilteredCharacters.slice(0, displayedCount)}
-            emptyMessage="No matching characters found."
-            renderItem={(character) => {
-              const isDeleting = deletingPath === character.path;
-              const isWorld = character.extensions?.card_type === 'world';
-
-              return (
-                <div
-                  key={character.path}
-                  className={`
-                    relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-[3/5]
-                    transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
-                    ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
-                    ${character.is_incomplete ? 'ring-2 ring-amber-500/70' : ''}
-                    hover:shadow-xl 
-                  `}
-                  onClick={() => handleCharacterClick(character)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Select ${isWorld ? 'world' : 'character'} ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
-                >
-                  {/* Incomplete Character Indicator */}
-                  {character.is_incomplete && (
-                    <div
-                      className="absolute top-2 left-2 z-10 p-1.5 bg-amber-500/90 text-white rounded-full shadow-lg"
-                      title="New character - needs basic info setup"
-                    >
-                      <AlertTriangle size={16} />
-                    </div>
-                  )}
-
-                  {/* World Badge */}
-                  {isWorld && (
-                    <div
-                      className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-emerald-600/80 text-white rounded-full shadow-lg backdrop-blur-sm border border-emerald-500/30`}
-                      title="World Card"
-                    >
-                      <MapIcon size={16} />
-                    </div>
-                  )}
-
-                  {/* Delete Button - Only show if not in comparison selection mode */}
-                  {!isSecondarySelector && (
-                    <button
-                      onClick={(e) => handleTrashIconClick(e, character)}
-                      className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full 
-                                 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600
-                                 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
-                      aria-label={`Delete ${character.name}`}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-
-                  {/* Info Button - Always show */}
-                  <button
-                    onClick={(e) => handleInfoIconClick(e, character)}
-                    className={`absolute top-2 ${!isSecondarySelector ? 'right-10' : 'right-2'} z-10 p-1.5 bg-black/50 text-white rounded-full 
-                               opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600
-                               focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-stone-800`}
-                    aria-label={`Info for ${character.name}`}
-                    title={character.extensions?.card_type === 'world' ? "World Splash Screen" : "Basic Info & Greetings"}
-                  >
-                    <Info size={16} />
-                  </button>
-
-                  {/* Character Image Container */}
-                  <div className="w-full h-full bg-stone-950">
-                    <img
-                      src={getCharacterImage(character)}
-                      alt={character.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      loading="lazy"
-                      onError={(e) => {
-                        // Fallback or error handling
-                        const target = e.target as HTMLImageElement;
-                        target.src = '/pngPlaceholder.png'; // Add a designated placeholder if needed
-                      }}
-                    />
-                  </div>
-
-                  {/* Character Name Overlay */}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium truncate rounded-b-lg">
-                    {character.name}
-                  </div>
-                </div>
-              );
-            }}
-          />
+          viewMode === 'folder' ? (
+            <CharacterFolderView
+              characters={sortedAndFilteredCharacters.slice(0, displayedCount)}
+              emptyMessage="No matching characters found."
+              renderCharacterCard={renderCharacterCard}
+              isSearching={!!searchTerm}
+            />
+          ) : (
+            <GalleryGrid
+              items={sortedAndFilteredCharacters.slice(0, displayedCount)}
+              emptyMessage="No matching characters found."
+              renderItem={renderCharacterCard}
+            />
+          )
         )}
 
         {/* Load more trigger for intersection observer */}

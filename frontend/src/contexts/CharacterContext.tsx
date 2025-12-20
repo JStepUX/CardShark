@@ -5,19 +5,9 @@
  * @consumers App wide
  */
 import React, { createContext, useContext, useState } from 'react';
-import { CharacterCard } from '../types/schema';
+import { CharacterCard, CharacterFile } from '../types/schema';
 import { generateUUID } from '../utils/uuidUtils';
 
-// Add character file interface for gallery
-interface CharacterFile {
-  name: string;
-  path: string;
-  size: number;
-  modified: number;
-  is_incomplete?: boolean; // True if character has no valid metadata (needs editing)
-  character_uuid?: string;
-  description?: string;
-}
 
 // Add character gallery cache interface
 interface CharacterGalleryCache {
@@ -39,7 +29,7 @@ interface CharacterContextType {
   createNewCharacter: (name: string) => void;
   isNewlyCreated: boolean;
   setIsNewlyCreated: React.Dispatch<React.SetStateAction<boolean>>;
-  
+
   // New gallery cache properties
   characterCache: CharacterGalleryCache | null;
   setCharacterCache: React.Dispatch<React.SetStateAction<CharacterGalleryCache | null>>;

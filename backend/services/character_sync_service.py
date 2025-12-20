@@ -135,22 +135,38 @@ class CharacterSyncService:
             self.logger.log_warning(f"Could not read metadata from {file_path}")
             return
 
-        # Create new Character record
-        # Note: PngMetadataHandler returns a dict compatible with our model mostly
-        # We need to map fields correctly.
+        # Extract data from metadata, handling both V1 and V2 SillyTavern formats
+        # V2 has a nested 'data' object, V1 has properties at the top level
+        data_section = metadata.get("data", metadata)
         
-        # Extract fields (simplified mapping)
+        # Helper to convert a value to a JSON string if it's not already a string.
+        def as_json_str(value):
+            import json
+            if value is None:
+                return None
+            return value if isinstance(value, str) else json.dumps(value)
+
+        # Create new Character record
         char_data = {
-            "character_uuid": metadata.get("uuid") or str(uuid.uuid4()), # Ensure UUID
-            "name": metadata.get("name", "Unknown"),
-            "description": metadata.get("description"),
-            "personality": metadata.get("personality"),
-            "scenario": metadata.get("scenario"),
-            "first_mes": metadata.get("first_mes"),
-            "mes_example": metadata.get("mes_example"),
-            "creator_comment": metadata.get("creator_comment"),
+            "character_uuid": data_section.get("character_uuid") or str(uuid.uuid4()),
+            "name": data_section.get("name", file_path.stem),
+            "description": data_section.get("description"),
+            "personality": data_section.get("personality"),
+            "scenario": data_section.get("scenario"),
+            "first_mes": data_section.get("first_mes"),
+            "mes_example": data_section.get("mes_example"),
+            "creator_comment": metadata.get("creatorcomment") or data_section.get("creator_comment"),
             "png_file_path": relative_path,
-            "spec_version": metadata.get("spec_version"),
+            "tags": as_json_str(data_section.get("tags", [])),
+            "spec_version": metadata.get("spec_version", "2.0"),
+            "extensions_json": as_json_str(data_section.get("extensions", {})),
+            "alternate_greetings_json": as_json_str(data_section.get("alternate_greetings", [])),
+            "creator_notes": data_section.get("creator_notes"),
+            "system_prompt": data_section.get("system_prompt"),
+            "post_history_instructions": data_section.get("post_history_instructions"),
+            "creator": data_section.get("creator"),
+            "character_version": data_section.get("character_version"),
+            "combat_stats_json": as_json_str(data_section.get("combat_stats")),
             "file_last_modified": mtime
         }
 
@@ -174,15 +190,32 @@ class CharacterSyncService:
         if not metadata:
             return
 
+        data_section = metadata.get("data", metadata)
+        
+        def as_json_str(value):
+            import json
+            if value is None:
+                return None
+            return value if isinstance(value, str) else json.dumps(value)
+
         # Update fields
-        db_char.name = metadata.get("name", db_char.name)
-        db_char.description = metadata.get("description")
-        db_char.personality = metadata.get("personality")
-        db_char.scenario = metadata.get("scenario")
-        db_char.first_mes = metadata.get("first_mes")
-        db_char.mes_example = metadata.get("mes_example")
-        db_char.creator_comment = metadata.get("creator_comment")
-        db_char.spec_version = metadata.get("spec_version")
+        db_char.name = data_section.get("name", db_char.name)
+        db_char.description = data_section.get("description")
+        db_char.personality = data_section.get("personality")
+        db_char.scenario = data_section.get("scenario")
+        db_char.first_mes = data_section.get("first_mes")
+        db_char.mes_example = data_section.get("mes_example")
+        db_char.creator_comment = metadata.get("creatorcomment") or data_section.get("creator_comment")
+        db_char.tags = as_json_str(data_section.get("tags", []))
+        db_char.spec_version = metadata.get("spec_version", db_char.spec_version)
+        db_char.extensions_json = as_json_str(data_section.get("extensions", {}))
+        db_char.alternate_greetings_json = as_json_str(data_section.get("alternate_greetings", []))
+        db_char.creator_notes = data_section.get("creator_notes")
+        db_char.system_prompt = data_section.get("system_prompt")
+        db_char.post_history_instructions = data_section.get("post_history_instructions")
+        db_char.creator = data_section.get("creator")
+        db_char.character_version = data_section.get("character_version")
+        db_char.combat_stats_json = as_json_str(data_section.get("combat_stats"))
         db_char.file_last_modified = mtime
         
         db.commit()
