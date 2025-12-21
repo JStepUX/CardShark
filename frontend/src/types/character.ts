@@ -1,5 +1,5 @@
 // frontend/src/types/character.ts
-import { WorldData } from './worldV2';
+import { WorldData } from './world';
 
 /**
  * Defines the combat statistics for an NPC.

@@ -1,5 +1,4 @@
-// frontend/src/utils/worldStateApi.ts
-import { FullWorldState } from '../types/worldState';
+import { WorldData } from '../types/world';
 
 /**
  * API client for interacting with the World Card system
@@ -11,14 +10,13 @@ export const worldStateApi = {
   listWorlds: async (): Promise<any[]> => {
     try {
       const response = await fetch('/api/world-cards');
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to list worlds: ${
-          errorData.detail || errorData.message || response.statusText
-        }`);
+        throw new Error(`Failed to list worlds: ${errorData.detail || errorData.message || response.statusText
+          }`);
       }
-      
+
       const data = await response.json();
       return data.data || [];
     } catch (error) {
@@ -36,7 +34,7 @@ export const worldStateApi = {
       if (characterPath) {
         payload.character_path = characterPath;
       }
-      
+
       const response = await fetch('/api/world-cards/create', {
         method: 'POST',
         headers: {
@@ -44,14 +42,13 @@ export const worldStateApi = {
         },
         body: JSON.stringify(payload),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to create world: ${
-          errorData.detail || errorData.message || response.statusText
-        }`);
+        throw new Error(`Failed to create world: ${errorData.detail || errorData.message || response.statusText
+          }`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('Error in createWorld:', error);
@@ -66,16 +63,15 @@ export const worldStateApi = {
     try {
       // Send request to backed API
       const response = await fetch(`/api/world-cards/${encodeURIComponent(worldId)}/state`);
-      
+
       if (!response.ok) {
         // Handle API error
         const errorData = await response.json().catch(() => ({}));
         console.error(`Error loading world state: ${response.status} - ${JSON.stringify(errorData)}`);
-        throw new Error(`Failed to load world: ${
-          errorData.detail || errorData.message || response.statusText
-        }`);
+        throw new Error(`Failed to load world: ${errorData.detail || errorData.message || response.statusText
+          }`);
       }
-      
+
       const data = await response.json();
       if (data && data.success && data.data) {
         console.log(`Successfully loaded world state with ${Object.keys(data.data.locations || {}).length} locations`);
@@ -102,14 +98,14 @@ export const worldStateApi = {
         },
         body: JSON.stringify({ state }),
       });
-      
+
       if (!response.ok) {
         // Handle API error
         const errorData = await response.json().catch(() => ({}));
         console.error(`Error saving world state: ${response.status} - ${JSON.stringify(errorData)}`);
         return false;
       }
-      
+
       const data = await response.json();
       return data && data.success === true;
     } catch (error) {
@@ -119,101 +115,23 @@ export const worldStateApi = {
   },
 
   /**
-   * Move the player in a specific direction
-   */
-  // movePlayer: async (worldName: string, direction: string): Promise<FullWorldState> => {
-  //   // TODO: Refactor to use full world state save (POST /api/world-cards/{world_name}/state)
-  //   // This would involve:
-  //   // 1. Fetching current world state
-  //   // 2. Calculating new player position based on direction
-  //   // 3. Updating the player's position in the state object
-  //   // 4. Calling saveWorldState(worldName, updatedState)
-  //   const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/move`, {
-  //     method: 'POST',
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //     },
-  //     body: JSON.stringify({ direction }),
-  //   });
-
-  //   if (!response.ok) {
-  //     throw new Error(`Failed to move player: ${response.statusText}`);
-  //   }
-
-  //   return await response.json();
-  // },
-
-  /**
-   * Create a new location adjacent to the current one
-   */
-  createLocation: async (
-    worldName: string,
-    originCoordinates: string,
-    direction: string
-  ): Promise<FullWorldState> => {
-    const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/location/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        origin_coordinates: originCoordinates,
-        direction,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create location: ${response.statusText}`);
-    }
-
-    return await response.json();
-  },
-
-  /**
-   * Connect an unconnected location to the map
-   */
-  connectLocation: async (
-    worldName: string,
-    locationId: string,
-    coordinates: number[]
-  ): Promise<FullWorldState> => {
-    const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/connect-location`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        location_id: locationId,
-        coordinates,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to connect location: ${response.statusText}`);
-    }
-
-    return await response.json();
-  },
-
-  /**
    * Load the latest chat for a world card
    */
   loadLatestChat: async (worldId: string): Promise<any> => {
     try {
       const response = await fetch(`/api/world-chat/${encodeURIComponent(worldId)}/latest`);
-      
+
       if (response.status === 404) {
         // No chat yet, return null (not an error)
         return null;
       }
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to load latest chat: ${
-          errorData.detail || errorData.message || response.statusText
-        }`);
+        throw new Error(`Failed to load latest chat: ${errorData.detail || errorData.message || response.statusText
+          }`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('Error in loadLatestChat:', error);
@@ -236,13 +154,13 @@ export const worldStateApi = {
           data: chatData
         }),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error(`Error saving chat: ${response.status} - ${JSON.stringify(errorData)}`);
         return false;
       }
-      
+
       const data = await response.json();
       return data && data.success === true;
     } catch (error) {
@@ -254,7 +172,7 @@ export const worldStateApi = {
   /**
    * Append a message to a world card chat
    */
-  appendMessage: async (worldName: string, chatId: string, message: any) => {
+  appendMessage: async (worldName: string, chatId: string, message: any): Promise<boolean> => {
     try {
       const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/chat/${encodeURIComponent(chatId)}/append`, {
         method: 'POST',
@@ -265,13 +183,13 @@ export const worldStateApi = {
           message,
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to append message: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      return data.success === true;
+      return data && data.success === true;
     } catch (error) {
       console.error(`Error appending message for world ${worldName}:`, error);
       throw new Error(`Failed to append message: ${error instanceof Error ? error.message : String(error)}`);
@@ -294,7 +212,7 @@ export const worldStateApi = {
           updated_at: Date.now()
         }
       };
-      
+
       // Save the new chat
       const success = await worldStateApi.saveChat(worldName, chatId, chatData);
       if (success) {
@@ -309,32 +227,27 @@ export const worldStateApi = {
   },
 
   /**
-   * Update a location in the world
+   * Update a room in the world
    */
-  updateLocation: async (worldName: string, coordinates: string, locationData: any): Promise<FullWorldState> => {
+  updateRoom: async (worldName: string, roomId: string, roomData: any): Promise<WorldData> => {
     try {
-      // First get the current world state
       const worldState = await worldStateApi.getWorldState(worldName);
-      
-      // Update the specific location
-      if (worldState.locations && worldState.locations[coordinates]) {
-        worldState.locations[coordinates] = {
-          ...worldState.locations[coordinates],
-          ...locationData
+      const roomIndex = worldState.rooms?.findIndex((r: any) => r.id === roomId);
+
+      if (roomIndex !== undefined && roomIndex !== -1) {
+        worldState.rooms[roomIndex] = {
+          ...worldState.rooms[roomIndex],
+          ...roomData
         };
-        
-        // Save the updated state
+
         const success = await worldStateApi.saveWorldState(worldName, worldState);
-        if (success) {
-          return worldState;
-        } else {
-          throw new Error('Failed to save updated location');
-        }
+        if (success) return worldState;
+        throw new Error('Failed to save updated room');
       } else {
-        throw new Error(`Location not found at coordinates: ${coordinates}`);
+        throw new Error(`Room not found: ${roomId}`);
       }
     } catch (err) {
-      console.error('Error updating location:', err);
+      console.error('Error updating room:', err);
       throw err;
     }
   }

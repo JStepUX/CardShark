@@ -1,5 +1,5 @@
 import React from 'react';
-import { Room } from '../../types/worldV2';
+import { Room } from '../../types/world';
 import { Plus, MapPin } from 'lucide-react';
 
 interface WorldMapProps {
@@ -26,14 +26,14 @@ const WorldMap: React.FC<WorldMapProps> = ({ rooms, onSelectRoom, onAddRoom, wor
 
                 {/* Existing Rooms */}
                 {rooms.map((room) => (
-                    <div 
+                    <div
                         key={room.id}
                         onClick={() => onSelectRoom(room)}
                         className="aspect-video bg-stone-900 border border-stone-800 rounded-lg overflow-hidden cursor-pointer hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-900/10 transition-all group relative"
                     >
                         {/* Background Image Preview */}
                         {room.image_path ? (
-                            <img 
+                            <img
                                 src={`/api/world-assets/${worldId}/${room.image_path.split('/').pop()}`}
                                 alt={room.name}
                                 className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition-opacity"

@@ -31,9 +31,7 @@ import ChatInputArea from './ChatInputArea';
 import WorldSidePanel from './WorldSidePanel';
 
 // Types and Utilities
-import { Room } from '../../types/room';
-import { FullWorldState } from '../../types/worldState';
-import { formatWorldName } from '../../utils/formatters';
+import { Room, WorldData } from '../../types/world';
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -370,41 +368,31 @@ const ChatView: React.FC = () => {
   }, []);
 
   // Handle Room Navigation (World Cards)
-  const handleRoomChange = useCallback((room: Room, _position: string, worldState: FullWorldState) => {
+  const handleRoomChange = useCallback((room: Room, worldState: WorldData) => {
     if (!characterData) return;
 
     // Check if this is a navigation event (vs initial sync)
-    // We determine this by checking if we already have a room set and it's different
     const isNavigation = currentRoom && currentRoom.id !== room.id;
 
     // Update local state
     setCurrentRoom(room);
 
     // Update Character Context for the AI
-    // We create a new character card with updated scenario/system prompt reflecting the location
     const worldUserIntroduction = room.introduction ||
       `You find yourself in ${room.name || 'an interesting place'}.`;
 
-    // Helper to check if we actually need to update the card content to avoid loops
-    // In a real implementation we would do a deep comparison or just update properties
-    // For now we mutate the current object reference copy carefully or use setCharacterData
-    // NOTE: setCharacterData triggers re-render.
-
-    // Logic adapted from WorldCardsPlayView
     const newCard = { ...characterData };
     if (!newCard.data) return;
 
-    const newScenario = `The user is exploring ${room.name || 'this location'} in the world of ${formatWorldName(worldState.name) || 'Unknown'}.`;
-    const newSystemPrompt = `You are the narrator describing the world of ${formatWorldName(worldState.name) || 'Unknown'}.`;
+    const newScenario = `The user is exploring ${room.name || 'this location'} in the world of ${worldState.name || 'Unknown'}.`;
+    const newSystemPrompt = `You are the narrator describing the world of ${worldState.name || 'Unknown'}.`;
 
     // Only update if changed
     if (newCard.data.scenario !== newScenario) {
       newCard.data.scenario = newScenario;
       newCard.data.system_prompt = newSystemPrompt;
-      newCard.data.first_mes = worldUserIntroduction; // Update greeting for new chats?
+      newCard.data.first_mes = worldUserIntroduction;
 
-      // Use setCharacterData to update global context
-      // This ensures the NEXT generation uses these values
       setCharacterData(newCard);
     }
 
@@ -414,7 +402,6 @@ const ChatView: React.FC = () => {
       const roomIntroduction = room.introduction || room.description || `You've entered ${room.name || "a new room"}.`;
       const message = `You leave ${previousRoomName} and enter ${room.name || "a new area"}. ${roomIntroduction}`;
 
-      // Trigger generation
       generateResponse(message);
     }
   }, [characterData, currentRoom, isGenerating, generateResponse, setCharacterData]);

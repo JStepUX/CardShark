@@ -11,8 +11,7 @@ import {
   MessageSquare,
   Book,
   MessageCircle,
-  Settings as SettingsIcon,
-  Globe
+  Settings as SettingsIcon
 } from 'lucide-react';
 import { useOptionalChat } from '../hooks/useOptionalProviders';
 import { useCharacter } from '../contexts/CharacterContext';
@@ -31,7 +30,6 @@ const importLoreView = () => import('./LoreView');
 const importMessagesView = () => import('./MessagesView');
 const importChatView = () => import('./chat/ChatView');
 const importAPISettingsView = () => import('./settings/APISettingsView');
-const importWorldCardsView = () => import('../views/WorldCardsView');
 
 const NAV_ICONS = {
   gallery: FolderOpen,
@@ -39,8 +37,7 @@ const NAV_ICONS = {
   messages: MessageSquare,
   lore: Book,
   chat: MessageCircle,
-  settings: SettingsIcon,
-  worldcards: Globe
+  settings: SettingsIcon
 } as const;
 
 // Map route paths to their import functions for prefetching
@@ -50,8 +47,7 @@ const ROUTE_IMPORTS: Record<string, () => Promise<any>> = {
   '/lore': importLoreView,
   '/messages': importMessagesView,
   '/chat': importChatView,
-  '/settings': importAPISettingsView,
-  '/worldcards': importWorldCardsView
+  '/settings': importAPISettingsView
 };
 
 interface SideNavProps {
@@ -77,22 +73,22 @@ const SideNav: React.FC<SideNavProps> = ({
   backendStatus,
   onImageChange
 }) => {
-const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter(); // Add setters
-const chatContext = useOptionalChat();
-const navigate = useNavigate(); // Add navigation hook
-const [isCollapsed, setIsCollapsed] = useState(false);
+  const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter(); // Add setters
+  const chatContext = useOptionalChat();
+  const navigate = useNavigate(); // Add navigation hook
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-// Extract chat preview image data with fallbacks
-const availablePreviewImages = chatContext?.availablePreviewImages || undefined;
-const currentPreviewImageIndex = chatContext?.currentPreviewImageIndex || 0;
-const navigateToPreviewImage = chatContext?.navigateToPreviewImage || (() => {});
+  // Extract chat preview image data with fallbacks
+  const availablePreviewImages = chatContext?.availablePreviewImages || undefined;
+  const currentPreviewImageIndex = chatContext?.currentPreviewImageIndex || 0;
+  const navigateToPreviewImage = chatContext?.navigateToPreviewImage || (() => { });
 
-// Determine the image URL to display based on context, prioritizing lore images if available
-const displayImageUrl = availablePreviewImages && availablePreviewImages.length > 0
-  ? availablePreviewImages[currentPreviewImageIndex]?.src
-  : characterImageUrl; // Fallback to default character image if no lore images are active
+  // Determine the image URL to display based on context, prioritizing lore images if available
+  const displayImageUrl = availablePreviewImages && availablePreviewImages.length > 0
+    ? availablePreviewImages[currentPreviewImageIndex]?.src
+    : characterImageUrl; // Fallback to default character image if no lore images are active
 
-return (
+  return (
     <div className={`relative bg-stone-950 shrink-0 flex flex-col border-r border-stone-800 transition-all duration-300 
       ${isCollapsed ? 'w-20' : 'w-96'}`}
     >
@@ -255,9 +251,9 @@ const NavLinkHelper: React.FC<{
       className={({ isActive }) =>
         `w-full px-4 py-2 rounded-lg transition-colors flex items-center gap-3
          ${isActive
-           ? "bg-stone-800 text-white"
-           : "text-gray-300 hover:text-white hover:bg-stone-700"
-         }
+          ? "bg-stone-800 text-white"
+          : "text-gray-300 hover:text-white hover:bg-stone-700"
+        }
          ${isCollapsed ? "justify-center w-10 !px-0" : ""}`
       }
       aria-label={label}

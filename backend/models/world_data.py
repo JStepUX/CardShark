@@ -36,6 +36,7 @@ class Room(BaseModel):
     id: str = Field(..., description="Unique identifier for the room.")
     name: str = Field(..., description="Name of the room.")
     description: str = Field(..., description="Description of the room.")
+    introduction: Optional[str] = Field(default=None, description="Greeting text displayed when entering the room.")
     image_path: Optional[str] = Field(default=None, description="Path to the room's background image.")
     connections: List[RoomConnection] = Field(default_factory=list, description="Connections to other rooms.")
     npcs: List[RoomNPC] = Field(default_factory=list, description="NPCs that can be found here.")

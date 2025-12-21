@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import { CharacterData } from '../types/character';
-import { WorldData, Room, NarratorVoice, TimeSystem } from '../types/worldV2';
+import { WorldData, Room, NarratorVoice, TimeSystem } from '../types/world';
 import { generateUUID } from '../utils/generateUUID';
 import RoomEditor from '../components/WorldBuilderV2/RoomEditor';
 import WorldMap from '../components/WorldBuilderV2/WorldMap';
@@ -28,7 +28,7 @@ const WorldBuilder: React.FC = () => {
                 setLoading(true);
                 const response = await fetch(`/api/character/${uuid}`);
                 if (!response.ok) throw new Error('Failed to load world card');
-                
+
                 const data = await response.json();
                 if (data.success && data.data) {
                     const charData = data.data;
@@ -47,9 +47,9 @@ const WorldBuilder: React.FC = () => {
                             extensions: charData.extensions_json || {},
                         }
                     };
-                    
+
                     setWorldCard(mappedData);
-                    
+
                     // Convert to CharacterCard format for Context (Schema mismatch adapter)
                     const contextData = {
                         name: mappedData.data.name,
@@ -70,7 +70,7 @@ const WorldBuilder: React.FC = () => {
                         create_date: new Date().toISOString()
                     };
                     setCharacterData(contextData as any);
-                    
+
                     // Parse World Data
                     const wData = mappedData.data.extensions?.world_data || {
                         rooms: [],
@@ -92,17 +92,17 @@ const WorldBuilder: React.FC = () => {
     // Save Function
     const handleSave = async () => {
         if (!worldCard || !worldData || !uuid) return;
-        
+
         try {
             setSaving(true);
-            
+
             // Construct updated character data
             const updatedExtensions = {
                 ...worldCard.data.extensions,
                 card_type: 'world' as const,
                 world_data: worldData
             };
-            
+
             const payload = {
                 ...worldCard.data,
                 extensions: updatedExtensions
@@ -112,7 +112,7 @@ const WorldBuilder: React.FC = () => {
             // The Character API usually expects fields to update.
             // Let's assume we can PUT to /api/character/{uuid} with the full data structure or partial.
             // Based on backend implementation, it likely expects Pydantic model structure.
-            
+
             const response = await fetch(`/api/character/${uuid}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -122,10 +122,10 @@ const WorldBuilder: React.FC = () => {
             });
 
             if (!response.ok) throw new Error('Failed to save world');
-            
+
             // Update local state
             setWorldCard(prev => prev ? { ...prev, data: payload } : null);
-            
+
         } catch (err) {
             console.error(err);
             alert('Failed to save changes');
@@ -136,16 +136,16 @@ const WorldBuilder: React.FC = () => {
 
     const handleRoomSave = (updatedRoom: Room) => {
         if (!worldData) return;
-        
+
         const roomIndex = worldData.rooms.findIndex(r => r.id === updatedRoom.id);
         const newRooms = [...worldData.rooms];
-        
+
         if (roomIndex >= 0) {
             newRooms[roomIndex] = updatedRoom;
         } else {
             newRooms.push(updatedRoom);
         }
-        
+
         setWorldData({ ...worldData, rooms: newRooms });
         setSelectedRoom(null); // Close editor
         // Auto-save the world structure? Or wait for explicit save?
@@ -155,7 +155,7 @@ const WorldBuilder: React.FC = () => {
     const handleRoomDelete = (roomId: string) => {
         if (!worldData) return;
         if (!confirm('Are you sure you want to delete this room?')) return;
-        
+
         const newRooms = worldData.rooms.filter(r => r.id !== roomId);
         setWorldData({ ...worldData, rooms: newRooms });
         setSelectedRoom(null);
@@ -182,7 +182,7 @@ const WorldBuilder: React.FC = () => {
             {/* Toolbar */}
             <div className="h-14 border-b border-stone-800 bg-stone-900 flex items-center px-4 justify-between shrink-0">
                 <div className="flex items-center gap-4">
-                    <button 
+                    <button
                         onClick={() => navigate(`/world/${uuid}/launcher`)}
                         className="text-stone-400 hover:text-white transition-colors"
                         title="Back to Launcher"
@@ -217,19 +217,19 @@ const WorldBuilder: React.FC = () => {
             {/* Main Content */}
             <div className="flex-1 overflow-hidden relative">
                 {activeView === 'map' && (
-                    <WorldMap 
-                        rooms={worldData.rooms} 
-                        onSelectRoom={setSelectedRoom} 
+                    <WorldMap
+                        rooms={worldData.rooms}
+                        onSelectRoom={setSelectedRoom}
                         onAddRoom={handleAddRoom}
                         worldId={uuid!}
                     />
                 )}
-                
+
                 {/* Room Editor Modal/Overlay */}
                 {selectedRoom && (
                     <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-8">
                         <div className="w-full max-w-4xl max-h-full overflow-y-auto">
-                            <RoomEditor 
+                            <RoomEditor
                                 room={selectedRoom}
                                 worldId={uuid!}
                                 onSave={handleRoomSave}

@@ -1143,15 +1143,19 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
             firstMsg.variations = [firstMsg.content, ...effectiveCharacterData.data.alternate_greetings];
             firstMsg.currentVariation = 0;
           }
+          // Use messageStateHook to add the greeting instead of legacy setState
+          // This ensures the greeting displays correctly even without a UUID
+          messageStateHook.clearMessages();
+          messageStateHook.addMessage(firstMsg);
           setState(prev => ({
             ...prev,
-            messages: [firstMsg],
             chatSessionUuid: null,
             isLoading: false,
             error: "Character has no UUID, showing greeting only."
           }));
         } else {
-          setState(prev => ({ ...prev, messages: [], chatSessionUuid: null, isLoading: false, error: "Character data incomplete." }));
+          messageStateHook.clearMessages();
+          setState(prev => ({ ...prev, chatSessionUuid: null, isLoading: false, error: "Character data incomplete." }));
         }
         hasInitializedChat.current = true;
         return;

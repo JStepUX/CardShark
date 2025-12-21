@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Room, RoomConnection } from '../../types/worldV2';
+import { Room, RoomConnection } from '../../types/world';
 import { Upload, Save, Trash2, Plus, X, Image as ImageIcon } from 'lucide-react';
 
 interface RoomEditorProps {

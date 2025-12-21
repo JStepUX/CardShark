@@ -1,7 +1,7 @@
 // frontend/src/components/character/CharacterSelect.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, User } from 'lucide-react';
-import { NpcGridItem } from '../../types/worldState';
+import { NpcGridItem } from '../../types/world';
 
 interface CharacterProfile {
     character_uuid: string;

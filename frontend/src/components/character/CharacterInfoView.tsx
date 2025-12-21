@@ -259,58 +259,40 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   };
 
   const handleConvertToWorld = async () => {
-    if (!characterData) return;
+    if (!characterData || !characterData.data.character_uuid) return;
 
     try {
-      // Prepare updated data with world type
-      const updatedExtensions = {
-        ...characterData.data.extensions,
-        card_type: 'world',
-        // Ensure world_data stub exists
-        world_data: (characterData.data.extensions as any)?.world_data || {
-          rooms: [],
-          settings: { narrator_voice: 'default', time_system: 'turn_based', global_scripts: [] },
-          player_state: { inventory: [], health: 100, stats: {}, flags: {} }
-        }
-      };
-
-      const payload = {
-        ...characterData.data,
-        extensions: updatedExtensions
-      };
-
-      // We'll duplicate the character first with a new name indicating it's a world
-      // Then update the duplicate to be a world card
-      // This preserves the original character
-
-      const duplicateResponse = await fetch(`/api/character/${characterData.data.character_uuid}/duplicate`, {
+      // Use the V2 World Creation API
+      // This will handles duplication, lore extraction, and initialization atomially on the backend
+      const response = await fetch('/api/world-cards/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_name: `${characterData.data.name} (World)` })
-      });
-
-      if (!duplicateResponse.ok) throw new Error('Failed to duplicate character');
-
-      const duplicateData = await duplicateResponse.json();
-      const newUuid = duplicateData.data.character.character_uuid;
-
-      // Now update the duplicate to be a world
-      const updateResponse = await fetch(`/api/character/${newUuid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          data: {
-            ...payload,
-            name: `${characterData.data.name} (World)`, // Ensure name match
-            character_uuid: newUuid // Ensure UUID match
-          }
+          name: `${characterData.data.name} (World)`,
+          character_path: characterData.data.character_uuid // Backend also supports UUID as character_path
         })
       });
 
-      if (!updateResponse.ok) throw new Error('Failed to convert duplicate to world');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.message || 'Failed to create world');
+      }
 
-      // Navigate to the new world launcher
-      navigate(`/world/${newUuid}/launcher`);
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const newUuid = result.data.character_uuid;
+
+        // Invalidate character gallery cache since we generated a new card
+        if (primaryContext.invalidateCharacterCache) {
+          primaryContext.invalidateCharacterCache();
+        }
+
+        // Navigate to the new world launcher
+        navigate(`/world/${newUuid}/launcher`);
+      } else {
+        throw new Error('World creation returned success but no data was received.');
+      }
 
     } catch (error) {
       console.error('Failed to convert to world:', error);
@@ -371,8 +353,8 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             <button
               onClick={toggleCompareMode}
               className={`flex items-center gap-2 px-4 py-2 ${isCompareMode
-                  ? 'bg-stone-700 text-white'
-                  : 'bg-transparent hover:bg-stone-800 text-white'
+                ? 'bg-stone-700 text-white'
+                : 'bg-transparent hover:bg-stone-800 text-white'
                 } rounded-lg transition-colors`}
               title={isCompareMode ? "Close comparison" : "Compare with another character"}
             >

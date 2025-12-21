@@ -1,16 +1,16 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import GridRoomMap from '../world/GridRoomMap';
-import { Room } from '../../types/room';
-import { FullWorldState } from '../../types/worldState';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Room, WorldData } from '../../types/world';
 import { worldDataService } from '../../services/WorldDataService';
 import GameWorldIconBar from '../GameWorldIconBar';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { MapPin, ArrowRight, Users } from 'lucide-react';
+import { useCharacter } from '../../contexts/CharacterContext';
 
 interface WorldSidePanelProps {
     worldId: string;
     currentRoomId: string | null;
-    onRoomChange: (room: Room, position: string, worldState: FullWorldState) => void;
+    onRoomChange: (room: Room, worldState: WorldData) => void;
     onNpcClick?: () => void;
     onInventoryClick?: () => void;
     onSpellsClick?: () => void;
@@ -19,175 +19,186 @@ interface WorldSidePanelProps {
 
 const WorldSidePanel: React.FC<WorldSidePanelProps> = ({
     worldId,
-    currentRoomId,
+    currentRoomId: propRoomId,
     onRoomChange,
     onNpcClick,
     onInventoryClick,
     onSpellsClick,
     onMeleeClick
 }) => {
-    const [worldData, setWorldData] = useState<FullWorldState | null>(null);
+    const { characterData } = useCharacter();
+    const [worldData, setWorldData] = useState<WorldData | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const [roomsById, setRoomsById] = useState<Record<string, Room>>({});
-    const [posToId, setPosToId] = useState<Record<string, string>>({});
 
     const loadWorldData = useCallback(async () => {
         if (!worldId) return;
         setIsLoading(true);
         setError(null);
         try {
-            const data = await worldDataService.loadWorld(worldId);
-            // Ensure connections (logic from WorldCardsPlayView)
-            if (data && data.locations) {
-                Object.entries(data.locations).forEach(([_, location]: [string, any]) => {
-                    if (location && location.connected !== false) {
-                        location.connected = true;
-                    }
-                });
+            // Priority: Use data from context if it's the right world
+            const ctxExt = characterData?.data?.extensions as any;
+            const uuid = (characterData as any)?.character_uuid;
+            if (ctxExt?.world_data && uuid === worldId) {
+                setWorldData(ctxExt.world_data);
+                return;
             }
-            setWorldData(data);
 
-            // Determine current room on initial load
-            if (data) {
-                const { room: currentLoc, position: currentPos } = worldDataService.getCurrentRoom(data);
-                if (currentLoc && currentPos) {
-                    // Convert WorldLocation to Room structure if needed, or rely on processing below
-                    // But we need to pass strict Room object to onRoomChange usually?
-                    // Let's defer initial onRoomChange until we process rooms
-                }
-            }
+            // Fallback: load from API
+            const data = await worldDataService.loadWorld(worldId);
+            setWorldData(data);
         } catch (err: any) {
-            console.error("Failed to load world map:", err);
-            setError(`Failed to load world map: ${err.message || 'Unknown error'}`);
+            console.error("Failed to load world data:", err);
+            setError(`Failed to load world data: ${err.message || 'Unknown error'}`);
         } finally {
             setIsLoading(false);
         }
-    }, [worldId]);
+    }, [worldId, characterData]);
 
     useEffect(() => {
         loadWorldData();
     }, [loadWorldData]);
 
-    // Process data for the map
-    const processedData = useMemo(() => {
-        const processedRoomsById: Record<string, Room> = {};
-        const processedPosToId: Record<string, string> = {};
+    const activeRoomId = propRoomId || worldData?.player_state?.current_room_id;
+    const currentRoom = worldData?.rooms?.find(r => r.id === activeRoomId) || null;
 
-        if (worldData?.locations) {
-            Object.entries(worldData.locations).forEach(([position, location]) => {
-                if (!location || !location.location_id || location.connected === false) {
-                    return;
-                }
+    const handleNavigate = async (targetId: string) => {
+        if (!worldData) return;
 
-                const coords = position.split(',').map(Number);
-                const x = coords[0] || 0;
-                const y = coords[1] || 0;
+        const targetRoom = worldData.rooms.find(r => r.id === targetId);
+        if (!targetRoom) return;
 
-                const posKey = `${x},${y}`;
-                const pos3DKey = position;
-
-                const room: Room = {
-                    id: location.location_id,
-                    name: location.name || 'Unnamed Room',
-                    description: location.description || '',
-                    introduction: location.introduction || location.description || '',
-                    x,
-                    y,
-                    npcs: (location.npcs || []).map((path: string) => {
-                        const name = path.split(/[/\\]/).pop()?.replace('.png', '') || 'Unknown NPC';
-                        return { path, name };
-                    }),
-                    neighbors: {}
-                };
-
-                processedRoomsById[location.location_id] = room;
-                processedPosToId[posKey] = location.location_id;
-                processedPosToId[pos3DKey] = location.location_id;
-            });
-        }
-
-        return { processedRoomsById, processedPosToId };
-    }, [worldData]);
-
-    useEffect(() => {
-        setRoomsById(processedData.processedRoomsById);
-        setPosToId(processedData.processedPosToId);
-
-        // Initial sync with parent if needed
-        if (worldData && processedData.processedRoomsById && !currentRoomId) {
-            const { room: currentLoc, position: currentPos } = worldDataService.getCurrentRoom(worldData);
-            if (currentLoc && currentPos && processedData.processedRoomsById[currentLoc.location_id]) {
-                onRoomChange(processedData.processedRoomsById[currentLoc.location_id], currentPos, worldData);
+        const updatedState: WorldData = {
+            ...worldData,
+            player_state: {
+                ...worldData.player_state,
+                current_room_id: targetId
             }
-        }
-    }, [processedData, worldData, currentRoomId, onRoomChange]);
+        };
 
+        setWorldData(updatedState);
+        onRoomChange(targetRoom, updatedState);
 
-    const handleSelectRoom = async (roomId: string) => {
-        if (!worldData || !worldId) return;
-
-        // Find position
-        const position = Object.entries(posToId).find(([_, id]) => id === roomId)?.[0];
-        if (position && roomsById[roomId]) {
-            // Optimistically update
-            const updatedState = {
-                ...worldData,
-                current_position: position,
-                visited_positions: worldData.visited_positions.includes(position)
-                    ? worldData.visited_positions
-                    : [...worldData.visited_positions, position]
-            };
-            setWorldData(updatedState);
-
-            // Notify parent
-            onRoomChange(roomsById[roomId], position, updatedState);
-
-            // Persist
-            try {
-                await worldDataService.saveWorldState(worldId, updatedState);
-            } catch (e) {
-                console.error("Failed to save world state", e);
-                // Revert? For now just log
-            }
+        try {
+            await worldDataService.saveWorldState(worldId, updatedState);
+        } catch (e) {
+            console.error("Failed to save navigation state", e);
         }
     };
 
-    const currentRoom = currentRoomId ? roomsById[currentRoomId] : null;
-
     return (
-        <div className="flex flex-col h-full bg-stone-900 border-l border-stone-800 w-[400px]">
-            <div className="p-4 border-b border-stone-800">
-                <h2 className="text-lg font-semibold text-stone-200">{worldData?.name || 'World'}</h2>
-                <p className="text-xs text-stone-500">
-                    {currentRoom ? currentRoom.name : 'Unknown Location'}
+        <div className="flex flex-col h-full bg-stone-900 border-l border-stone-800 w-[400px] shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="p-4 border-b border-stone-800 bg-stone-950/50">
+                <div className="flex items-center gap-2 mb-1">
+                    <MapPin size={18} className="text-emerald-500" />
+                    <h2 className="text-lg font-bold text-stone-100 truncate">
+                        {worldData?.name || 'World Exploration'}
+                    </h2>
+                </div>
+                <p className="text-sm text-stone-400 font-medium">
+                    {currentRoom?.name || 'Unknown Location'}
                 </p>
             </div>
 
-            <div className="flex-1 overflow-hidden p-4 relative">
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {isLoading && !worldData ? (
-                    <div className="flex justify-center p-8"><LoadingSpinner /></div>
+                    <div className="flex flex-col items-center justify-center h-64 gap-4">
+                        <LoadingSpinner />
+                        <p className="text-stone-500 animate-pulse text-sm">Loading world map...</p>
+                    </div>
                 ) : error ? (
-                    <div className="text-red-400 p-4 text-center">{error}</div>
+                    <div className="m-4 p-4 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm text-center">
+                        {error}
+                        <button
+                            onClick={() => loadWorldData()}
+                            className="block mx-auto mt-2 text-red-300 hover:underline"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                ) : currentRoom ? (
+                    <div className="p-4 space-y-6">
+                        {/* Room Description */}
+                        <div className="bg-stone-800/30 p-4 rounded-xl border border-stone-700/50">
+                            <h3 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">Description</h3>
+                            <p className="text-stone-300 text-sm leading-relaxed italic">
+                                "{currentRoom.description}"
+                            </p>
+                        </div>
+
+                        {/* Navigation / Exits */}
+                        <div>
+                            <h3 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <ArrowRight size={14} /> Available Exits
+                            </h3>
+                            <div className="grid grid-cols-1 gap-2">
+                                {currentRoom.connections?.length > 0 ? (
+                                    currentRoom.connections.map((conn, idx) => {
+                                        const target = worldData?.rooms?.find(r => r.id === conn.target_room_id);
+                                        return (
+                                            <button
+                                                key={`${conn.target_room_id}-${idx}`}
+                                                onClick={() => handleNavigate(conn.target_room_id)}
+                                                className="group flex items-center justify-between p-3 bg-stone-800 hover:bg-emerald-900/30 border border-stone-700 hover:border-emerald-500/50 rounded-lg transition-all text-left"
+                                            >
+                                                <div>
+                                                    <span className="block text-stone-200 font-bold text-sm group-hover:text-emerald-400 transition-colors">
+                                                        {conn.direction}
+                                                    </span>
+                                                    <span className="text-xs text-stone-500 block truncate w-64">
+                                                        {target?.name || 'Unknown Room'}
+                                                    </span>
+                                                </div>
+                                                <ArrowRight size={16} className="text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
+                                            </button>
+                                        );
+                                    })
+                                ) : (
+                                    <p className="text-stone-600 text-sm italic py-2">No obvious exits... you are trapped.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* NPCs Present */}
+                        {currentRoom.npcs?.length > 0 && (
+                            <div>
+                                <h3 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                    <Users size={14} /> Inhabitants
+                                </h3>
+                                <div className="space-y-2">
+                                    {currentRoom.npcs.map((npc, idx) => {
+                                        const npcName = npc.character_id.split(/[/\\]/).pop()?.replace('.png', '') || 'Unknown';
+                                        return (
+                                            <div key={idx} className="flex items-center gap-3 p-2 bg-stone-800/50 rounded-lg border border-stone-700/30">
+                                                <div className="w-8 h-8 rounded-full bg-stone-700 flex items-center justify-center overflow-hidden">
+                                                    <img
+                                                        src={`/api/character-image/${encodeURIComponent(npc.character_id)}`}
+                                                        alt={npcName}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/150')}
+                                                    />
+                                                </div>
+                                                <span className="text-sm font-medium text-stone-300">{npcName}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 ) : (
-                    <div className="h-full overflow-auto">
-                        <GridRoomMap
-                            roomsById={roomsById}
-                            posToId={posToId}
-                            selectedRoomId={currentRoomId}
-                            onSelectRoom={handleSelectRoom}
-                            onCreateRoom={() => { }} // No-op for play mode
-                            playMode={true}
-                            gridSize={5}
-                        />
+                    <div className="flex flex-col items-center justify-center h-64 text-stone-600 italic">
+                        Select a location to explore
                     </div>
                 )}
             </div>
 
-            <div className="p-4 border-t border-stone-800 bg-stone-900/95 sticky bottom-0">
+            {/* Footer / Icon Bar */}
+            <div className="p-4 border-t border-stone-800 bg-stone-950/80 backdrop-blur-md">
                 <GameWorldIconBar
-                    onMap={() => { }} // Map is always visible
+                    onMap={() => { }}
                     onInventory={onInventoryClick}
                     onSpells={onSpellsClick}
                     onMelee={onMeleeClick}

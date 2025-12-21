@@ -173,8 +173,12 @@ const WorldLauncher: React.FC = () => {
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {(() => {
                      const worldData = ((worldCard.data.extensions as any)?.world_data || {}) as any;
-                     const locationCount = (Object.keys(worldData.locations || {}).length || worldData.rooms?.length || 0);
-                     const hasLocations = locationCount > 0;
+                     const locations = worldData.locations || {};
+                     const rooms = worldData.rooms || [];
+                     // Check both locations (object) and rooms (array) for presence
+                     const locationCount = Object.keys(locations).length;
+                     const roomCount = Array.isArray(rooms) ? rooms.length : 0;
+                     const hasLocations = locationCount > 0 || roomCount > 0;
 
                      return (
                         <button
@@ -198,7 +202,7 @@ const WorldLauncher: React.FC = () => {
                   })()}
 
                   <button
-                     onClick={() => navigate(`/worldcards/${encodeURIComponent(worldCard.data.name)}/builder`)}
+                     onClick={() => navigate(`/world/${uuid}/builder`)}
                      className="group flex flex-col items-center justify-center p-8 bg-gradient-to-br from-blue-900/50 to-stone-900 border border-blue-800/50 rounded-xl hover:border-blue-500/50 hover:from-blue-900/80 transition-all shadow-lg hover:shadow-blue-900/20"
                   >
                      <div className="bg-blue-500/20 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform">
