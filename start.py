@@ -223,8 +223,25 @@ def clean_mei_folders(max_age_hours=1):
 
 def main():
     print("=== CardShark Development Server ===")
+    
+    # Try to get local IP for LAN access notification
+    local_ip = "127.0.0.1"
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+
     print(f"Backend will run on: http://localhost:{BACKEND_PORT}")
+    if local_ip != "127.0.0.1":
+        print(f"Backend LAN Access: http://{local_ip}:{BACKEND_PORT}")
+        
     print(f"Frontend will run on: http://localhost:{FRONTEND_PORT}")
+    if local_ip != "127.0.0.1":
+        print(f"Frontend LAN Access: http://{local_ip}:{FRONTEND_PORT}")
     print()
     
     # Ensure ports are available before starting

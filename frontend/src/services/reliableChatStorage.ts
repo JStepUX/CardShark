@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from '../utils/apiConfig';
 import { APIConfig } from '../types/api';
 
 export interface ChatMessage {
@@ -33,7 +34,7 @@ class ReliableChatStorage {
     this.apiConfig = apiConfig;
   }
   private getApiUrl(): string {
-    return this.apiConfig.url || 'http://localhost:9696';
+    return this.apiConfig.url || getApiBaseUrl();
   }
 
   private async makeRequest<T>(

@@ -8,11 +8,12 @@
  * @module chatService
  */
 
-import { 
-  Message, 
-  UserProfile, 
-  ChatSession, 
-  SaveChatParams, 
+import { getApiBaseUrl } from '../../utils/apiConfig';
+import {
+  Message,
+  UserProfile,
+  ChatSession,
+  SaveChatParams,
   SaveChatResult,
   PromptContextMessage,
   isValidMessage,
@@ -22,7 +23,7 @@ import {
 } from './chatTypes';
 
 // API Configuration
-const API_BASE_URL = 'http://localhost:9696/api';
+const API_BASE_URL = `${getApiBaseUrl()}/api`;
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 1000; // 1 second
@@ -131,7 +132,7 @@ class ChatApiClient {
 
       } catch (error) {
         lastError = error as Error;
-        
+
         // Don't retry on abort or final attempt
         if (this.isAbortError(error) || attempt === retryAttempts) {
           break;
@@ -154,7 +155,7 @@ class ChatApiClient {
    */
   private combineSignals(signals: AbortSignal[]): AbortSignal {
     const controller = new AbortController();
-    
+
     signals.forEach(signal => {
       if (signal.aborted) {
         controller.abort();
@@ -305,7 +306,7 @@ export class ChatService {
       }
 
       const chatSession = response.data!;
-      
+
       // Validate loaded chat session
       if (!isValidChatSession(chatSession)) {
         throw new Error('Invalid chat session data received from server');
@@ -383,7 +384,7 @@ export class ChatService {
       }
 
       const messages = response.data!;
-      
+
       // Validate messages
       const invalidMessages = messages.filter(msg => !isValidMessage(msg));
       if (invalidMessages.length > 0) {
@@ -418,7 +419,7 @@ export class ChatService {
       }
 
       const chatSession = response.data!;
-      
+
       // Validate created chat session
       if (!isValidChatSession(chatSession)) {
         throw new Error('Invalid chat session data received from server');

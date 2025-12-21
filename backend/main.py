@@ -786,7 +786,21 @@ def main():
       # Log startup information
     host = os.environ.get("CARDSHARK_HOST", args.host)
     port = int(os.environ.get("CARDSHARK_PORT", args.port))
+    
+    # Try to get local IP for LAN access notification
+    local_ip = "127.0.0.1"
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+
     logger.log_step(f"Starting CardShark server at http://{host}:{port}")
+    if host == "0.0.0.0" and local_ip != "127.0.0.1":
+        logger.log_step(f"LAN Access available at: http://{local_ip}:{port}")
     
     # Always show localhost URL for local access
     browser_url = f"http://localhost:{port}"
