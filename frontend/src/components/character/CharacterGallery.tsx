@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { CharacterFile } from '../../types/schema';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw } from 'lucide-react';
 import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
@@ -103,6 +103,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // State for infinite scrolling with a more reasonable initial batch size
   const [displayedCount, setDisplayedCount] = useState(20);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // State for manual refresh
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // State for the currently loaded directory and search term
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
@@ -492,6 +495,25 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     loadSettings();
   }, [settingsChangeCount, loadFromDirectory, invalidateCharacterCache]);
 
+  // Manual refresh handler
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshing || !currentDirectory) return;
+
+    setIsRefreshing(true);
+    try {
+      // Invalidate cache to force a fresh directory scan
+      invalidateCharacterCache();
+      console.log(`[${componentId.current}] Manual refresh triggered`);
+
+      // Reload from directory
+      await loadFromDirectory(currentDirectory);
+    } catch (err) {
+      console.error('Manual refresh failed:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, currentDirectory, invalidateCharacterCache, loadFromDirectory]);
+
   // Reset displayedCount when search term changes
   useEffect(() => {
     // When the search term changes, reset to show the initial batch
@@ -832,6 +854,20 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   <Folder size={16} />
                 </button>
               </div>
+
+              {/* Refresh Button */}
+              <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshing || !currentDirectory}
+                className={`p-2 rounded-lg border transition-all ${isRefreshing
+                    ? 'bg-stone-700 border-stone-600 text-slate-500 cursor-wait'
+                    : 'bg-stone-800 border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-stone-700'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                title="Refresh gallery (check for new/modified/deleted files)"
+                aria-label="Refresh gallery"
+              >
+                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+              </button>
 
               {/* Sort Dropdown */}
               <div className="relative" ref={sortDropdownRef}>

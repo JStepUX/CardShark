@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2 } from 'lucide-react';
+import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Edit, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
@@ -103,6 +103,10 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   // State for deletion
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // State for overflow menu
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   // Track original character data when it changes
   useEffect(() => {
@@ -329,6 +333,62 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
     }
   };
 
+  const handleDuplicate = async () => {
+    if (!characterData?.data?.character_uuid) return;
+
+    setShowOverflowMenu(false);
+    try {
+      const response = await fetch(`/api/character/${characterData.data.character_uuid}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          new_name: `${characterData.data.name} (Copy)`
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.message || 'Failed to duplicate character');
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data?.character) {
+        const newUuid = result.data.character.character_uuid;
+
+        // Invalidate character gallery cache
+        if (primaryContext.invalidateCharacterCache) {
+          primaryContext.invalidateCharacterCache();
+        }
+
+        // Navigate to the duplicated character
+        navigate(`/character/${newUuid}/info`);
+      } else {
+        throw new Error('Duplication returned success but no data was received.');
+      }
+
+    } catch (error) {
+      console.error('Failed to duplicate character:', error);
+      alert('Failed to duplicate character: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  // Close overflow menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (overflowMenuRef.current && !overflowMenuRef.current.contains(event.target as Node)) {
+        setShowOverflowMenu(false);
+      }
+    };
+
+    if (showOverflowMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showOverflowMenu]);
+
   return (
     <>
       <div className="p-8 pb-4 flex justify-between items-center">
@@ -336,18 +396,6 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           {isSecondary ? "Comparison View" : "Primary Character Info"}
         </h2>
         <div className="flex items-center gap-3">
-          {/* Delete Button - Primary View Only */}
-          {!isSecondary && (
-            <button
-              onClick={() => setIsDeleteConfirmOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-red-900/30 text-white hover:text-red-400 rounded-lg transition-colors group"
-              title="Delete Character"
-            >
-              <Trash2 className="w-4 h-4 group-hover:text-red-400" />
-              <span className="group-hover:text-red-400">Delete</span>
-            </button>
-          )}
-
           {/* Compare button - only shown in primary view when not already comparing */}
           {!isSecondary && (
             <button
@@ -360,18 +408,6 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             >
               <SplitSquareVertical className="w-4 h-4" />
               {isCompareMode ? "Close Compare" : "Compare"}
-            </button>
-          )}
-
-          {/* Convert to World Button - Primary View Only */}
-          {!isSecondary && (
-            <button
-              onClick={handleConvertToWorld}
-              className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
-              title="Convert this character to a World Card (duplicates character)"
-            >
-              <Globe className="w-4 h-4" />
-              Convert to World
             </button>
           )}
 
@@ -392,6 +428,56 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           >
             <FileJson className="w-5 h-5" />
           </button>
+
+          {/* Edit Menu - Primary View Only */}
+          {!isSecondary && (
+            <div className="relative" ref={overflowMenuRef}>
+              <button
+                onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+                className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
+                title="Edit actions"
+              >
+                <Edit className="w-5 h-5" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showOverflowMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-stone-800 border border-stone-700 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <button
+                    onClick={handleDuplicate}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>Duplicate</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowOverflowMenu(false);
+                      handleConvertToWorld();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span>Convert to World</span>
+                  </button>
+
+                  <div className="border-t border-stone-700"></div>
+
+                  <button
+                    onClick={() => {
+                      setShowOverflowMenu(false);
+                      setIsDeleteConfirmOpen(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-red-400 hover:bg-red-900/30 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>      <div className="flex-1 overflow-y-auto">
         <div className="px-8 pb-8">
