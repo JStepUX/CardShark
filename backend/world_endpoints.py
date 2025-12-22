@@ -279,8 +279,77 @@ async def save_world_state_api(
         # Ensure the state data includes a name field
         if "name" not in state_data:
             state_data["name"] = world_name
-            
+
         logger.log_step(f"Request to save world state for: {world_name}")
+
+        # CRITICAL FIX: Convert frontend 'rooms' array to backend 'locations' dict
+        # Frontend sends WorldData with 'rooms: Room[]', backend needs WorldState with 'locations: Dict[str, Location]'
+        if "rooms" in state_data and isinstance(state_data["rooms"], list):
+            logger.log_step(f"Converting {len(state_data['rooms'])} rooms to locations dict")
+            locations_dict = {}
+
+            for room in state_data["rooms"]:
+                # Extract coordinates (x, y from frontend, z defaults to 0)
+                x = room.get("x", 0)
+                y = room.get("y", 0)
+                z = 0  # Frontend uses 2D grid, backend uses 3D coordinates
+                coord_key = f"{x},{y},{z}"
+
+                # Convert RoomConnection[] to explicit_exits dict
+                explicit_exits = {}
+                for conn in room.get("connections", []):
+                    direction = conn.get("direction", "").lower()
+                    if direction and conn.get("target_room_id"):
+                        from backend.models.world_state import ExitDefinition
+                        explicit_exits[direction] = ExitDefinition(
+                            target_location_id=conn.get("target_room_id"),
+                            name=direction.capitalize(),
+                            description=conn.get("description"),
+                            locked=conn.get("is_locked", False),
+                            key_item_id=conn.get("key_id")
+                        )
+
+                # Convert RoomNPC[] to npcs string list
+                npcs_list = []
+                for npc in room.get("npcs", []):
+                    if isinstance(npc, dict):
+                        npcs_list.append(npc.get("character_id", ""))
+                    elif isinstance(npc, str):
+                        npcs_list.append(npc)
+
+                # Create Location object
+                from backend.models.world_state import Location
+                location = Location(
+                    name=room.get("name", "Unnamed Location"),
+                    coordinates=[x, y, z],
+                    location_id=room.get("id", f"room_{x}_{y}_{z}"),
+                    description=room.get("description", ""),
+                    introduction=room.get("introduction"),
+                    background=room.get("image_path"),
+                    npcs=npcs_list,
+                    explicit_exits=explicit_exits,
+                    connected=True
+                )
+
+                locations_dict[coord_key] = location
+
+            # Replace 'rooms' with 'locations' in state_data
+            del state_data["rooms"]
+            state_data["locations"] = locations_dict
+            logger.log_step(f"Converted rooms to locations dict with {len(locations_dict)} entries")
+
+            # Convert player_state.current_room_id to current_position
+            if "player_state" in state_data:
+                player_state = state_data["player_state"]
+                current_room_id = player_state.get("current_room_id")
+
+                if current_room_id:
+                    # Find the room in our converted locations to get coordinates
+                    for coord_key, location in locations_dict.items():
+                        if location.location_id == current_room_id:
+                            state_data["current_position"] = coord_key
+                            logger.log_step(f"Set current_position to {coord_key} based on current_room_id {current_room_id}")
+                            break
 
         try:
             world_state = WorldState(**state_data)
