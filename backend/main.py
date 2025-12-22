@@ -502,14 +502,17 @@ async def generate_greeting(request: Request):
              full_memory += "Character Data:\n" + character_context
 
         # Construct prompt
-        prompt = f"You are tasked with crafting a new, engaging first message for the character {name}."
+        # Get internal prompt template from request or use default
+        prompt_template = request_data.get('prompt_template')
         
-        if first_mes:
-            prompt += f"\n\nThe original first message was:\n\"{first_mes}\"\n\nPlease write a variation of this greeting that captures the same tone and personality, but offers a fresh introduction."
+        if prompt_template:
+            # Use provided template
+            prompt = prompt_template.replace('{{char}}', name)
+            # Ensure {{user}} remains as {{user}} for the LLM if it was in the template
+            # (No action needed if we just replace {{char}})
         else:
-             prompt += " Use the character's personality traits and background to write a brief, natural introduction."
-        
-        prompt += " Keep it concise and in character."
+            # Default prompt
+            prompt = f"#Generate an alternate first message for {name}. ##Only requirements: - Establish the world: Where are we? What does it feel like here? - Establish {name}'s presence (not bio): How do they occupy this space? Everything else (tone, structure, acknowledging/ignoring {{{{user}}}}, dialogue/action/interiority, length) is your choice. ##Choose what best serves this character in this moment. ##Goal: Create a scene unique to {name} speaking only for {name}"
         
         # Stream the response using ApiHandler
         # Pass full_memory as the memory context

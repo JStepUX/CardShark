@@ -387,6 +387,20 @@ const PROMPT_CATEGORIES = [
           PromptVariable.DESCRIPTION,
           PromptVariable.PERSONALITY
         ]
+      },
+      {
+        key: StandardPromptKey.GENERATE_INTRO,
+        title: 'Alternative Greeting Prompt',
+        description: 'Template for generating a new first message for a character',
+        variables: [
+          PromptVariable.CHAR_NAME,
+          PromptVariable.USER_NAME,
+          PromptVariable.DESCRIPTION,
+          PromptVariable.PERSONALITY,
+          PromptVariable.SCENARIO,
+          PromptVariable.FIRST_MESSAGE,
+          PromptVariable.EXAMPLES
+        ]
       }
     ]
   },

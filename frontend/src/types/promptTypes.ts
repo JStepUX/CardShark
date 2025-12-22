@@ -64,7 +64,8 @@ export enum StandardPromptKey {
   REASONING = 'reasoning',               // Thinking/reasoning prompt
 
   // Variation prompts
-  REFRESH_VARIATION = 'refresh_variation' // Create variation of response
+  REFRESH_VARIATION = 'refresh_variation', // Create variation of response
+  GENERATE_INTRO = 'generateIntro' // Generate introduction/greeting
 }
 
 /**

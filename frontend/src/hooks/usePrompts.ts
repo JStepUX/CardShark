@@ -21,7 +21,10 @@ const DEFAULT_PROMPTS: Record<string, string> = {
   reasoning: '{{char}} is thinking about how to respond to {{user}}\'s message: "{{message}}"',
 
   // Variation prompts
-  refresh_variation: 'Generate an alternative response from {{char}} to {{user}}\'s message: "{{message}}"'
+  refresh_variation: 'Generate an alternative response from {{char}} to {{user}}\'s message: "{{message}}"',
+
+  // Introduction message generation prompt template
+  generateIntro: "#Generate an alternate first message for {{char}}. ##Only requirements: - Establish the world: Where are we? What does it feel like here? - Establish {{char}}'s presence (not bio): How do they occupy this space? Everything else (tone, structure, acknowledging/ignoring {{user}}, dialogue/action/interiority, length) is your choice. ##Choose what best serves this character in this moment. ##Goal: Create a scene unique to {{char}} speaking only for {{char}}"
 };
 
 // Local storage keys

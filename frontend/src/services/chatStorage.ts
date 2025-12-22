@@ -1,5 +1,6 @@
 import { CharacterCard } from '../types/schema';
 import { Message, UserProfile } from '../types/messages';
+import { promptService } from './promptService';
 
 export class ChatStorage {
   /**
@@ -18,7 +19,8 @@ export class ChatStorage {
         },
         body: JSON.stringify({
           character_data: characterData,
-          api_config: apiConfig
+          api_config: apiConfig,
+          prompt_template: promptService.getPrompt('generateIntro')
         })
       });
 
@@ -68,7 +70,8 @@ export class ChatStorage {
         },
         body: JSON.stringify({
           character_data: characterData,
-          api_config: apiConfig
+          api_config: apiConfig,
+          prompt_template: promptService.getPrompt('generateIntro')
         })
       });
 

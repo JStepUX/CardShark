@@ -780,6 +780,7 @@ class OpenRouterAdapter(ApiProviderAdapter):
         # Special handling for greeting generation
         is_greeting = False
         if prompt and (prompt.startswith("You are tasked with crafting a new, engaging first message") or 
+                     prompt.startswith("#Generate an alternate first message") or
                      "craft a new introductory message" in prompt.lower()):
             is_greeting = True
             self.logger.log_step("Detected greeting generation request")
