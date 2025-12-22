@@ -52,6 +52,7 @@ interface ChatContextType {
   updateMessage: (messageId: string, content: string) => void;
   deleteMessage: (messageId: string) => void;
   addMessage: (message: Message) => void;
+  setMessages: (messages: Message[]) => void;
   cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
   generateResponse: (prompt: string, retryCount?: number) => Promise<void>;
   regenerateMessage: (message: Message, retryCount?: number) => Promise<void>;
@@ -1068,7 +1069,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
     messages, isLoading, isGenerating, error, currentUser, lastContextWindow,
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
     currentPreviewImageIndex, currentChatId: currentChatId,
-    updateMessage, deleteMessage, addMessage, cycleVariation,
+    updateMessage, deleteMessage, addMessage, setMessages, cycleVariation,
     generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,

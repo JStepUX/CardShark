@@ -30,7 +30,8 @@ const APISettingsView = lazy(() => import('./settings/APISettingsView'));
 
 // World views (V2 - UUID-based)
 const WorldLauncher = lazy(() => import('../views/WorldLauncher'));
-const WorldBuilder = lazy(() => import('../views/WorldBuilder'));
+const WorldEditor = lazy(() => import('../views/WorldEditor'));
+const WorldPlayView = lazy(() => import('../views/WorldPlayView'));
 
 const AppRoutes: React.FC = () => (
   // Global providers needed by most features - only essential ones
@@ -59,15 +60,15 @@ const AppRoutes: React.FC = () => (
                     </LazyRoute>
                   } />
                   <Route path="world/:uuid/builder" element={
-                    <LazyRoute routeName="World Builder">
-                      <WorldBuilder />
+                    <LazyRoute routeName="World Editor">
+                      <WorldEditor />
                     </LazyRoute>
                   } />
                   <Route path="world/:uuid/play" element={
                     <ChatProvider>
                       <LazyRoute routeName="World Play">
                         <HighlightStylesUpdater />
-                        <ChatView />
+                        <WorldPlayView />
                       </LazyRoute>
                     </ChatProvider>
                   } />

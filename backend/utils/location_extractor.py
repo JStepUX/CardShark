@@ -14,7 +14,15 @@ class LocationExtractor:
             "mountain", "lake", "river", "cave", "mansion", "house", "tavern", "inn",
             "academy", "school", "library", "dungeon", "palace", "fort", "fortress",
             "island", "valley", "bridge", "gate", "port", "harbor", "market", "shop",
-            "arena", "garden", "park", "tomb", "crypt", "cemetery", "laboratory"
+            "arena", "garden", "park", "tomb", "crypt", "cemetery", "laboratory",
+            "kitchen", "room", "hall", "entrance", "clearing", "field", "camp",
+            "office", "study", "bedroom", "bathroom", "quarters", "center", 
+            "station", "base", "post", "gym", "yard", "plaza", "square", "road",
+            "path", "street", "avenue", "lane", "alley", "grove", "woods", "church", 
+            "chapel", "pub", "bar", "restaurant", "cafe", "store", "mall", "hospital",
+            "clinic", "prison", "jail", "cell", "vault", "ruins", "wasteland", "desert",
+            "beach", "coast", "cliff", "hill", "peak", "summit", "swamp", "marsh",
+            "bog", "sewer", "tunnel", "mine", "shaft", "dock", "pier", "deck", "cabin"
         ]
         
     def extract_from_lore(self, character_data: Dict) -> List[UnconnectedLocation]:

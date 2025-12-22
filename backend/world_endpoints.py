@@ -196,7 +196,7 @@ async def create_world_api(
 
         logger.log_step(f"Creating world '{safe_world_name}', character_path: {character_path}")
 
-        result = world_card_handler.create_world(safe_world_name, character_path)
+        result = world_card_handler.create_world(safe_world_name, character_path, display_name=world_name)
 
         if not result:
             logger.error(f"Failed to create world '{safe_world_name}' using handler")

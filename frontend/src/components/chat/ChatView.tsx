@@ -28,7 +28,7 @@ import { ArrowDown } from 'lucide-react';
 import ChatBackgroundLayer from './ChatBackgroundLayer';
 import ChatHeader from './ChatHeader';
 import ChatInputArea from './ChatInputArea';
-import WorldSidePanel from './WorldSidePanel';
+// WorldSidePanel import removed
 
 // Types and Utilities
 import { Room, WorldData } from '../../types/world';
@@ -90,8 +90,12 @@ export const useStallDetection = (
   }, [isGenerating, stallTimeout, onStallDetected]);
 };
 
+interface ChatViewProps {
+  disableSidePanel?: boolean;
+}
+
 // Main ChatView component
-const ChatView: React.FC = () => {
+const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
   const { characterData, setCharacterData } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
@@ -519,18 +523,7 @@ const ChatView: React.FC = () => {
           </div>
         </div>
 
-        {/* World Side Panel (3rd Column) */}
-        {isWorldCard && worldId && (
-          <WorldSidePanel
-            worldId={worldId}
-            currentRoomId={currentRoom?.id || null}
-            onRoomChange={handleRoomChange}
-            onNpcClick={handleNpcClick}
-            onInventoryClick={() => console.log('Inventory clicked')}
-            onSpellsClick={() => console.log('Spells clicked')}
-            onMeleeClick={() => console.log('Melee clicked')}
-          />
-        )}
+
       </div>
 
       {/* Modals and Dialogs */}

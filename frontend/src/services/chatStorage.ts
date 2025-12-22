@@ -271,10 +271,11 @@ export class ChatStorage {
       console.log('Creating new chat for character:', character.data?.name);
 
       // Extract character ID
-      const characterUuid = character.data?.character_uuid;
-      if (!characterUuid) {
-        console.error('Cannot create chat: Missing character_uuid in character.data');
-        return { success: false, error: 'Missing character_uuid' };
+      // Extract character ID
+      const characterUuid = this.getCharacterId(character);
+      if (!characterUuid || characterUuid === 'unknown-character') {
+        console.error('Cannot create chat: Unable to determine character ID');
+        return { success: false, error: 'Missing character ID' };
       }
       console.log('Using character_uuid:', characterUuid);
 
@@ -410,10 +411,10 @@ export class ChatStorage {
     try {
       console.log('Loading latest chat for character:', character.data?.name);
 
-      const characterUuid = character.data?.character_uuid;
-      if (!characterUuid) {
-        console.error('Cannot load latest chat: Missing character_uuid in character.data');
-        return { success: false, error: 'Missing character_uuid', isRecoverable: true, first_mes_available: character?.data?.first_mes ? true : false };
+      const characterUuid = this.getCharacterId(character);
+      if (!characterUuid || characterUuid === 'unknown-character') {
+        console.error('Cannot load latest chat: Unable to determine character ID');
+        return { success: false, error: 'Missing character ID', isRecoverable: true, first_mes_available: character?.data?.first_mes ? true : false };
       }
       console.log('Using character_uuid for load-latest-chat:', characterUuid);
 

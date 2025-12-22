@@ -554,19 +554,26 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           setSecondaryImageUrl(newImageUrl);
           if (onCharacterSelected) onCharacterSelected();
         } else {
+          // Always load character data into context before navigation
           setCharacterData(metadata);
           setImageUrl(newImageUrl);
 
           // Navigation Logic
           if (targetRoute) {
+            // If explicit target route is provided, use it
             navigate(targetRoute);
           } else {
-            // Default logic (Chat vs Info)
-            // If incomplete, go to info. Otherwise chat.
-            // Note: World cards might go to Chat now.
-            if (character.is_incomplete) {
+            // Default navigation based on card type and state
+            const isWorldCard = character.extensions?.card_type === 'world';
+
+            if (isWorldCard && character.character_uuid) {
+              // World cards navigate to World Play view
+              navigate(`/world/${character.character_uuid}/play`);
+            } else if (character.is_incomplete) {
+              // Incomplete characters go to info/setup
               navigate('/info');
             } else {
+              // Regular characters go to chat
               navigate('/chat');
             }
           }
@@ -583,20 +590,23 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
   // Handle character selection (Main Click)
   const handleCharacterClick = (character: CharacterFile) => {
-    // For World Cards, we now go to ChatView (World Mode)
-    // For Characters, ChatView
+    // Routing is now handled intelligently in selectCharacter:
+    // - World Cards -> /world/{uuid}/play (WorldPlayView with WorldSidePanel)
+    // - Regular Characters -> /chat (ChatView)
     selectCharacter(character);
   };
 
   // Handle info button click
-  const handleInfoIconClick = (event: React.MouseEvent, character: CharacterFile) => {
+  const handleInfoIconClick = async (event: React.MouseEvent, character: CharacterFile) => {
     event.stopPropagation();
 
     // Logic:
-    // World Card -> Launcher (Splash)
+    // World Card -> Launcher (Splash) - Load data first, then navigate
     // Character -> Info View
     if (character.extensions?.card_type === 'world' && character.character_uuid) {
-      navigate(`/world/${character.character_uuid}/launcher`);
+      // Load character data into context before navigating to launcher
+      // This ensures the World Launcher has access to the card metadata
+      await selectCharacter(character, `/world/${character.character_uuid}/launcher`, true);
     } else {
       selectCharacter(character, '/info', true);
     }

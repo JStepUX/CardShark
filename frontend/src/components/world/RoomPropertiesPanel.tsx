@@ -1,0 +1,333 @@
+import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2 } from 'lucide-react';
+import { useState } from 'react';
+import { GridRoom } from '../../utils/worldStateApi';
+
+// Simple Modal for full content editing
+function TextEditorModal({
+  title,
+  value,
+  onSave,
+  onClose
+}: {
+  title: string;
+  value: string;
+  onSave: (val: string) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(value);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-4xl bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
+          <h3 className="text-lg font-medium text-white">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 p-4 min-h-[300px]">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="w-full h-full min-h-[400px] bg-[#141414] border border-[#2a2a2a] rounded-lg p-4 text-white font-mono text-sm focus:outline-none focus:border-purple-500 resize-none"
+            placeholder={`Enter ${title.toLowerCase()}...`}
+            autoFocus
+          />
+        </div>
+        <div className="p-4 border-t border-[#2a2a2a] flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 hover:bg-[#2a2a2a] rounded-lg text-gray-300 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => { onSave(text); onClose(); }}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          >
+            Apply Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface RoomPropertiesPanelProps {
+  room: GridRoom | null;
+  worldId: string;
+  availableCharacters: any[];
+  onUpdate: (room: GridRoom) => void;
+  onClose: () => void;
+  onOpenNPCPicker?: () => void;
+  isVisible?: boolean;
+}
+
+export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, isVisible = true }: RoomPropertiesPanelProps) {
+  const [uploading, setUploading] = useState(false);
+  const [editingField, setEditingField] = useState<{
+    field: 'description' | 'introduction_text';
+    title: string;
+    value: string;
+  } | null>(null);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!room || !e.target.files || e.target.files.length === 0) return;
+
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      setUploading(true);
+      const response = await fetch(`/api/world-assets/${worldId}`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        onUpdate({ ...room, image_path: data.data.path });
+      }
+    } catch (error) {
+      console.error('Error uploading room image:', error);
+      alert('Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const getNpcName = (id: string) => {
+    const char = availableCharacters.find((c: any) => c.id === id);
+    return char ? char.name : id;
+  };
+  const handleRemoveNPC = (npcId: string) => {
+    if (!room) return;
+    onUpdate({
+      ...room,
+      npcs: room.npcs.filter(id => id !== npcId),
+    });
+  };
+
+  // Overlay panel - slides in from right
+  return (
+    <>
+      {/* Modal for Full Text Editing */}
+      {editingField && (
+        <TextEditorModal
+          title={editingField.title}
+          value={editingField.value}
+          onSave={(newValue) => {
+            if (room) {
+              onUpdate({ ...room, [editingField.field]: newValue });
+            }
+          }}
+          onClose={() => setEditingField(null)}
+        />
+      )}
+
+      {/* Panel */}
+      <div
+        className={`
+          fixed top-0 right-0 h-full w-[500px] max-w-[90vw] bg-[#141414] border-l border-[#2a2a2a] 
+          flex flex-col z-50 shadow-2xl transform transition-transform duration-300 ease-out
+          ${isVisible && room ? 'translate-x-0' : 'translate-x-full'}
+        `}
+      >
+        {/* Header */}
+        <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
+          <h3 className="text-sm font-medium text-white">Room Properties</h3>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-[#2a2a2a] rounded transition-colors"
+          >
+            <X size={16} className="text-gray-400" />
+          </button>
+        </div>
+
+        {!room ? (
+          <div className="flex-1 flex items-center justify-center p-6 text-center">
+            <div className="text-gray-500 text-sm">
+              <p className="mb-2">No room selected</p>
+              <p className="text-xs text-gray-600">Click a room to edit it, or click an empty cell to create one</p>
+            </div>
+          </div>
+        ) : (
+          /* Properties */
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 space-y-4">
+              {/* Room Name */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Room Name</label>
+                <input
+                  type="text"
+                  value={room.name}
+                  onChange={(e) => onUpdate({ ...room, name: e.target.value })}
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors"
+                  placeholder="Enter room name..."
+                />
+              </div>
+
+              {/* Room Description */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-gray-400">Description</label>
+                  <button
+                    onClick={() => room && setEditingField({
+                      field: 'description',
+                      title: 'Room Description',
+                      value: room.description
+                    })}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  >
+                    <Maximize2 size={12} />
+                    Expand
+                  </button>
+                </div>
+                <textarea
+                  value={room.description}
+                  onChange={(e) => onUpdate({ ...room, description: e.target.value })}
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors resize-none mb-1"
+                  rows={2}
+                  placeholder="Describe this room..."
+                />
+              </div>
+
+              {/* Introduction Text */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-gray-400">Introduction Text</label>
+                  <button
+                    onClick={() => room && setEditingField({
+                      field: 'introduction_text',
+                      title: 'Introduction Text',
+                      value: room.introduction_text
+                    })}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  >
+                    <Maximize2 size={12} />
+                    Expand
+                  </button>
+                </div>
+                <textarea
+                  value={room.introduction_text}
+                  onChange={(e) => onUpdate({ ...room, introduction_text: e.target.value })}
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors resize-none"
+                  rows={2}
+                  placeholder="Text shown when entering room..."
+                />
+              </div>
+
+              {/* Cover Image */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Cover Image</label>
+                <div className="relative group">
+                  <div className={`
+                    w-full aspect-video bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg overflow-hidden flex items-center justify-center
+                    ${!room.image_path ? 'py-8' : ''}
+                  `}>
+                    {room.image_path ? (
+                      <img
+                        src={`/api/world-assets/${worldId}/${room.image_path.split('/').pop()}`}
+                        alt="Room cover"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-gray-500">
+                        <ImageIcon size={24} />
+                        <span className="text-xs">No image set</span>
+                      </div>
+                    )}
+
+                    {/* Overlay/Upload Button */}
+                    <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                      <div className="flex flex-col items-center gap-2 text-white">
+                        {uploading ? (
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <Upload size={24} />
+                            <span className="text-xs">Upload Image</span>
+                          </>
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={handleImageUpload}
+                        disabled={uploading}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* NPCs */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-gray-400">NPCs</label>
+                  <button className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors" onClick={onOpenNPCPicker}>
+                    <Plus size={14} />
+                    <span>Add NPC</span>
+                  </button>
+                </div>
+                {room.npcs.length === 0 ? (
+                  <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-6 text-center text-xs text-gray-500">
+                    No NPCs in this room
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {room.npcs.map((npcId) => (
+                      <div
+                        key={npcId}
+                        className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Users size={14} className="text-gray-500" />
+                          <span className="text-sm text-white">{getNpcName(npcId)}</span>
+                        </div>
+                        <button className="text-gray-500 hover:text-red-400 transition-colors" onClick={() => handleRemoveNPC(npcId)}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Connections */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Connections</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['north', 'south', 'east', 'west'] as const).map((direction) => (
+                    <div
+                      key={direction}
+                      className={`bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-xs ${room.connections[direction] ? 'text-green-400' : 'text-gray-600'
+                        }`}
+                    >
+                      <div className="capitalize">{direction}</div>
+                      <div className="text-xs opacity-60">
+                        {room.connections[direction] ? 'Connected' : 'None'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Position Info */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">Position</label>
+                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-gray-400">
+                  ({room.position.x}, {room.position.y})
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

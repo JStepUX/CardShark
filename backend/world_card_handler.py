@@ -147,21 +147,23 @@ class WorldCardHandler:
             self.logger.log_error(f"Failed to save world state for {world_identifier}: {e}")
             return False
 
-    def create_world(self, world_name: str, character_path: Optional[str] = None) -> Optional[Dict]:
+    def create_world(self, world_name: str, character_path: Optional[str] = None, display_name: Optional[str] = None) -> Optional[Dict]:
         """Creates a new world card (Character with world_data)."""
-        self.logger.log_step(f"Creating world '{world_name}'")
+        self.logger.log_step(f"Creating world '{world_name}' (Display: {display_name})")
         
+        final_name = display_name or world_name
+
         try:
             initial_state = None
             
             if character_path:
                 # Import character logic similar to WorldStateHandler
                 self.logger.log_step(f"Initializing from character: {character_path}")
-                initial_state = self._initialize_from_character(world_name, character_path)
+                initial_state = self._initialize_from_character(final_name, character_path)
             else:
                 # Empty world
                 self.logger.log_step("Initializing empty world")
-                initial_state = self._initialize_empty_world_state(world_name)
+                initial_state = self._initialize_empty_world_state(final_name)
             
             if not initial_state:
                 return None
@@ -172,7 +174,7 @@ class WorldCardHandler:
             
             # We need to construct the character data
             char_data = {
-                "name": world_name,
+                "name": final_name,
                 "description": f"World: {world_name}",
                 "tags": ["world"],
                 "extensions": {
@@ -186,8 +188,20 @@ class WorldCardHandler:
             image_bytes = None
             original_filename = f"{world_name}.png"
             
-            if character_path and Path(character_path).exists():
-                 with open(character_path, "rb") as f:
+            # Resolve image path from character_path (which might be a UUID)
+            real_image_path = None
+            if character_path:
+                # 1. Check if it's a path that directly exists
+                if Path(character_path).exists():
+                    real_image_path = character_path
+                else:
+                    # 2. Try to resolve as character UUID/Name
+                    char_obj = self._get_character_by_identifier(character_path)
+                    if char_obj and char_obj.png_file_path and Path(char_obj.png_file_path).exists():
+                        real_image_path = char_obj.png_file_path
+
+            if real_image_path:
+                 with open(real_image_path, "rb") as f:
                      image_bytes = f.read()
                      # We should probably preserve original character metadata too if we are "converting"
                      # But for now, let's just make a world card.
@@ -295,7 +309,7 @@ class WorldCardHandler:
                 description=f"The journey begins, inspired by {char_actual_name}. {char_description}",
                 introduction=f"You are at the starting point associated with {char_actual_name}. {char_description}",
                 connected=True,
-                npcs=[str(char_path)] 
+                npcs=[] 
             )
 
             # Extract locations
