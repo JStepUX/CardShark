@@ -443,6 +443,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         onOpenMap={handleOpenMap}
         isCollapsed={isPanelCollapsed}
         onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+        worldId={worldId}
       />
 
       {/* Map Modal */}

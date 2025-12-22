@@ -10,6 +10,7 @@ interface WorldSidePanelProps {
   onOpenMap: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  worldId: string;
 }
 
 export function WorldSidePanel({
@@ -20,6 +21,7 @@ export function WorldSidePanel({
   onOpenMap,
   isCollapsed,
   onToggleCollapse,
+  worldId,
 }: WorldSidePanelProps) {
   if (isCollapsed) {
     return (
@@ -50,6 +52,33 @@ export function WorldSidePanel({
           </h2>
         </div>
       </div>
+
+      {/* Room Image */}
+      {currentRoom && (
+        <div className="border-b border-gray-800 overflow-hidden">
+          <div className="relative w-full aspect-video bg-[#0a0a0a]">
+            {currentRoom.image_path ? (
+              <img
+                src={`/api/world-assets/${worldId}/${currentRoom.image_path.split('/').pop()}`}
+                alt={currentRoom.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-600 text-sm">No image available</div>';
+                  }
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-600 text-sm">
+                No image available
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* NPC Showcase */}
       <NPCShowcase
