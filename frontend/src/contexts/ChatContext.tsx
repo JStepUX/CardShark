@@ -595,6 +595,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!abortCtrl.signal.aborted && fullContent.trim().length === 0) {
         if (retryCount < 2) {
           console.warn(`Empty response detected during regen, retrying (attempt ${retryCount + 1})...`);
+
+          // Add a small delay before retrying to allow system to stabilize, but only after specific retries
+          if (retryCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
           const msgToRegen = finalMsgs.find(m => m.id === message.id) || message;
           await regenerateMessage(msgToRegen, retryCount + 1);
           return;
@@ -721,6 +727,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!abortCtrl.signal.aborted && fullContent.trim().length === 0) {
         if (retryCount < 2) {
           console.warn(`Empty response detected, retrying (attempt ${retryCount + 1})...`);
+
+          // Add a small delay before retrying to allow system to stabilize, but only after specific retries
+          if (retryCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
           const msgToRegen = finalMsgs.find(m => m.id === assistantMsgId);
           if (msgToRegen) {
             await regenerateMessage(msgToRegen, retryCount + 1);

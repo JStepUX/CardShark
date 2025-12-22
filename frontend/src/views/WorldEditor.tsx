@@ -5,7 +5,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, PanelLeftClose } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import { ToolPalette, type Tool } from '../components/world/ToolPalette';
 import { GridCanvas } from '../components/world/GridCanvas';
 import { RoomPropertiesPanel } from '../components/world/RoomPropertiesPanel';
@@ -41,7 +41,8 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   // Responsive panel states
   const [isToolPanelCollapsed, setIsToolPanelCollapsed] = useState(false);
 
-  const gridSize = { width: 5, height: 4 };
+  // Grid size state - dynamic based on world content
+  const [gridSize, setGridSize] = useState({ width: 8, height: 6 });
 
   // Load world data and available characters
   useEffect(() => {
@@ -60,6 +61,13 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
         if (figmaState) {
           setWorldState(figmaState);
+
+          // Determine grid size from loaded state
+          if (figmaState.grid && figmaState.grid.length > 0) {
+            const height = Math.max(figmaState.grid.length, 6);
+            const width = Math.max(figmaState.grid[0]?.length || 0, 8);
+            setGridSize({ width, height });
+          }
 
           // Extract rooms from grid
           const extractedRooms: GridRoom[] = [];
@@ -138,7 +146,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedRoom]);
+  }, [selectedRoom, rooms]);
 
   const handleRoomCreate = useCallback((position: { x: number; y: number }) => {
     const newRoom: GridRoom = {
@@ -155,7 +163,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     setRooms(prev => [...prev, newRoom]);
     setSelectedRoom(newRoom);
     setIsDirty(true);
-  }, [rooms.length]);
+  }, []);
 
   const handleRoomDelete = useCallback((roomId: string) => {
     setRooms(prev => prev.filter(r => r.id !== roomId));
@@ -197,14 +205,26 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     if (!worldState || !worldId) return;
 
     try {
-      // Rebuild grid from rooms
-      const newGrid: (GridRoom | null)[][] = Array(gridSize.height)
+      // Rebuild grid from rooms using CURRENT gridSize
+      // Ensure we accommodate all rooms by expanding grid if necessary (temporarily for save)
+      let maxX = gridSize.width - 1;
+      let maxY = gridSize.height - 1;
+
+      rooms.forEach(room => {
+        maxX = Math.max(maxX, room.position.x);
+        maxY = Math.max(maxY, room.position.y);
+      });
+
+      const saveWidth = maxX + 1;
+      const saveHeight = maxY + 1;
+
+      const newGrid: (GridRoom | null)[][] = Array(saveHeight)
         .fill(null)
-        .map(() => Array(gridSize.width).fill(null));
+        .map(() => Array(saveWidth).fill(null));
 
       rooms.forEach(room => {
         const { x, y } = room.position;
-        if (y >= 0 && y < gridSize.height && x >= 0 && x < gridSize.width) {
+        if (y >= 0 && y < saveHeight && x >= 0 && x < saveWidth) {
           newGrid[y][x] = room;
         }
       });
@@ -220,6 +240,10 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
       if (success) {
         setIsDirty(false);
+        // Update local grid size if it expanded
+        if (saveWidth > gridSize.width || saveHeight > gridSize.height) {
+          setGridSize({ width: saveWidth, height: saveHeight });
+        }
         console.log('World saved successfully');
       } else {
         setError('Failed to save world');
@@ -274,82 +298,76 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   }
 
   return (
-    <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Left Panel - Tools (Collapsible) */}
-      <ToolPalette
-        activeTool={activeTool}
-        onToolChange={setActiveTool}
-        isCollapsed={isToolPanelCollapsed}
-        onToggleCollapse={() => setIsToolPanelCollapsed(!isToolPanelCollapsed)}
-      />
-
-      {/* Center - Grid Canvas */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="bg-[#141414] border-b border-[#2a2a2a] px-3 md:px-6 py-3 md:py-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
-            <button
-              onClick={handleBack}
-              className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors shrink-0"
-              title="Go back"
-            >
-              <ArrowLeft size={20} className="text-gray-400" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-sm md:text-base font-medium truncate">{worldState.metadata.name}</h1>
-              <p className="text-xs md:text-sm text-gray-500 truncate hidden sm:block">{worldState.metadata.description}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1 md:gap-2 shrink-0">
-            {isDirty && (
-              <span className="text-xs text-yellow-500 mr-1 md:mr-2 hidden sm:inline">Unsaved</span>
-            )}
-
-            {/* Toggle collapse button for tool panel - visible on smaller screens */}
-            <button
-              onClick={() => setIsToolPanelCollapsed(!isToolPanelCollapsed)}
-              className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors md:hidden"
-              title={isToolPanelCollapsed ? "Show tools" : "Hide tools"}
-            >
-              <PanelLeftClose size={16} className={`text-gray-400 ${isToolPanelCollapsed ? 'rotate-180' : ''}`} />
-            </button>
-
-
-
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              <Save size={16} />
-              <span className="text-sm hidden sm:inline">Save</span>
-            </button>
+    <div className="flex flex-col h-screen bg-[#0a0a0a] text-white overflow-hidden">
+      {/* Header */}
+      <div className="bg-[#141414] border-b border-[#2a2a2a] px-3 md:px-6 py-3 md:py-4 flex items-center justify-between gap-2 shrink-0 z-30 relative">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
+          <button
+            onClick={handleBack}
+            className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors shrink-0"
+            title="Go back"
+          >
+            <ArrowLeft size={20} className="text-gray-400" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm md:text-base font-medium truncate">{worldState.metadata.name}</h1>
+            <p className="text-xs md:text-sm text-gray-500 truncate hidden sm:block">{worldState.metadata.description}</p>
           </div>
         </div>
 
-        {/* Grid Canvas */}
-        <GridCanvas
-          rooms={rooms}
-          selectedRoom={selectedRoom}
-          activeTool={activeTool}
-          gridSize={gridSize}
-          onRoomSelect={setSelectedRoom}
-          onRoomCreate={handleRoomCreate}
-          onRoomDelete={handleRoomDelete}
-          onRoomMove={handleRoomMove}
-        />
+        <div className="flex items-center gap-2 shrink-0">
+          {isDirty && (
+            <span className="text-xs text-yellow-500 mr-2">Unsaved</span>
+          )}
+
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            <Save size={16} />
+            <span className="text-sm">Save</span>
+          </button>
+        </div>
       </div>
 
-      {/* Right Panel - Properties Overlay */}
-      <RoomPropertiesPanel
-        room={selectedRoom}
-        worldId={worldId}
-        availableCharacters={availableCharacters}
-        onUpdate={handleRoomUpdate}
-        onClose={() => setSelectedRoom(null)}
-        onOpenNPCPicker={() => setShowNPCPicker(true)}
-        isVisible={!!selectedRoom && activeTool === 'edit'}
-      />
+      {/* Main Body (Tools + Canvas + Properties) */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Panel - Tools (Absolute Overlay) */}
+        <div className={`absolute top-0 left-0 bottom-0 z-20 transition-transform duration-200 ${isToolPanelCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
+          <ToolPalette
+            activeTool={activeTool}
+            onToolChange={setActiveTool}
+            isCollapsed={false}
+            onToggleCollapse={() => setIsToolPanelCollapsed(!isToolPanelCollapsed)}
+          />
+        </div>
+
+        {/* Center - Content (Full Width) */}
+        <div className="flex-1 flex flex-col">
+          {/* Grid Canvas */}
+          <GridCanvas
+            rooms={rooms}
+            selectedRoom={selectedRoom}
+            activeTool={activeTool}
+            gridSize={gridSize}
+            onRoomSelect={setSelectedRoom}
+            onRoomCreate={handleRoomCreate}
+            onRoomDelete={handleRoomDelete}
+            onRoomMove={handleRoomMove}
+          />
+        </div>
+
+        {/* Right Panel - Properties Overlay */}
+        <RoomPropertiesPanel
+          room={selectedRoom}
+          worldId={worldId}
+          availableCharacters={availableCharacters}
+          onUpdate={handleRoomUpdate}
+          onClose={() => setSelectedRoom(null)}
+          onOpenNPCPicker={() => setShowNPCPicker(true)}
+          isVisible={!!selectedRoom && activeTool === 'edit'}
+        />
+      </div>
 
       {/* NPC Picker Modal */}
       {showNPCPicker && selectedRoom && (

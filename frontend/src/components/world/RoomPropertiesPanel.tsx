@@ -131,8 +131,8 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
       {/* Panel */}
       <div
         className={`
-          fixed top-0 right-0 h-full w-[500px] max-w-[90vw] bg-[#141414] border-l border-[#2a2a2a] 
-          flex flex-col z-50 shadow-2xl transform transition-transform duration-300 ease-out
+          absolute top-0 bottom-0 right-0 w-[500px] max-w-[90vw] bg-[#141414] border-l border-[#2a2a2a] 
+          flex flex-col z-20 shadow-2xl transform transition-transform duration-300 ease-out
           ${isVisible && room ? 'translate-x-0' : 'translate-x-full'}
         `}
       >

@@ -89,14 +89,14 @@ const SideNav: React.FC<SideNavProps> = ({
     : characterImageUrl; // Fallback to default character image if no lore images are active
 
   return (
-    <div className={`relative bg-stone-950 shrink-0 flex flex-col border-r border-stone-800 transition-all duration-300 
+    <div className={`relative bg-stone-950 shrink-0 flex flex-col border-r border-stone-800 transition-all duration-300 z-40
       ${isCollapsed ? 'w-20' : 'w-96'}`}
     >
       {/* Toggle Button */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="absolute -right-3 top-6 w-6 h-12 bg-stone-800 rounded-full flex items-center justify-center
-                   hover:bg-stone-700 transition-colors z-30"
+                   hover:bg-stone-700 transition-colors z-50"
       >
         {isCollapsed ? (
           <ChevronRight className="w-4 h-4 text-gray-300" />

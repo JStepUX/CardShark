@@ -58,6 +58,8 @@ site-Home/
 koboldcpp/
 worlds/
 docs/docs/archivedOLD
+world_assets/
+uploads/
 
 *.spec
 crawlsite.py

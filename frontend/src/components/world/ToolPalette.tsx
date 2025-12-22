@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Edit3, Link2, Trash2, Move, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit3, Link2, Trash2, Move, ChevronLeft } from 'lucide-react';
 
 // Define Tool type - simplified to 4 tools
 type Tool = 'edit' | 'move' | 'connection' | 'eraser';
@@ -18,71 +18,23 @@ const tools: { id: Tool; icon: typeof Edit3; label: string; shortcut: string; de
   { id: 'eraser', icon: Trash2, label: 'Delete', shortcut: 'D', description: 'Remove rooms' },
 ];
 
-export function ToolPalette({ activeTool, onToolChange, isCollapsed = false, onToggleCollapse }: ToolPaletteProps) {
-  const [hoveredTool, setHoveredTool] = useState<Tool | null>(null);
-
-  // Collapsed view for small screens
-  if (isCollapsed) {
-    return (
-      <div className="bg-[#141414] border-r border-[#2a2a2a] flex flex-col w-14 transition-all duration-200">
-        <div className="p-2 border-b border-[#2a2a2a] flex justify-center">
-          <button
-            onClick={onToggleCollapse}
-            className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
-            title="Expand tools"
-          >
-            <ChevronRight size={16} className="text-gray-400" />
-          </button>
-        </div>
-        <div className="p-2 space-y-1">
-          {tools.map((tool) => {
-            const Icon = tool.icon;
-            const isActive = activeTool === tool.id;
-
-            return (
-              <button
-                key={tool.id}
-                onClick={() => onToolChange(tool.id)}
-                onMouseEnter={() => setHoveredTool(tool.id)}
-                onMouseLeave={() => setHoveredTool(null)}
-                className={`relative w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${isActive
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                  : 'text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-transparent'
-                  }`}
-                title={tool.label}
-              >
-                <Icon size={18} />
-                {/* Tooltip */}
-                {hoveredTool === tool.id && (
-                  <div className="absolute left-12 top-1/2 -translate-y-1/2 z-50 bg-[#2a2a2a] text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                    {tool.label} ({tool.shortcut})
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // Full view
+export function ToolPalette({ activeTool, onToolChange, onToggleCollapse }: ToolPaletteProps) {
   return (
-    <div className="w-56 lg:w-64 bg-[#141414] border-r border-[#2a2a2a] flex flex-col transition-all duration-200">
-      <div className="p-3 lg:p-4 border-b border-[#2a2a2a] flex items-center justify-between">
+    <div className="w-64 bg-[#141414] border-r border-[#2a2a2a] flex flex-col h-full">
+      <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
         <h3 className="text-sm font-medium">Tools</h3>
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="p-1.5 hover:bg-[#2a2a2a] rounded-lg transition-colors lg:hidden"
-            title="Collapse tools"
+            className="p-1.5 hover:bg-[#2a2a2a] rounded-lg transition-colors"
+            title="Close tools"
           >
             <ChevronLeft size={14} className="text-gray-400" />
           </button>
         )}
       </div>
 
-      <div className="p-3 lg:p-4 border-b border-[#2a2a2a]">
+      <div className="p-4 border-b border-[#2a2a2a]">
         <div className="space-y-1">
           {tools.map((tool) => {
             const Icon = tool.icon;
@@ -93,8 +45,8 @@ export function ToolPalette({ activeTool, onToolChange, isCollapsed = false, onT
                 key={tool.id}
                 onClick={() => onToolChange(tool.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isActive
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                  : 'text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-transparent'
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                    : 'text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-transparent'
                   }`}
               >
                 <Icon size={18} />
@@ -115,7 +67,7 @@ export function ToolPalette({ activeTool, onToolChange, isCollapsed = false, onT
         </div>
       </div>
 
-      <div className="p-3 lg:p-4 border-b border-[#2a2a2a]">
+      <div className="p-4 border-b border-[#2a2a2a]">
         <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-3">Templates</h3>
         <div className="space-y-1">
           {['Empty Room', 'Tavern', 'Forest', 'Dungeon', 'Shop'].map((template) => (
@@ -129,7 +81,7 @@ export function ToolPalette({ activeTool, onToolChange, isCollapsed = false, onT
         </div>
       </div>
 
-      <div className="flex-1 p-3 lg:p-4">
+      <div className="flex-1 p-4">
         <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Keyboard Shortcuts</h3>
         <div className="text-xs text-gray-600 space-y-1">
           {tools.map(tool => (
