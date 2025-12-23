@@ -16,6 +16,7 @@
 - **Routing**: React Router v7
 - **State Management**: React Context API with custom hooks
 - **Testing**: Jest with React Testing Library and MSW for API mocking
+- **Debug Logging**: DEBUG flag pattern for controlling console.log output (production vs development)
 
 ## Development Tools
 - **Linting**: ESLint for TypeScript/React

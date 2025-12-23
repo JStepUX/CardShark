@@ -28,10 +28,11 @@ import { ArrowDown } from 'lucide-react';
 import ChatBackgroundLayer from './ChatBackgroundLayer';
 import ChatHeader from './ChatHeader';
 import ChatInputArea from './ChatInputArea';
-// WorldSidePanel import removed
+import { SidePanel } from '../SidePanel';
 
 // Types and Utilities
-import { Room, WorldData } from '../../types/world';
+// Reserved for future world card functionality
+// import { Room, WorldData } from '../../types/world';
 
 // Define the ReasoningSettings interface
 interface ReasoningSettings {
@@ -100,18 +101,20 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false);
 
-  // World Card State
-  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  // Reserved for future world card functionality
+  // const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
 
   const isWorldCard = useMemo(() => {
     // Only open if strictly defined as a world type card
     return characterData?.data?.extensions?.card_type === 'world';
   }, [characterData]);
 
-  const worldId = useMemo(() => {
-    return characterData?.data?.extensions?.world || characterData?.data?.name || '';
-  }, [characterData]);
+  // Reserved for future world card functionality
+  // const worldId = useMemo(() => {
+  //   return characterData?.data?.extensions?.world || characterData?.data?.name || '';
+  // }, [characterData]);
   const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
   const [backgroundSettings, setBackgroundSettings] = useState<BackgroundSettings>(DEFAULT_BACKGROUND_SETTINGS);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -140,7 +143,8 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     clearError: clearHookError,
     currentChatId,
     continueResponse,
-    regenerateGreeting
+    regenerateGreeting,
+    isCompressing
   } = useChat();
 
   const { getPrompt, getDefaultPrompt, isLoading: isPromptsLoading } = usePrompts();
@@ -371,53 +375,60 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     setShowScrollButton(!isAtBottom);
   }, []);
 
-  // Handle Room Navigation (World Cards)
-  const handleRoomChange = useCallback((room: Room, worldState: WorldData) => {
-    if (!characterData) return;
+  // Reserved for future world card functionality
+  // const handleRoomChange = useCallback((room: Room, worldState: WorldData) => {
+  //   if (!characterData) return;
+  //
+  //   // Check if this is a navigation event (vs initial sync)
+  //   const isNavigation = currentRoom && currentRoom.id !== room.id;
+  //
+  //   // Update local state
+  //   setCurrentRoom(room);
+  //
+  //   // Update Character Context for the AI
+  //   const worldUserIntroduction = room.introduction ||
+  //     `You find yourself in ${room.name || 'an interesting place'}.`;
+  //
+  //   const newCard = { ...characterData };
+  //   if (!newCard.data) return;
+  //
+  //   const newScenario = `The user is exploring ${room.name || 'this location'} in the world of ${worldState.name || 'Unknown'}.`;
+  //   const newSystemPrompt = `You are the narrator describing the world of ${worldState.name || 'Unknown'}.`;
+  //
+  //   // Only update if changed
+  //   if (newCard.data.scenario !== newScenario) {
+  //     newCard.data.scenario = newScenario;
+  //     newCard.data.system_prompt = newSystemPrompt;
+  //     newCard.data.first_mes = worldUserIntroduction;
+  //
+  //     setCharacterData(newCard);
+  //   }
+  //
+  //   // Generate response if navigation
+  //   if (isNavigation && !isGenerating) {
+  //     const previousRoomName = currentRoom?.name || "the previous area";
+  //     const roomIntroduction = room.introduction || room.description || `You've entered ${room.name || "a new room"}.`;
+  //     const message = `You leave ${previousRoomName} and enter ${room.name || "a new area"}. ${roomIntroduction}`;
+  //
+  //     generateResponse(message);
+  //   }
+  // }, [characterData, currentRoom, isGenerating, generateResponse, setCharacterData]);
 
-    // Check if this is a navigation event (vs initial sync)
-    const isNavigation = currentRoom && currentRoom.id !== room.id;
-
-    // Update local state
-    setCurrentRoom(room);
-
-    // Update Character Context for the AI
-    const worldUserIntroduction = room.introduction ||
-      `You find yourself in ${room.name || 'an interesting place'}.`;
-
-    const newCard = { ...characterData };
-    if (!newCard.data) return;
-
-    const newScenario = `The user is exploring ${room.name || 'this location'} in the world of ${worldState.name || 'Unknown'}.`;
-    const newSystemPrompt = `You are the narrator describing the world of ${worldState.name || 'Unknown'}.`;
-
-    // Only update if changed
-    if (newCard.data.scenario !== newScenario) {
-      newCard.data.scenario = newScenario;
-      newCard.data.system_prompt = newSystemPrompt;
-      newCard.data.first_mes = worldUserIntroduction;
-
-      setCharacterData(newCard);
-    }
-
-    // Generate response if navigation
-    if (isNavigation && !isGenerating) {
-      const previousRoomName = currentRoom?.name || "the previous area";
-      const roomIntroduction = room.introduction || room.description || `You've entered ${room.name || "a new room"}.`;
-      const message = `You leave ${previousRoomName} and enter ${room.name || "a new area"}. ${roomIntroduction}`;
-
-      generateResponse(message);
-    }
-  }, [characterData, currentRoom, isGenerating, generateResponse, setCharacterData]);
-
-  // Handle NPC interactions from the side panel
-  const handleNpcClick = useCallback(() => {
-    // Placeholder for now, or open NPC dialog if needed
-    console.log("NPC icon clicked in ChatView");
-  }, []);
+  // Reserved for future NPC interaction functionality
+  // const handleNpcClick = useCallback(() => {
+  //   // Placeholder for now, or open NPC dialog if needed
+  //   console.log("NPC icon clicked in ChatView");
+  // }, []);
 
   // Compute emotion here to pass to InputArea
   const { currentEmotion: emotion } = useEmotionDetection(messages, characterData?.data?.name);
+
+  // Determine SidePanel mode
+  const sidePanelMode = useMemo(() => {
+    if (isWorldCard) return 'world';
+    if (characterData?.data?.character_uuid === 'cardshark-general-assistant-v1') return 'assistant';
+    return 'character';
+  }, [isWorldCard, characterData]);
 
   if (!characterData) {
     return <div className="flex items-center justify-center h-full text-gray-400">{isPromptsLoading ? "Loading Assistant..." : "Initializing Assistant..."}</div>;
@@ -516,6 +527,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
             <ChatInputArea
               onSend={handleSendMessage}
               isGenerating={isGenerating}
+              isCompressing={isCompressing}
               currentUser={currentUser}
               onUserSelect={() => setShowUserSelect(true)}
               emotion={emotion}
@@ -523,7 +535,15 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
           </div>
         </div>
 
-
+        {/* Side Panel - only render if not disabled */}
+        {!disableSidePanel && (
+          <SidePanel
+            mode={sidePanelMode}
+            isCollapsed={sidePanelCollapsed}
+            onToggleCollapse={() => setSidePanelCollapsed(!sidePanelCollapsed)}
+            characterName={characterData.data.name}
+          />
+        )}
       </div>
 
       {/* Modals and Dialogs */}

@@ -69,9 +69,14 @@
   - `CharacterGallery.tsx` - Character browsing and selection
   - `WorldMap.tsx` - World Cards navigation interface
   - `APISettingsView.tsx` - AI provider configuration
+  - `SidePanel/` - Unified side panel with mode-based rendering
+    - `SidePanel.tsx` - Main container with world/character/assistant modes
+    - `SessionNotes.tsx` - Auto-saving notes with character limit
+    - `CompressionToggle.tsx` - Message compression toggle
+    - `types.ts` - TypeScript definitions
 - `views/` - Page-level components
   - `WorldCardsView.tsx` - World management interface
-  - `WorldView.tsx` - World gameplay interface
+  - `WorldPlayView.tsx` - World gameplay interface
 - `contexts/` - React Context providers for state management
 - `hooks/` - Custom React hooks for shared logic
 - `api/` - API client modules for backend communication

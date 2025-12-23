@@ -613,7 +613,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // Handle character selection (Main Click)
   const handleCharacterClick = (character: CharacterFile) => {
     // Routing is now handled intelligently in selectCharacter:
-    // - World Cards -> /world/{uuid}/play (WorldPlayView with WorldSidePanel)
+    // - World Cards -> /world/{uuid}/play (WorldPlayView with SidePanel in world mode)
     // - Regular Characters -> /chat (ChatView)
     selectCharacter(character);
   };
@@ -860,8 +860,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                 onClick={handleManualRefresh}
                 disabled={isRefreshing || !currentDirectory}
                 className={`p-2 rounded-lg border transition-all ${isRefreshing
-                    ? 'bg-stone-700 border-stone-600 text-slate-500 cursor-wait'
-                    : 'bg-stone-800 border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-stone-700'
+                  ? 'bg-stone-700 border-stone-600 text-slate-500 cursor-wait'
+                  : 'bg-stone-800 border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-stone-700'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                 title="Refresh gallery (check for new/modified/deleted files)"
                 aria-label="Refresh gallery"
@@ -989,7 +989,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         {isLoading && characters.length === 0 && (
           <div className="flex flex-col items-center justify-center p-12 text-center">
             <LoadingSpinner size="lg" text="Loading characters..." className="text-blue-400 mb-4" />
-            <p className="text-sm text-slate-400 mt-2">If character directory is set, but characters aren't loading: Try restarting CardShark</p>
+            <p className="text-sm text-slate-400 mt-2">If character directory is set, but characters aren't loading: Try restarting CardShark or give it a moment to build up your database on first run.</p>
           </div>
         )}
         {!isLoading && error && (

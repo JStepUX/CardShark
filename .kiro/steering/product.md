@@ -6,6 +6,7 @@ CardShark is a PNG metadata editor and AI chatbot frontend built exclusively by 
 
 - **Character Management**: Create, import, and manage AI characters with rich metadata embedded in PNG files using unique UUIDs
 - **Dynamic Chat System**: Real-time streaming conversations with multiple AI providers (OpenAI, Claude, KoboldCPP, etc.)
+- **Context Management**: Session notes and automatic message compression to maintain coherent long conversations
 - **World Cards System**: Navigate dynamic maps, interact with AI-driven characters, and experience events that shape immersive worlds
 - **Template Management**: Create, edit, and manage customizable prompt templates for different conversation styles
 - **Content Filtering**: Advanced content moderation and safety controls with builtin and custom filters

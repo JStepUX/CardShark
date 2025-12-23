@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Send, User } from 'lucide-react';
+import { Send, User, Loader2 } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import MoodIndicator from '../MoodIndicator';
 import { UserProfile } from '../../types/messages';
@@ -8,6 +8,7 @@ import { EmotionState } from '../../hooks/useEmotionDetection';
 interface ChatInputAreaProps {
   onSend: (text: string) => void;
   isGenerating: boolean;
+  isCompressing?: boolean;
   currentUser: UserProfile | null;
   onUserSelect: () => void;
   emotion: EmotionState;
@@ -16,6 +17,7 @@ interface ChatInputAreaProps {
 const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onSend,
   isGenerating,
+  isCompressing = false,
   currentUser,
   onUserSelect,
   emotion,
@@ -26,7 +28,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (inputValue.trim() && !isGenerating) {
+      if (inputValue.trim() && !isGenerating && !isCompressing) {
         onSend(inputValue.trim());
         setInputValue('');
       }
@@ -40,6 +42,13 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 
   return (
     <div className="flex-none p-4 border-t border-stone-800">
+      {/* Compression Indicator */}
+      {isCompressing && (
+        <div className="mb-2 flex items-center gap-2 text-sm text-blue-400 animate-pulse">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Preparing context...</span>
+        </div>
+      )}
       <div className="flex items-end gap-4">
         {/* User Image */}
         <div
@@ -80,12 +89,12 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           <MoodIndicator emotion={emotion} size={24} showLabel={false} />
           <button
             onClick={() => {
-              if (inputValue.trim() && !isGenerating) {
+              if (inputValue.trim() && !isGenerating && !isCompressing) {
                 onSend(inputValue.trim());
                 setInputValue('');
               }
             }}
-            disabled={!inputValue.trim() || isGenerating}
+            disabled={!inputValue.trim() || isGenerating || isCompressing}
             className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700
                      transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >

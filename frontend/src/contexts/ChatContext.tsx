@@ -23,6 +23,7 @@ import {
 } from '../handlers/loreHandler';
 import { LoreEntry } from '../types/schema';
 import { buildContextMessages } from '../utils/contextBuilder';
+import { chatService, SessionSettings } from '../services/chat/chatService';
 
 interface ReasoningSettings {
   enabled: boolean;
@@ -49,6 +50,9 @@ interface ChatContextType {
   availablePreviewImages: AvailablePreviewImage[];
   currentPreviewImageIndex: number;
   currentChatId: string | null;
+  sessionNotes: string;
+  compressionEnabled: boolean;
+  isCompressing: boolean;
   updateMessage: (messageId: string, content: string) => void;
   deleteMessage: (messageId: string) => void;
   addMessage: (message: Message) => void;
@@ -67,6 +71,8 @@ interface ChatContextType {
   trackLoreImages: (matchedEntries: LoreEntry[], characterUuid: string) => void;
   resetTriggeredLoreImagesState: () => void;
   clearError: () => void;
+  setSessionNotes: (notes: string) => void;
+  setCompressionEnabled: (enabled: boolean) => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -103,11 +109,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [availablePreviewImages, setAvailablePreviewImages] = useState<AvailablePreviewImage[]>([]);
   const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState<number>(0);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [sessionNotes, setSessionNotesState] = useState<string>('');
+  const [compressionEnabled, setCompressionEnabledState] = useState<boolean>(false);
+  const [isCompressing, setIsCompressing] = useState<boolean>(false);
   const currentGenerationRef = useRef<AbortController | null>(null);
   const lastCharacterId = useRef<string | null>(null); // Stores character_id for file system comparison
   const autoSaveEnabled = useRef(true);
   const createNewChatRef = useRef<(() => Promise<string | null>) | null>(null);
   const isCreatingChatRef = useRef(false); // Prevent concurrent chat creation
+  const settingsSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const settingsSaveRetryCountRef = useRef<number>(0);
 
   useEffect(() => {
     const loadCtxWindow = async () => {
@@ -134,6 +145,114 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAvailablePreviewImages(defaultAvailImages);
     setCurrentPreviewImageIndex(0);
   }, [characterData]);
+
+  /**
+   * Debounced session settings save with retry logic
+   * - Optimistic updates (immediate local state)
+   * - Silent retry on failure with exponential backoff
+   * - Surface error only after 3 consecutive failures
+   */
+  const saveSessionSettings = useCallback(async (
+    chatSessionUuid: string,
+    settings: Partial<SessionSettings>,
+    retryCount: number = 0
+  ) => {
+    try {
+      await chatService.updateSessionSettings(chatSessionUuid, settings);
+      // Reset retry count on success
+      settingsSaveRetryCountRef.current = 0;
+    } catch (error) {
+      console.warn(`Failed to save session settings (attempt ${retryCount + 1}):`, error);
+
+      if (retryCount < 2) {
+        // Silent retry with exponential backoff: 1s, 2s, 4s
+        const delayMs = 1000 * Math.pow(2, retryCount);
+        setTimeout(() => {
+          saveSessionSettings(chatSessionUuid, settings, retryCount + 1);
+        }, delayMs);
+      } else {
+        // Surface error only after 3 failures
+        console.error('Failed to save session settings after 3 attempts:', error);
+        setError('Failed to save session settings. Please check your connection.');
+      }
+    }
+  }, []);
+
+  /**
+   * Set session notes with debounced save
+   */
+  const setSessionNotes = useCallback((notes: string) => {
+    // Optimistic update - immediate local state
+    setSessionNotesState(notes);
+
+    // Cancel pending save
+    if (settingsSaveTimerRef.current) {
+      clearTimeout(settingsSaveTimerRef.current);
+    }
+
+    // Debounce save by 1500ms
+    if (currentChatId) {
+      settingsSaveTimerRef.current = setTimeout(() => {
+        saveSessionSettings(currentChatId, { session_notes: notes || null });
+      }, 1500);
+    }
+  }, [currentChatId, saveSessionSettings]);
+
+  /**
+   * Set compression enabled with debounced save
+   */
+  const setCompressionEnabled = useCallback((enabled: boolean) => {
+    // Optimistic update - immediate local state
+    setCompressionEnabledState(enabled);
+
+    // Cancel pending save
+    if (settingsSaveTimerRef.current) {
+      clearTimeout(settingsSaveTimerRef.current);
+    }
+
+    // Debounce save by 1500ms
+    if (currentChatId) {
+      settingsSaveTimerRef.current = setTimeout(() => {
+        saveSessionSettings(currentChatId, { compression_enabled: enabled });
+      }, 1500);
+    }
+  }, [currentChatId, saveSessionSettings]);
+
+  /**
+   * Load session settings when chat session changes
+   */
+  useEffect(() => {
+    const loadSessionSettings = async () => {
+      if (!currentChatId) {
+        // Reset to defaults when no session
+        setSessionNotesState('');
+        setCompressionEnabledState(false);
+        return;
+      }
+
+      try {
+        const settings = await chatService.getSessionSettings(currentChatId);
+        setSessionNotesState(settings.session_notes || '');
+        setCompressionEnabledState(settings.compression_enabled);
+      } catch (error) {
+        console.error('Failed to load session settings:', error);
+        // Fallback to defaults on error
+        setSessionNotesState('');
+        setCompressionEnabledState(false);
+      }
+    };
+
+    loadSessionSettings();
+
+    // Cleanup: cancel pending saves when session changes
+    return () => {
+      if (settingsSaveTimerRef.current) {
+        clearTimeout(settingsSaveTimerRef.current);
+        settingsSaveTimerRef.current = null;
+      }
+    };
+  }, [currentChatId]);
+
 
   const saveChat = useCallback(async (messageList: Message[]) => {
     if (!characterData?.data?.name || !autoSaveEnabled.current) {
@@ -543,7 +662,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const response = await PromptHandler.generateChatResponse(
-        currentChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
+        currentChatId,
+        ctxMsgs,
+        fmtAPIConfig,
+        abortCtrl.signal,
+        characterData,
+        sessionNotes,
+        compressionEnabled,
+        () => setIsCompressing(true),
+        () => setIsCompressing(false),
+        (payload) => setLastContextWindow((prev: any) => ({ ...prev, type: 'regeneration', timestamp: new Date().toISOString(), payload }))
       );
 
       let fullContent = ''; let buffer = ''; const bufferInt = 50;
@@ -622,7 +750,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
       currentGenerationRef.current = null;
     }
-  }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat]);
+  }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes]);
 
   const generateResponse = useCallback(async (prompt: string, retryCount: number = 0) => {
     if (!characterData) { setError('No character data for response.'); return; }
@@ -668,7 +796,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const response = await PromptHandler.generateChatResponse(
-        effectiveChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
+        effectiveChatId,
+        ctxMsgs,
+        fmtAPIConfig,
+        abortCtrl.signal,
+        characterData,
+        sessionNotes,
+        compressionEnabled,
+        () => setIsCompressing(true),
+        () => setIsCompressing(false),
+        (payload) => setLastContextWindow((prev: any) => ({ ...prev, type: 'generation', timestamp: new Date().toISOString(), payload }))
       );
 
       let fullContent = '';
@@ -755,7 +892,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
       currentGenerationRef.current = null;
     }
-  }, [characterData, addMessage, prepareAPIConfig, apiConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, createNewChat, regenerateMessage]);
+  }, [characterData, addMessage, prepareAPIConfig, apiConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, createNewChat, regenerateMessage, sessionNotes]);
 
 
 
@@ -866,7 +1003,16 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       ctxMsgs.push(continuationPrompt);
 
       const fmtAPIConfig = prepareAPIConfig(apiConfig); const response = await PromptHandler.generateChatResponse(
-        currentChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, characterData
+        currentChatId,
+        ctxMsgs,
+        fmtAPIConfig,
+        abortCtrl.signal,
+        characterData,
+        sessionNotes,
+        compressionEnabled,
+        () => setIsCompressing(true),
+        () => setIsCompressing(false),
+        (payload) => setLastContextWindow((prev: any) => ({ ...prev, type: 'continuation', timestamp: new Date().toISOString(), payload }))
       );
 
       let buffer = ''; const bufferInt = 50;
@@ -921,7 +1067,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
       currentGenerationRef.current = null;
     }
-  }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat]);
+  }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes]);
 
   const stopGeneration = useCallback(() => {
     if (currentGenerationRef.current) {
@@ -1081,11 +1227,13 @@ Continue the response from exactly that point. Do not repeat the existing text. 
     messages, isLoading, isGenerating, error, currentUser, lastContextWindow,
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
     currentPreviewImageIndex, currentChatId: currentChatId,
+    sessionNotes, compressionEnabled, isCompressing,
     updateMessage, deleteMessage, addMessage, setMessages, cycleVariation,
     generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,
     resetTriggeredLoreImagesState, clearError,
+    setSessionNotes, setCompressionEnabled,
   };
 
   return <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>;

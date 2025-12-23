@@ -321,3 +321,43 @@ def append_message_to_chat_session(db: Session, chat_session_uuid: str, message_
         db.commit()
         db.refresh(db_chat_session)
     return db_chat_session
+
+
+# Session Settings operations for Context Lens feature
+
+def get_session_settings(db: Session, chat_session_uuid: str) -> Optional[dict]:
+    """
+    Get session settings (notes and compression flag) for a chat session.
+    Returns a dict with session_notes and compression_enabled, or None if session not found.
+    """
+    chat_session = get_chat_session(db, chat_session_uuid)
+    if not chat_session:
+        return None
+    
+    return {
+        "session_notes": chat_session.session_notes,
+        "compression_enabled": bool(chat_session.compression_enabled)  # Convert INTEGER to bool
+    }
+
+
+def update_session_settings(db: Session, chat_session_uuid: str, 
+                           session_notes: Optional[str] = None,
+                           compression_enabled: Optional[bool] = None) -> bool:
+    """
+    Update session settings for a chat session.
+    Returns True if successful, False if session not found.
+    """
+    chat_session = get_chat_session(db, chat_session_uuid)
+    if not chat_session:
+        return False
+    
+    # Update fields if provided
+    if session_notes is not None:
+        chat_session.session_notes = session_notes
+    
+    if compression_enabled is not None:
+        chat_session.compression_enabled = 1 if compression_enabled else 0  # Convert bool to INTEGER
+    
+    db.commit()
+    db.refresh(chat_session)
+    return True

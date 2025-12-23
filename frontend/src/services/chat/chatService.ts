@@ -70,6 +70,23 @@ interface GenerationResponse {
 }
 
 /**
+ * Session settings for context compression and notes
+ */
+export interface SessionSettings {
+  session_notes: string | null;
+  compression_enabled: boolean;
+}
+
+/**
+ * Session settings update payload
+ */
+export interface SessionSettingsUpdate {
+  chat_session_uuid: string;
+  session_notes?: string | null;
+  compression_enabled?: boolean;
+}
+
+/**
  * HTTP client with retry logic and proper error handling
  */
 class ChatApiClient {
@@ -450,6 +467,56 @@ export class ChatService {
       return response.data! || [];
     } catch (error) {
       console.error('Failed to get prompt context:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get session settings (notes and compression)
+   */
+  async getSessionSettings(chatSessionUuid: string): Promise<SessionSettings> {
+    if (!chatSessionUuid || typeof chatSessionUuid !== 'string') {
+      throw new Error('chatSessionUuid must be a non-empty string');
+    }
+
+    try {
+      const response = await this.client.get<SessionSettings>(`/chat/session-settings/${chatSessionUuid}`);
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to get session settings');
+      }
+
+      return response.data!;
+    } catch (error) {
+      console.error('Failed to get session settings:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update session settings (notes and compression)
+   */
+  async updateSessionSettings(
+    chatSessionUuid: string,
+    settings: Partial<SessionSettings>
+  ): Promise<void> {
+    if (!chatSessionUuid || typeof chatSessionUuid !== 'string') {
+      throw new Error('chatSessionUuid must be a non-empty string');
+    }
+
+    try {
+      const payload: SessionSettingsUpdate = {
+        chat_session_uuid: chatSessionUuid,
+        ...settings,
+      };
+
+      const response = await this.client.post<{ success: boolean }>('/chat/session-settings', payload);
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update session settings');
+      }
+    } catch (error) {
+      console.error('Failed to update session settings:', error);
       throw error;
     }
   }

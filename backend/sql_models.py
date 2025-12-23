@@ -201,6 +201,10 @@ class ChatSession(Base):
     title = Column(String, nullable=True)
     export_format_version = Column(String, nullable=True)  # for future compatibility
     is_archived = Column(Boolean, default=False, nullable=False)
+    
+    # Context Lens feature columns
+    session_notes = Column(Text, nullable=True, default=None)
+    compression_enabled = Column(Integer, default=0, nullable=False)  # SQLite uses INTEGER for boolean
 
     # Relationships
     character = relationship("Character") # Add back_populates if Character links to ChatSessions

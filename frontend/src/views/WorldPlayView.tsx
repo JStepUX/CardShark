@@ -1,15 +1,14 @@
 /**
  * @file WorldPlayView.tsx
  * @description Main orchestrator for World Card gameplay. Integrates the existing ChatView
- *              with WorldSidePanel and MapModal for navigation.
- * @dependencies worldStateApi, ChatView, WorldSidePanel, MapModal
+ *              with SidePanel (in world mode) and MapModal for navigation.
+ * @dependencies worldStateApi, ChatView, SidePanel, MapModal
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCharacter } from '../contexts/CharacterContext';
 import { useChat } from '../contexts/ChatContext';
 import ChatView from '../components/chat/ChatView';
-import { WorldSidePanel } from '../components/world/WorldSidePanel';
+import { SidePanel } from '../components/SidePanel';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
 import { MapModal } from '../components/world/MapModal';
 import {
@@ -27,9 +26,7 @@ interface WorldPlayViewProps {
 export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const { uuid } = useParams<{ uuid: string }>();
   const navigate = useNavigate();
-  const { setCharacterData: setCharacterDataInContext } = useCharacter(); // For loading NPC data
   const {
-    generateResponse,
     isGenerating,
     messages,
     setMessages,
@@ -291,16 +288,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
     // Find the target room in the grid
     let foundRoom: GridRoom | undefined;
-    let foundY = 0;
-    let foundX = 0;
 
     for (let y = 0; y < worldState.grid.length; y++) {
       for (let x = 0; x < worldState.grid[y].length; x++) {
         const room = worldState.grid[y][x];
         if (room?.id === roomId) {
           foundRoom = room;
-          foundY = y;
-          foundX = x;
           break;
         }
       }
@@ -435,7 +428,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       </div>
 
       {/* World Side Panel */}
-      <WorldSidePanel
+      <SidePanel
+        mode="world"
         currentRoom={currentRoom}
         npcs={roomNpcs}
         activeNpcId={activeNpcId}

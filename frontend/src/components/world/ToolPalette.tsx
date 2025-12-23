@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Edit3, Link2, Trash2, Move, ChevronLeft } from 'lucide-react';
 
 // Define Tool type - simplified to 4 tools
@@ -45,8 +44,8 @@ export function ToolPalette({ activeTool, onToolChange, onToggleCollapse }: Tool
                 key={tool.id}
                 onClick={() => onToolChange(tool.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                    : 'text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-transparent'
+                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                  : 'text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-transparent'
                   }`}
               >
                 <Icon size={18} />

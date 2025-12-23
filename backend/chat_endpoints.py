@@ -912,3 +912,80 @@ def reliable_delete_chat_endpoint(
         raise
     except Exception as e:
         raise handle_generic_error(e, "deleting chat (reliable)")
+
+
+# =============================================================================
+# SESSION SETTINGS ENDPOINTS (Context Lens Feature)
+# =============================================================================
+
+@router.get("/chat/session-settings/{chat_session_uuid}")
+def get_session_settings_endpoint(
+    chat_session_uuid: str,
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Get session settings (notes and compression flag) for a chat session.
+    Returns session_notes and compression_enabled.
+    """
+    try:
+        from backend.models.session_settings import SessionSettings
+        
+        settings = chat_service.get_session_settings(db, chat_session_uuid)
+        
+        if settings is None:
+            raise NotFoundException(f"Chat session not found: {chat_session_uuid}")
+        
+        # Convert to Pydantic model
+        response = SessionSettings(
+            session_notes=settings.get("session_notes"),
+            compression_enabled=settings.get("compression_enabled", False)
+        )
+        
+        return create_data_response(response)
+        
+    except NotFoundException:
+        raise
+    except Exception as e:
+        raise handle_generic_error(e, "getting session settings")
+
+
+@router.post("/chat/session-settings")
+def update_session_settings_endpoint(
+    payload: dict,  # Expected: {chat_session_uuid: str, session_notes?: str, compression_enabled?: bool}
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Update session settings for a chat session.
+    Accepts session_notes and/or compression_enabled.
+    """
+    try:
+        from backend.models.session_settings import SessionSettingsUpdate, SessionSettingsResponse
+        
+        # Validate payload
+        chat_session_uuid = payload.get("chat_session_uuid")
+        if not chat_session_uuid:
+            raise ValidationException("chat_session_uuid is required")
+        
+        session_notes = payload.get("session_notes")
+        compression_enabled = payload.get("compression_enabled")
+        
+        # Update settings
+        success = chat_service.update_session_settings(
+            db=db,
+            chat_session_uuid=chat_session_uuid,
+            session_notes=session_notes,
+            compression_enabled=compression_enabled
+        )
+        
+        if not success:
+            raise NotFoundException(f"Chat session not found: {chat_session_uuid}")
+        
+        response = SessionSettingsResponse(success=True)
+        return create_data_response(response)
+        
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        raise handle_generic_error(e, "updating session settings")

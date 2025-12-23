@@ -37,6 +37,12 @@
 - **Styling**: Tailwind CSS classes - avoid inline styles
 - **Error handling**: Proper error boundaries and loading states
 - **Testing**: Jest with React Testing Library
+- **Debug logging**: Use DEBUG flag constant to gate console.log statements (set to false for production)
+
+### Component Patterns
+- **Mode-based components**: Components that adapt UI based on mode prop (e.g., SidePanel with world/character/assistant modes)
+- **Debounced persistence**: Auto-save with debounce for user input (e.g., session notes with 1-2 second delay)
+- **Character limits**: Enforce limits with visual feedback (gray → yellow → red as limit approaches)
 
 ## Data Handling Patterns
 
@@ -53,6 +59,10 @@
 - **Service layer**: `backend/services/chat_service.py` handles all chat operations
 - **Frontend integration**: Use `chat_session_uuid` for all chat API calls
 - **Message storage**: All messages stored in database, not files
+- **Session settings**: Per-session configuration stored in database:
+  - `session_notes`: User-editable notes injected into AI context (2000 char limit)
+  - `compression_enabled`: Toggle for automatic message compression
+  - Auto-saved with debounce, loaded on session switch
 
 ### World Cards System
 - **Directory structure**: `/worlds/{worldName}/` with `world_state.json`

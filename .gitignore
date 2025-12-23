@@ -35,6 +35,7 @@ yarn-error.log*
 # System files
 .DS_Store
 Thumbs.db
+*.sqlite
 
 # Temporary files
 *.tmp

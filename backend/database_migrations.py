@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 # Current schema version - increment when making schema changes
 # When this changes, the old database will be deleted and rebuilt fresh
-CURRENT_SCHEMA_VERSION = "2.1.0"  # Added is_incomplete column to Character model
+CURRENT_SCHEMA_VERSION = "2.2.0"  # Added session_notes and compression_enabled columns for Context Lens feature
+
 
 
 def get_database_path() -> Path:

@@ -3,6 +3,13 @@ import { CharacterCard } from '../types/schema';
 import { templateService } from '../services/templateService';
 import { Template } from '../types/templateTypes';
 
+// Debug flag - set to false to disable console.log statements
+const DEBUG = false;
+
+// Compression constants
+const COMPRESSION_THRESHOLD = 20;  // don't compress below this
+const RECENT_WINDOW = 10;          // always keep this many verbatim
+
 export class PromptHandler {
   // Removed unused DEFAULT_PARAMS
 
@@ -11,13 +18,13 @@ export class PromptHandler {
     if (!template) return '';
 
     let result = template;
-    
+
     // Replace each variable in the template
     Object.entries(variables).forEach(([key, value]) => {
       const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
       result = result.replace(regex, value || '');
     });
-    
+
     return result;
   }
 
@@ -27,14 +34,14 @@ export class PromptHandler {
    */
   public static stripHtmlTags(content: string): string { // Changed to public
     if (!content) return '';
-    
+
     // Create a DOM element to safely parse and extract text
     const temp = document.createElement('div');
     temp.innerHTML = content;
-    
+
     // Get text content (strips HTML tags)
     const textContent = temp.textContent || temp.innerText || '';
-    
+
     // Return non-empty text or original as fallback
     return textContent.trim() || content;
   }
@@ -47,10 +54,10 @@ export class PromptHandler {
   public static getTemplate(templateId?: string): Template | null { // Changed to public
     // If templateId is provided, try to get that template
     if (templateId) {
-      console.log(`Looking up template with ID: ${templateId}`);
+      if (DEBUG) console.log(`Looking up template with ID: ${templateId}`);
       const template = templateService.getTemplateById(templateId);
       if (template) {
-        console.log(`Found template: ${template.name}`);
+        if (DEBUG) console.log(`Found template: ${template.name}`);
         return template;
       } else {
         console.warn(`Template not found for ID: ${templateId}`);
@@ -58,25 +65,25 @@ export class PromptHandler {
     } else {
       console.warn('No templateId provided');
     }
-     
+
     // Fallback to mistral template or first available
-    console.log('Falling back to default template');
+    if (DEBUG) console.log('Falling back to default template');
     const defaultTemplate = templateService.getTemplateById('mistral') ||
-                           templateService.getAllTemplates()[0] ||
-                           null;
-    
+      templateService.getAllTemplates()[0] ||
+      null;
+
     if (defaultTemplate) {
-      console.log(`Using default template: ${defaultTemplate.name}`);
+      if (DEBUG) console.log(`Using default template: ${defaultTemplate.name}`);
     } else {
       console.error('No templates available');
     }
-    
+
     return defaultTemplate;
   }
 
   // Create memory context from character data using template
   public static createMemoryContext(character: CharacterCard, template: Template | null, userName?: string): string {
-    console.log('Creating memory context with template:', template?.name || 'No template', 'User:', userName);
+    if (DEBUG) console.log('Creating memory context with template:', template?.name || 'No template', 'User:', userName);
     const currentUser = userName || 'User'; // Fallback for user name
 
     if (!template || !template.memoryFormat) {
@@ -91,7 +98,7 @@ Personality: ${character.data.personality || ''}
 [Scenario: ${scenario}]
 ${character.data.mes_example || ''}
 ***`;
-      console.log('Using default memory format:', defaultMemory);
+      if (DEBUG) console.log('Using default memory format:', defaultMemory);
       return defaultMemory;
     }
 
@@ -107,7 +114,7 @@ ${character.data.mes_example || ''}
       };
 
       const formattedMemory = this.replaceVariables(template.memoryFormat, variables);
-      console.log('Formatted memory using template:', formattedMemory);
+      if (DEBUG) console.log('Formatted memory using template:', formattedMemory);
       return formattedMemory.trim(); // Ensure clean formatting
     } catch (error) {
       console.error('Error formatting memory context:', error);
@@ -130,7 +137,7 @@ ${character.data.mes_example || ''}
   ): string {
     // Strip HTML from the current message
     const cleanMessage = this.stripHtmlTags(currentMessage);
-    
+
     if (!template) {
       // Default to a Mistral-like format if no template provided
       return `${history}\n[INST] ${cleanMessage} [/INST]\n${characterName}:`;
@@ -138,14 +145,14 @@ ${character.data.mes_example || ''}
 
     try {
       // Format user message
-      const userFormatted = this.replaceVariables(template.userFormat, { 
-        content: cleanMessage 
+      const userFormatted = this.replaceVariables(template.userFormat, {
+        content: cleanMessage
       });
 
       // Format assistant message start
-      const assistantFormatted = this.replaceVariables(template.assistantFormat, { 
-        content: '', 
-        char: characterName 
+      const assistantFormatted = this.replaceVariables(template.assistantFormat, {
+        content: '',
+        char: characterName
       });
 
       // Combine to create the complete prompt
@@ -167,10 +174,10 @@ ${character.data.mes_example || ''}
     templateId?: string
   ): string {
     if (!messages || messages.length === 0) return '';
-    
+
     const template = this.getTemplate(templateId);
-    console.log('Formatting chat history with template:', template?.name || 'Default');
-    
+    if (DEBUG) console.log('Formatting chat history with template:', template?.name || 'Default');
+
     // Process each message to ensure we use the latest edited version,
     // and handle thinking messages specially
     const processedMessages = messages
@@ -178,21 +185,21 @@ ${character.data.mes_example || ''}
       .map(msg => {
         // If the message has variations and a currentVariation index, use that content
         let finalContent = msg.content;
-        if (msg.variations && msg.variations.length > 0 && 
-            typeof msg.currentVariation === 'number' && 
-            msg.variations[msg.currentVariation]) {
+        if (msg.variations && msg.variations.length > 0 &&
+          typeof msg.currentVariation === 'number' &&
+          msg.variations[msg.currentVariation]) {
           finalContent = msg.variations[msg.currentVariation];
         }
-        
+
         // Strip HTML tags to ensure clean text for the API
         const cleanContent = this.stripHtmlTags(finalContent);
-        
+
         return {
           role: msg.role,
           content: cleanContent
         };
-    });
-    
+      });
+
     if (!template) {
       // Fallback formatting if no template found
       return processedMessages
@@ -211,19 +218,19 @@ ${character.data.mes_example || ''}
       return processedMessages
         .map(msg => {
           const { role, content } = msg;
-          
+
           if (role === 'assistant') {
-            return this.replaceVariables(template.assistantFormat, { 
-              content, 
-              char: characterName 
+            return this.replaceVariables(template.assistantFormat, {
+              content,
+              char: characterName
             });
           } else if (role === 'system' && template.systemFormat) {
             return this.replaceVariables(template.systemFormat, {
               content
             });
           } else {
-            return this.replaceVariables(template.userFormat, { 
-              content 
+            return this.replaceVariables(template.userFormat, {
+              content
             });
           }
         })
@@ -243,6 +250,77 @@ ${character.data.mes_example || ''}
         .join('\n\n');
     }
   }
+
+  /**
+   * Format messages for compression prompt
+   */
+  private static formatMessagesForCompression(
+    messages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
+    characterName: string
+  ): string {
+    return messages
+      .map(msg => {
+        const role = msg.role === 'assistant' ? characterName : msg.role === 'user' ? 'User' : 'System';
+        return `${role}: ${msg.content}`;
+      })
+      .join('\n\n');
+  }
+
+  /**
+   * Compress old messages into a summary using the configured API
+   */
+  private static async compressMessages(
+    messages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
+    characterName: string,
+    apiConfig: any,
+    signal?: AbortSignal
+  ): Promise<string> {
+    const systemPrompt = `You are a context compressor for a roleplay chat. Summarize the following messages into a concise narrative that preserves:
+- Key plot events and decisions
+- Character emotional states and relationship changes
+- Established facts about the world/setting
+- Any commitments, promises, or plans made
+
+Write in past tense, third person. Be concise but do not lose critical details.
+Do not editorialize or add interpretation. Just the facts of what happened.`;
+
+    const userPrompt = `Compress these messages:\n\n${this.formatMessagesForCompression(messages, characterName)}`;
+
+    // Build a simple payload for compression
+    const payload = {
+      api_config: apiConfig,
+      generation_params: {
+        prompt: `${systemPrompt}\n\n${userPrompt}\n\nSummary:`,
+        memory: '',
+        stop_sequence: [],
+        quiet: true
+      }
+    };
+
+    if (DEBUG) console.log('Calling compression API...');
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Compression API failed with status ${response.status}`);
+    }
+
+    // Collect the full response from the stream
+    let compressedText = '';
+    for await (const chunk of this.streamResponse(response)) {
+      compressedText += chunk;
+    }
+
+    if (DEBUG) console.log('Compression complete, length:', compressedText.length);
+    return compressedText.trim();
+  }
+
   /**
    * Generates a chat response using the provided parameters.
    * Routes to the working /api/generate endpoint with proper payload structure.
@@ -252,40 +330,111 @@ ${character.data.mes_example || ''}
     contextMessages: Array<{ role: 'user' | 'assistant' | 'system', content: string }>,
     apiConfig: any, // API configuration for LLM generation
     signal?: AbortSignal,
-    characterCard?: CharacterCard // Optional: for stop sequences and prompt formatting
+    characterCard?: CharacterCard, // Optional: for stop sequences and prompt formatting
+    sessionNotes?: string, // Optional: user notes to inject into context
+    compressionEnabled?: boolean, // Optional: enable message compression
+    onCompressionStart?: () => void, // Optional: callback when compression starts
+    onCompressionEnd?: () => void, // Optional: callback when compression ends
+    onPayloadReady?: (payload: any) => void // Optional: callback with the payload before sending
   ): Promise<Response> {
     if (!chatSessionUuid) {
       throw new Error("chat_session_uuid is required for chat generation");
     }
-    
+
     if (!apiConfig) {
       throw new Error("apiConfig is required for LLM generation");
     }
-    
+
     try {
       // Get template and character info
       const templateId = apiConfig?.templateId;
       const template = this.getTemplate(templateId);
       const characterName = characterCard?.data?.name || 'Character';
-      
+
       // Create memory context using the template system
       let memory = '';
       if (characterCard?.data) {
         memory = this.createMemoryContext(characterCard, template, 'User');
       }
-      
+
+      // Compression logic
+      let compressedContext = '';
+      let messagesToFormat = contextMessages;
+
+      if (compressionEnabled && contextMessages.length > COMPRESSION_THRESHOLD) {
+        if (DEBUG) console.log(`Compression enabled: ${contextMessages.length} messages (threshold: ${COMPRESSION_THRESHOLD})`);
+
+        const splitPoint = contextMessages.length - RECENT_WINDOW;
+        const oldMessages = contextMessages.slice(0, splitPoint);
+        const recentMessages = contextMessages.slice(splitPoint);
+
+        if (DEBUG) console.log(`Splitting: ${oldMessages.length} old messages, ${recentMessages.length} recent messages`);
+
+        try {
+          // Notify that compression is starting
+          if (onCompressionStart) {
+            onCompressionStart();
+          }
+
+          // Compress old messages
+          const compressed = await this.compressMessages(
+            oldMessages,
+            characterName,
+            apiConfig,
+            signal
+          );
+
+          compressedContext = `[Previous Events Summary]\n${compressed}\n[End Summary - Recent conversation follows]`;
+          messagesToFormat = recentMessages;
+
+          if (DEBUG) console.log('Compression successful, using compressed context');
+        } catch (error) {
+          console.error('Compression failed, using full context:', error);
+          // Fallback: use uncompressed messages (current behavior)
+          messagesToFormat = contextMessages;
+          compressedContext = '';
+        } finally {
+          // Notify that compression is done
+          if (onCompressionEnd) {
+            onCompressionEnd();
+          }
+        }
+      } else if (compressionEnabled) {
+        if (DEBUG) console.log(`Compression enabled but below threshold (${contextMessages.length} < ${COMPRESSION_THRESHOLD})`);
+      }
+
+      // Inject session notes at depth-3 (after memory, before conversation)
+      let notesBlock = '';
+      if (sessionNotes && sessionNotes.trim()) {
+        notesBlock = `[Session Notes]\n${sessionNotes.trim()}\n[End Session Notes]`;
+        if (DEBUG) console.log('Injecting session notes into payload:', notesBlock);
+      }
+
       // Format conversation history using the template system
       const prompt = this.formatChatHistory(
-        contextMessages.map(msg => ({
+        messagesToFormat.map(msg => ({
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content
         })),
         characterName,
         templateId
       );
-        // Get stop sequences from template or use defaults
+
+      // Combine memory, compressed context, notes, and prompt
+      // Structure: memory (system prompt) → compressed context (if any) → session notes → conversation history
+      let finalPrompt = prompt;
+
+      if (compressedContext) {
+        finalPrompt = `${compressedContext}\n\n${finalPrompt}`;
+      }
+
+      if (notesBlock) {
+        finalPrompt = `${finalPrompt}\n\n${notesBlock}`;
+      }
+
+      // Get stop sequences from template or use defaults
       const stopSequences = this.getStopSequences(template, characterName);
-        
+
       // Build the payload for /api/generate endpoint
       // Extract only essential character data without lore book to avoid sending unnecessary data
       const essentialCharacterData = characterCard ? {
@@ -312,7 +461,7 @@ ${character.data.mes_example || ''}
       const payload = {
         api_config: apiConfig,
         generation_params: {
-          prompt: prompt,
+          prompt: finalPrompt,
           memory: memory,
           stop_sequence: stopSequences,
           chat_session_uuid: chatSessionUuid, // Include for potential backend use
@@ -321,6 +470,16 @@ ${character.data.mes_example || ''}
           quiet: true
         }
       };
+
+      // Log payload for verification
+      if (DEBUG && sessionNotes && sessionNotes.trim()) {
+        console.log('Payload with notes:', JSON.stringify(payload, null, 2));
+      }
+
+      // Call the payload callback if provided (for debugging/inspection)
+      if (onPayloadReady) {
+        onPayloadReady(payload);
+      }
 
       // Make the actual API request to the working streaming endpoint
       const response = await fetch('/api/generate', {
@@ -331,14 +490,14 @@ ${character.data.mes_example || ''}
         body: JSON.stringify(payload),
         signal // Pass the abort signal for cancellation
       });
-      
+
       return response;
     } catch (error) {
       console.error('Error generating chat response:', error);
       throw error;
     }
   }
-  
+
   /**
    * Helper method to format prompt with context messages
    */
@@ -377,7 +536,7 @@ ${character.data.mes_example || ''}
               return this.replaceVariables(`{{user}}: {{content}}`, messageVariables);
             }
           }
-          
+
           if (msg.role === 'assistant') {
             return this.replaceVariables(template.assistantFormat || '{{char}}: {{content}}', messageVariables);
           } else if (msg.role === 'system' && template.systemFormat) {
@@ -388,7 +547,7 @@ ${character.data.mes_example || ''}
         })
         .join('\n');
     }
-    
+
     // Combine everything into a complete prompt
     const currentUserPromptFormatted = template?.userFormat
       ? this.replaceVariables(template.userFormat, { content: prompt, user: currentUser, char: characterName })
@@ -397,9 +556,9 @@ ${character.data.mes_example || ''}
     const assistantPrefixFormatted = template?.assistantFormat
       ? this.replaceVariables(template.assistantFormat, { content: '', char: characterName, user: currentUser })
       : this.replaceVariables(`{{char}}:`, { char: characterName });
-      
+
     const fullPrompt = `${memoryContext}\n\n${history}\n\n${currentUserPromptFormatted}\n\n${assistantPrefixFormatted}`;
-    
+
     return fullPrompt;
   }
 
@@ -411,68 +570,68 @@ ${character.data.mes_example || ''}
     if (!response.ok) {
       throw new Error(`API responded with status ${response.status}`);
     }
-    
+
     if (!response.body) {
       throw new Error('Response body is empty');
     }
-    
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    
+
     try {
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) {
           break;
         }
-        
+
         // Decode the chunk
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
-        
+
         // Process lines in buffer
         let lineEnd;
         while ((lineEnd = buffer.indexOf('\n')) !== -1) {
           const line = buffer.substring(0, lineEnd).trim();
           buffer = buffer.substring(lineEnd + 1);
-          
+
           if (!line) continue;
-          
+
           // Check if it's SSE format (data: prefix)
           if (line.startsWith('data: ')) {
             const data = line.substring(6);
-            
+
             // Handle completion marker
             if (data === '[DONE]') {
-              console.log('Stream complete marker received');
+              if (DEBUG) console.log('Stream complete marker received');
               continue;
             }
-              try {
+            try {
               // Parse the JSON data
               const parsed = JSON.parse(data);
-              console.log(`[PromptHandler.streamResponse] Parsed data:`, parsed);
-              
+              if (DEBUG) console.log(`[PromptHandler.streamResponse] Parsed data:`, parsed);
+
               // Log first chunk for debugging (optional)
               if (parsed.delta_type === 'role' && parsed.role === 'assistant') {
-                console.log('[OpenRouter] Received role marker for assistant');
+                if (DEBUG) console.log('[OpenRouter] Received role marker for assistant');
                 continue; // Skip yielding for role-only chunks
               }
-              
+
               // Handle OpenRouter-specific token format from our improved adapter
               if (parsed.token !== undefined) {
-                console.log(`[PromptHandler.streamResponse] Yielding token: "${parsed.token}"`);
+                if (DEBUG) console.log(`[PromptHandler.streamResponse] Yielding token: "${parsed.token}"`);
                 yield parsed.token;
                 continue;
               }
-              
+
               // Handle Featherless adapter specific format
               if (parsed.raw_featherless_payload !== undefined) {
                 try {
                   // Try to parse the raw payload from Featherless
                   const featherlessData = JSON.parse(parsed.raw_featherless_payload);
-                  
+
                   // Handle chat completions format
                   if (featherlessData.choices && featherlessData.choices[0]) {
                     if (featherlessData.choices[0].message && featherlessData.choices[0].message.content) {
@@ -489,14 +648,14 @@ ${character.data.mes_example || ''}
                       continue;
                     }
                   }
-                  
+
                   // If no specific format matched but we have content field as fallback
                   if (featherlessData.content) {
                     yield featherlessData.content;
                     continue;
                   }
-                  
-                  console.log('Unrecognized Featherless response format:', featherlessData);
+
+                  if (DEBUG) console.log('Unrecognized Featherless response format:', featherlessData);
                 } catch (parseError) {
                   // If the raw payload isn't valid JSON, just use it directly
                   console.warn('Could not parse Featherless raw payload:', parseError);
@@ -504,26 +663,26 @@ ${character.data.mes_example || ''}
                 }
                 continue;
               }
-                // Handle different response formats
+              // Handle different response formats
               // OpenAI and OpenRouter format: choices[0].delta.content
               if (parsed.choices && parsed.choices[0]?.delta?.content) {
                 yield parsed.choices[0].delta.content;
                 continue;
               }
-                // KoboldCPP and other formats - check for content field
+              // KoboldCPP and other formats - check for content field
               if (parsed.hasOwnProperty('content')) {
                 // Even if content is empty string, yield it (it's valid)
-                console.log(`[PromptHandler.streamResponse] Yielding content: "${parsed.content}"`);
+                if (DEBUG) console.log(`[PromptHandler.streamResponse] Yielding content: "${parsed.content}"`);
                 yield parsed.content;
                 continue;
               }
-              
+
               // Handle special formats with empty content that should be skipped
               if (parsed.delta_type === 'empty_delta' || parsed.delta_type === 'processing') {
-                console.log(`[PromptHandler.streamResponse] Skipping empty delta: ${parsed.delta_type}`);
+                if (DEBUG) console.log(`[PromptHandler.streamResponse] Skipping empty delta: ${parsed.delta_type}`);
                 continue;
               }
-              
+
               // If we can't extract content in a standard way, log the format for debugging
               console.warn('Unrecognized response format:', parsed);
               console.warn('Parsed content:', parsed.content);
@@ -540,7 +699,7 @@ ${character.data.mes_example || ''}
           }
         }
       }
-      
+
       // Don't forget any remaining content in the buffer
       if (buffer.trim()) {
         yield buffer.trim();
@@ -566,7 +725,7 @@ ${character.data.mes_example || ''}
     }
 
     // Replace {{char}} in stop sequences with actual character name
-    return template.stopSequences.map(seq => 
+    return template.stopSequences.map(seq =>
       seq.replace(/\{\{char\}\}/g, characterName)
     );
   }
