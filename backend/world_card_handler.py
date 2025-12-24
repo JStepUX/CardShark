@@ -172,10 +172,20 @@ class WorldCardHandler:
             # If we initialized from character, we might want to use that character's image and base data
             # But _initialize_from_character just returns WorldState object.
             
+            # Determine first_mes from the starting location
+            first_mes = "Welcome to the world."
+            if initial_state.current_position and initial_state.current_position in initial_state.locations:
+                start_loc = initial_state.locations[initial_state.current_position]
+                if start_loc.introduction:
+                    first_mes = start_loc.introduction
+                elif start_loc.description:
+                    first_mes = start_loc.description
+
             # We need to construct the character data
             char_data = {
                 "name": final_name,
                 "description": f"World: {world_name}",
+                "first_mes": first_mes,
                 "tags": ["world"],
                 "extensions": {
                     "card_type": "world",
