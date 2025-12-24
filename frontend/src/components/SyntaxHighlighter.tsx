@@ -20,7 +20,7 @@ const SyntaxHighlighter: React.FC<{ text: string }> = ({ text }) => {
 
     // Split text into segments based on patterns
     const segments = input.split(/(".*?"|\*.*?\*|\{\{.*?\}\})/g);
-    
+
     return segments.map((segment, index) => {
       if (segment.match(/^".*"$/)) {
         return <span key={index} style={{ color: colors.quoted }}>{segment}</span>;

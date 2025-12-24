@@ -346,6 +346,13 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
     }
 
     try {
+      // Ghost Request Guard: Prevent sending requests with practically empty context
+      if ((!contextMessages || contextMessages.length === 0) && !characterCard?.data?.first_mes) {
+        if (DEBUG) console.warn('Blocked potential Ghost Request: No context messages and no character greeting');
+        // Return a mocked 400 response to stop processing without crashing UI
+        return new Response(JSON.stringify({ error: 'Ghost Request Blocked: Insufficient context' }), { status: 400 });
+      }
+
       // Get template and character info
       const templateId = apiConfig?.templateId;
       const template = this.getTemplate(templateId);
@@ -403,7 +410,8 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         if (DEBUG) console.log(`Compression enabled but below threshold (${contextMessages.length} < ${COMPRESSION_THRESHOLD})`);
       }
 
-      // Inject session notes at depth-3 (after memory, before conversation)
+      // Inject session notes
+      // Fix: Move notes to be BEFORE the conversation history to avoid confusing the model
       let notesBlock = '';
       if (sessionNotes && sessionNotes.trim()) {
         notesBlock = `[Session Notes]\n${sessionNotes.trim()}\n[End Session Notes]`;
@@ -421,22 +429,30 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
       );
 
       // Combine memory, compressed context, notes, and prompt
-      // Structure: memory (system prompt) → compressed context (if any) → session notes → conversation history
-      let finalPrompt = prompt;
+      // Revised Structure: memory (system prompt) → compressed context → session notes → conversation history
+      // This ensures the model sees the notes as context/instructions before generating the continuation
+      let finalPrompt = '';
 
       if (compressedContext) {
-        finalPrompt = `${compressedContext}\n\n${finalPrompt}`;
+        finalPrompt += `${compressedContext}\n\n`;
       }
 
       if (notesBlock) {
-        finalPrompt = `${finalPrompt}\n\n${notesBlock}`;
+        finalPrompt += `${notesBlock}\n\n`;
+      }
+
+      finalPrompt += prompt;
+
+      // Ensure we don't send an empty prompt if history is empty (e.g. first message)
+      if (!finalPrompt.trim()) {
+        finalPrompt = `${characterName}:`;
       }
 
       // Get stop sequences from template or use defaults
       const stopSequences = this.getStopSequences(template, characterName);
 
       // Build the payload for /api/generate endpoint
-      // Extract only essential character data without lore book to avoid sending unnecessary data
+      // Extract only essential character data without lore book
       const essentialCharacterData = characterCard ? {
         spec: characterCard.spec,
         spec_version: characterCard.spec_version,
@@ -461,6 +477,8 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
       const payload = {
         api_config: apiConfig,
         generation_params: {
+          // Fix: Spread user generation settings (like banned_tokens) so they aren't lost
+          ...(apiConfig.generation_settings || {}),
           prompt: finalPrompt,
           memory: memory,
           stop_sequence: stopSequences,

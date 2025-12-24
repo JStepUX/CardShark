@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Dialog } from '../common/Dialog';
 import { Copy, FileText, MessageSquare, Settings } from 'lucide-react';
 import { z } from 'zod';
 
 const ContextWindowSchema = z.object({
   type: z.enum([
-    'generation', 'regeneration', 'generation_complete', 
-    'regeneration_complete', 'initial_message', 
+    'generation', 'regeneration', 'generation_complete',
+    'regeneration_complete', 'initial_message',
     'loaded_chat', 'chat_loaded', 'new_chat'
   ]),
   timestamp: z.string().datetime(),
@@ -63,37 +63,15 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
 }) => {
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'analysis' | 'raw'>('analysis');
-  
-  // State to store context history in reverse chronological order (newest first)
-  const [contextHistory, setContextHistory] = useState<any[]>([]);
 
-  // Update context history when new data is received
-  useEffect(() => {
-    if (contextData) {
-      setContextHistory(prev => {
-        // Avoid duplicates by checking if identical context already exists
-        const exists = prev.some(ctx => 
-          JSON.stringify(ctx) === JSON.stringify(contextData)
-        );
-        
-        if (exists) return prev;
-        
-        // Add newest context at the beginning, keep up to 10 entries
-        return [contextData, ...prev].slice(0, 10);
-      });
-    }
-  }, [contextData]);
-
-  // Copy to clipboard functionality - Copy the active context (first one)
+  // Copy to clipboard functionality - Copy the active context
   const handleCopy = async () => {
     try {
-      const dataToCopy = contextHistory.length > 0 ? 
-        JSON.stringify(contextHistory[0], null, 2) : 
-        JSON.stringify(contextData, null, 2);
-        
+      const dataToCopy = JSON.stringify(contextData, null, 2);
+
       await navigator.clipboard.writeText(dataToCopy);
       setCopySuccess(true);
-      
+
       // Reset the "Copied!" message after 2 seconds
       setTimeout(() => {
         setCopySuccess(false);
@@ -106,62 +84,62 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
   // Analyze token usage
   const tokenAnalysis = useMemo(() => {
     if (!contextData) return null;
-    
+
     const analysis: Record<string, number> = {};
     let totalTokens = 0;
-    
+
     // System information (character description, etc)
     if (contextData.systemPrompt) {
       const systemTokens = countTokens(contextData.systemPrompt);
       analysis.systemPrompt = systemTokens;
       totalTokens += systemTokens;
     }
-    
+
     if (contextData.personality) {
       const personalityTokens = countTokens(contextData.personality);
       analysis.personality = personalityTokens;
       totalTokens += personalityTokens;
     }
-    
+
     if (contextData.scenario) {
       const scenarioTokens = countTokens(contextData.scenario);
       analysis.scenario = scenarioTokens;
       totalTokens += scenarioTokens;
     }
-    
+
     // Message history
     if (contextData.messageHistory && Array.isArray(contextData.messageHistory)) {
       let historyTokens = 0;
-      contextData.messageHistory.forEach((msg: {role: string, content: string}) => {
+      contextData.messageHistory.forEach((msg: { role: string, content: string }) => {
         historyTokens += countTokens(msg.content);
       });
       analysis.messageHistory = historyTokens;
       totalTokens += historyTokens;
     }
-    
+
     // User prompt
     if (contextData.prompt) {
       const promptTokens = countTokens(contextData.prompt);
       analysis.prompt = promptTokens;
       totalTokens += promptTokens;
     }
-    
+
     analysis.total = totalTokens;
-    
+
     // Estimate remaining capacity
     const estimatedCapacity = contextData.config?.max_context_length || 8192;
     analysis.remainingCapacity = Math.max(0, estimatedCapacity - totalTokens);
     analysis.usagePercentage = Math.min(100, (totalTokens / estimatedCapacity) * 100);
-    
+
     return analysis;
   }, [contextData]);
 
   const getContextTypeSummary = () => {
     if (!contextData) return "No data";
-    
+
     const type = contextData.type || 'unknown';
     const timestamp = contextData.timestamp ? new Date(contextData.timestamp).toLocaleTimeString() : 'unknown time';
-    
+
     switch (type) {
       case 'generation':
         return `Generation request at ${timestamp}`;
@@ -186,12 +164,12 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
 
   const renderTokenAnalysis = () => {
     if (!tokenAnalysis) return <div className="text-gray-400">No token analysis available</div>;
-    
+
     return (
       <div className="space-y-4">
         <div className="bg-stone-800 p-4 rounded-lg">
           <div className="text-sm text-gray-300 mb-2">{getContextTypeSummary()}</div>
-          
+
           <div className="flex items-center gap-2 mb-2">
             <div className="text-lg font-semibold">
               {tokenAnalysis.total.toLocaleString()} tokens used
@@ -200,20 +178,20 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
               (~{tokenAnalysis.remainingCapacity.toLocaleString()} remaining)
             </div>
           </div>
-          
+
           {/* Progress bar */}
           <div className="w-full h-2 bg-stone-700 rounded-full overflow-hidden">
-            <div 
+            <div
               className={`h-full ${tokenAnalysis.usagePercentage > 90 ? 'bg-red-500' : tokenAnalysis.usagePercentage > 70 ? 'bg-orange-500' : 'bg-green-500'}`}
               style={{ width: `${tokenAnalysis.usagePercentage}%` }}
             />
           </div>
         </div>
-        
+
         {/* Token breakdown */}
         <div className="bg-stone-800 p-4 rounded-lg">
           <h3 className="text-sm font-medium mb-3">Token Usage Breakdown</h3>
-          
+
           <div className="space-y-2">
             {tokenAnalysis.systemPrompt !== undefined && (
               <div className="flex justify-between items-center">
@@ -224,7 +202,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
                 <div className="text-gray-300">{tokenAnalysis.systemPrompt.toLocaleString()} tokens</div>
               </div>
             )}
-            
+
             {tokenAnalysis.personality !== undefined && (
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -234,7 +212,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
                 <div className="text-gray-300">{tokenAnalysis.personality.toLocaleString()} tokens</div>
               </div>
             )}
-            
+
             {tokenAnalysis.scenario !== undefined && (
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -244,7 +222,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
                 <div className="text-gray-300">{tokenAnalysis.scenario.toLocaleString()} tokens</div>
               </div>
             )}
-            
+
             {tokenAnalysis.messageHistory !== undefined && (
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -254,7 +232,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
                 <div className="text-gray-300">{tokenAnalysis.messageHistory.toLocaleString()} tokens</div>
               </div>
             )}
-            
+
             {tokenAnalysis.prompt !== undefined && (
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -266,7 +244,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             )}
           </div>
         </div>
-        
+
         {/* API Configuration */}
         {contextData.config && (
           <div className="bg-stone-800 p-4 rounded-lg">
@@ -274,7 +252,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
               <Settings size={16} />
               <span>API Configuration</span>
             </h3>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-xs text-gray-400">Provider</div>
@@ -295,7 +273,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             </div>
           </div>
         )}
-        
+
         {/* Template Information */}
         {contextData.template && (
           <div className="bg-stone-800 p-4 rounded-lg">
@@ -303,12 +281,12 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
               <FileText size={16} />
               <span>Template Information</span>
             </h3>
-            
+
             <div className="mb-2">
               <div className="text-xs text-gray-400">Template Name</div>
               <div>{contextData.template.name || 'Unknown'}</div>
             </div>
-            
+
             {contextData.template.format && (
               <div>
                 <div className="text-xs text-gray-400">Format</div>
@@ -321,7 +299,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             )}
           </div>
         )}
-        
+
         {/* Character Info */}
         {contextData.characterName && (
           <div className="bg-stone-800 p-4 rounded-lg">
@@ -346,19 +324,19 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
         <div className="flex border-b border-stone-700 mb-4 performance-contain">
           <button
             onClick={() => setActiveTab('analysis')}
-            className={`px-4 py-2 performance-transform ${activeTab === 'analysis' 
-              ? 'border-b-2 border-blue-500 text-blue-400' 
+            className={`px-4 py-2 performance-transform ${activeTab === 'analysis'
+              ? 'border-b-2 border-blue-500 text-blue-400'
               : 'text-gray-400 hover:text-gray-300'
-            }`}
+              }`}
           >
             Analysis
           </button>
           <button
             onClick={() => setActiveTab('raw')}
-            className={`px-4 py-2 performance-transform ${activeTab === 'raw' 
-              ? 'border-b-2 border-blue-500 text-blue-400' 
+            className={`px-4 py-2 performance-transform ${activeTab === 'raw'
+              ? 'border-b-2 border-blue-500 text-blue-400'
               : 'text-gray-400 hover:text-gray-300'
-            }`}
+              }`}
           >
             Raw Data
           </button>
@@ -384,22 +362,12 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           </div>
         ) : (
           <div className="flex-1 overflow-auto performance-contain">
-            {/* Display context history in reverse chronological order (newest first) */}
-            {contextHistory.length > 0 ? (
-              contextHistory.map((context, index) => (
-                <div key={index} className="mb-6 performance-contain performance-transform">
-                  <pre className="bg-stone-900 text-gray-300 font-mono text-sm
-                              rounded-lg p-4 overflow-auto whitespace-pre-wrap">
-                    {JSON.stringify(context, null, 2)}
-                  </pre>
-                </div>
-              ))
-            ) : (
+            <div className="performance-contain performance-transform">
               <pre className="bg-stone-900 text-gray-300 font-mono text-sm
-                           rounded-lg p-4 overflow-auto whitespace-pre-wrap performance-contain">
+                           rounded-lg p-4 overflow-auto whitespace-pre-wrap">
                 {JSON.stringify(contextData, null, 2)}
               </pre>
-            )}
+            </div>
           </div>
         )}
       </div>
