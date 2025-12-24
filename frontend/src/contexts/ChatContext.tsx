@@ -773,6 +773,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Add to UI state
     const msgWithId = { ...userMsg, id: userMsg.id || crypto.randomUUID() };
+
+    // CRITICAL: Capture messagesRef.current BEFORE any await statements
+    // This prevents React's useEffect from updating the ref with the new user message
+    // before we build the context, which would cause duplication
+    const existingMessagesSnapshot = messagesRef.current;
+
     setMessages((prev: Message[]) => [...prev, msgWithId]);
 
     // Persist directly with known-good chat ID (fixes closure stale state bug)
@@ -789,8 +795,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl; try {
       // Build context using shared utility - handles async state bug
+      // Use the snapshot captured before any awaits to prevent duplication
       const ctxMsgs = buildContextMessages({
-        existingMessages: messagesRef.current,
+        existingMessages: existingMessagesSnapshot,
         newUserMessage: userMsg,
         excludeMessageId: assistantMsgId
       });
