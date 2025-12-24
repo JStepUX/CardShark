@@ -6,6 +6,7 @@
  */
 // frontend/src/components/chat/ChatView.tsx
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import ChatBubble from './ChatBubble';
 import ThoughtBubble from '../ThoughtBubble';
@@ -97,7 +98,8 @@ interface ChatViewProps {
 
 // Main ChatView component
 const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
-  const { characterData, setCharacterData } = useCharacter();
+  const navigate = useNavigate();
+  const { characterData, setCharacterData, setImageUrl } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
@@ -430,6 +432,21 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     return 'character';
   }, [isWorldCard, characterData]);
 
+  // Handler for image changes in the side panel
+  const handleImageChange = useCallback((newImageData: string | File) => {
+    // This would typically save the image to the character
+    // For now, we'll just log it as this functionality may need backend support
+    console.log('Image change requested in side panel:', newImageData);
+    // TODO: Implement image save functionality
+  }, []);
+
+  // Handler for unloading character (dismiss)
+  const handleUnloadCharacter = useCallback(() => {
+    setCharacterData(null);
+    setImageUrl(undefined);
+    navigate('/gallery');
+  }, [setCharacterData, setImageUrl, navigate]);
+
   if (!characterData) {
     return <div className="flex items-center justify-center h-full text-gray-400">{isPromptsLoading ? "Loading Assistant..." : "Initializing Assistant..."}</div>;
   }
@@ -542,6 +559,8 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
             isCollapsed={sidePanelCollapsed}
             onToggleCollapse={() => setSidePanelCollapsed(!sidePanelCollapsed)}
             characterName={characterData.data.name}
+            onImageChange={handleImageChange}
+            onUnloadCharacter={handleUnloadCharacter}
           />
         )}
       </div>

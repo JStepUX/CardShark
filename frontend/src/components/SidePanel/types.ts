@@ -17,4 +17,6 @@ export interface SidePanelProps {
 
     // Character mode props (optional)
     characterName?: string;
+    onImageChange?: (newImageData: string | File) => void;
+    onUnloadCharacter?: () => void;
 }

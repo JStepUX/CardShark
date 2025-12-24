@@ -5,6 +5,7 @@ import { SessionNotes } from './SessionNotes';
 import { CompressionToggle } from './CompressionToggle';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
+import ImagePreview from '../ImagePreview';
 
 export function SidePanel({
     mode,
@@ -17,6 +18,8 @@ export function SidePanel({
     onOpenMap,
     worldId,
     characterName,
+    onImageChange,
+    onUnloadCharacter,
 }: SidePanelProps) {
     const { sessionNotes, setSessionNotes, compressionEnabled, setCompressionEnabled } = useChat();
     if (isCollapsed) {
@@ -75,6 +78,8 @@ export function SidePanel({
                 setSessionNotes={setSessionNotes}
                 compressionEnabled={compressionEnabled}
                 setCompressionEnabled={setCompressionEnabled}
+                onImageChange={onImageChange}
+                onUnloadCharacter={onUnloadCharacter}
             />}
 
             {mode === 'assistant' && <AssistantModeContent
@@ -198,13 +203,17 @@ function CharacterModeContent({
     sessionNotes,
     setSessionNotes,
     compressionEnabled,
-    setCompressionEnabled
+    setCompressionEnabled,
+    onImageChange,
+    onUnloadCharacter
 }: {
     characterName?: string;
     sessionNotes: string;
     setSessionNotes: (notes: string) => void;
     compressionEnabled: boolean;
     setCompressionEnabled: (enabled: boolean) => void;
+    onImageChange?: (newImageData: string | File) => void;
+    onUnloadCharacter?: () => void;
 }) {
     // Get the actual image URL from CharacterContext (same as gallery uses)
     const { imageUrl } = useCharacter();
@@ -214,23 +223,13 @@ function CharacterModeContent({
             {/* Character Portrait */}
             <div className="border-b border-gray-800 overflow-hidden">
                 <div className="relative w-full aspect-[4/5] bg-[#0a0a0a] overflow-hidden">
-                    {imageUrl ? (
-                        <img
-                            src={imageUrl}
-                            alt={characterName || 'Character'}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = '/pngPlaceholder.png';
-                            }}
-                        />
-                    ) : (
-                        <img
-                            src="/pngPlaceholder.png"
-                            alt="No character loaded"
-                            className="w-full h-full object-cover opacity-50"
-                        />
-                    )}
+                    <ImagePreview
+                        imageUrl={imageUrl}
+                        placeholderUrl="/pngPlaceholder.png"
+                        onImageChange={onImageChange}
+                        hasCharacterLoaded={!!imageUrl}
+                        onUnloadCharacter={onUnloadCharacter}
+                    />
                 </div>
             </div>
 
