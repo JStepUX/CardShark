@@ -12,6 +12,7 @@ coverage/
 testHelpers/
 cardshark.sqlite
 
+
 # Environment files
 .env
 .env.local
@@ -36,6 +37,7 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 *.sqlite
+Beekeeper*.*
 
 # Temporary files
 *.tmp
