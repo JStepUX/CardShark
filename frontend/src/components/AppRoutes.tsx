@@ -19,6 +19,7 @@ import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
 // Character and Gallery views
 const CharacterGallery = lazy(() => import('./character/CharacterGallery'));
 const CharacterInfoView = lazy(() => import('./character/CharacterInfoView'));
+const InfoViewRouter = lazy(() => import('./InfoViewRouter'));
 const LoreView = lazy(() => import('./LoreView'));
 const MessagesView = lazy(() => import('./MessagesView'));
 
@@ -77,7 +78,7 @@ const AppRoutes: React.FC = () => (
                   <Route path="info" element={
                     <LazyRoute routeName="Character Info">
                       <ImageHandlerProvider>
-                        <CharacterInfoView />
+                        <InfoViewRouter />
                       </ImageHandlerProvider>
                     </LazyRoute>
                   } />

@@ -182,7 +182,7 @@ const WorldLauncher: React.FC = () => {
 
                      return (
                         <button
-                           onClick={() => hasLocations && navigate('/chat')}
+                           onClick={() => hasLocations && navigate(`/world/${uuid}/play`)}
                            disabled={!hasLocations}
                            className={`group flex flex-col items-center justify-center p-8 border rounded-xl transition-all shadow-lg 
                             ${hasLocations

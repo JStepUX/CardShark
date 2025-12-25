@@ -63,6 +63,7 @@ worlds/
 docs/docs/archivedOLD
 world_assets/
 uploads/
+beekeeper_studio_data/
 
 *.spec
 crawlsite.py

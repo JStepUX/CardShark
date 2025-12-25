@@ -21,7 +21,7 @@ import {
   getAvailableImagesForPreview,
   resetTriggeredImages as resetGlobalTriggeredImages
 } from '../handlers/loreHandler';
-import { LoreEntry } from '../types/schema';
+import { LoreEntry, CharacterCard } from '../types/schema';
 import { buildContextMessages } from '../utils/contextBuilder';
 import { chatService, SessionSettings } from '../services/chat/chatService';
 
@@ -53,6 +53,7 @@ interface ChatContextType {
   sessionNotes: string;
   compressionEnabled: boolean;
   isCompressing: boolean;
+  setCharacterDataOverride: (characterData: CharacterCard | null) => void;
   updateMessage: (messageId: string, content: string) => void;
   deleteMessage: (messageId: string) => void;
   addMessage: (message: Message) => void;
@@ -112,6 +113,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [sessionNotes, setSessionNotesState] = useState<string>('');
   const [compressionEnabled, setCompressionEnabledState] = useState<boolean>(false);
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
+  const [characterDataOverride, setCharacterDataOverride] = useState<CharacterCard | null>(null);
   const currentGenerationRef = useRef<AbortController | null>(null);
   const lastCharacterId = useRef<string | null>(null); // Stores character_id for file system comparison
   const autoSaveEnabled = useRef(true);
@@ -661,12 +663,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         excludeMessageId: message.id
       });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
+      // Use character data override if set (for world cards with room context)
+      const effectiveCharacterData = characterDataOverride || characterData;
       const response = await PromptHandler.generateChatResponse(
         currentChatId,
         ctxMsgs,
         fmtAPIConfig,
         abortCtrl.signal,
-        characterData,
+        effectiveCharacterData,
         sessionNotes,
         compressionEnabled,
         () => setIsCompressing(true),
@@ -802,12 +806,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         excludeMessageId: assistantMsgId
       });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
+      // Use character data override if set (for world cards with room context)
+      const effectiveCharacterData = characterDataOverride || characterData;
       const response = await PromptHandler.generateChatResponse(
         effectiveChatId,
         ctxMsgs,
         fmtAPIConfig,
         abortCtrl.signal,
-        characterData,
+        effectiveCharacterData,
         sessionNotes,
         compressionEnabled,
         () => setIsCompressing(true),
@@ -1009,12 +1015,15 @@ Continue the response from exactly that point. Do not repeat the existing text. 
 
       ctxMsgs.push(continuationPrompt);
 
-      const fmtAPIConfig = prepareAPIConfig(apiConfig); const response = await PromptHandler.generateChatResponse(
+      const fmtAPIConfig = prepareAPIConfig(apiConfig);
+      // Use character data override if set (for world cards with room context)
+      const effectiveCharacterData = characterDataOverride || characterData;
+      const response = await PromptHandler.generateChatResponse(
         currentChatId,
         ctxMsgs,
         fmtAPIConfig,
         abortCtrl.signal,
-        characterData,
+        effectiveCharacterData,
         sessionNotes,
         compressionEnabled,
         () => setIsCompressing(true),
@@ -1235,6 +1244,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
     currentPreviewImageIndex, currentChatId: currentChatId,
     sessionNotes, compressionEnabled, isCompressing,
+    setCharacterDataOverride,
     updateMessage, deleteMessage, addMessage, setMessages, cycleVariation,
     generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,

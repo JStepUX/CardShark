@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
+import { useCharacter } from '../contexts/CharacterContext';
 import ChatView from '../components/chat/ChatView';
 import { SidePanel } from '../components/SidePanel';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
@@ -18,6 +19,7 @@ import {
   DisplayNPC,
   resolveNpcDisplayData,
 } from '../utils/worldStateApi';
+import { injectRoomContext } from '../utils/worldCardAdapter';
 
 interface WorldPlayViewProps {
   worldId?: string;
@@ -30,8 +32,10 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     isGenerating,
     messages,
     setMessages,
-    addMessage
+    addMessage,
+    setCharacterDataOverride
   } = useChat();
+  const { characterData } = useCharacter();
 
   const worldId = propWorldId || uuid || '';
 
@@ -96,6 +100,17 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
     loadWorld();
   }, [worldId]);
+
+  // Inject current room context into character data for LLM generation
+  useEffect(() => {
+    if (characterData && currentRoom) {
+      const modifiedCharacterData = injectRoomContext(characterData, currentRoom);
+      setCharacterDataOverride(modifiedCharacterData);
+    } else {
+      // Clear override if no room is set
+      setCharacterDataOverride(null);
+    }
+  }, [characterData, currentRoom, setCharacterDataOverride]);
 
   // Handle NPC selection - sets active responder (does NOT change session)
   const handleSelectNpc = useCallback(async (npcId: string) => {

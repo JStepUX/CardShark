@@ -88,6 +88,10 @@ const SideNav: React.FC<SideNavProps> = ({
     ? availablePreviewImages[currentPreviewImageIndex]?.src
     : characterImageUrl; // Fallback to default character image if no lore images are active
 
+  // Determine info label based on card type
+  const cardType = characterData?.data?.extensions?.card_type;
+  const infoLabel = cardType === 'world' ? 'World Builder' : 'Basic Info & Greetings';
+
   return (
     <div className={`relative bg-stone-950 shrink-0 flex flex-col border-r border-stone-800 transition-all duration-300 z-40
       ${isCollapsed ? 'w-20' : 'w-96'}`}
@@ -137,7 +141,7 @@ const SideNav: React.FC<SideNavProps> = ({
             <nav className="flex flex-col items-center space-y-2 w-10 mt-6">
               {/* Enhanced NavLinkHelper with prefetching */}
               <NavLinkHelper isCollapsed={isCollapsed} to="/gallery" label="Character Folder" Icon={NAV_ICONS.gallery} />
-              <NavLinkHelper isCollapsed={isCollapsed} to="/info" label="Basic Info & Greetings" Icon={NAV_ICONS.info} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/info" label={infoLabel} Icon={NAV_ICONS.info} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore Manager" Icon={NAV_ICONS.lore} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/chat" label="Chat" Icon={NAV_ICONS.chat} />
               {/* <NavLinkHelper isCollapsed={isCollapsed} to="/worldcards" label="Worlds" Icon={NAV_ICONS.worldcards} /> */}
@@ -188,7 +192,7 @@ const SideNav: React.FC<SideNavProps> = ({
             <nav className="space-y-2">
               {/* Enhanced NavLinkHelper with prefetching */}
               <NavLinkHelper isCollapsed={isCollapsed} to="/gallery" label="Character Folder" Icon={NAV_ICONS.gallery} />
-              <NavLinkHelper isCollapsed={isCollapsed} to="/info" label="Basic Info & Greetings" Icon={NAV_ICONS.info} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/info" label={infoLabel} Icon={NAV_ICONS.info} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore" Icon={NAV_ICONS.lore} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/chat" label="Chat" Icon={NAV_ICONS.chat} />
               {/* <NavLinkHelper isCollapsed={isCollapsed} to="/worldcards" label="Worlds" Icon={NAV_ICONS.worldcards} /> */}
