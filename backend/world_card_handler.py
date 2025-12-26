@@ -9,15 +9,15 @@ from pathlib import Path
 from backend.models.character_data import CharacterData
 from backend.models.world_state import (
     WorldState, Room, RoomConnection, Position, PlayerState, WorldMetadata, GridSize,
-    Location, UnconnectedLocation  # Legacy V1 models
+    UnconnectedLocation
 )
 from backend.services.character_service import CharacterService
 from backend.log_manager import LogManager
 from backend.world_asset_handler import WorldAssetHandler
 from backend.utils.location_extractor import LocationExtractor
-from backend.utils.world_state_migration import load_world_state_with_migration, generate_uuid
 from backend.errors import CardSharkError, ErrorType, ErrorMessages
 from datetime import datetime
+import uuid as uuid_module
 
 class WorldCardHandler:
     """
@@ -101,7 +101,7 @@ class WorldCardHandler:
         return worlds
 
     def get_world_state(self, world_identifier: str) -> Optional[WorldState]:
-        """Retrieves the WorldState from a character card, applying migration if needed."""
+        """Retrieves the WorldState from a character card."""
         character = self._get_character_by_identifier(world_identifier)
         if not character:
             return None
@@ -113,12 +113,8 @@ class WorldCardHandler:
             if not world_data_dict:
                 return None
 
-            # Ensure name exists (legacy data might miss it)
-            if "name" not in world_data_dict:
-                world_data_dict["name"] = character.name
-
-            # Use migration function to handle both v1 and v2 formats
-            world_state = load_world_state_with_migration(world_data_dict)
+            # Parse WorldState directly
+            world_state = WorldState(**world_data_dict)
 
             # Update metadata UUID from character if not set
             if not world_state.metadata.uuid or world_state.metadata.uuid == "":
@@ -132,7 +128,7 @@ class WorldCardHandler:
             return None
 
     def save_world_state(self, world_identifier: str, state: WorldState) -> bool:
-        """Saves the WorldState to the character card (always v2 format)."""
+        """Saves the WorldState to the character card."""
         character = self._get_character_by_identifier(world_identifier)
         if not character:
             self.logger.log_warning(f"Character not found for world: {world_identifier}")
@@ -269,8 +265,8 @@ class WorldCardHandler:
     # --- Logic adapted from WorldStateHandler ---
 
     def _initialize_empty_world_state(self, world_name: str) -> WorldState:
-        """Creates an initial WorldState with a starting room (V2 format)."""
-        start_room_id = f"room-{generate_uuid()[:8]}"
+        """Creates an initial WorldState with a starting room."""
+        start_room_id = f"room-{uuid_module.uuid4().hex[:8]}"
 
         start_room = Room(
             id=start_room_id,
@@ -289,7 +285,7 @@ class WorldCardHandler:
             name=world_name,
             description="",
             author=None,
-            uuid=generate_uuid(),
+            uuid=str(uuid_module.uuid4()),
             created_at=datetime.now(),
             last_modified=datetime.now(),
             cover_image=None
@@ -314,7 +310,7 @@ class WorldCardHandler:
         )
 
     def _initialize_from_character(self, world_name: str, character_identifier: str) -> Optional[WorldState]:
-        """Creates a world state based on a character card, extracting lore locations (V2 format)."""
+        """Creates a world state based on a character card, extracting lore locations."""
         try:
             # Try to resolve character first
             char_path = None
@@ -355,7 +351,7 @@ class WorldCardHandler:
             char_uuid = char_metadata.get('uuid', '')
 
             # Create starter room
-            start_room_id = f"room-{generate_uuid()[:8]}"
+            start_room_id = f"room-{uuid_module.uuid4().hex[:8]}"
             start_room = Room(
                 id=start_room_id,
                 name=f"{char_actual_name}'s Starting Point",
@@ -406,7 +402,7 @@ class WorldCardHandler:
                 name=world_name,
                 description=f"World inspired by {char_actual_name}",
                 author=None,
-                uuid=generate_uuid(),
+                uuid=str(uuid_module.uuid4()),
                 created_at=datetime.now(),
                 last_modified=datetime.now(),
                 cover_image=None

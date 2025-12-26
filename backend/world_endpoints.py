@@ -241,7 +241,7 @@ async def get_world_state_api(
     world_card_handler: WorldCardHandler = Depends(get_world_card_handler_dependency),
     logger: LogManager = Depends(get_logger_dependency)
 ):
-    """Loads the world state for a specific world card (V2 unified schema)."""
+    """Loads the world state for a specific world card."""
     try:
         logger.log_step(f"Request to get world state for: {world_name}")
         world_state = world_card_handler.get_world_state(world_name)
@@ -250,8 +250,7 @@ async def get_world_state_api(
             logger.warning(f"World state not found for: {world_name}")
             raise NotFoundException(f"World '{world_name}' not found")
 
-        logger.log_step(f"Successfully loaded world state for: {world_name} (v{world_state.schema_version})")
-        # Always return v2 format (migration happens in get_world_state)
+        logger.log_step(f"Successfully loaded world state for: {world_name}")
         return create_data_response(world_state.dict())
     except (ValidationException, NotFoundException):
         raise
@@ -267,7 +266,7 @@ async def save_world_state_api(
     world_card_handler: WorldCardHandler = Depends(get_world_card_handler_dependency),
     logger: LogManager = Depends(get_logger_dependency)
 ):
-    """Saves the world state for a specific world card (V2 unified schema)."""
+    """Saves the world state for a specific world card."""
     try:
         data = await request.json()
         state_data = data.get("state", {})
@@ -277,12 +276,9 @@ async def save_world_state_api(
 
         logger.log_step(f"Request to save world state for: {world_name}")
 
-        # Use migration to handle both v1 and v2 formats
-        from backend.utils.world_state_migration import load_world_state_with_migration
-
         try:
-            # Migration function handles conversion if needed
-            world_state = load_world_state_with_migration(state_data)
+            # Parse WorldState directly
+            world_state = WorldState(**state_data)
 
             # Ensure world name matches
             if not world_state.metadata.name:

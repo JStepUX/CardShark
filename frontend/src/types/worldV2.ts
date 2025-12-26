@@ -1,5 +1,5 @@
 // frontend/src/types/worldV2.ts
-// TypeScript interfaces matching the V2 unified world schema
+// TypeScript interfaces matching the unified world schema
 // These types align exactly with backend/models/world_state.py
 
 export interface Position {
