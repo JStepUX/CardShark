@@ -7,12 +7,17 @@ from typing import Dict, Any, Optional, List, Tuple, Union
 from pathlib import Path
 
 from backend.models.character_data import CharacterData
-from backend.models.world_state import WorldState, Location, UnconnectedLocation, PlayerState
+from backend.models.world_state import (
+    WorldState, Room, RoomConnection, Position, PlayerState, WorldMetadata, GridSize,
+    Location, UnconnectedLocation  # Legacy V1 models
+)
 from backend.services.character_service import CharacterService
 from backend.log_manager import LogManager
 from backend.world_asset_handler import WorldAssetHandler
 from backend.utils.location_extractor import LocationExtractor
+from backend.utils.world_state_migration import load_world_state_with_migration, generate_uuid
 from backend.errors import CardSharkError, ErrorType, ErrorMessages
+from datetime import datetime
 
 class WorldCardHandler:
     """
@@ -95,56 +100,67 @@ class WorldCardHandler:
                 continue
         return worlds
 
-    def get_world_state(self, world_identifier: str) -> Optional[Union[WorldState, Dict[str, Any]]]:
-        """Retrieves the WorldState from a character card."""
+    def get_world_state(self, world_identifier: str) -> Optional[WorldState]:
+        """Retrieves the WorldState from a character card, applying migration if needed."""
         character = self._get_character_by_identifier(world_identifier)
         if not character:
             return None
-        
+
         try:
             extensions = json.loads(character.extensions_json) if character.extensions_json else {}
             world_data_dict = extensions.get("world_data")
-            
+
             if not world_data_dict:
                 return None
-            
+
             # Ensure name exists (legacy data might miss it)
             if "name" not in world_data_dict:
                 world_data_dict["name"] = character.name
 
-            # Check if it's legacy data (has 'rooms')
-            if "rooms" in world_data_dict:
-                # Return raw dict for legacy support
-                return world_data_dict
-            
-            # Validate with Pydantic
-            return WorldState(**world_data_dict)
+            # Use migration function to handle both v1 and v2 formats
+            world_state = load_world_state_with_migration(world_data_dict)
+
+            # Update metadata UUID from character if not set
+            if not world_state.metadata.uuid or world_state.metadata.uuid == "":
+                world_state.metadata.uuid = character.character_uuid
+
+            return world_state
         except Exception as e:
             self.logger.log_error(f"Error loading world state for {world_identifier}: {e}")
+            import traceback
+            self.logger.log_error(traceback.format_exc())
             return None
 
     def save_world_state(self, world_identifier: str, state: WorldState) -> bool:
-        """Saves the WorldState to the character card."""
+        """Saves the WorldState to the character card (always v2 format)."""
         character = self._get_character_by_identifier(world_identifier)
         if not character:
             self.logger.log_warning(f"Character not found for world: {world_identifier}")
             return False
-            
+
         try:
+            # Ensure v2 schema version
+            state.schema_version = 2
+
+            # Update last_modified timestamp
+            state.metadata.last_modified = datetime.now()
+
             extensions = json.loads(character.extensions_json) if character.extensions_json else {}
             extensions["card_type"] = "world"
             extensions["world_data"] = state.dict()
-            
+
             # Update character via service
             update_data = {"extensions": extensions}
             # Also update name if world name changed
-            if state.name != character.name:
-                update_data["name"] = state.name
-                
+            if state.metadata.name != character.name:
+                update_data["name"] = state.metadata.name
+
             self.character_service.update_character(character.character_uuid, update_data)
             return True
         except Exception as e:
             self.logger.log_error(f"Failed to save world state for {world_identifier}: {e}")
+            import traceback
+            self.logger.log_error(traceback.format_exc())
             return False
 
     def create_world(self, world_name: str, character_path: Optional[str] = None, display_name: Optional[str] = None) -> Optional[Dict]:
@@ -253,34 +269,61 @@ class WorldCardHandler:
     # --- Logic adapted from WorldStateHandler ---
 
     def _initialize_empty_world_state(self, world_name: str) -> WorldState:
-        """Creates an initial WorldState with a starting location."""
-        start_location = Location(
+        """Creates an initial WorldState with a starting room (V2 format)."""
+        start_room_id = f"room-{generate_uuid()[:8]}"
+
+        start_room = Room(
+            id=start_room_id,
             name="Origin Point",
-            coordinates=[0, 0, 0],
-            location_id="origin_0_0_0",
             description="A neutral starting point in the void. The world unfolds from here.",
-            introduction="You find yourself in a featureless void. The only point of reference is the spot where you stand.",
-            connected=True
+            introduction_text="You find yourself in a featureless void. The only point of reference is the spot where you stand.",
+            image_path=None,
+            position=Position(x=0, y=0),
+            npcs=[],
+            connections=RoomConnection(),
+            events=[],
+            visited=True
+        )
+
+        metadata = WorldMetadata(
+            name=world_name,
+            description="",
+            author=None,
+            uuid=generate_uuid(),
+            created_at=datetime.now(),
+            last_modified=datetime.now(),
+            cover_image=None
+        )
+
+        player = PlayerState(
+            current_room=start_room_id,
+            visited_rooms=[start_room_id],
+            inventory=[],
+            health=100,
+            stamina=100,
+            level=1,
+            experience=0
         )
 
         return WorldState(
-            name=world_name,
-            current_position="0,0,0",
-            locations={"0,0,0": start_location},
-            visited_positions=["0,0,0"]
+            schema_version=2,
+            metadata=metadata,
+            grid_size=GridSize(width=8, height=6),
+            rooms=[start_room],
+            player=player
         )
 
     def _initialize_from_character(self, world_name: str, character_identifier: str) -> Optional[WorldState]:
-        """Creates a world state based on a character card, extracting lore locations."""
+        """Creates a world state based on a character card, extracting lore locations (V2 format)."""
         try:
             # Try to resolve character first
             char_path = None
-            
+
             # 1. Try finding character in DB by identifier (UUID or Name)
             character = self._get_character_by_identifier(character_identifier)
             if character and character.png_file_path:
                 char_path = Path(character.png_file_path)
-            
+
             # 2. If not found, check if it's a direct path
             if not char_path:
                  maybe_path = Path(character_identifier)
@@ -302,68 +345,104 @@ class WorldCardHandler:
                 return None
 
             # Read metadata
-            metadata = self.character_service.png_handler.read_metadata(str(char_path))
-            if not metadata or 'data' not in metadata:
+            char_metadata = self.character_service.png_handler.read_metadata(str(char_path))
+            if not char_metadata or 'data' not in char_metadata:
                 return None
 
-            character_data = metadata['data']
+            character_data = char_metadata['data']
             char_actual_name = character_data.get("name", "Unnamed Character")
             char_description = character_data.get("description", "No description provided.")
-            char_uuid = metadata.get('uuid', '')
+            char_uuid = char_metadata.get('uuid', '')
 
-            # Create starter location
-            start_location = Location(
+            # Create starter room
+            start_room_id = f"room-{generate_uuid()[:8]}"
+            start_room = Room(
+                id=start_room_id,
                 name=f"{char_actual_name}'s Starting Point",
-                coordinates=[0, 0, 0],
-                location_id=f"origin_{char_uuid if char_uuid else 'char'}_0_0_0",
                 description=f"The journey begins, inspired by {char_actual_name}. {char_description}",
-                introduction=f"You are at the starting point associated with {char_actual_name}. {char_description}",
-                connected=True,
-                npcs=[] 
+                introduction_text=f"You are at the starting point associated with {char_actual_name}. {char_description}",
+                image_path=None,
+                position=Position(x=0, y=0),
+                npcs=[],
+                connections=RoomConnection(),
+                events=[],
+                visited=True
             )
 
-            # Extract locations
-            unconnected_locations_list = self.location_extractor.extract_from_lore(metadata)
-            
-            # Place locations on grid
-            locations_dict = {"0,0,0": start_location}
-            
-            # (Simplified grid placement logic)
+            # Extract locations from lore
+            unconnected_locations_list = self.location_extractor.extract_from_lore(char_metadata)
+
+            # Create rooms list starting with origin
+            rooms = [start_room]
+
+            # Place extracted locations on grid
             grid_size = max(5, int(1 + (len(unconnected_locations_list) / 4) ** 0.5 * 2))
             grid_positions = []
             for x in range(-grid_size//2, grid_size//2 + 1):
                 for y in range(-grid_size//2, grid_size//2 + 1):
                     if not (x == 0 and y == 0):
-                        grid_positions.append((x, y, 0))
+                        grid_positions.append((x, y))
             grid_positions.sort(key=lambda pos: abs(pos[0]) + abs(pos[1]))
 
             for i, loc in enumerate(unconnected_locations_list):
                 if i < len(grid_positions):
-                    x, y, z = grid_positions[i]
-                    coord_str = f"{x},{y},{z}"
-                    new_location = Location(
+                    x, y = grid_positions[i]
+                    new_room = Room(
+                        id=loc.location_id,
                         name=loc.name,
-                        coordinates=[x, y, z],
-                        location_id=loc.location_id,
                         description=loc.description or f"A location associated with {char_actual_name}.",
-                        introduction=f"You have arrived at {loc.name}. {loc.description}" if loc.description else f"You have arrived at {loc.name}, a location associated with {char_actual_name}.",
-                        lore_source=loc.lore_source,
-                        connected=True
+                        introduction_text=f"You have arrived at {loc.name}. {loc.description}" if loc.description else f"You have arrived at {loc.name}.",
+                        image_path=None,
+                        position=Position(x=x, y=y),
+                        npcs=[],
+                        connections=RoomConnection(),
+                        events=[],
+                        visited=False
                     )
-                    locations_dict[coord_str] = new_location
+                    rooms.append(new_room)
+
+            # Create metadata
+            world_metadata = WorldMetadata(
+                name=world_name,
+                description=f"World inspired by {char_actual_name}",
+                author=None,
+                uuid=generate_uuid(),
+                created_at=datetime.now(),
+                last_modified=datetime.now(),
+                cover_image=None
+            )
+
+            # Calculate grid size from room positions
+            max_x = max((r.position.x for r in rooms), default=0)
+            max_y = max((r.position.y for r in rooms), default=0)
+            grid_size_obj = GridSize(
+                width=max(abs(max_x) * 2 + 1, 8),
+                height=max(abs(max_y) * 2 + 1, 6)
+            )
+
+            # Create player state
+            player = PlayerState(
+                current_room=start_room_id,
+                visited_rooms=[start_room_id],
+                inventory=[],
+                health=100,
+                stamina=100,
+                level=1,
+                experience=0
+            )
 
             return WorldState(
-                name=world_name,
-                current_position="0,0,0",
-                locations=locations_dict,
-                visited_positions=["0,0,0"],
-                unconnected_locations={},
-                player=PlayerState(),
-                base_character_id=str(char_path)
+                schema_version=2,
+                metadata=world_metadata,
+                grid_size=grid_size_obj,
+                rooms=rooms,
+                player=player
             )
 
         except Exception as e:
             self.logger.log_error(f"Error initializing world from character: {e}")
+            import traceback
+            self.logger.log_error(traceback.format_exc())
             return None
 
     # --- Room Management Wrappers ---
