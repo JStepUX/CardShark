@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { ArrowLeft, Play, Hammer } from 'lucide-react';
+import { ArrowLeft, Play, Hammer, Download } from 'lucide-react';
 import { CharacterData } from '../types/character';
 
 const WorldLauncher: React.FC = () => {
@@ -13,6 +13,33 @@ const WorldLauncher: React.FC = () => {
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState<string | null>(null);
    const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+   const handleExportWorld = async () => {
+      if (!worldCard) return;
+
+      try {
+         const worldName = worldCard.data.name;
+         const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/export`);
+
+         if (!response.ok) {
+            throw new Error(`Export failed: ${response.statusText}`);
+         }
+
+         // Create a download link
+         const blob = await response.blob();
+         const url = window.URL.createObjectURL(blob);
+         const a = document.createElement('a');
+         a.href = url;
+         a.download = `world_${worldName}.zip`;
+         document.body.appendChild(a);
+         a.click();
+         window.URL.revokeObjectURL(url);
+         document.body.removeChild(a);
+      } catch (err) {
+         console.error('Export failed:', err);
+         alert('Failed to export world: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      }
+   };
 
    useEffect(() => {
       const loadWorldCard = async () => {
@@ -107,12 +134,22 @@ const WorldLauncher: React.FC = () => {
 
    return (
       <div className="flex flex-col h-full bg-stone-950 text-white p-8 overflow-y-auto">
-         <button
-            onClick={() => navigate('/gallery')}
-            className="flex items-center text-stone-400 hover:text-white mb-6 transition-colors"
-         >
-            <ArrowLeft className="mr-2" size={20} /> Back to Gallery
-         </button>
+         <div className="flex justify-between items-center mb-6">
+            <button
+               onClick={() => navigate('/gallery')}
+               className="flex items-center text-stone-400 hover:text-white transition-colors"
+            >
+               <ArrowLeft className="mr-2" size={20} /> Back to Gallery
+            </button>
+            <button
+               onClick={handleExportWorld}
+               className="flex items-center gap-2 px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 hover:text-white rounded-lg transition-colors border border-emerald-600"
+               title="Export world as ZIP file"
+            >
+               <Download size={18} />
+               Export World
+            </button>
+         </div>
 
          <div className="flex flex-col md:flex-row gap-8 max-w-6xl mx-auto w-full">
             {/* Left Column: Image & Stats */}

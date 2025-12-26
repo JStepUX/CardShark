@@ -4,7 +4,6 @@ import { Outlet, useLocation } from "react-router-dom"; // Added useLocation for
 import { useCharacter } from "../contexts/CharacterContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
-import { BackyardImportDialog } from "./BackyardImportDialog";
 import { AboutDialog } from "./AboutDialog";
 import ComparisonPanel from "./ComparisonPanel";
 import SideNav from "./SideNav";
@@ -15,7 +14,6 @@ const Layout: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State management
-  const [showBackyardDialog, setShowBackyardDialog] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
   const [backendStatus, setBackendStatus] = useState<"running" | "disconnected">("disconnected");
@@ -265,48 +263,62 @@ const Layout: React.FC = () => {
     }
   };
 
-  // Backyard import handler
-  const handleBackyardImport = async (url: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  // World import handler
+  const handleWorldImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
 
-      const response = await fetch("/api/characters/import-backyard", { // Changed endpoint URL
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url }),
-      });
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      if (!response.ok) {
-        throw new Error(`Import failed: ${response.statusText}`);
-      }
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('conflict_policy', 'skip');
 
-      const data = await response.json();
-      if (data.success && data.data && data.data.character) {
-        // Extract character data from the API response
-        const characterData = data.data.character;
-        setCharacterData(characterData);
+        const response = await fetch('/api/world-cards/import', {
+          method: 'POST',
+          body: formData,
+        });
 
-        // For imported characters, use the character UUID to construct image URL
-        if (characterData.character_uuid) {
-          setImageUrl(`/api/character-image/${characterData.character_uuid}.png`);
+        if (response.status === 409) {
+          // Conflict - ask user
+          const shouldOverwrite = window.confirm('World already exists. Overwrite?');
+          if (shouldOverwrite) {
+            formData.set('conflict_policy', 'overwrite');
+            const retryResponse = await fetch('/api/world-cards/import', {
+              method: 'POST',
+              body: formData,
+            });
+            const retryResult = await retryResponse.json();
+            if (retryResult.success && retryResult.data) {
+              alert(`World "${retryResult.data.world_name}" imported successfully!\nNPCs: ${retryResult.data.imported_npcs} imported, ${retryResult.data.skipped_npcs} skipped`);
+              invalidateCharacterCache(); // Refresh gallery
+            } else {
+              throw new Error(retryResult.message || 'Failed to import world');
+            }
+          }
+          return;
         }
 
-        // Show success message
-        console.log("Backyard character imported successfully:", characterData.name || 'Unknown Character');
-      } else {
-        throw new Error(data.message || data.data?.message || "Failed to process character data");
+        const result = await response.json();
+        if (result.success && result.data) {
+          alert(`World "${result.data.world_name}" imported successfully!\nNPCs: ${result.data.imported_npcs} imported, ${result.data.skipped_npcs} skipped`);
+          invalidateCharacterCache(); // Refresh gallery
+        } else {
+          throw new Error(result.message || 'Failed to import world');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to import world');
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to import character");
-      setCharacterData(null);
-      setImageUrl(undefined);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
+    };
+    input.click();
   };
 
   // Settings change tracking
@@ -335,7 +347,7 @@ const Layout: React.FC = () => {
       {/* Props currentView and onViewChange are removed from SideNavProps */}
       <SideNav
         onFileUpload={() => fileInputRef.current?.click()}
-        onUrlImport={() => setShowBackyardDialog(true)}
+        onWorldImport={handleWorldImport}
         onSave={handleSave}
         onShowAbout={() => setShowAboutDialog(true)}
         backendStatus={backendStatus}
@@ -367,11 +379,6 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Dialogs */}
-      <BackyardImportDialog
-        isOpen={showBackyardDialog}
-        onClose={() => setShowBackyardDialog(false)}
-        onImport={handleBackyardImport}
-      />
       <AboutDialog
         isOpen={showAboutDialog}
         onClose={() => setShowAboutDialog(false)}
