@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { CharacterFile } from '../../types/schema';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload, Download } from 'lucide-react';
 import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
@@ -715,6 +715,62 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   };
 
+  // Handle world import
+  const handleImportWorld = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        setIsLoading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('conflict_policy', 'skip');
+
+        const response = await fetch('/api/world-cards/import', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.status === 409) {
+          // Conflict - ask user
+          const shouldOverwrite = window.confirm('World already exists. Overwrite?');
+          if (shouldOverwrite) {
+            formData.set('conflict_policy', 'overwrite');
+            const retryResponse = await fetch('/api/world-cards/import', {
+              method: 'POST',
+              body: formData,
+            });
+            const retryResult = await retryResponse.json();
+            if (retryResult.success && retryResult.data) {
+              alert(`World "${retryResult.data.world_name}" imported successfully!\nNPCs: ${retryResult.data.imported_npcs} imported, ${retryResult.data.skipped_npcs} skipped`);
+              fetchCharacters(); // Refresh gallery
+            } else {
+              throw new Error(retryResult.message || 'Failed to import world');
+            }
+          }
+          return;
+        }
+
+        const result = await response.json();
+        if (result.success && result.data) {
+          alert(`World "${result.data.world_name}" imported successfully!\nNPCs: ${result.data.imported_npcs} imported, ${result.data.skipped_npcs} skipped`);
+          fetchCharacters(); // Refresh gallery
+        } else {
+          throw new Error(result.message || 'Failed to import world');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to import world');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    input.click();
+  };
+
   // Cancel deletion
   const handleCancelDelete = () => {
     setIsDeleteConfirmOpen(false);
@@ -854,6 +910,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   <Folder size={16} />
                 </button>
               </div>
+
+              {/* Import World Button - Only show when viewing worlds */}
+              {filterType === 'world' && (
+                <button
+                  onClick={handleImportWorld}
+                  className="p-2 rounded-lg border bg-emerald-800 border-emerald-600 text-emerald-100 hover:text-white hover:bg-emerald-700 transition-all"
+                  title="Import world from ZIP file"
+                  aria-label="Import world"
+                >
+                  <Upload size={16} />
+                </button>
+              )}
 
               {/* Refresh Button */}
               <button
