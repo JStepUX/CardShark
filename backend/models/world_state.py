@@ -1,6 +1,6 @@
 # backend/models/world_state.py
 # Description: Pydantic models for representing the state of a World Card
-# Unified schema that aligns frontend and backend
+# V2 Schema - Room-based world system
 
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -65,8 +65,9 @@ class PlayerState(BaseModel):
 
 class WorldState(BaseModel):
     """
-    Unified World State
-    This format is used by both frontend and backend.
+    World State V2 Schema
+    Room-based world system with grid positioning.
+    This is the single canonical format used by both frontend and backend.
     """
     schema_version: int = 2
     metadata: WorldMetadata
@@ -78,11 +79,3 @@ class WorldState(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
-
-# Backward compatibility aliases (for existing code that imports these)
-class UnconnectedLocation(BaseModel):
-    """Legacy unconnected location"""
-    location_id: str
-    name: str
-    description: str
-    lore_source: str

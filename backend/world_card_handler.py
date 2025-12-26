@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import re
 import math
@@ -8,8 +10,7 @@ from pathlib import Path
 
 from backend.models.character_data import CharacterData
 from backend.models.world_state import (
-    WorldState, Room, RoomConnection, Position, PlayerState, WorldMetadata, GridSize,
-    UnconnectedLocation
+    WorldState, Room, RoomConnection, Position, PlayerState, WorldMetadata, GridSize
 )
 from backend.services.character_service import CharacterService
 from backend.log_manager import LogManager
@@ -169,7 +170,7 @@ class WorldCardHandler:
             initial_state = None
             
             if character_path:
-                # Import character logic similar to WorldStateHandler
+                # Import character and extract locations from lore
                 self.logger.log_step(f"Initializing from character: {character_path}")
                 initial_state = self._initialize_from_character(final_name, character_path)
             else:
@@ -184,14 +185,16 @@ class WorldCardHandler:
             # If we initialized from character, we might want to use that character's image and base data
             # But _initialize_from_character just returns WorldState object.
             
-            # Determine first_mes from the starting location
+            # Determine first_mes from the starting room
             first_mes = "Welcome to the world."
-            if initial_state.current_position and initial_state.current_position in initial_state.locations:
-                start_loc = initial_state.locations[initial_state.current_position]
-                if start_loc.introduction:
-                    first_mes = start_loc.introduction
-                elif start_loc.description:
-                    first_mes = start_loc.description
+            if initial_state.player and initial_state.player.current_room:
+                # Find the starting room by ID
+                start_room = next((r for r in initial_state.rooms if r.id == initial_state.player.current_room), None)
+                if start_room:
+                    if start_room.introduction_text:
+                        first_mes = start_room.introduction_text
+                    elif start_room.description:
+                        first_mes = start_room.description
 
             # We need to construct the character data
             char_data = {
@@ -262,7 +265,7 @@ class WorldCardHandler:
             return False
         return self.character_service.delete_character(character.character_uuid, delete_png_file=True)
 
-    # --- Logic adapted from WorldStateHandler ---
+    # --- World Initialization Methods ---
 
     def _initialize_empty_world_state(self, world_name: str) -> WorldState:
         """Creates an initial WorldState with a starting room."""
@@ -441,54 +444,48 @@ class WorldCardHandler:
             self.logger.log_error(traceback.format_exc())
             return None
 
-    # --- Room Management Wrappers ---
+    # --- Room Management Methods ---
 
-    def add_room(self, world_identifier: str, room: Location) -> bool: # Using Location instead of Room
+    def add_room(self, world_identifier: str, room: Room) -> bool:
+        """Add a new room to the world."""
         state = self.get_world_state(world_identifier)
-        if not state: return False
-        
-        # Room/Location conversion if needed
-        # Assuming we use Location internally
-        
-        coord_str = ",".join(map(str, room.coordinates)) if room.coordinates else None
-        if not coord_str: return False # Must have coordinates for current system
-        
-        if coord_str in state.locations:
+        if not state:
             return False
-            
-        state.locations[coord_str] = room
+        
+        # Check if room ID already exists
+        if any(r.id == room.id for r in state.rooms):
+            return False
+        
+        # Add the room to the list
+        state.rooms.append(room)
         return self.save_world_state(world_identifier, state)
 
-    def update_room(self, world_identifier: str, room: Location) -> bool:
+    def update_room(self, world_identifier: str, room: Room) -> bool:
+        """Update an existing room in the world."""
         state = self.get_world_state(world_identifier)
-        if not state: return False
+        if not state:
+            return False
         
-        # Find room by ID or coordinate
-        # This is tricky because dictionary key is coordinate
-        found_coord = None
-        for coord, loc in state.locations.items():
-            if loc.location_id == room.location_id:
-                found_coord = coord
-                break
+        # Find and update the room by ID
+        for i, existing_room in enumerate(state.rooms):
+            if existing_room.id == room.id:
+                state.rooms[i] = room
+                return self.save_world_state(world_identifier, state)
         
-        if found_coord:
-            state.locations[found_coord] = room
-            return self.save_world_state(world_identifier, state)
         return False
 
     def delete_room(self, world_identifier: str, room_id: str) -> bool:
+        """Delete a room from the world."""
         state = self.get_world_state(world_identifier)
-        if not state: return False
+        if not state:
+            return False
         
-        found_coord = None
-        for coord, loc in state.locations.items():
-            if loc.location_id == room_id:
-                found_coord = coord
-                break
+        # Find and remove the room by ID
+        for i, room in enumerate(state.rooms):
+            if room.id == room_id:
+                del state.rooms[i]
+                return self.save_world_state(world_identifier, state)
         
-        if found_coord:
-            del state.locations[found_coord]
-            return self.save_world_state(world_identifier, state)
         return False
 
     def get_world_image_path(self, world_identifier: str) -> Optional[Path]:

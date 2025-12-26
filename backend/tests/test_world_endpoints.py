@@ -3,10 +3,12 @@ from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from typing import Dict, Any, List
+from datetime import datetime
+import uuid as uuid_module
 
 # Import based on actual project structure
 from backend.world_card_handler import WorldCardHandler
-from backend.models.world_state import WorldState, Location, PlayerState
+from backend.models.world_state import WorldState, Room, PlayerState, WorldMetadata, Position, GridSize
 from backend.log_manager import LogManager
 from backend.main import app
 from backend.dependencies import get_world_card_handler_dependency, get_logger_dependency
@@ -34,19 +36,33 @@ MOCK_WORLDS_DATA = [
 ]
 
 MOCK_WORLD_STATE = WorldState(
-    name="Test World",
-    current_position="0,0,0",
-    locations={
-        "0,0,0": Location(
-            name="Origin", 
-            coordinates=[0,0,0], 
-            location_id="loc_0", 
-            description="Start", 
-            connected=True
+    schema_version=2,
+    metadata=WorldMetadata(
+        name="Test World",
+        description="A test world",
+        author="Test Author",
+        uuid=str(uuid_module.uuid4()),
+        created_at=datetime.now(),
+        last_modified=datetime.now(),
+        cover_image=None
+    ),
+    grid_size=GridSize(width=8, height=6),
+    rooms=[
+        Room(
+            id="room-origin",
+            name="Origin",
+            description="Start location",
+            introduction_text="You find yourself at the origin",
+            image_path=None,
+            position=Position(x=0, y=0),
+            npcs=[],
+            visited=True
         )
-    },
-    visited_positions=["0,0,0"],
-    player=PlayerState()
+    ],
+    player=PlayerState(
+        current_room="room-origin",
+        visited_rooms=["room-origin"]
+    )
 )
 
 @pytest.fixture
@@ -124,7 +140,7 @@ def test_get_world_state_success(client, mock_world_card_handler):
     assert response.status_code == 200
     content = response.json()
     assert content["success"] is True
-    assert content["data"]["name"] == "Test World"
+    assert content["data"]["metadata"]["name"] == "Test World"
     mock_world_card_handler.get_world_state.assert_called_with("Test World")
 
 def test_get_world_state_not_found(client, mock_world_card_handler):

@@ -2,8 +2,16 @@
 # Description: Utility for extracting potential locations from character lore entries.
 
 from typing import List, Dict, Tuple, Set
+from dataclasses import dataclass
 import re
-from ..models.world_state import UnconnectedLocation
+
+@dataclass
+class ExtractedLocation:
+    """Simple data structure for locations extracted from lore"""
+    location_id: str
+    name: str
+    description: str
+    lore_source: str
 
 class LocationExtractor:
     def __init__(self, logger):
@@ -25,7 +33,7 @@ class LocationExtractor:
             "bog", "sewer", "tunnel", "mine", "shaft", "dock", "pier", "deck", "cabin"
         ]
         
-    def extract_from_lore(self, character_data: Dict) -> List[UnconnectedLocation]:
+    def extract_from_lore(self, character_data: Dict) -> List[ExtractedLocation]:
         """
         Extract potential locations from character lore entries.
         Uses the lore entry's trigger words ('name' field) first to find locations.
@@ -72,7 +80,7 @@ class LocationExtractor:
     
     def _create_location_from_keys(self, keys: List[str], content: str, key_str: str, 
                                   location_id: str, processed_names: Set[str], 
-                                  locations: List[UnconnectedLocation]) -> bool:
+                                  locations: List[ExtractedLocation]) -> bool:
         """Create a location using the first trigger word that contains a location indicator."""
         if not keys:
             return False
@@ -91,7 +99,7 @@ class LocationExtractor:
                 if indicator in key_lower:
                     # Create a location using this key as the name
                     room_name = key.title()  # Capitalize for consistency
-                    locations.append(UnconnectedLocation(
+                    locations.append(ExtractedLocation(
                         location_id=location_id,
                         name=room_name,
                         description=content,
@@ -104,8 +112,8 @@ class LocationExtractor:
     
     def _create_locations_from_content(self, content: str, key_str: str, 
                                       location_id: str, processed_names: Set[str], 
-                                      locations: List[UnconnectedLocation]) -> None:
-        """Extract locations from content text and create UnconnectedLocation objects."""
+                                      locations: List[ExtractedLocation]) -> None:
+        """Extract locations from content text and create ExtractedLocation objects."""
         # Patterns for location extraction
         for indicator in self.location_indicators:
             patterns = [
@@ -128,7 +136,7 @@ class LocationExtractor:
                     description = self._extract_sentence_with_location(content, loc_name) or ""
                     
                     # Create the location
-                    locations.append(UnconnectedLocation(
+                    locations.append(ExtractedLocation(
                         location_id=f"{location_id}_{len(locations)}",
                         name=loc_name,
                         description=description or f"A location mentioned in relation to {key_str}.",

@@ -24,7 +24,6 @@ from .background_handler import BackgroundHandler
 from .content_filter_manager import ContentFilterManager
 from .lore_handler import LoreHandler
 from .backyard_handler import BackyardHandler
-from .handlers.world_state_handler import WorldStateHandler
 from .handlers.world_card_chat_handler import WorldCardChatHandler
 
 # New Handlers
@@ -130,12 +129,7 @@ def get_lore_handler(request: Request) -> LoreHandler:
         raise HTTPException(status_code=500, detail="Lore handler not initialized")
     return lore_handler
 
-def get_world_state_handler(request: Request) -> WorldStateHandler:
-    """Get WorldStateHandler instance from app state."""
-    world_state_handler = cast(WorldStateHandler, request.app.state.world_state_handler)
-    if world_state_handler is None:
-        raise HTTPException(status_code=500, detail="World state handler not initialized")
-    return world_state_handler
+
 
 def get_world_card_chat_handler(request: Request) -> WorldCardChatHandler:
     """Get WorldCardChatHandler instance from app state."""
@@ -249,9 +243,7 @@ def get_lore_handler_dependency(request: Request) -> LoreHandler:
     """Get LoreHandler instance from app state (standardized dependency)."""
     return get_lore_handler(request)
 
-def get_world_state_handler_dependency(request: Request) -> WorldStateHandler:
-    """Get WorldStateHandler instance from app state (standardized dependency)."""
-    return get_world_state_handler(request)
+
 
 def get_world_asset_handler_dependency(request: Request) -> WorldAssetHandler:
     """Get WorldAssetHandler instance from app state (standardized dependency)."""

@@ -155,7 +155,6 @@ from backend.koboldcpp_handler import router as koboldcpp_router
 from backend.utils.user_dirs import get_users_dir # type: ignore
 
 # Import various handlers
-from backend.handlers.world_state_handler import WorldStateHandler
 from backend.handlers.world_card_chat_handler import WorldCardChatHandler
 from backend.world_asset_handler import WorldAssetHandler
 from backend.world_card_handler import WorldCardHandler
@@ -368,7 +367,6 @@ template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
 background_handler.initialize_default_backgrounds() # Initialize default backgrounds
 lore_handler = LoreHandler(logger, default_position=0) # Create LoreHandler for dependency injection
-world_state_handler = WorldStateHandler(logger, settings_manager)
 
 # Store handlers on app.state for access in dependencies
 app.state.png_handler = png_handler
@@ -378,7 +376,6 @@ app.state.background_handler = background_handler # Store BackgroundHandler for 
 app.state.content_filter_manager = content_filter_manager # Store ContentFilterManager for dependency injection
 app.state.template_handler = template_handler # Store TemplateHandler for dependency injection
 app.state.backyard_handler = backyard_handler # Store BackyardHandler for dependency injection
-app.state.world_state_handler = world_state_handler # Store WorldStateHandler for dependency injection
 app.state.lore_handler = lore_handler # Store LoreHandler for dependency injection
 # app.state.logger is already set above
 
