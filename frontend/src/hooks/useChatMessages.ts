@@ -585,16 +585,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         reasoning: reasoningText
       });
 
-      const contextWindow = {
-        type: 'generation_start', timestamp: new Date().toISOString(),
-        characterName: effectiveCharacterData.data?.name || 'Unknown',
-        messageId: assistantMessage.id,
-        promptUsed: `Context: ${apiContextMessages.map(m => m.content).join('\n')}`,
-        contextMessageCount: apiContextMessages.length, config: preparedApiConfig,
-        reasoningUsed: reasoningText
-      };
-      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
-      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow)); console.log(`[generateResponse] About to call PromptHandler.generateChatResponse with:`, {
+      console.log(`[generateResponse] About to call PromptHandler.generateChatResponse with:`, {
         currentChatSessionUuid,
         apiContextMessagesLength: apiContextMessages.length,
         preparedApiConfig: preparedApiConfig?.provider,
@@ -609,7 +600,23 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         apiContextMessages, // This context needs to be correct
         preparedApiConfig,
         signal,
-        effectiveCharacterData
+        effectiveCharacterData,
+        undefined, // sessionNotes - not implemented yet
+        undefined, // compressionEnabled - not implemented yet
+        undefined, // onCompressionStart
+        undefined, // onCompressionEnd
+        (payload) => {
+          // Capture the actual payload for the context window modal
+          const contextWindow = {
+            type: 'generation_start',
+            timestamp: new Date().toISOString(),
+            characterName: effectiveCharacterData.data?.name || 'Unknown',
+            messageId: assistantMessage.id,
+            ...payload // Include the full payload structure
+          };
+          setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+          localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
+        }
       );
 
       // Log state immediately before calling processStream for the main response
@@ -697,23 +704,28 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         reasoning: reasoningText
       });
 
-      const contextWindow = {
-        type: 'regeneration_start', timestamp: new Date().toISOString(),
-        characterName: effectiveCharacterData.data?.name || 'Unknown',
-        messageId: messageToRegenerate.id,
-        promptUsed: `Context for regen: ${contextMessagesForAPI.map(m => m.content).join('\n')}`,
-        contextMessageCount: contextMessagesForAPI.length, config: preparedApiConfig,
-        reasoningUsed: reasoningText
-      };
-      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
-      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
-
       const response = await PromptHandler.generateChatResponse(
         currentChatSessionUuid,
         contextMessagesForAPI,
         preparedApiConfig,
         signal,
-        effectiveCharacterData
+        effectiveCharacterData,
+        undefined, // sessionNotes
+        undefined, // compressionEnabled
+        undefined, // onCompressionStart
+        undefined, // onCompressionEnd
+        (payload) => {
+          // Capture the actual payload for the context window modal
+          const contextWindow = {
+            type: 'regeneration_start',
+            timestamp: new Date().toISOString(),
+            characterName: effectiveCharacterData.data?.name || 'Unknown',
+            messageId: messageToRegenerate.id,
+            ...payload
+          };
+          setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+          localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
+        }
       );
 
       await processStream(
@@ -842,23 +854,28 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         reasoning: reasoningText
       });
 
-      const contextWindow = {
-        type: 'variation_start', timestamp: new Date().toISOString(),
-        characterName: effectiveCharacterData.data?.name || 'Unknown',
-        messageId: messageToVary.id,
-        promptUsed: `Context for variation: ${contextMessagesForAPI.map(m => m.content).join('\n')}`,
-        contextMessageCount: contextMessagesForAPI.length, config: preparedApiConfig,
-        reasoningUsed: reasoningText
-      };
-      setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
-      localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
-
       const response = await PromptHandler.generateChatResponse(
         currentChatSessionUuid,
         contextMessagesForAPI,
         preparedApiConfig,
         signal,
-        effectiveCharacterData
+        effectiveCharacterData,
+        undefined, // sessionNotes
+        undefined, // compressionEnabled
+        undefined, // onCompressionStart
+        undefined, // onCompressionEnd
+        (payload) => {
+          // Capture the actual payload for the context window modal
+          const contextWindow = {
+            type: 'variation_start',
+            timestamp: new Date().toISOString(),
+            characterName: effectiveCharacterData.data?.name || 'Unknown',
+            messageId: messageToVary.id,
+            ...payload
+          };
+          setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
+          localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
+        }
       );
 
       await processStream(

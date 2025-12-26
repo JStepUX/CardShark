@@ -675,7 +675,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         compressionEnabled,
         () => setIsCompressing(true),
         () => setIsCompressing(false),
-        (payload) => setLastContextWindow((prev: any) => ({ ...prev, type: 'regeneration', timestamp: new Date().toISOString(), payload }))
+        (payload) => {
+          setLastContextWindow({
+            type: 'regeneration',
+            timestamp: new Date().toISOString(),
+            characterName: effectiveCharacterData?.data?.name || 'Unknown',
+            messageId: message.id,
+            ...payload
+          });
+        }
       );
 
       let fullContent = ''; let buffer = ''; const bufferInt = 50;
@@ -818,7 +826,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         compressionEnabled,
         () => setIsCompressing(true),
         () => setIsCompressing(false),
-        (payload) => setLastContextWindow((prev: any) => ({ ...prev, type: 'generation', timestamp: new Date().toISOString(), payload }))
+        (payload) => {
+          setLastContextWindow({
+            type: 'generation',
+            timestamp: new Date().toISOString(),
+            characterName: effectiveCharacterData?.data?.name || 'Unknown',
+            messageId: assistantMsgId,
+            ...payload // Spread payload properties directly
+          });
+        }
       );
 
       let fullContent = '';
@@ -1028,7 +1044,15 @@ Continue the response from exactly that point. Do not repeat the existing text. 
         compressionEnabled,
         () => setIsCompressing(true),
         () => setIsCompressing(false),
-        (payload) => setLastContextWindow((prev: any) => ({ ...prev, type: 'continuation', timestamp: new Date().toISOString(), payload }))
+        (payload) => {
+          setLastContextWindow({
+            type: 'continuation',
+            timestamp: new Date().toISOString(),
+            characterName: effectiveCharacterData?.data?.name || 'Unknown',
+            messageId: message.id,
+            ...payload
+          });
+        }
       );
 
       let buffer = ''; const bufferInt = 50;

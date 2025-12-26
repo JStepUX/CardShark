@@ -15,6 +15,35 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Global scrollbar styling - thin, purple-tinted, dark-mode friendly */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(139 92 246 / 0.5) transparent; /* violet-500 at 50% opacity */
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(139 92 246 / 0.4);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(139 92 246 / 0.7);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Optional: slightly visible track on hover for discoverability */
+*::-webkit-scrollbar-track:hover {
+  background: rgb(139 92 246 / 0.1);
+}
+
 a {
   font-weight: 500;
   color: #646cff;

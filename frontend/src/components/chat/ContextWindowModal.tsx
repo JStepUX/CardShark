@@ -50,9 +50,17 @@ interface ContextWindowModalProps {
 
 // Simple token counting for estimation
 const countTokens = (text?: string): number => {
-  if (!text) return 0;
-  // Split on whitespace and punctuation as a rough approximation
-  return text.split(/\s+/).length;
+  if (!text || typeof text !== 'string') return 0;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return 0;
+
+  // More accurate approximation: split on whitespace and count
+  // Also account for punctuation as separate tokens
+  const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+
+  // Rough estimate: 1 token per word, plus extra for punctuation
+  // This is a simple heuristic - real tokenization is more complex
+  return Math.max(1, words.length);
 };
 
 const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
@@ -81,53 +89,47 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
     }
   };
 
-  // Analyze token usage
+  // Analyze token usage from the actual API payload
   const tokenAnalysis = useMemo(() => {
     if (!contextData) return null;
 
     const analysis: Record<string, number> = {};
     let totalTokens = 0;
 
-    // System information (character description, etc)
-    if (contextData.systemPrompt) {
-      const systemTokens = countTokens(contextData.systemPrompt);
-      analysis.systemPrompt = systemTokens;
-      totalTokens += systemTokens;
+    // The payload structure can be in different places depending on when it was captured
+    // Check for: contextData.generation_params (direct from onPayloadReady callback)
+    // or contextData itself if it has the fields we need
+    const payload = contextData.generation_params || contextData;
+
+    // Memory/System Prompt
+    if (payload.memory) {
+      const memoryTokens = countTokens(payload.memory);
+      analysis.memory = memoryTokens;
+      totalTokens += memoryTokens;
     }
 
-    if (contextData.personality) {
-      const personalityTokens = countTokens(contextData.personality);
-      analysis.personality = personalityTokens;
-      totalTokens += personalityTokens;
-    }
-
-    if (contextData.scenario) {
-      const scenarioTokens = countTokens(contextData.scenario);
-      analysis.scenario = scenarioTokens;
-      totalTokens += scenarioTokens;
-    }
-
-    // Message history
-    if (contextData.messageHistory && Array.isArray(contextData.messageHistory)) {
-      let historyTokens = 0;
-      contextData.messageHistory.forEach((msg: { role: string, content: string }) => {
-        historyTokens += countTokens(msg.content);
-      });
-      analysis.messageHistory = historyTokens;
-      totalTokens += historyTokens;
-    }
-
-    // User prompt
-    if (contextData.prompt) {
-      const promptTokens = countTokens(contextData.prompt);
+    // Main prompt (includes formatted chat history)
+    if (payload.prompt) {
+      const promptTokens = countTokens(payload.prompt);
       analysis.prompt = promptTokens;
       totalTokens += promptTokens;
     }
 
+    // Chat history (raw messages)
+    if (payload.chat_history && Array.isArray(payload.chat_history)) {
+      let historyTokens = 0;
+      payload.chat_history.forEach((msg: { role: string, content: string }) => {
+        historyTokens += countTokens(msg.content);
+      });
+      analysis.chat_history = historyTokens;
+      totalTokens += historyTokens;
+    }
+
     analysis.total = totalTokens;
 
-    // Estimate remaining capacity
-    const estimatedCapacity = contextData.config?.max_context_length || 8192;
+    // Estimate remaining capacity - check both possible locations for api_config
+    const apiConfig = contextData.api_config || payload.api_config || contextData.config;
+    const estimatedCapacity = apiConfig?.max_context_length || 8192;
     analysis.remainingCapacity = Math.max(0, estimatedCapacity - totalTokens);
     analysis.usagePercentage = Math.min(100, (totalTokens / estimatedCapacity) * 100);
 
@@ -193,43 +195,13 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           <h3 className="text-sm font-medium mb-3">Token Usage Breakdown</h3>
 
           <div className="space-y-2">
-            {tokenAnalysis.systemPrompt !== undefined && (
+            {tokenAnalysis.memory !== undefined && (
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <FileText size={16} className="text-blue-400" />
-                  <span>System Prompt</span>
+                  <span>Memory (System Prompt)</span>
                 </div>
-                <div className="text-gray-300">{tokenAnalysis.systemPrompt.toLocaleString()} tokens</div>
-              </div>
-            )}
-
-            {tokenAnalysis.personality !== undefined && (
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <FileText size={16} className="text-purple-400" />
-                  <span>Personality</span>
-                </div>
-                <div className="text-gray-300">{tokenAnalysis.personality.toLocaleString()} tokens</div>
-              </div>
-            )}
-
-            {tokenAnalysis.scenario !== undefined && (
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <FileText size={16} className="text-green-400" />
-                  <span>Scenario</span>
-                </div>
-                <div className="text-gray-300">{tokenAnalysis.scenario.toLocaleString()} tokens</div>
-              </div>
-            )}
-
-            {tokenAnalysis.messageHistory !== undefined && (
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <MessageSquare size={16} className="text-orange-400" />
-                  <span>Message History</span>
-                </div>
-                <div className="text-gray-300">{tokenAnalysis.messageHistory.toLocaleString()} tokens</div>
+                <div className="text-gray-300">{tokenAnalysis.memory.toLocaleString()} tokens</div>
               </div>
             )}
 
@@ -237,16 +209,26 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <MessageSquare size={16} className="text-green-400" />
-                  <span>Current Prompt</span>
+                  <span>Formatted Prompt</span>
                 </div>
                 <div className="text-gray-300">{tokenAnalysis.prompt.toLocaleString()} tokens</div>
+              </div>
+            )}
+
+            {tokenAnalysis.chat_history !== undefined && (
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <MessageSquare size={16} className="text-orange-400" />
+                  <span>Raw Chat History</span>
+                </div>
+                <div className="text-gray-300">{tokenAnalysis.chat_history.toLocaleString()} tokens</div>
               </div>
             )}
           </div>
         </div>
 
         {/* API Configuration */}
-        {contextData.config && (
+        {(contextData.api_config || contextData.config) && (
           <div className="bg-stone-800 p-4 rounded-lg">
             <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
               <Settings size={16} />
@@ -256,19 +238,19 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-xs text-gray-400">Provider</div>
-                <div>{contextData.config.provider || 'Unknown'}</div>
+                <div>{(contextData.api_config || contextData.config)?.provider || 'Unknown'}</div>
               </div>
               <div>
                 <div className="text-xs text-gray-400">Model</div>
-                <div>{contextData.config.model || 'Default'}</div>
+                <div>{(contextData.api_config || contextData.config)?.model || 'Default'}</div>
               </div>
               <div>
                 <div className="text-xs text-gray-400">Context Limit</div>
-                <div>{contextData.config.max_context_length?.toLocaleString() || '8192'} tokens</div>
+                <div>{((contextData.api_config || contextData.config)?.max_context_length)?.toLocaleString() || '8192'} tokens</div>
               </div>
               <div>
                 <div className="text-xs text-gray-400">Max Output</div>
-                <div>{contextData.config.max_length?.toLocaleString() || '220'} tokens</div>
+                <div>{((contextData.api_config || contextData.config)?.max_length)?.toLocaleString() || '220'} tokens</div>
               </div>
             </div>
           </div>
@@ -297,14 +279,6 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
                 </code>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Character Info */}
-        {contextData.characterName && (
-          <div className="bg-stone-800 p-4 rounded-lg">
-            <h3 className="text-sm font-medium mb-2">Character Information</h3>
-            <div className="text-gray-300">{contextData.characterName}</div>
           </div>
         )}
       </div>
