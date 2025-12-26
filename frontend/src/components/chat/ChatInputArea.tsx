@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Send, User, Loader2 } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import MoodIndicator from '../MoodIndicator';
@@ -14,6 +14,9 @@ interface ChatInputAreaProps {
   emotion: EmotionState;
 }
 
+const MIN_INPUT_HEIGHT = 128; // h-32 in pixels
+const MAX_INPUT_HEIGHT = 400; // Maximum height before scrolling
+
 const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onSend,
   isGenerating,
@@ -24,6 +27,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -40,6 +45,47 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     setImageError(false);
   }, [currentUser?.filename]);
 
+  // Auto-grow input area based on content
+  useEffect(() => {
+    if (editorRef.current) {
+      const editorElement = editorRef.current.querySelector('.ProseMirror') as HTMLElement;
+      if (editorElement) {
+        // Get the scroll height of the content
+        const scrollHeight = editorElement.scrollHeight;
+        const padding = 24; // Account for padding (0.75rem * 2)
+        const newHeight = Math.min(Math.max(scrollHeight + padding, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT);
+
+        setInputHeight(newHeight);
+
+        // Scroll to cursor position after height adjustment
+        requestAnimationFrame(() => {
+          const selection = window.getSelection();
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            const editorRect = editorElement.getBoundingClientRect();
+
+            // Check if cursor is below visible area
+            if (rect.bottom > editorRect.bottom) {
+              editorElement.scrollTop += (rect.bottom - editorRect.bottom + 10);
+            }
+            // Check if cursor is above visible area
+            else if (rect.top < editorRect.top) {
+              editorElement.scrollTop -= (editorRect.top - rect.top + 10);
+            }
+          }
+        });
+      }
+    }
+  }, [inputValue]);
+
+  // Reset height when input is cleared
+  useEffect(() => {
+    if (!inputValue) {
+      setInputHeight(MIN_INPUT_HEIGHT);
+    }
+  }, [inputValue]);
+
   return (
     <div className="flex-none p-4 border-t border-stone-800">
       {/* Compression Indicator */}
@@ -49,7 +95,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           <span>Preparing context...</span>
         </div>
       )}
-      <div className="flex items-end gap-4">
+      <div className="flex items-start gap-4">
         {/* User Image */}
         <div
           onClick={onUserSelect}
@@ -72,8 +118,12 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           )}
         </div>
 
-        {/* Text Input Area */}
-        <div className="flex-1 h-32 flex flex-col overflow-hidden">
+        {/* Text Input Area with Auto-grow */}
+        <div
+          ref={editorRef}
+          className="flex-1 flex flex-col overflow-hidden transition-all duration-200 ease-out"
+          style={{ height: `${inputHeight}px` }}
+        >
           <RichTextEditor
             content={inputValue}
             onChange={setInputValue}
