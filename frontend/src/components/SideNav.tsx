@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom'; // Import NavLink and useNavigate
 import {
   ImagePlus,
-  Link,
+  Map as MapIcon,
   Save,
   ChevronLeft,
   ChevronRight,
@@ -55,7 +55,7 @@ interface SideNavProps {
   // currentView: View;
   // onViewChange: (view: View) => void;
   onFileUpload: () => void;
-  onUrlImport: () => void;
+  onWorldImport: () => void;
   onSave: () => void;
   onShowAbout: () => void;
   backendStatus: 'running' | 'disconnected';
@@ -67,7 +67,7 @@ const SideNav: React.FC<SideNavProps> = ({
   // currentView,
   // onViewChange,
   onFileUpload,
-  onUrlImport,
+  onWorldImport,
   onSave,
   onShowAbout,
   backendStatus,
@@ -124,16 +124,16 @@ const SideNav: React.FC<SideNavProps> = ({
               <button
                 onClick={onFileUpload}
                 className="w-10 h-10 bg-orange-700 rounded-lg flex items-center justify-center hover:bg-orange-600 transition-colors"
-                title="Load PNG"
+                title="Import Character PNG"
               >
                 <ImagePlus size={20} />
               </button>
               <button
-                onClick={onUrlImport}
-                className="w-10 h-10 bg-orange-700/80 rounded-lg flex items-center justify-center hover:bg-orange-600 transition-colors"
-                title="Import from URL"
+                onClick={onWorldImport}
+                className="w-10 h-10 bg-emerald-700 rounded-lg flex items-center justify-center hover:bg-emerald-600 transition-colors"
+                title="Import World"
               >
-                <Link size={20} />
+                <MapIcon size={20} />
               </button>
             </div>
 
@@ -171,10 +171,10 @@ const SideNav: React.FC<SideNavProps> = ({
               <div className="flex items-center gap-2">
                 <DropdownMenu
                   icon={ImagePlus}
-                  title="Import character from PNG or URL"
+                  title="Import character or world"
                   items={[
-                    { icon: ImagePlus, label: "Load PNG", onClick: onFileUpload },
-                    { icon: Link, label: "Import by URL", onClick: onUrlImport }
+                    { icon: ImagePlus, label: "Import Character PNG", onClick: onFileUpload },
+                    { icon: MapIcon, label: "Import World", onClick: onWorldImport }
                   ]}
                   buttonClassName="w-10 h-10 bg-orange-700 rounded-lg flex items-center justify-center hover:bg-orange-600 transition-colors"
                 />
