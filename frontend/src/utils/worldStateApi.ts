@@ -1,4 +1,4 @@
-import { WorldData, Room, RoomNPC, RoomConnection, NarratorVoice, TimeSystem } from '../types/world';
+import { WorldState, Room, Position, RoomConnection, PlayerState, DisplayNPC } from '../types/world';
 
 // ============================================================================
 // Grid-Based View Types (View Layer)
@@ -26,210 +26,172 @@ export interface GridWorldState {
   };
 }
 
-export interface DisplayNPC {
-  id: string;
-  name: string;
-  imageUrl: string;
-  personality?: string;
-}
-
 // ============================================================================
 // Adapter Functions
-// Convert between view layer types and codebase types at the API boundary
+// Convert between unified WorldState and Grid UI format
 // ============================================================================
 
 /**
- * Convert codebase Room to grid-compatible Room
+ * Convert unified Room to GridRoom
  */
-export function toGridRoom(room: Room, x: number, y: number): GridRoom {
-  // Convert RoomConnection[] to Record<string, string | null>
-  const connections: Record<string, string | null> = {
-    north: null,
-    south: null,
-    east: null,
-    west: null,
-  };
-
-  room.connections.forEach((conn) => {
-    if (conn.direction && conn.target_room_id) {
-      connections[conn.direction.toLowerCase()] = conn.target_room_id;
-    }
-  });
-
+export function toGridRoom(room: Room): GridRoom {
   return {
     id: room.id,
     name: room.name,
     description: room.description,
-    introduction_text: room.introduction || room.description,
-    npcs: room.npcs.map((npc) => npc.character_id),
-    events: [],
-    connections,
-    position: { x: room.x ?? x, y: room.y ?? y },
+    introduction_text: room.introduction_text,
+    npcs: room.npcs,
+    events: room.events,
+    connections: {
+      north: room.connections.north,
+      south: room.connections.south,
+      east: room.connections.east,
+      west: room.connections.west,
+    },
+    position: { x: room.position.x, y: room.position.y },
     image_path: room.image_path || undefined,
   };
 }
 
 /**
- * Convert Grid Room back to codebase Room
+ * Convert GridRoom back to unified Room
  */
-export function fromGridRoom(figmaRoom: GridRoom): Room {
-  // Convert Record<string, string | null> to RoomConnection[]
-  const connections: RoomConnection[] = [];
-
-  Object.entries(figmaRoom.connections).forEach(([direction, targetId]) => {
-    if (targetId) {
-      connections.push({
-        target_room_id: targetId,
-        direction: direction.charAt(0).toUpperCase() + direction.slice(1), // Capitalize
-        is_locked: false,
-      });
-    }
-  });
-
-  // Convert string[] to RoomNPC[]
-  const npcs: RoomNPC[] = figmaRoom.npcs.map((characterId) => ({
-    character_id: characterId,
-    spawn_chance: 1.0,
-  }));
-
+export function fromGridRoom(gridRoom: GridRoom): Room {
   return {
-    id: figmaRoom.id,
-    name: figmaRoom.name,
-    description: figmaRoom.description,
-    introduction: figmaRoom.introduction_text,
-    connections,
-    npcs,
-    items: [],
-    visited: false,
-    x: figmaRoom.position.x,
-    y: figmaRoom.position.y,
-    image_path: figmaRoom.image_path || null,
+    id: gridRoom.id,
+    name: gridRoom.name,
+    description: gridRoom.description,
+    introduction_text: gridRoom.introduction_text,
+    image_path: gridRoom.image_path || null,
+    position: {
+      x: gridRoom.position.x,
+      y: gridRoom.position.y,
+    },
+    npcs: gridRoom.npcs,
+    connections: {
+      north: gridRoom.connections.north || null,
+      south: gridRoom.connections.south || null,
+      east: gridRoom.connections.east || null,
+      west: gridRoom.connections.west || null,
+    },
+    events: gridRoom.events,
+    visited: false, // Will be updated from actual state
   };
 }
 
 /**
- * Convert codebase WorldData to grid-compatible WorldState
+ * Convert unified WorldState to grid-compatible format
  */
-export function toGridWorldState(worldData: WorldData | any, worldName: string): GridWorldState {
-  // Handle both 'rooms' and 'locations' (backend uses 'locations')
-  const rooms: Room[] = worldData.rooms || [];
+export function toGridWorldState(worldState: WorldState): GridWorldState {
+  const { grid_size, rooms, player } = worldState;
 
-  // If we have 'locations' instead of 'rooms', convert them
-  if (!worldData.rooms && worldData.locations) {
-    // locations is an object keyed by room name
-    const locationEntries = Object.entries(worldData.locations || {});
-    locationEntries.forEach(([name, loc]: [string, any], index) => {
-      rooms.push({
-        id: loc.id || name,
-        name: loc.name || name,
-        description: loc.description || '',
-        introduction: loc.description || '',
-        connections: (loc.connections || []).map((c: any) => ({
-          target_room_id: c.target || c.target_room_id || '',
-          direction: c.direction || '',
-          is_locked: c.is_locked || false,
-        })),
-        npcs: (loc.npcs || []).map((n: any) => ({
-          character_id: typeof n === 'string' ? n : n.character_id,
-          spawn_chance: n.spawn_chance || 1.0,
-        })),
-        items: loc.items || [],
-        visited: loc.visited || false,
-        x: loc.grid_x ?? loc.x ?? index % 8,
-        y: loc.grid_y ?? loc.y ?? Math.floor(index / 8),
-      });
-    });
-  }
-
-  // Determine grid dimensions by finding max x and y
-  let maxX = 0;
-  let maxY = 0;
-
-  rooms.forEach((room) => {
-    if (room.x !== undefined && room.x > maxX) maxX = room.x;
-    if (room.y !== undefined && room.y > maxY) maxY = room.y;
-  });
-
-  // Initialize grid with nulls (at least 8x6 for good visibility)
-  const gridWidth = Math.max(maxX + 1, 8);
-  const gridHeight = Math.max(maxY + 1, 6);
-  const grid: (GridRoom | null)[][] = Array(gridHeight)
+  // Create grid based on grid_size
+  const grid: (GridRoom | null)[][] = Array(grid_size.height)
     .fill(null)
-    .map(() => Array(gridWidth).fill(null));
+    .map(() => Array(grid_size.width).fill(null));
+
+  // Calculate offset to center grid (support negative coordinates)
+  const offsetX = Math.floor(grid_size.width / 2);
+  const offsetY = Math.floor(grid_size.height / 2);
 
   // Place rooms on grid
-  rooms.forEach((room, index) => {
-    const x = room.x ?? index;
-    const y = room.y ?? 0;
-    if (y < gridHeight && x < gridWidth) {
-      grid[y][x] = toGridRoom(room, x, y);
-    }
-  });
+  for (const room of rooms) {
+    const gridX = room.position.x + offsetX;
+    const gridY = room.position.y + offsetY;
 
-  // Determine player position from current_room_id or current_location
-  let playerX = 0;
-  let playerY = 0;
-  const currentRoomId = worldData.player_state?.current_room_id || worldData.current_location;
-  if (currentRoomId) {
-    const currentRoom = rooms.find(
-      (r) => r.id === currentRoomId || r.name === currentRoomId
-    );
-    if (currentRoom) {
-      playerX = currentRoom.x ?? 0;
-      playerY = currentRoom.y ?? 0;
+    if (gridY >= 0 && gridY < grid_size.height && gridX >= 0 && gridX < grid_size.width) {
+      grid[gridY][gridX] = toGridRoom(room);
     }
   }
+
+  // Find player position
+  const currentRoom = rooms.find((r) => r.id === player.current_room);
+  const playerPos = currentRoom
+    ? {
+        x: currentRoom.position.x + offsetX,
+        y: currentRoom.position.y + offsetY,
+      }
+    : { x: offsetX, y: offsetY };
 
   return {
     grid,
-    player_position: { x: playerX, y: playerY },
+    player_position: playerPos,
     metadata: {
-      name: worldData.name || worldName || 'Unknown World',
-      description: '', // Could be stored in settings or elsewhere
+      name: worldState.metadata.name,
+      description: worldState.metadata.description,
     },
   };
 }
 
 /**
- * Convert Grid WorldState back to codebase WorldData
+ * Convert GridWorldState back to unified WorldState
  */
-export function fromGridWorldState(figmaState: GridWorldState): WorldData {
-  // Extract rooms from grid
+export function fromGridWorldState(gridState: GridWorldState, existingState?: WorldState): WorldState {
   const rooms: Room[] = [];
 
-  figmaState.grid.forEach((row) => {
-    row.forEach((room) => {
-      if (room) {
-        rooms.push(fromGridRoom(room));
+  // Calculate offset
+  const offsetX = Math.floor(gridState.grid[0]?.length / 2) || 0;
+  const offsetY = Math.floor(gridState.grid.length / 2) || 0;
+
+  // Extract rooms from grid
+  gridState.grid.forEach((row, y) => {
+    row.forEach((gridRoom, x) => {
+      if (gridRoom) {
+        const room = fromGridRoom(gridRoom);
+        // Adjust position back to world coordinates
+        room.position.x = x - offsetX;
+        room.position.y = y - offsetY;
+
+        // Restore visited status from existing state if available
+        if (existingState) {
+          const existingRoom = existingState.rooms.find((r) => r.id === room.id);
+          if (existingRoom) {
+            room.visited = existingRoom.visited;
+          }
+        }
+
+        rooms.push(room);
       }
     });
   });
 
-  // Find current room based on player position
-  const currentRoom = figmaState.grid[figmaState.player_position.y]?.[figmaState.player_position.x];
+  // Find current room from player position
+  const currentRoomAtPos = gridState.grid[gridState.player_position.y]?.[gridState.player_position.x];
+  const currentRoomId = currentRoomAtPos?.id || (rooms[0]?.id || '');
+
+  // Build WorldState
+  const now = new Date().toISOString();
 
   return {
+    schema_version: 2,
+    metadata: existingState?.metadata || {
+      name: gridState.metadata.name,
+      description: gridState.metadata.description,
+      author: null,
+      uuid: crypto.randomUUID(),
+      created_at: now,
+      last_modified: now,
+      cover_image: null,
+    },
+    grid_size: {
+      width: gridState.grid[0]?.length || 8,
+      height: gridState.grid.length || 6,
+    },
     rooms,
-    settings: {
-      narrator_voice: NarratorVoice.DEFAULT,
-      time_system: TimeSystem.EVENT_BASED,
-      entry_room_id: rooms[0]?.id || null,
-      global_scripts: [],
+    player: {
+      current_room: currentRoomId,
+      visited_rooms: existingState?.player.visited_rooms || (currentRoomId ? [currentRoomId] : []),
+      inventory: existingState?.player.inventory || [],
+      health: existingState?.player.health || 100,
+      stamina: existingState?.player.stamina || 100,
+      level: existingState?.player.level || 1,
+      experience: existingState?.player.experience || 0,
     },
-    player_state: {
-      current_room_id: currentRoom?.id || null,
-      inventory: [],
-      health: 100,
-      stats: {},
-      flags: {},
-    },
-    name: figmaState.metadata.name,
   };
 }
 
 /**
  * Resolve NPC IDs to full character info for display
- * Fetches character data from the API
  */
 export async function resolveNpcDisplayData(npcIds: string[]): Promise<DisplayNPC[]> {
   if (npcIds.length === 0) return [];
@@ -288,8 +250,7 @@ export const worldStateApi = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to list worlds: ${errorData.detail || errorData.message || response.statusText
-          }`);
+        throw new Error(`Failed to list worlds: ${errorData.detail || errorData.message || response.statusText}`);
       }
 
       const data = await response.json();
@@ -320,8 +281,7 @@ export const worldStateApi = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to create world: ${errorData.detail || errorData.message || response.statusText
-          }`);
+        throw new Error(`Failed to create world: ${errorData.detail || errorData.message || response.statusText}`);
       }
 
       return await response.json();
@@ -332,25 +292,22 @@ export const worldStateApi = {
   },
 
   /**
-   * Get the state for a specific world
+   * Get the state for a specific world (unified format)
    */
-  getWorldState: async (worldId: string): Promise<any> => {
+  getWorldState: async (worldId: string): Promise<WorldState> => {
     try {
-      // Send request to backed API
       const response = await fetch(`/api/world-cards/${encodeURIComponent(worldId)}/state`);
 
       if (!response.ok) {
-        // Handle API error
         const errorData = await response.json().catch(() => ({}));
         console.error(`Error loading world state: ${response.status} - ${JSON.stringify(errorData)}`);
-        throw new Error(`Failed to load world: ${errorData.detail || errorData.message || response.statusText
-          }`);
+        throw new Error(`Failed to load world: ${errorData.detail || errorData.message || response.statusText}`);
       }
 
       const data = await response.json();
       if (data && data.success && data.data) {
-        console.log(`Successfully loaded world state with ${Object.keys(data.data.locations || {}).length} locations`);
-        return data.data;
+        console.log(`Successfully loaded world state with ${data.data.rooms.length} rooms`);
+        return data.data as WorldState;
       } else {
         throw new Error('Invalid response format from server');
       }
@@ -361,11 +318,10 @@ export const worldStateApi = {
   },
 
   /**
-   * Save the state for a specific world
+   * Save the state for a specific world (unified format)
    */
-  saveWorldState: async (worldId: string, state: any): Promise<boolean> => {
+  saveWorldState: async (worldId: string, state: WorldState): Promise<boolean> => {
     try {
-      // Make direct API call to backend
       const response = await fetch(`/api/world-cards/${encodeURIComponent(worldId)}/state`, {
         method: 'POST',
         headers: {
@@ -375,7 +331,6 @@ export const worldStateApi = {
       });
 
       if (!response.ok) {
-        // Handle API error
         const errorData = await response.json().catch(() => ({}));
         console.error(`Error saving world state: ${response.status} - ${JSON.stringify(errorData)}`);
         return false;
@@ -390,6 +345,94 @@ export const worldStateApi = {
   },
 
   /**
+   * Update a room in the world
+   */
+  updateRoom: async (worldName: string, roomId: string, roomData: Partial<Room>): Promise<WorldState> => {
+    try {
+      const worldState = await worldStateApi.getWorldState(worldName);
+      const roomIndex = worldState.rooms.findIndex((r) => r.id === roomId);
+
+      if (roomIndex !== -1) {
+        worldState.rooms[roomIndex] = {
+          ...worldState.rooms[roomIndex],
+          ...roomData
+        };
+
+        const success = await worldStateApi.saveWorldState(worldName, worldState);
+        if (success) return worldState;
+        throw new Error('Failed to save updated room');
+      } else {
+        throw new Error(`Room not found: ${roomId}`);
+      }
+    } catch (err) {
+      console.error('Error updating room:', err);
+      throw err;
+    }
+  },
+
+  /**
+   * Move player to a new room and persist the position
+   */
+  movePlayer: async (worldId: string, roomId: string): Promise<boolean> => {
+    try {
+      const worldState = await worldStateApi.getWorldState(worldId);
+
+      if (!worldState) {
+        throw new Error('World state not found');
+      }
+
+      // Update player position
+      worldState.player.current_room = roomId;
+
+      // Add to visited rooms if not already there
+      if (!worldState.player.visited_rooms.includes(roomId)) {
+        worldState.player.visited_rooms.push(roomId);
+      }
+
+      // Mark room as visited
+      const room = worldState.rooms.find((r) => r.id === roomId);
+      if (room) {
+        room.visited = true;
+      }
+
+      // Save updated state
+      return await worldStateApi.saveWorldState(worldId, worldState);
+    } catch (error) {
+      console.error('Error moving player:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Load world state and convert to grid-compatible format
+   */
+  getGridWorldState: async (worldId: string): Promise<GridWorldState | null> => {
+    try {
+      const worldState = await worldStateApi.getWorldState(worldId);
+      if (!worldState) return null;
+      return toGridWorldState(worldState);
+    } catch (error) {
+      console.error('Error loading world state for grid view:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Save grid world state by converting back to unified format
+   */
+  saveGridWorldState: async (worldId: string, gridState: GridWorldState): Promise<boolean> => {
+    try {
+      // Get existing state to preserve metadata and player stats
+      const existingState = await worldStateApi.getWorldState(worldId);
+      const worldState = fromGridWorldState(gridState, existingState);
+      return await worldStateApi.saveWorldState(worldId, worldState);
+    } catch (error) {
+      console.error('Error saving grid world state:', error);
+      return false;
+    }
+  },
+
+  /**
    * Load the latest chat for a world card
    */
   loadLatestChat: async (worldId: string): Promise<any> => {
@@ -397,14 +440,12 @@ export const worldStateApi = {
       const response = await fetch(`/api/world-chat/${encodeURIComponent(worldId)}/latest`);
 
       if (response.status === 404) {
-        // No chat yet, return null (not an error)
         return null;
       }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to load latest chat: ${errorData.detail || errorData.message || response.statusText
-          }`);
+        throw new Error(`Failed to load latest chat: ${errorData.detail || errorData.message || response.statusText}`);
       }
 
       return await response.json();
@@ -445,38 +486,10 @@ export const worldStateApi = {
   },
 
   /**
-   * Append a message to a world card chat
-   */
-  appendMessage: async (worldName: string, chatId: string, message: any): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/chat/${encodeURIComponent(chatId)}/append`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to append message: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data && data.success === true;
-    } catch (error) {
-      console.error(`Error appending message for world ${worldName}:`, error);
-      throw new Error(`Failed to append message: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  },
-
-  /**
    * Create a new chat for a world card
    */
   createNewChat: async (worldName: string): Promise<any> => {
     try {
-      // Generate a new chat ID
       const chatId = `${worldName}-${Math.random().toString(36).substring(2, 10)}`;
       const chatData = {
         messages: [],
@@ -488,7 +501,6 @@ export const worldStateApi = {
         }
       };
 
-      // Save the new chat
       const success = await worldStateApi.saveChat(worldName, chatId, chatData);
       if (success) {
         return chatData;
@@ -498,99 +510,6 @@ export const worldStateApi = {
     } catch (err) {
       console.error('Error creating new chat:', err);
       return null;
-    }
-  },
-
-  /**
-   * Update a room in the world
-   */
-  updateRoom: async (worldName: string, roomId: string, roomData: any): Promise<WorldData> => {
-    try {
-      const worldState = await worldStateApi.getWorldState(worldName);
-      const roomIndex = worldState.rooms?.findIndex((r: any) => r.id === roomId);
-
-      if (roomIndex !== undefined && roomIndex !== -1) {
-        worldState.rooms[roomIndex] = {
-          ...worldState.rooms[roomIndex],
-          ...roomData
-        };
-
-        const success = await worldStateApi.saveWorldState(worldName, worldState);
-        if (success) return worldState;
-        throw new Error('Failed to save updated room');
-      } else {
-        throw new Error(`Room not found: ${roomId}`);
-      }
-    } catch (err) {
-      console.error('Error updating room:', err);
-      throw err;
-    }
-  },
-
-  /**
-   * Move player to a new room and persist the position
-   * This is called on every room transition (Option a from implementation plan)
-   */
-  movePlayer: async (worldId: string, roomId: string): Promise<boolean> => {
-    try {
-      // First get current world state
-      const worldState = await worldStateApi.getWorldState(worldId);
-
-      if (!worldState) {
-        throw new Error('World state not found');
-      }
-
-      // Update player position
-      if (worldState.player_state) {
-        worldState.player_state.current_room_id = roomId;
-      } else {
-        worldState.player_state = {
-          current_room_id: roomId,
-          inventory: [],
-          health: 100,
-          stats: {},
-          flags: {},
-        };
-      }
-
-      // Mark room as visited
-      const room = worldState.rooms?.find((r: any) => r.id === roomId);
-      if (room) {
-        room.visited = true;
-      }
-
-      // Save updated state
-      return await worldStateApi.saveWorldState(worldId, worldState);
-    } catch (error) {
-      console.error('Error moving player:', error);
-      return false;
-    }
-  },
-
-  /**
-   * Load world state and convert to grid-compatible format
-   */
-  getGridWorldState: async (worldId: string): Promise<GridWorldState | null> => {
-    try {
-      const worldData = await worldStateApi.getWorldState(worldId);
-      if (!worldData) return null;
-      return toGridWorldState(worldData, worldId);
-    } catch (error) {
-      console.error('Error loading world state for grid view:', error);
-      return null;
-    }
-  },
-
-  /**
-   * Save grid world state by converting back to codebase format
-   */
-  saveGridWorldState: async (worldId: string, figmaState: GridWorldState): Promise<boolean> => {
-    try {
-      const worldData = fromGridWorldState(figmaState);
-      return await worldStateApi.saveWorldState(worldId, worldData);
-    } catch (error) {
-      console.error('Error saving grid world state:', error);
-      return false;
     }
   },
 };

@@ -1,75 +1,76 @@
 // frontend/src/types/world.ts
-// TypeScript interfaces matching the V2 Spec in backend/models/world_data.py
+// TypeScript interfaces matching the unified world schema
+// These types align exactly with backend/models/world_state.py
 
-export enum NarratorVoice {
-  DEFAULT = "default",
-  OMNISCIENT = "omniscient",
-  UNRELIABLE = "unreliable",
-  SARCASTIC = "sarcastic",
-  HORROR = "horror"
-}
-
-export enum TimeSystem {
-  REALTIME = "realtime",
-  TURN_BASED = "turn_based",
-  EVENT_BASED = "event_based",
-  CINEMATIC = "cinematic"
+export interface Position {
+  x: number;
+  y: number;
 }
 
 export interface RoomConnection {
-  target_room_id: string;
-  direction: string;
-  description?: string | null;
-  is_locked: boolean;
-  key_id?: string | null;
+  north: string | null;
+  south: string | null;
+  east: string | null;
+  west: string | null;
 }
 
-export interface RoomNPC {
-  character_id: string;
-  spawn_chance: number;
-  initial_dialogue?: string | null;
+export interface EventDefinition {
+  id: string;
+  type: string;
+  trigger: string;
+  data: Record<string, any>;
 }
 
 export interface Room {
   id: string;
   name: string;
   description: string;
-  introduction?: string | null;
-  image_path?: string | null;
-  connections: RoomConnection[];
-  npcs: RoomNPC[];
-  items: string[];
+  introduction_text: string;
+  image_path: string | null;
+  position: Position;
+  npcs: string[];  // character UUIDs
+  connections: RoomConnection;
+  events: EventDefinition[];
   visited: boolean;
-  // UI Helpers (not persisted)
-  x?: number;
-  y?: number;
+}
+
+export interface WorldMetadata {
+  name: string;
+  description: string;
+  author: string | null;
+  uuid: string;
+  created_at: string;  // ISO8601
+  last_modified: string;  // ISO8601
+  cover_image: string | null;
+}
+
+export interface GridSize {
+  width: number;
+  height: number;
 }
 
 export interface PlayerState {
-  current_room_id?: string | null;
+  current_room: string;  // room ID
+  visited_rooms: string[];  // room IDs
   inventory: string[];
   health: number;
-  stats: Record<string, any>;
-  flags: Record<string, boolean>;
+  stamina: number;
+  level: number;
+  experience: number;
 }
 
-export interface WorldSettings {
-  narrator_voice: NarratorVoice;
-  time_system: TimeSystem;
-  entry_room_id?: string | null;
-  global_scripts: string[];
-}
-
-export interface WorldData {
+export interface WorldState {
+  schema_version: number;
+  metadata: WorldMetadata;
+  grid_size: GridSize;
   rooms: Room[];
-  settings: WorldSettings;
-  player_state: PlayerState;
-  name?: string; // Informational
+  player: PlayerState;
 }
 
 // Helper interface for UI components that need NPC display info
-export interface NpcGridItem {
-  character_id: string;
+export interface DisplayNPC {
+  id: string;
   name: string;
-  path: string;
+  imageUrl: string;
+  personality?: string;
 }
