@@ -97,6 +97,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const [isConvertingToWorld, setIsConvertingToWorld] = useState(false);
   const [originalCharacterData, setOriginalCharacterData] = useState<CharacterCard | null>(null);
   const changeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -263,29 +264,52 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   };
 
   const handleConvertToWorld = async () => {
-    if (!characterData || !characterData.data.character_uuid) return;
+    if (!characterData || !characterData.data.character_uuid) {
+      console.error('Cannot convert to world: Missing character data or UUID');
+      alert('Cannot convert to world: Character data is missing');
+      return;
+    }
+
+    console.log('Starting world conversion for:', characterData.data.name, 'UUID:', characterData.data.character_uuid);
+    setIsConvertingToWorld(true);
 
     try {
       // Use the V2 World Creation API
       // This will handles duplication, lore extraction, and initialization atomially on the backend
+      const requestBody = {
+        name: `${characterData.data.name} (World)`,
+        character_path: characterData.data.character_uuid // Backend also supports UUID as character_path
+      };
+
+      console.log('Sending world creation request:', requestBody);
+
       const response = await fetch('/api/world-cards/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `${characterData.data.name} (World)`,
-          character_path: characterData.data.character_uuid // Backend also supports UUID as character_path
-        })
+        body: JSON.stringify(requestBody)
       });
 
+      console.log('World creation response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || errorData.message || 'Failed to create world');
+        let errorMessage = 'Failed to create world';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+          console.error('World creation error response:', errorData);
+        } catch (e) {
+          console.error('Failed to parse error response:', e);
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
+      console.log('World creation result:', result);
 
       if (result.success && result.data) {
         const newUuid = result.data.character_uuid;
+        console.log('World created successfully with UUID:', newUuid);
 
         // Invalidate character gallery cache since we generated a new card
         if (primaryContext.invalidateCharacterCache) {
@@ -293,14 +317,19 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
         }
 
         // Navigate to the new world launcher
-        navigate(`/world/${newUuid}/launcher`);
+        const targetUrl = `/world/${newUuid}/launcher`;
+        console.log('Navigating to:', targetUrl);
+        navigate(targetUrl);
       } else {
+        console.error('World creation returned unexpected result:', result);
         throw new Error('World creation returned success but no data was received.');
       }
 
     } catch (error) {
       console.error('Failed to convert to world:', error);
       alert('Failed to convert to world: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsConvertingToWorld(false);
     }
   };
 
@@ -456,10 +485,11 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                       setShowOverflowMenu(false);
                       handleConvertToWorld();
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"
+                    disabled={isConvertingToWorld}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Globe className="w-4 h-4" />
-                    <span>Convert to World</span>
+                    <Globe className={`w-4 h-4 ${isConvertingToWorld ? 'animate-spin' : ''}`} />
+                    <span>{isConvertingToWorld ? 'Converting...' : 'Convert to World'}</span>
                   </button>
 
                   <div className="border-t border-stone-700"></div>
