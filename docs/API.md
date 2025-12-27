@@ -1,719 +1,378 @@
-# CardShark API Documentation
+# API.md
 
-This document provides a comprehensive reference for CardShark's FastAPI backend endpoints.
-
-## Base URL
-
-**Development**: `http://localhost:9696`
-**Production**: Depends on deployment configuration
-
-## Table of Contents
-
-- [World Cards API](#world-cards-api)
-- [Characters API](#characters-api)
-- [Chat API](#chat-api)
-- [Settings API](#settings-api)
-- [Templates API](#templates-api)
-- [Content Filters API](#content-filters-api)
-- [Background API](#background-api)
-- [Rooms API](#rooms-api)
-
----
-
-## World Cards API
-
-Base path: `/api/world-cards/`
-
-Manages World Cards - dynamic, navigable environments with characters and events.
-
-### List Worlds
-
-```http
-GET /api/world-cards/
+## BASE_CONFIG
+```yaml
+development: http://localhost:9696
+production: depends_on_deployment
+cors_dev: http://localhost:6969
+auth: none (local use only)
 ```
 
-**Response**: Array of available world names
+## WORLD_CARDS_API
+```yaml
+base_path: /api/world-cards/
 
-**Example:**
-```json
-["fantasy-kingdom", "cyberpunk-city", "space-station"]
+list_worlds:
+  method: GET
+  path: /api/world-cards/
+  response: array[string]
+
+get_state:
+  method: GET
+  path: /api/world-cards/{world_name}/state
+  params:
+    world_name: path
+  response:
+    world_name: string
+    current_room: string
+    rooms: object
+    player_position: string
+
+update_state:
+  method: POST
+  path: /api/world-cards/{world_name}/state
+  params:
+    world_name: path
+  body: world_state_object
+  response: success_confirmation
+
+move_player:
+  method: POST
+  path: /api/world-cards/{world_name}/move
+  params:
+    world_name: path
+  body:
+    destination: string
+    player_id: string
+  response: updated_position_and_room
+
+create_world:
+  method: POST
+  path: /api/world-cards/create
+  body:
+    world_name: string
+    description: string
+    initial_room: string
+  response: created_world_state
 ```
 
----
+## CHARACTERS_API
+```yaml
+base_path: /api/characters/
 
-### Get World State
+list_characters:
+  method: GET
+  path: /api/characters/
+  response:
+    - character_uuid: string
+      name: string
+      description: string
+      file_path: string
 
-```http
-GET /api/world-cards/{world_name}/state
+save_card:
+  method: POST
+  path: /api/characters/save-card
+  content_type: multipart/form-data
+  fields:
+    file: PNG
+    metadata: JSON_string
+  metadata_fields:
+    character_uuid: string (required)
+    name: string
+    description: string
+    personality: string
+    first_message: string
+  side_effect: embeds_metadata_in_PNG_EXIF
+
+extract_metadata:
+  method: POST
+  path: /api/characters/extract-metadata
+  content_type: multipart/form-data
+  fields:
+    file: PNG
+  response: extracted_v2_metadata
+
+get_by_id:
+  method: GET
+  path: /api/characters/{character_id}
+  params:
+    character_id: path (UUID or name)
+  response: full_character_object
 ```
 
-**Parameters:**
-- `world_name` (path) - Name of the world
+## CHAT_API
+```yaml
+base_path: /api/chat/
 
-**Response**: World state object including rooms, NPCs, player position, etc.
+generate:
+  method: POST
+  path: /api/chat/generate
+  body:
+    chat_session_uuid: string (REQUIRED)
+    character_id: string
+    message: string
+    api_config:
+      provider: string
+      model: string
+      temperature: number
+  response_type: text/event-stream (SSE)
+  sse_format:
+    - token: string
+      done: boolean
+  side_effect: appends_to_SQLite
 
-**Example Response:**
-```json
-{
-  "world_name": "fantasy-kingdom",
-  "current_room": "throne-room",
-  "rooms": {
-    "throne-room": {
-      "name": "Throne Room",
-      "description": "A grand hall with marble columns",
-      "npcs": ["king", "guard"],
-      "events": []
-    }
-  },
-  "player_position": "throne-room"
-}
+list_sessions:
+  method: GET
+  path: /api/chat/list/{character_id}
+  params:
+    character_id: path
+  response:
+    - chat_session_uuid: string
+      character_id: string
+      created_at: ISO8601
+      last_message_at: ISO8601
+      message_count: integer
+
+load_session:
+  method: POST
+  path: /api/chat/load
+  body:
+    chat_session_uuid: string
+  response:
+    chat_session_uuid: string
+    character_id: string
+    messages: array
+    session_notes: string
+    compression_enabled: boolean
+
+create_new_chat:
+  method: POST
+  path: /api/chat/create-new-chat
+  body:
+    character_id: string|null
+    session_notes: string
+  response:
+    chat_session_uuid: string
+  side_effect: creates_SQLite_row
+
+append_message:
+  method: POST
+  path: /api/chat/append-chat-message
+  body:
+    chat_session_uuid: string (REQUIRED)
+    role: user|assistant
+    content: string
+  response:
+    success: boolean
+  side_effect: appends_to_SQLite
+
+load_latest:
+  method: GET
+  path: /api/chat/load-latest-chat/{character_id}
+  params:
+    character_id: path
+  response: most_recent_session_for_character
 ```
 
----
+## SETTINGS_API
+```yaml
+base_path: /api/settings/
 
-### Update World State
+get_settings:
+  method: GET
+  path: /api/settings/
+  response:
+    api:
+      default_provider: string
+      openai_api_key: string
+      default_model: string
+    ui:
+      theme: string
+      font_size: string
+    paths:
+      characters_dir: string
+      worlds_dir: string
+      chats_dir: string
 
-```http
-POST /api/world-cards/{world_name}/state
+update_settings:
+  method: POST
+  path: /api/settings/
+  body: partial_or_full_settings_object
+  response: updated_settings
+  side_effect: writes_to_settings_json
 ```
 
-**Parameters:**
-- `world_name` (path) - Name of the world
+## TEMPLATES_API
+```yaml
+base_path: /api/templates/
 
-**Request Body**: Updated world state object
+list_templates:
+  method: GET
+  path: /api/templates/
+  response:
+    - name: string
+      description: string
+      file_path: string
 
-**Response**: Success confirmation
+get_template:
+  method: GET
+  path: /api/templates/{template_name}
+  params:
+    template_name: path
+  response:
+    name: string
+    system_prompt: string
+    user_prefix: string
+    assistant_prefix: string
+    format: string
 
----
+save_template:
+  method: POST
+  path: /api/templates/
+  body: template_object
+  response: success_confirmation
 
-### Move Player
-
-```http
-POST /api/world-cards/{world_name}/move
+delete_template:
+  method: DELETE
+  path: /api/templates/{template_name}
+  params:
+    template_name: path
+  response: success_confirmation
 ```
 
-**Parameters:**
-- `world_name` (path) - Name of the world
+## CONTENT_FILTERS_API
+```yaml
+base_path: /api/content-filters/
 
-**Request Body:**
-```json
-{
-  "destination": "garden",
-  "player_id": "player-uuid"
-}
+list_filters:
+  method: GET
+  path: /api/content-filters/
+  response: array[builtin_and_custom_filters]
+
+get_filter:
+  method: GET
+  path: /api/content-filters/{filter_name}
+  params:
+    filter_name: path
+  response: filter_configuration_and_rules
+
+save_custom_filter:
+  method: POST
+  path: /api/content-filters/
+  body: filter_configuration
+  response: success_confirmation
+
+delete_custom_filter:
+  method: DELETE
+  path: /api/content-filters/{filter_name}
+  params:
+    filter_name: path
+  constraint: builtin_filters_cannot_be_deleted
+  response: success_confirmation
 ```
 
-**Response**: Updated player position and room information
+## BACKGROUNDS_API
+```yaml
+base_path: /api/backgrounds/
 
----
+list_backgrounds:
+  method: GET
+  path: /api/backgrounds/
+  response: array[background_with_metadata]
 
-### Create World
+upload_background:
+  method: POST
+  path: /api/backgrounds/upload
+  content_type: multipart/form-data
+  fields:
+    file: image
+    metadata: JSON
+  response: uploaded_background_info
 
-```http
-POST /api/world-cards/create
+delete_background:
+  method: DELETE
+  path: /api/backgrounds/{background_name}
+  params:
+    background_name: path
+  response: success_confirmation
 ```
 
-**Request Body:**
-```json
-{
-  "world_name": "new-world",
-  "description": "A mysterious new world",
-  "initial_room": "entrance"
-}
+## ROOMS_API
+```yaml
+base_path: /api/rooms/
+
+list_rooms:
+  method: GET
+  path: /api/rooms/
+  response: array[room_objects]
+
+create_room:
+  method: POST
+  path: /api/rooms/
+  body: room_configuration
+  response: created_room_object
+
+update_room:
+  method: PUT
+  path: /api/rooms/{room_id}
+  params:
+    room_id: path
+  body: updated_room_configuration
+  response: updated_room_object
+
+delete_room:
+  method: DELETE
+  path: /api/rooms/{room_id}
+  params:
+    room_id: path
+  response: success_confirmation
 ```
 
-**Response**: Created world state
+## ERROR_RESPONSES
+```yaml
+format:
+  error: string (error_type)
+  message: string (detail)
+  status_code: integer
+  details: object (optional)
 
----
+status_codes:
+  200: OK
+  201: Created
+  400: Bad Request
+  404: Not Found
+  422: Unprocessable Entity (validation)
+  500: Internal Server Error
 
-## Characters API
-
-Base path: `/api/characters/`
-
-Manages character data with PNG metadata embedding.
-
-### List Characters
-
-```http
-GET /api/characters/
+example:
+  error: ValidationError
+  message: "character_uuid is required in metadata"
+  status_code: 422
+  details:
+    field: character_uuid
+    constraint: required
 ```
 
-**Response**: Array of character objects
+## CONVENTIONS
+```yaml
+content_types:
+  json_request: application/json
+  file_upload: multipart/form-data
+  sse_response: text/event-stream
 
-**Example:**
-```json
-[
-  {
-    "character_uuid": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "Elena",
-    "description": "A brave warrior",
-    "file_path": "characters/elena.png"
-  }
-]
+invariants:
+  chat_session_uuid: required for all chat ops post-creation
+  character_uuid: immutable, embedded in PNG EXIF
+
+cors:
+  dev_origin: http://localhost:6969
+  prod_origin: same_as_backend
 ```
 
----
-
-### Save Character Card
-
-```http
-POST /api/characters/save-card
+## REFS
+```yaml
+context: ../CONTEXT.md (API_CONTRACTS section)
+development: DEVELOPMENT.md
+structure: ../.kiro/steering/structure.md
+conventions: ../.kiro/steering/conventions.md
 ```
-
-**Request**: Multipart form data with PNG file and metadata
-
-**Form Fields:**
-- `file` - PNG image file
-- `metadata` - JSON string with character data (including `character_uuid`)
-
-**Response**: Saved character with embedded metadata
-
-**Metadata Example:**
-```json
-{
-  "character_uuid": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "Elena",
-  "description": "A brave warrior from the northern kingdoms",
-  "personality": "Courageous, loyal, quick-witted",
-  "first_message": "Greetings, traveler!"
-}
-```
-
----
-
-### Extract Character Metadata
-
-```http
-POST /api/characters/extract-metadata
-```
-
-**Request**: Multipart form data with PNG file
-
-**Response**: Extracted metadata from PNG EXIF data
-
----
-
-### Get Character by ID
-
-```http
-GET /api/characters/{character_id}
-```
-
-**Parameters:**
-- `character_id` (path) - Character UUID or name
-
-**Response**: Character object with full metadata
-
----
-
-## Chat API
-
-Base path: `/api/chat/`
-
-Manages chat sessions and message generation.
-
-### Generate Chat Response
-
-```http
-POST /api/chat/generate
-```
-
-**Request Body:**
-```json
-{
-  "chat_session_uuid": "abc123-session-uuid",
-  "character_id": "elena",
-  "message": "Hello!",
-  "api_config": {
-    "provider": "openai",
-    "model": "gpt-4",
-    "temperature": 0.8
-  }
-}
-```
-
-**Response**: Server-sent events (SSE) stream with AI-generated response
-
-**SSE Event Format:**
-```
-data: {"token": "Hello", "done": false}
-data: {"token": " there", "done": false}
-data: {"token": "!", "done": true}
-```
-
----
-
-### List Chat Sessions
-
-```http
-GET /api/chat/list/{character_id}
-```
-
-**Parameters:**
-- `character_id` (path) - Character UUID or name
-
-**Response**: Array of chat sessions for the character
-
-**Example:**
-```json
-[
-  {
-    "chat_session_uuid": "session-123",
-    "character_id": "elena",
-    "created_at": "2025-12-26T10:00:00Z",
-    "last_message_at": "2025-12-26T11:30:00Z",
-    "message_count": 42
-  }
-]
-```
-
----
-
-### Load Chat Session
-
-```http
-POST /api/chat/load
-```
-
-**Request Body:**
-```json
-{
-  "chat_session_uuid": "session-123"
-}
-```
-
-**Response**: Complete chat history with messages
-
-**Example:**
-```json
-{
-  "chat_session_uuid": "session-123",
-  "character_id": "elena",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Hello!",
-      "timestamp": "2025-12-26T10:00:00Z"
-    },
-    {
-      "role": "assistant",
-      "content": "Greetings, traveler!",
-      "timestamp": "2025-12-26T10:00:05Z"
-    }
-  ],
-  "session_notes": "Elena is on a quest to find the ancient sword",
-  "compression_enabled": true
-}
-```
-
----
-
-### Create New Chat Session
-
-```http
-POST /api/chat/create-new-chat
-```
-
-**Request Body:**
-```json
-{
-  "character_id": "elena",
-  "session_notes": "Starting a new adventure"
-}
-```
-
-**Response**: New chat session UUID
-
----
-
-### Append Chat Message
-
-```http
-POST /api/chat/append-chat-message
-```
-
-**Request Body:**
-```json
-{
-  "chat_session_uuid": "session-123",
-  "role": "user",
-  "content": "What should we do next?"
-}
-```
-
-**Response**: Success confirmation
-
----
-
-### Load Latest Chat
-
-```http
-GET /api/chat/load-latest-chat/{character_id}
-```
-
-**Parameters:**
-- `character_id` (path) - Character UUID or name
-
-**Response**: Most recent chat session for the character
-
----
-
-## Settings API
-
-Base path: `/api/settings/`
-
-Manages application configuration.
-
-### Get Settings
-
-```http
-GET /api/settings/
-```
-
-**Response**: Current application settings
-
-**Example:**
-```json
-{
-  "api": {
-    "default_provider": "openai",
-    "openai_api_key": "sk-...",
-    "default_model": "gpt-4"
-  },
-  "ui": {
-    "theme": "dark",
-    "font_size": "medium"
-  },
-  "paths": {
-    "characters_dir": "characters/",
-    "worlds_dir": "worlds/",
-    "chats_dir": "chats/"
-  }
-}
-```
-
----
-
-### Update Settings
-
-```http
-POST /api/settings/
-```
-
-**Request Body**: Settings object (partial updates supported)
-
-**Example:**
-```json
-{
-  "api": {
-    "default_provider": "anthropic",
-    "anthropic_api_key": "sk-ant-..."
-  }
-}
-```
-
-**Response**: Updated settings
-
----
-
-## Templates API
-
-Base path: `/api/templates/`
-
-Manages chat prompt templates.
-
-### List Templates
-
-```http
-GET /api/templates/
-```
-
-**Response**: Array of available templates
-
-**Example:**
-```json
-[
-  {
-    "name": "default",
-    "description": "Standard chat template",
-    "file_path": "templates/default.json"
-  },
-  {
-    "name": "roleplay",
-    "description": "Immersive roleplay template",
-    "file_path": "templates/roleplay.json"
-  }
-]
-```
-
----
-
-### Get Template
-
-```http
-GET /api/templates/{template_name}
-```
-
-**Parameters:**
-- `template_name` (path) - Name of the template
-
-**Response**: Template content
-
-**Example:**
-```json
-{
-  "name": "default",
-  "system_prompt": "You are a helpful assistant",
-  "user_prefix": "User: ",
-  "assistant_prefix": "Assistant: ",
-  "format": "{{system_prompt}}\n\n{{history}}\n\n{{user_prefix}}{{message}}\n{{assistant_prefix}}"
-}
-```
-
----
-
-### Create/Update Template
-
-```http
-POST /api/templates/
-```
-
-**Request Body**: Template object
-
-**Response**: Saved template confirmation
-
----
-
-### Delete Template
-
-```http
-DELETE /api/templates/{template_name}
-```
-
-**Parameters:**
-- `template_name` (path) - Name of the template to delete
-
-**Response**: Success confirmation
-
----
-
-## Content Filters API
-
-Base path: `/api/content-filters/`
-
-Manages content moderation filters.
-
-### List Filters
-
-```http
-GET /api/content-filters/
-```
-
-**Response**: Array of available content filters (builtin and custom)
-
----
-
-### Get Filter
-
-```http
-GET /api/content-filters/{filter_name}
-```
-
-**Parameters:**
-- `filter_name` (path) - Name of the filter
-
-**Response**: Filter configuration and rules
-
----
-
-### Create/Update Custom Filter
-
-```http
-POST /api/content-filters/
-```
-
-**Request Body**: Filter configuration
-
-**Response**: Saved filter confirmation
-
----
-
-### Delete Custom Filter
-
-```http
-DELETE /api/content-filters/{filter_name}
-```
-
-**Parameters:**
-- `filter_name` (path) - Name of custom filter to delete (builtin filters cannot be deleted)
-
-**Response**: Success confirmation
-
----
-
-## Background API
-
-Base path: `/api/backgrounds/`
-
-Manages background images for chat customization.
-
-### List Backgrounds
-
-```http
-GET /api/backgrounds/
-```
-
-**Response**: Array of available backgrounds with metadata
-
----
-
-### Upload Background
-
-```http
-POST /api/backgrounds/upload
-```
-
-**Request**: Multipart form data with image file and metadata
-
-**Response**: Uploaded background information
-
----
-
-### Delete Background
-
-```http
-DELETE /api/backgrounds/{background_name}
-```
-
-**Parameters:**
-- `background_name` (path) - Name of background to delete
-
-**Response**: Success confirmation
-
----
-
-## Rooms API
-
-Base path: `/api/rooms/`
-
-Manages chat rooms and conversation spaces.
-
-### List Rooms
-
-```http
-GET /api/rooms/
-```
-
-**Response**: Array of available rooms
-
----
-
-### Create Room
-
-```http
-POST /api/rooms/
-```
-
-**Request Body**: Room configuration
-
-**Response**: Created room object
-
----
-
-### Update Room
-
-```http
-PUT /api/rooms/{room_id}
-```
-
-**Parameters:**
-- `room_id` (path) - Room identifier
-
-**Request Body**: Updated room configuration
-
-**Response**: Updated room object
-
----
-
-### Delete Room
-
-```http
-DELETE /api/rooms/{room_id}
-```
-
-**Parameters:**
-- `room_id` (path) - Room identifier
-
-**Response**: Success confirmation
-
----
-
-## Error Responses
-
-All endpoints follow consistent error response formats:
-
-### Standard Error Response
-
-```json
-{
-  "error": "Error type",
-  "message": "Detailed error message",
-  "status_code": 400
-}
-```
-
-### Common HTTP Status Codes
-
-- `200 OK` - Request successful
-- `201 Created` - Resource created successfully
-- `400 Bad Request` - Invalid request data
-- `404 Not Found` - Resource not found
-- `422 Unprocessable Entity` - Validation error
-- `500 Internal Server Error` - Server error
-
-### Example Error Response
-
-```json
-{
-  "error": "ValidationError",
-  "message": "character_uuid is required in metadata",
-  "status_code": 422,
-  "details": {
-    "field": "character_uuid",
-    "constraint": "required"
-  }
-}
-```
-
----
-
-## Request/Response Conventions
-
-### Content Types
-
-- **JSON requests**: `Content-Type: application/json`
-- **File uploads**: `Content-Type: multipart/form-data`
-- **SSE responses**: `Content-Type: text/event-stream`
-
-### Authentication
-
-Currently, CardShark is designed for local use and does not require authentication. API keys for AI providers are stored in settings and used server-side.
-
-### CORS
-
-CORS is configured to allow requests from the frontend during development:
-- Development frontend: `http://localhost:6969`
-- Production: Served from the same origin as the backend
-
----
-
-## Additional Resources
-
-- **[Development Guide](DEVELOPMENT.md)** - Setup and testing
-- **[Code Conventions](../.kiro/steering/conventions.md)** - Backend patterns and standards
-- **[Project Structure](../.kiro/steering/structure.md)** - Backend file organization
-- **[Persistence Architecture](persistence_architecture.md)** - Data storage patterns
-
----
-
-For questions or issues, join the [CardShark Discord](https://discord.gg/RfVts3hYsd).
