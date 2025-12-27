@@ -144,7 +144,7 @@ class WorldCardHandler:
 
             extensions = json.loads(character.extensions_json) if character.extensions_json else {}
             extensions["card_type"] = "world"
-            extensions["world_data"] = state.dict()
+            extensions["world_data"] = state.model_dump(mode='json')
 
             # Update character via service
             update_data = {"extensions": extensions}
@@ -204,7 +204,7 @@ class WorldCardHandler:
                 "tags": ["world"],
                 "extensions": {
                     "card_type": "world",
-                    "world_data": initial_state.dict()
+                    "world_data": initial_state.model_dump(mode='json')
                 },
                 "spec_version": "2.0"
             }

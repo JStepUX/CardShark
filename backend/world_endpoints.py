@@ -251,7 +251,7 @@ async def get_world_state_api(
             raise NotFoundException(f"World '{world_name}' not found")
 
         logger.log_step(f"Successfully loaded world state for: {world_name}")
-        return create_data_response(world_state.dict())
+        return create_data_response(world_state.model_dump(mode='json'))
     except (ValidationException, NotFoundException):
         raise
     except Exception as e:
@@ -847,7 +847,7 @@ async def import_world(
                     "tags": ["world"],
                     "extensions": {
                         "card_type": "world",
-                        "world_data": world_state.dict()
+                        "world_data": world_state.model_dump(mode='json')
                     },
                     "spec_version": "2.0",
                     "character_uuid": world_uuid

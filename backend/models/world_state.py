@@ -2,7 +2,7 @@
 # Description: Pydantic models for representing the state of a World Card
 # V2 Schema - Room-based world system
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -69,13 +69,14 @@ class WorldState(BaseModel):
     Room-based world system with grid positioning.
     This is the single canonical format used by both frontend and backend.
     """
+    model_config = ConfigDict(
+        json_encoders={
+            datetime: lambda v: v.isoformat()
+        }
+    )
+
     schema_version: int = 2
     metadata: WorldMetadata
     grid_size: GridSize = Field(default_factory=GridSize)
     rooms: List[Room]
     player: PlayerState
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
