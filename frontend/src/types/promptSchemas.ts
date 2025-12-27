@@ -25,7 +25,7 @@ export const newPromptSchema = z.object({
  * Schema for validating prompt exports/imports
  */
 export const PromptExportSchema = z.object({
-  prompts: z.record(z.string()),
+  prompts: z.record(z.string(), z.string()),
   custom: z.array(z.object({
     key: promptKeySchema,
     template: promptTemplateSchema

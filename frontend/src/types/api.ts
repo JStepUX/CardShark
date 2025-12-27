@@ -184,7 +184,7 @@ export const APIConfigSchema = z.object({
   apiKey: z.string().optional(),
   model: z.string().optional(),
   templateId: z.string().optional(),
-  generation_settings: z.record(z.any()).optional(),
+  generation_settings: z.record(z.string(), z.any()).optional(),
   enabled: z.boolean().default(false),
   lastConnectionStatus: z.object({
     connected: z.boolean(),

@@ -216,7 +216,7 @@ export const ChatSessionSchema = z.object({
   userId: z.string().optional(),
   created_at: z.number().int().positive(),
   updated_at: z.number().int().positive(),
-  metadata: z.record(z.any()).optional()
+  metadata: z.record(z.string(), z.any()).optional()
 });
 
 /**
@@ -239,7 +239,7 @@ export const validateMessage = (data: unknown): { success: true; data: Message }
     return { success: true, data: result as Message };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ') };
+      return { success: false, error: error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join('; ') };
     }
     return { success: false, error: 'Unknown validation error' };
   }
@@ -254,7 +254,7 @@ export const validateUserProfile = (data: unknown): { success: true; data: UserP
     return { success: true, data: result as UserProfile };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ') };
+      return { success: false, error: error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join('; ') };
     }
     return { success: false, error: 'Unknown validation error' };
   }
@@ -269,7 +269,7 @@ export const validateSaveChatParams = (data: unknown): { success: true; data: Sa
     return { success: true, data: result };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ') };
+      return { success: false, error: error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join('; ') };
     }
     return { success: false, error: 'Unknown validation error' };
   }
