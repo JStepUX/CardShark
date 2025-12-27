@@ -43,6 +43,7 @@ Beekeeper*.*
 *.tmp
 *.bak
 .temp/
+nul
 
 cards/
 __pycache__/
