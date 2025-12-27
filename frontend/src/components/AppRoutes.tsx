@@ -18,7 +18,6 @@ import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
 // Lazily load route components
 // Character and Gallery views
 const CharacterGallery = lazy(() => import('./character/CharacterGallery'));
-const CharacterInfoView = lazy(() => import('./character/CharacterInfoView'));
 const InfoViewRouter = lazy(() => import('./InfoViewRouter'));
 const LoreView = lazy(() => import('./LoreView'));
 const MessagesView = lazy(() => import('./MessagesView'));

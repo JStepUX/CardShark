@@ -73,7 +73,6 @@ export function SidePanel({
             />}
 
             {mode === 'character' && <CharacterModeContent
-                characterName={characterName}
                 sessionNotes={sessionNotes}
                 setSessionNotes={setSessionNotes}
                 compressionEnabled={compressionEnabled}
@@ -199,7 +198,6 @@ function WorldModeContent({
 
 // Character Mode Content
 function CharacterModeContent({
-    characterName,
     sessionNotes,
     setSessionNotes,
     compressionEnabled,
@@ -207,7 +205,6 @@ function CharacterModeContent({
     onImageChange,
     onUnloadCharacter
 }: {
-    characterName?: string;
     sessionNotes: string;
     setSessionNotes: (notes: string) => void;
     compressionEnabled: boolean;

@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { CharacterFile } from '../../types/schema';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload, Download } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload } from 'lucide-react';
 import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
@@ -747,7 +747,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             const retryResult = await retryResponse.json();
             if (retryResult.success && retryResult.data) {
               alert(`World "${retryResult.data.world_name}" imported successfully!\nNPCs: ${retryResult.data.imported_npcs} imported, ${retryResult.data.skipped_npcs} skipped`);
-              fetchCharacters(); // Refresh gallery
+              handleManualRefresh(); // Refresh gallery
             } else {
               throw new Error(retryResult.message || 'Failed to import world');
             }
@@ -758,7 +758,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         const result = await response.json();
         if (result.success && result.data) {
           alert(`World "${result.data.world_name}" imported successfully!\nNPCs: ${result.data.imported_npcs} imported, ${result.data.skipped_npcs} skipped`);
-          fetchCharacters(); // Refresh gallery
+          handleManualRefresh(); // Refresh gallery
         } else {
           throw new Error(result.message || 'Failed to import world');
         }

@@ -1,7 +1,7 @@
 // frontend/src/utils/worldGridAdapter.ts
 // Adapter between V2 WorldState and Grid UI format
 
-import { WorldState, Room, RoomConnection, Position } from '../types/worldV2';
+import { WorldState, Room } from '../types/worldV2';
 
 // Grid UI format (used by WorldPlayView/WorldEditor)
 export interface GridRoom {
@@ -98,9 +98,9 @@ export function worldStateToGrid(state: WorldState): GridWorldState {
   const currentRoom = state.rooms.find((r) => r.id === state.player.current_room);
   const playerPos = currentRoom
     ? {
-        x: currentRoom.position.x + Math.floor(state.grid_size.width / 2),
-        y: currentRoom.position.y + Math.floor(state.grid_size.height / 2),
-      }
+      x: currentRoom.position.x + Math.floor(state.grid_size.width / 2),
+      y: currentRoom.position.y + Math.floor(state.grid_size.height / 2),
+    }
     : { x: 0, y: 0 };
 
   return {
