@@ -45,6 +45,7 @@ export interface CharacterCoreData {
   tags?: string[] | null;
   creator?: string | null;
   character_version?: string | null;
+  character_uuid?: string | null; // UUID for canonical character identification
   extensions?: CharacterExtensions;
   // World Card Specific Additions
   combat_stats?: NpcCombatStats | null;

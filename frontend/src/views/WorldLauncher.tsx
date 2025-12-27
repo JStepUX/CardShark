@@ -87,6 +87,7 @@ const WorldLauncher: React.FC = () => {
                      creator_notes: charData.creator_comment,
                      tags: charData.tags,
                      extensions: extensions,
+                     character_uuid: uuid, // Include UUID so InfoViewRouter can get worldId
                      // Add other fields as needed
                   }
                };
