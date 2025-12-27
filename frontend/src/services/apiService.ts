@@ -337,18 +337,19 @@ export const listCharacterChats = async (characterData: CharacterData): Promise<
  */
 export const generateResponse = async (prompt: string, config: APIConfig) => {
   // Build the request payload
-  const payload = {
+  const payload: any = {
     prompt,
-    ...(config.generation_settings?.dynatemp_enabled && {
-      dynatemp_config: {
-        dynatemp_range: [
-          config.generation_settings.dynatemp_min, 
-          config.generation_settings.dynatemp_max
-        ],
-        dynatemp_exponent: config.generation_settings.dynatemp_exponent
-      }
-    }),
   };
+
+  if (config.generation_settings?.dynatemp_enabled) {
+    payload.dynatemp_config = {
+      dynatemp_range: [
+        config.generation_settings.dynatemp_min,
+        config.generation_settings.dynatemp_max
+      ],
+      dynatemp_exponent: config.generation_settings.dynatemp_exponent
+    };
+  }
 
   try {
     const response = await fetch('/api/generate-response', {

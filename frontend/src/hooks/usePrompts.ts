@@ -244,7 +244,7 @@ export const usePrompts = () => {
       // Import modified standard prompts
       if (parsedData.prompts) {
         Object.entries(parsedData.prompts).forEach(([key, value]) => {
-          updatePrompt(key, value);
+          updatePrompt(key, value as string);
         });
       }
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
-import { useResilientApi } from "../context/ResilientApiContext"; // Keep for retryAllConnections
+import { useResilientApi } from "./ResilientApiContext"; // Keep for retryAllConnections
 import { ContentFilterClient } from "../services/contentFilterClient";
 // Removed unused import: WordSwapRule
 

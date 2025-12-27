@@ -109,7 +109,25 @@ const SAMPLER_ORDER_OPTIONS = [
 
 const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, onUpdate }) => {
   const [expanded, setExpanded] = useState(true); // Set initial state to true
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<{
+    max_length: number;
+    max_context_length: number;
+    temperature: number;
+    top_p: number;
+    top_k: number;
+    top_a: number;
+    typical: number;
+    tfs: number;
+    min_p: number;
+    rep_pen: number;
+    rep_pen_range: number;
+    rep_pen_slope: number;
+    sampler_order: number[];
+    dynatemp_enabled: boolean;
+    dynatemp_min: number;
+    dynatemp_max: number;
+    dynatemp_exponent: number;
+  }>({
     max_length: config.generation_settings?.max_length ?? 220,
     max_context_length: config.generation_settings?.max_context_length ?? 6144,
     temperature: config.generation_settings?.temperature ?? 1.05,

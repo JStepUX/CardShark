@@ -1,6 +1,6 @@
 // src/App.tsx
 import ApiErrorBoundary from './components/common/ApiErrorBoundary';
-import ResilientApiProvider from './context/ResilientApiContext';
+import ResilientApiProvider from './contexts/ResilientApiContext';
 import AppRoutes from './components/AppRoutes';
 import { Toaster } from 'sonner'; // Import Toaster
 import './styles/fonts.css';
