@@ -121,6 +121,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isCreatingChatRef = useRef(false); // Prevent concurrent chat creation
   const settingsSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const settingsSaveRetryCountRef = useRef<number>(0);
+  const hasMountedRef = useRef(false); // Track if component has mounted to force initial load
 
   useEffect(() => {
     const loadCtxWindow = async () => {
@@ -334,6 +335,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
    *
    * Backend filtering: Only loads chats with >1 message (greeting + user message)
    * This prevents loading empty chats and ensures users pick up where they left off
+   *
+   * NOTE: This effect MUST run on every mount to restore chat when returning from other routes
    */
   useEffect(() => {
     if (!characterData?.data?.name) {
@@ -342,11 +345,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
+    const isCharacterChanged = lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId;
+    const isFreshMount = !hasMountedRef.current;
+
     console.log('ChatContext useEffect: Auto-loading chat for character:', characterData.data.name);
-    console.log('  Character ID:', currentCharacterFileId, 'Previous:', lastCharacterId.current, 'Current Chat ID:', currentChatId);
+    console.log('  Character ID:', currentCharacterFileId, 'Previous:', lastCharacterId.current);
+    console.log('  Current Chat ID:', currentChatId, 'Fresh mount:', isFreshMount, 'Character changed:', isCharacterChanged);
+
+    // Mark that we've mounted
+    hasMountedRef.current = true;
 
     // Clear context window if character changed
-    if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) {
+    if (isCharacterChanged) {
       console.log('  Character changed, clearing context window');
       ChatStorage.clearContextWindow();
     }
@@ -479,6 +489,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Execute the chat loading function
     loadChatForCharacterInternal();
+
+    // Cleanup: Reset mount flag when component unmounts
+    return () => {
+      console.log('ChatContext: Component unmounting, resetting mount flag');
+      hasMountedRef.current = false;
+    };
   }, [characterData, resetTriggeredLoreImagesState]);
 
   const debouncedSave = MessageUtils.createDebouncedSave(

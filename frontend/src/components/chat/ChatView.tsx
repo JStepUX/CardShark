@@ -126,6 +126,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
 
   const {
     messages,
+    isLoading,
     isGenerating,
     error: hookError,
     currentUser,
@@ -489,6 +490,15 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
               className="h-full overflow-y-auto p-4 space-y-4 scroll-smooth"
               onScroll={handleScroll}
             >
+              {/* Loading indicator when chat is being loaded */}
+              {isLoading && messages.length === 0 && (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-2"></div>
+                    <div>Loading chat history...</div>
+                  </div>
+                </div>
+              )}
               {messages.map((message) => (
                 <React.Fragment key={message.id}>
                   {message.role === 'thinking' && reasoningSettings.visible ? (
