@@ -10,13 +10,15 @@ from sqlalchemy.orm import sessionmaker
 logger = logging.getLogger(__name__)
 
 import pathlib
+from backend.utils.path_utils import get_application_base_path
 
-# Define the database file path relative to the backend directory
+# Define the database file path relative to the application base directory
 # This will place cardshark.sqlite in the main project directory (x:/Bolt-On/cardshark)
-# Adjust as needed if a different location (e.g., a 'data' subdirectory) is preferred.
+# When running as a PyInstaller EXE, it will be placed next to the EXE file
+# When running from source, it will be placed in the project root
 DATABASE_FILE_NAME = "cardshark.sqlite"
-# Assuming this script is in backend/, so ../ goes to project root
-PROJECT_ROOT = pathlib.Path(__file__).parent.parent.absolute()
+# Use the path_utils helper to get the correct base path for both dev and frozen environments
+PROJECT_ROOT = get_application_base_path()
 DATABASE_URL = f"sqlite:///{PROJECT_ROOT / DATABASE_FILE_NAME}"
 
 engine = create_engine(
