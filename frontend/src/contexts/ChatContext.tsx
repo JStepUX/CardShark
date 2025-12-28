@@ -321,51 +321,63 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(err instanceof Error ? err.message : 'An unexpected error occurred during save.');
       return false;
     }
-  }, [characterData, currentUser, apiConfig, availablePreviewImages, currentPreviewImageIndex, triggeredLoreImages, currentChatId]); useEffect(() => {
+  }, [characterData, currentUser, apiConfig, availablePreviewImages, currentPreviewImageIndex, triggeredLoreImages, currentChatId]);
+
+  /**
+   * Auto-load chat session when character is selected
+   *
+   * This effect implements the seamless chat restore feature:
+   * 1. When a character is selected, automatically load the most recent chat session
+   *    that has actual conversation (at least one user message)
+   * 2. If no chat sessions exist with user messages, initialize with first_mes (greeting)
+   * 3. Works seamlessly when navigating between chat/settings/character editing
+   *
+   * Backend filtering: Only loads chats with >1 message (greeting + user message)
+   * This prevents loading empty chats and ensures users pick up where they left off
+   */
+  useEffect(() => {
     if (!characterData?.data?.name) {
       console.log('ChatContext useEffect: No character data name, returning');
       return;
     }
 
     const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
-    console.log('ChatContext useEffect: currentCharacterFileId:', currentCharacterFileId, 'lastCharacterId:', lastCharacterId.current, 'currentChatId:', currentChatId);
+    console.log('ChatContext useEffect: Auto-loading chat for character:', characterData.data.name);
+    console.log('  Character ID:', currentCharacterFileId, 'Previous:', lastCharacterId.current, 'Current Chat ID:', currentChatId);
 
-    // Always load the most recent chat for any character selection
-    // This ensures we get the latest chat from the database even if returning to the same character
-
+    // Clear context window if character changed
     if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) {
-      console.log('Character changed, clearing context window');
+      console.log('  Character changed, clearing context window');
       ChatStorage.clearContextWindow();
     }
 
-    console.log('Loading most recent chat for character:', characterData.data.name);
-
-    // Only reset currentChatId if this is a character change or first load
-    // If returning to chat with same character, preserve current chat
-    if (lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId) {
-      console.log('Character changed, resetting currentChatId to load most recent chat');
-      setCurrentChatId(null);
-    } else if (!currentChatId) {
-      console.log('No current chat, loading most recent chat');
-      setCurrentChatId(null); // Explicitly set to null to trigger latest chat load
-    } else {
-      console.log('Returning to existing chat session:', currentChatId);
-      // Don't reset currentChatId - we're resuming an existing session
-    }
-
+    // Reset chat-related state
     resetTriggeredLoreImagesState();
 
+    /**
+     * Load the latest chat session for the selected character
+     * - If chat sessions with user messages exist: Load the most recent one
+     * - If no chat sessions exist: Initialize with first_mes (character greeting)
+     * - If first_mes unavailable: Show error state
+     */
     async function loadChatForCharacterInternal() {
       try {
         setIsLoading(true);
         setError(null);
-        if (!characterData) throw new Error('No character data available'); const response = await ChatStorage.loadLatestChat(characterData);
+        if (!characterData) throw new Error('No character data available');
+
+        // Request latest chat from backend
+        // Backend filters for chats with user messages (message_count > 1)
+        console.log('  Requesting latest chat session from backend...');
+        const response = await ChatStorage.loadLatestChat(characterData);
 
         // Handle potentially unwrapped response from ChatStorage or raw DataResponse
         const sessionData = response.data || response;
         const messages = sessionData.messages;
 
+        // Case 1: Chat session found with messages - restore it
         if (response.success && messages && Array.isArray(messages) && messages.length > 0) {
+          console.log(`  ✓ Loaded existing chat with ${messages.length} messages`);
           setMessages(messages);
           const loadedChatSessionId = sessionData.chat_session_uuid || sessionData.chatId || sessionData.metadata?.chat_metadata?.chat_id || null;
           setCurrentChatId(loadedChatSessionId); if (sessionData.metadata?.chat_metadata?.lastUser) setCurrentUser(sessionData.metadata.chat_metadata.lastUser);
@@ -396,7 +408,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           setError(null);
         } else if (response.isRecoverable && characterData?.data?.first_mes) {
-          console.log('No existing chat (recoverable), init with first_mes. Error:', response.error);
+          // Case 2: No chat sessions with user messages found - initialize with first_mes
+          // This happens when:
+          // - Character has no chat history yet
+          // - All existing chats are empty (only greeting, no user messages)
+          console.log('  ℹ No chat sessions with messages found, initializing with first_mes');
+          console.log('  Backend response:', response.error);
+
           const charName = characterData.data.name || 'Character';
           const uName = currentUser?.name || 'User';
           const subContent = characterData.data.first_mes.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName);
@@ -417,8 +435,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             characterName: characterData.data.name, firstMessage: characterData.data.first_mes,
             originalLoadError: response.error
           });
-          const saveOk = await saveChat([firstMsg]); // saveChat will create ID if null
+
+          // Save the initial greeting to create a new chat session
+          const saveOk = await saveChat([firstMsg]);
           setError(saveOk ? null : "Failed to save initial message.");
+          console.log('  ✓ Initialized new chat with greeting');
 
           const charImgP = (characterData?.avatar !== 'none' && characterData?.data?.character_uuid)
             ? `/api/character-image/${characterData.data.character_uuid}.png` : '';
@@ -427,7 +448,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCurrentPreviewImageIndex(0);
           setTriggeredLoreImages([]);
         } else {
-          console.error('Failed to load chat. Resp:', response, 'Has first_mes:', !!characterData?.data?.first_mes);
+          // Case 3: Error - no chat found and no first_mes available
+          console.error('  ✗ Failed to load chat and no first_mes available for fallback');
+          console.error('  Response:', response);
+          console.error('  Has first_mes:', !!characterData?.data?.first_mes);
           setError(response.error || 'Failed to load chat & no initial message.');
           setMessages([]);
           setLastContextWindow({
@@ -437,7 +461,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         }
       } catch (err) {
-        console.error('Unexpected error during chat loading:', err);
+        // Unexpected error during chat loading
+        console.error('  ✗ Unexpected error during chat loading:', err);
         setError(err instanceof Error ? err.message : 'Unexpected error loading chat.');
         setMessages([]);
         setLastContextWindow({
@@ -451,8 +476,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastCharacterId.current = currentCharacterFileId;
       }
     }
+
+    // Execute the chat loading function
     loadChatForCharacterInternal();
-  }, [characterData, resetTriggeredLoreImagesState]); // Remove currentUser from deps
+  }, [characterData, resetTriggeredLoreImagesState]);
 
   const debouncedSave = MessageUtils.createDebouncedSave(
     (msgs: Message[]): Promise<boolean> => saveChat(msgs).catch(e => { console.error("Debounced saveChat err:", e); throw e; }), 500

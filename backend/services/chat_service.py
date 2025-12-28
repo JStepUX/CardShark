@@ -58,14 +58,22 @@ def get_latest_chat_session_for_character(db: Session, character_uuid: str) -> O
     """
     Retrieves the most recent chat session for a given character that has actual conversation
     (at least one user message), ordered by last_message_time descending.
-    Only returns chats that have been interacted with by the user.
+
+    This implements the auto-load chat history feature:
+    - Only returns chats that have been interacted with by the user (>1 message)
+    - Filters out empty chats (only greeting, no user messages)
+    - Orders by last_message_time to get the most recent active conversation
+    - Returns None if no chats with user messages exist (frontend falls back to first_mes)
+
+    This ensures users pick up where they left off when selecting a character.
     """
     # Use a join to find chat sessions that have user messages
+    # This filters for message_count > 1 (greeting + at least one user message)
     conversation_chat = db.query(sql_models.ChatSession)\
         .join(sql_models.ChatMessage, sql_models.ChatSession.chat_session_uuid == sql_models.ChatMessage.chat_session_uuid)\
         .filter(
             sql_models.ChatSession.character_uuid == character_uuid,
-            sql_models.ChatMessage.role == 'user'
+            sql_models.ChatMessage.role == 'user'  # Only chats with user interaction
         )\
         .order_by(sql_models.ChatSession.last_message_time.desc().nulls_last(), sql_models.ChatSession.start_time.desc())\
         .first()
