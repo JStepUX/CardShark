@@ -656,44 +656,71 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl;
 
     try {
-      // Build context using shared utility - for regeneration, slice to msgIdx
-      // which includes history up to and including the preceding user message
-      const ctxMsgs = buildContextMessages({
-        existingMessages: messagesRef.current.slice(0, msgIdx),
-        excludeMessageId: message.id
-      });
-      const fmtAPIConfig = prepareAPIConfig(apiConfig);
-      // Use character data override if set (for world cards with room context)
-      const effectiveCharacterData = characterDataOverride || characterData;
-      const response = await PromptHandler.generateChatResponse(
-        currentChatId,
-        ctxMsgs,
-        fmtAPIConfig,
-        abortCtrl.signal,
-        effectiveCharacterData,
-        sessionNotes,
-        compressionEnabled,
-        () => setIsCompressing(true),
-        () => setIsCompressing(false),
-        (payload) => {
-          setLastContextWindow({
-            type: 'regeneration',
-            timestamp: new Date().toISOString(),
-            characterName: effectiveCharacterData?.data?.name || 'Unknown',
-            messageId: message.id,
-            ...payload
-          });
+      // Use unified context builder for regeneration
+      const { buildGenerationContext, executeGeneration } = await import('../utils/generationOrchestrator');
+
+      const context = buildGenerationContext(
+        {
+          type: 'regenerate',
+          chatSessionUuid: currentChatId,
+          characterData: characterDataOverride || characterData,
+          apiConfig: prepareAPIConfig(apiConfig),
+          signal: abortCtrl.signal,
+          sessionNotes,
+          compressionEnabled,
+          onCompressionStart: () => setIsCompressing(true),
+          onCompressionEnd: () => setIsCompressing(false),
+          onPayloadReady: (payload) => {
+            setLastContextWindow({
+              type: 'regeneration',
+              timestamp: new Date().toISOString(),
+              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              messageId: message.id,
+              ...payload
+            });
+          }
+        },
+        {
+          existingMessages: messagesRef.current,
+          targetMessage: message,
+          excludeMessageId: message.id
         }
       );
 
+      const response = await executeGeneration(
+        {
+          type: 'regenerate',
+          chatSessionUuid: currentChatId,
+          characterData: characterDataOverride || characterData,
+          apiConfig: prepareAPIConfig(apiConfig),
+          signal: abortCtrl.signal,
+          sessionNotes,
+          compressionEnabled,
+          onCompressionStart: () => setIsCompressing(true),
+          onCompressionEnd: () => setIsCompressing(false),
+          onPayloadReady: (payload) => {
+            setLastContextWindow({
+              type: 'regeneration',
+              timestamp: new Date().toISOString(),
+              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              messageId: message.id,
+              ...payload
+            });
+          }
+        },
+        context
+      );
+
       let fullContent = ''; let buffer = ''; const bufferInt = 50;
-      let bufTimer: NodeJS.Timeout | null = null; const updateRegenMsgContent = (chunk: string, isFinal = false) => {
+      let bufTimer: NodeJS.Timeout | null = null;
+      const updateRegenMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
         // Always clear existing timer and set a new one for responsive streaming
         if (bufTimer) clearTimeout(bufTimer);
         bufTimer = setTimeout(() => {
           const curBuf = buffer; buffer = ''; fullContent += curBuf;
-          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent; setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {
+          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
+          setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {
             if (msg.id === message.id) {
               const newVars = [...origVariations, filtContent];
               return {
@@ -711,10 +738,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        if (abortCtrl.signal.aborted) { console.log('Regen aborted.'); if (bufTimer) clearTimeout(bufTimer); if (buffer.length > 0) updateRegenMsgContent('', true); break; }
+        if (abortCtrl.signal.aborted) {
+          console.log('Regen aborted.');
+          if (bufTimer) clearTimeout(bufTimer);
+          if (buffer.length > 0) updateRegenMsgContent('', true);
+          break;
+        }
         updateRegenMsgContent(chunk);
       }
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateRegenMsgContent('', true);
+
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
           const finalFiltContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
@@ -762,7 +795,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
       currentGenerationRef.current = null;
     }
-  }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes]);
+  }, [characterData, characterDataOverride, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes, compressionEnabled, debouncedSave]);
 
   const generateResponse = useCallback(async (prompt: string, retryCount: number = 0) => {
     if (!characterData) { setError('No character data for response.'); return; }
@@ -1006,7 +1039,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentChatId) { setError("Cannot continue: No active chat."); return; }
 
     const msgIdx = messagesRef.current.findIndex(m => m.id === message.id);
-    if (msgIdx === -1) return; const origContent = message.content;
+    if (msgIdx === -1) return;
+    const origContent = message.content;
 
     setIsGenerating(true); setGeneratingId(message.id); setError(null);
     const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl;
@@ -1014,55 +1048,72 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let appendedContent = ''; // Declare here to be available in catch block
 
     try {
-      const ctxMsgs = messagesRef.current.slice(0, msgIdx + 1)
-        .filter(msg => msg.role !== 'thinking')
-        .map(msg => ({
-          role: (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system' ? msg.role : 'system') as 'user' | 'assistant' | 'system',
-          content: msg.id === message.id ? origContent : msg.content
-        }));
+      // Use unified context builder for continuation
+      const { buildGenerationContext, executeGeneration } = await import('../utils/generationOrchestrator');
 
-      // Get the last part of the message to help the model identify where to continue
-      const lastPart = origContent.slice(-100);
-      const continuationPrompt = {
-        role: 'system' as const,
-        content: `The assistant's response was cut off. The last part was: "...${lastPart}"
-Continue the response from exactly that point. Do not repeat the existing text. Do not start a new paragraph unless necessary.`
-      };
-
-      ctxMsgs.push(continuationPrompt);
-
-      const fmtAPIConfig = prepareAPIConfig(apiConfig);
-      // Use character data override if set (for world cards with room context)
-      const effectiveCharacterData = characterDataOverride || characterData;
-      const response = await PromptHandler.generateChatResponse(
-        currentChatId,
-        ctxMsgs,
-        fmtAPIConfig,
-        abortCtrl.signal,
-        effectiveCharacterData,
-        sessionNotes,
-        compressionEnabled,
-        () => setIsCompressing(true),
-        () => setIsCompressing(false),
-        (payload) => {
-          setLastContextWindow({
-            type: 'continuation',
-            timestamp: new Date().toISOString(),
-            characterName: effectiveCharacterData?.data?.name || 'Unknown',
-            messageId: message.id,
-            ...payload
-          });
+      const context = buildGenerationContext(
+        {
+          type: 'continue',
+          chatSessionUuid: currentChatId,
+          characterData: characterDataOverride || characterData,
+          apiConfig: prepareAPIConfig(apiConfig),
+          signal: abortCtrl.signal,
+          sessionNotes,
+          compressionEnabled,
+          onCompressionStart: () => setIsCompressing(true),
+          onCompressionEnd: () => setIsCompressing(false),
+          onPayloadReady: (payload) => {
+            setLastContextWindow({
+              type: 'continuation',
+              timestamp: new Date().toISOString(),
+              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              messageId: message.id,
+              ...payload
+            });
+          }
+        },
+        {
+          existingMessages: messagesRef.current,
+          targetMessage: message,
+          includeTargetInContext: true,
+          excludeMessageId: undefined
         }
       );
 
+      const response = await executeGeneration(
+        {
+          type: 'continue',
+          chatSessionUuid: currentChatId,
+          characterData: characterDataOverride || characterData,
+          apiConfig: prepareAPIConfig(apiConfig),
+          signal: abortCtrl.signal,
+          sessionNotes,
+          compressionEnabled,
+          onCompressionStart: () => setIsCompressing(true),
+          onCompressionEnd: () => setIsCompressing(false),
+          onPayloadReady: (payload) => {
+            setLastContextWindow({
+              type: 'continuation',
+              timestamp: new Date().toISOString(),
+              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              messageId: message.id,
+              ...payload
+            });
+          }
+        },
+        context
+      );
+
       let buffer = ''; const bufferInt = 50;
-      let bufTimer: NodeJS.Timeout | null = null; const updateContinueMsgContent = (chunk: string, isFinal = false) => {
+      let bufTimer: NodeJS.Timeout | null = null;
+      const updateContinueMsgContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
         // Always clear existing timer and set a new one for responsive streaming
         if (bufTimer) clearTimeout(bufTimer);
         bufTimer = setTimeout(() => {
           const curBuf = buffer; buffer = ''; appendedContent += curBuf;
-          const combinedContent = origContent + appendedContent; const filtContent = shouldUseClientFiltering ? filterText(combinedContent) : combinedContent;
+          const combinedContent = origContent + appendedContent;
+          const filtContent = shouldUseClientFiltering ? filterText(combinedContent) : combinedContent;
           setMessages(prevMsgs => prevMsgs.map(msg => {
             if (msg.id === message.id) {
               const newVars = msg.variations ? [...msg.variations] : [origContent];
@@ -1075,9 +1126,15 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       };
 
       for await (const chunk of PromptHandler.streamResponse(response)) {
-        if (abortCtrl.signal.aborted) { console.log('Continuation aborted.'); if (bufTimer) clearTimeout(bufTimer); if (buffer.length > 0) updateContinueMsgContent('', true); break; }
+        if (abortCtrl.signal.aborted) {
+          console.log('Continuation aborted.');
+          if (bufTimer) clearTimeout(bufTimer);
+          if (buffer.length > 0) updateContinueMsgContent('', true);
+          break;
+        }
         updateContinueMsgContent(chunk);
-      } if (!abortCtrl.signal.aborted && buffer.length > 0) updateContinueMsgContent('', true);
+      }
+      if (!abortCtrl.signal.aborted && buffer.length > 0) updateContinueMsgContent('', true);
 
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
@@ -1092,7 +1149,8 @@ Continue the response from exactly that point. Do not repeat the existing text. 
     } catch (err) {
       if (!abortCtrl.signal.aborted) handleGenerationError(err, message.id);
       else {
-        console.log("Continuation aborted, saving current."); const finalMsgs = messagesRef.current.map(msg => {
+        console.log("Continuation aborted, saving current.");
+        const finalMsgs = messagesRef.current.map(msg => {
           if (msg.id === message.id) {
             const finalCombined = origContent + appendedContent;
             const finalFilt = shouldUseClientFiltering ? filterText(finalCombined) : finalCombined;
@@ -1107,7 +1165,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
       currentGenerationRef.current = null;
     }
-  }, [characterData, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes]);
+  }, [characterData, characterDataOverride, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes, compressionEnabled, debouncedSave]);
 
   const stopGeneration = useCallback(() => {
     if (currentGenerationRef.current) {
