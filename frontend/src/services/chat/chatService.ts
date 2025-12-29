@@ -75,6 +75,7 @@ interface GenerationResponse {
 export interface SessionSettings {
   session_notes: string | null;
   compression_enabled: boolean;
+  title: string | null;
 }
 
 /**

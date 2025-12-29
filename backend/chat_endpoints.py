@@ -939,7 +939,8 @@ def get_session_settings_endpoint(
         # Convert to Pydantic model
         response = SessionSettings(
             session_notes=settings.get("session_notes"),
-            compression_enabled=settings.get("compression_enabled", False)
+            compression_enabled=settings.get("compression_enabled", False),
+            title=settings.get("title")
         )
         
         return create_data_response(response)
@@ -970,13 +971,15 @@ def update_session_settings_endpoint(
         
         session_notes = payload.get("session_notes")
         compression_enabled = payload.get("compression_enabled")
+        title = payload.get("title")
         
         # Update settings
         success = chat_service.update_session_settings(
             db=db,
             chat_session_uuid=chat_session_uuid,
             session_notes=session_notes,
-            compression_enabled=compression_enabled
+            compression_enabled=compression_enabled,
+            title=title
         )
         
         if not success:

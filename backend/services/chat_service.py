@@ -344,13 +344,15 @@ def get_session_settings(db: Session, chat_session_uuid: str) -> Optional[dict]:
     
     return {
         "session_notes": chat_session.session_notes,
-        "compression_enabled": bool(chat_session.compression_enabled)  # Convert INTEGER to bool
+        "compression_enabled": bool(chat_session.compression_enabled),  # Convert INTEGER to bool
+        "title": chat_session.title
     }
 
 
 def update_session_settings(db: Session, chat_session_uuid: str, 
                            session_notes: Optional[str] = None,
-                           compression_enabled: Optional[bool] = None) -> bool:
+                           compression_enabled: Optional[bool] = None,
+                           title: Optional[str] = None) -> bool:
     """
     Update session settings for a chat session.
     Returns True if successful, False if session not found.
@@ -365,6 +367,9 @@ def update_session_settings(db: Session, chat_session_uuid: str,
     
     if compression_enabled is not None:
         chat_session.compression_enabled = 1 if compression_enabled else 0  # Convert bool to INTEGER
+    
+    if title is not None:
+        chat_session.title = title
     
     db.commit()
     db.refresh(chat_session)

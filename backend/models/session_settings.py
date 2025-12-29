@@ -12,6 +12,7 @@ class SessionSettings(BaseModel):
     """Session settings for a chat session (notes and compression)."""
     session_notes: Optional[str] = None
     compression_enabled: bool = False
+    title: Optional[str] = None
 
 
 class SessionSettingsUpdate(BaseModel):
@@ -19,6 +20,7 @@ class SessionSettingsUpdate(BaseModel):
     chat_session_uuid: str
     session_notes: Optional[str] = None
     compression_enabled: Optional[bool] = None
+    title: Optional[str] = None
 
 
 class SessionSettingsResponse(BaseModel):

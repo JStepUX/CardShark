@@ -51,6 +51,7 @@ interface ChatContextType {
   currentPreviewImageIndex: number;
   currentChatId: string | null;
   sessionNotes: string;
+  sessionName: string;
   compressionEnabled: boolean;
   isCompressing: boolean;
   setCharacterDataOverride: (characterData: CharacterCard | null) => void;
@@ -73,6 +74,7 @@ interface ChatContextType {
   resetTriggeredLoreImagesState: () => void;
   clearError: () => void;
   setSessionNotes: (notes: string) => void;
+  setSessionName: (name: string) => void;
   setCompressionEnabled: (enabled: boolean) => void;
 }
 
@@ -111,6 +113,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState<number>(0);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [sessionNotes, setSessionNotesState] = useState<string>('');
+  const [sessionName, setSessionNameState] = useState<string>('');
   const [compressionEnabled, setCompressionEnabledState] = useState<boolean>(false);
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
   const [characterDataOverride, setCharacterDataOverride] = useState<CharacterCard | null>(null);
@@ -202,6 +205,26 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentChatId, saveSessionSettings]);
 
   /**
+   * Set session name (title) with debounced save
+   */
+  const setSessionName = useCallback((name: string) => {
+    // Optimistic update - immediate local state
+    setSessionNameState(name);
+
+    // Cancel pending save
+    if (settingsSaveTimerRef.current) {
+      clearTimeout(settingsSaveTimerRef.current);
+    }
+
+    // Debounce save by 1500ms
+    if (currentChatId) {
+      settingsSaveTimerRef.current = setTimeout(() => {
+        saveSessionSettings(currentChatId, { title: name || null });
+      }, 1500);
+    }
+  }, [currentChatId, saveSessionSettings]);
+
+  /**
    * Set compression enabled with debounced save
    */
   const setCompressionEnabled = useCallback((enabled: boolean) => {
@@ -229,6 +252,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!currentChatId) {
         // Reset to defaults when no session
         setSessionNotesState('');
+        setSessionNameState('');
         setCompressionEnabledState(false);
         return;
       }
@@ -236,11 +260,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const settings = await chatService.getSessionSettings(currentChatId);
         setSessionNotesState(settings.session_notes || '');
+        setSessionNameState(settings.title || '');
         setCompressionEnabledState(settings.compression_enabled);
       } catch (error) {
         console.error('Failed to load session settings:', error);
         // Fallback to defaults on error
         setSessionNotesState('');
+        setSessionNameState('');
         setCompressionEnabledState(false);
       }
     };
@@ -1368,14 +1394,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     messages, isLoading, isGenerating, error, currentUser, lastContextWindow,
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
     currentPreviewImageIndex, currentChatId: currentChatId,
-    sessionNotes, compressionEnabled, isCompressing,
+    sessionNotes, sessionName, compressionEnabled, isCompressing,
     setCharacterDataOverride,
     updateMessage, deleteMessage, addMessage, setMessages, cycleVariation,
     generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,
     resetTriggeredLoreImagesState, clearError,
-    setSessionNotes, setCompressionEnabled,
+    setSessionNotes, setSessionName, setCompressionEnabled,
   };
 
   return <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>;

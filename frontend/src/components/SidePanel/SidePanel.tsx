@@ -6,6 +6,7 @@ import { CompressionToggle } from './CompressionToggle';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
 import ImagePreview from '../ImagePreview';
+import { useState, useEffect } from 'react';
 
 export function SidePanel({
     mode,
@@ -21,7 +22,7 @@ export function SidePanel({
     onImageChange,
     onUnloadCharacter,
 }: SidePanelProps) {
-    const { sessionNotes, setSessionNotes, compressionEnabled, setCompressionEnabled } = useChat();
+    const { sessionNotes, setSessionNotes, compressionEnabled, setCompressionEnabled, sessionName, setSessionName } = useChat();
     if (isCollapsed) {
         return (
             <div className="w-12 bg-[#1a1a1a] border-l border-gray-800 flex flex-col items-center py-4">
@@ -48,13 +49,20 @@ export function SidePanel({
                     <ChevronRight className="w-5 h-5" />
                 </button>
                 <div className="flex-1 min-w-0">
-                    <h2 className="text-white truncate">
-                        {mode === 'world' && currentRoom ? currentRoom.name : ''}
-                        {mode === 'character' && characterName ? characterName : ''}
-                        {mode === 'assistant' ? 'Session' : ''}
-                        {mode === 'world' && !currentRoom ? 'No Room Selected' : ''}
-                        {mode === 'character' && !characterName ? 'Character' : ''}
-                    </h2>
+                    {/* Editable Session Name */}
+                    <input
+                        type="text"
+                        value={sessionName || ''}
+                        onChange={(e) => setSessionName(e.target.value)}
+                        placeholder={
+                            mode === 'world' && currentRoom ? currentRoom.name :
+                                mode === 'character' && characterName ? `Chat with ${characterName}` :
+                                    mode === 'assistant' ? 'Session' :
+                                        'Untitled Chat'
+                        }
+                        className="w-full bg-transparent text-white border-none outline-none focus:ring-1 focus:ring-gray-600 rounded px-2 py-1 -mx-2 -my-1 truncate"
+                        title="Click to edit session name"
+                    />
                 </div>
             </div>
 

@@ -23,6 +23,15 @@ export interface GridWorldState {
   metadata: {
     name: string;
     description: string;
+    author?: string | null;
+    uuid?: string;
+    created_at?: string;
+    last_modified?: string;
+    cover_image?: string | null;
+  };
+  grid_size?: {
+    width: number;
+    height: number;
   };
 }
 
@@ -50,7 +59,10 @@ export function toGridRoom(room: Room, x: number, y: number): GridRoom {
     west: null,
   };
 
-  room.connections.forEach((conn) => {
+  // Defensive check: ensure connections is an array
+  const roomConnections = Array.isArray(room.connections) ? room.connections : [];
+
+  roomConnections.forEach((conn) => {
     if (conn.direction && conn.target_room_id) {
       connections[conn.direction.toLowerCase()] = conn.target_room_id;
     }
@@ -61,7 +73,7 @@ export function toGridRoom(room: Room, x: number, y: number): GridRoom {
     name: room.name,
     description: room.description,
     introduction_text: room.introduction || room.description,
-    npcs: room.npcs.map((npc) => npc.character_id),
+    npcs: Array.isArray(room.npcs) ? room.npcs.map((npc) => npc.character_id) : [],
     events: [],
     connections,
     position: { x: room.x ?? x, y: room.y ?? y },
@@ -108,35 +120,90 @@ export function fromGridRoom(figmaRoom: GridRoom): Room {
 }
 
 /**
- * Convert codebase WorldData to grid-compatible WorldState
+ * Convert backend WorldState to grid-compatible WorldState
+ * Handles both WorldState (world_state.py) and legacy WorldData (world_data.py) formats
  */
-export function toGridWorldState(worldData: WorldData | any, worldName: string): GridWorldState {
-  // Handle both 'rooms' and 'locations' (backend uses 'locations')
-  const rooms: Room[] = worldData.rooms || [];
+export function toGridWorldState(worldData: any, worldName: string): GridWorldState {
+  const rooms: any[] = [];
 
-  // If we have 'locations' instead of 'rooms', convert them
-  if (!worldData.rooms && worldData.locations) {
-    // locations is an object keyed by room name
+  // Handle WorldState schema (world_state.py) - current backend format
+  if (worldData.rooms && Array.isArray(worldData.rooms)) {
+    worldData.rooms.forEach((room: any, index: number) => {
+      // Extract position - could be {x, y} object or separate fields
+      const x = room.position?.x ?? room.x ?? index % 8;
+      const y = room.position?.y ?? room.y ?? Math.floor(index / 8);
+
+      // Extract NPCs - could be string array or RoomNPC array
+      let npcIds: string[] = [];
+      if (Array.isArray(room.npcs)) {
+        npcIds = room.npcs.map((npc: any) =>
+          typeof npc === 'string' ? npc : npc.character_id
+        );
+      }
+
+      // Extract connections - could be {north, south, east, west} object or RoomConnection array
+      let connections: Record<string, string | null> = {
+        north: null,
+        south: null,
+        east: null,
+        west: null,
+      };
+
+      if (room.connections) {
+        if (Array.isArray(room.connections)) {
+          // Legacy format: array of {target_room_id, direction}
+          room.connections.forEach((conn: any) => {
+            if (conn.direction && conn.target_room_id) {
+              connections[conn.direction.toLowerCase()] = conn.target_room_id;
+            }
+          });
+        } else {
+          // Current format: {north, south, east, west}
+          connections = {
+            north: room.connections.north || null,
+            south: room.connections.south || null,
+            east: room.connections.east || null,
+            west: room.connections.west || null,
+          };
+        }
+      }
+
+      rooms.push({
+        id: room.id,
+        name: room.name,
+        description: room.description || '',
+        introduction_text: room.introduction_text || room.introduction || room.description || '',
+        npcs: npcIds,
+        connections,
+        x,
+        y,
+        visited: room.visited || false,
+        image_path: room.image_path || null,
+      });
+    });
+  }
+  // Handle legacy 'locations' format (if still in use)
+  else if (worldData.locations) {
     const locationEntries = Object.entries(worldData.locations || {});
     locationEntries.forEach(([name, loc]: [string, any], index) => {
       rooms.push({
         id: loc.id || name,
         name: loc.name || name,
         description: loc.description || '',
-        introduction: loc.description || '',
-        connections: (loc.connections || []).map((c: any) => ({
-          target_room_id: c.target || c.target_room_id || '',
-          direction: c.direction || '',
-          is_locked: c.is_locked || false,
-        })),
-        npcs: (loc.npcs || []).map((n: any) => ({
-          character_id: typeof n === 'string' ? n : n.character_id,
-          spawn_chance: n.spawn_chance || 1.0,
-        })),
-        items: loc.items || [],
-        visited: loc.visited || false,
+        introduction_text: loc.description || '',
+        npcs: (loc.npcs || []).map((n: any) =>
+          typeof n === 'string' ? n : n.character_id
+        ),
+        connections: {
+          north: null,
+          south: null,
+          east: null,
+          west: null,
+        },
         x: loc.grid_x ?? loc.x ?? index % 8,
         y: loc.grid_y ?? loc.y ?? Math.floor(index / 8),
+        visited: loc.visited || false,
+        image_path: loc.image_path || null,
       });
     });
   }
@@ -151,29 +218,42 @@ export function toGridWorldState(worldData: WorldData | any, worldName: string):
   });
 
   // Initialize grid with nulls (at least 8x6 for good visibility)
-  const gridWidth = Math.max(maxX + 1, 8);
-  const gridHeight = Math.max(maxY + 1, 6);
+  const gridWidth = Math.max(maxX + 1, worldData.grid_size?.width || 8);
+  const gridHeight = Math.max(maxY + 1, worldData.grid_size?.height || 6);
   const grid: (GridRoom | null)[][] = Array(gridHeight)
     .fill(null)
     .map(() => Array(gridWidth).fill(null));
 
   // Place rooms on grid
-  rooms.forEach((room, index) => {
-    const x = room.x ?? index;
-    const y = room.y ?? 0;
+  rooms.forEach((room) => {
+    const x = room.x;
+    const y = room.y;
     if (y < gridHeight && x < gridWidth) {
-      grid[y][x] = toGridRoom(room, x, y);
+      grid[y][x] = {
+        id: room.id,
+        name: room.name,
+        description: room.description,
+        introduction_text: room.introduction_text,
+        npcs: room.npcs,
+        events: room.events || [],
+        connections: room.connections,
+        position: { x, y },
+        image_path: room.image_path,
+      };
     }
   });
 
-  // Determine player position from current_room_id or current_location
+  // Determine player position
   let playerX = 0;
   let playerY = 0;
-  const currentRoomId = worldData.player_state?.current_room_id || worldData.current_location;
+
+  // Try WorldState format first (player.current_room)
+  const currentRoomId = worldData.player?.current_room ||
+    worldData.player_state?.current_room_id ||
+    worldData.current_location;
+
   if (currentRoomId) {
-    const currentRoom = rooms.find(
-      (r) => r.id === currentRoomId || r.name === currentRoomId
-    );
+    const currentRoom = rooms.find((r) => r.id === currentRoomId || r.name === currentRoomId);
     if (currentRoom) {
       playerX = currentRoom.x ?? 0;
       playerY = currentRoom.y ?? 0;
@@ -184,23 +264,45 @@ export function toGridWorldState(worldData: WorldData | any, worldName: string):
     grid,
     player_position: { x: playerX, y: playerY },
     metadata: {
-      name: worldData.name || worldName || 'Unknown World',
-      description: '', // Could be stored in settings or elsewhere
+      name: worldData.metadata?.name || worldData.name || worldName || 'Unknown World',
+      description: worldData.metadata?.description || '',
+      author: worldData.metadata?.author || null,
+      uuid: worldData.metadata?.uuid || '',
+      created_at: worldData.metadata?.created_at || new Date().toISOString(),
+      last_modified: worldData.metadata?.last_modified || new Date().toISOString(),
+      cover_image: worldData.metadata?.cover_image || null,
     },
+    grid_size: worldData.grid_size || { width: gridWidth, height: gridHeight },
   };
 }
 
 /**
- * Convert Grid WorldState back to codebase WorldData
+ * Convert Grid WorldState back to backend WorldState schema
+ * Note: Backend expects WorldState (from world_state.py), not WorldData (from world_data.py)
  */
-export function fromGridWorldState(figmaState: GridWorldState): WorldData {
-  // Extract rooms from grid
-  const rooms: Room[] = [];
+export function fromGridWorldState(figmaState: GridWorldState): any {
+  // Extract rooms from grid and convert to backend format
+  const rooms: any[] = [];
 
   figmaState.grid.forEach((row) => {
     row.forEach((room) => {
       if (room) {
-        rooms.push(fromGridRoom(room));
+        // Convert to backend Room format
+        rooms.push({
+          id: room.id,
+          name: room.name,
+          description: room.description,
+          introduction_text: room.introduction_text,
+          image_path: room.image_path || null,
+          position: {
+            x: room.position.x,
+            y: room.position.y,
+          },
+          npcs: room.npcs, // Already string array
+          connections: room.connections, // Already in { north, south, east, west } format
+          events: room.events || [],
+          visited: false,
+        });
       }
     });
   });
@@ -208,22 +310,32 @@ export function fromGridWorldState(figmaState: GridWorldState): WorldData {
   // Find current room based on player position
   const currentRoom = figmaState.grid[figmaState.player_position.y]?.[figmaState.player_position.x];
 
+  // Return backend WorldState schema
   return {
-    rooms,
-    settings: {
-      narrator_voice: NarratorVoice.DEFAULT,
-      time_system: TimeSystem.EVENT_BASED,
-      entry_room_id: rooms[0]?.id || null,
-      global_scripts: [],
+    schema_version: 2,
+    metadata: {
+      name: figmaState.metadata.name,
+      description: figmaState.metadata.description || '',
+      author: figmaState.metadata.author || null,
+      uuid: figmaState.metadata.uuid || '', // Preserved from loaded state
+      created_at: figmaState.metadata.created_at || new Date().toISOString(),
+      last_modified: new Date().toISOString(), // Always update on save
+      cover_image: figmaState.metadata.cover_image || null,
     },
-    player_state: {
-      current_room_id: currentRoom?.id || null,
+    grid_size: figmaState.grid_size || {
+      width: figmaState.grid[0]?.length || 8,
+      height: figmaState.grid.length || 6,
+    },
+    rooms,
+    player: {
+      current_room: currentRoom?.id || (rooms[0]?.id || ''),
+      visited_rooms: [],
       inventory: [],
       health: 100,
-      stats: {},
-      flags: {},
+      stamina: 100,
+      level: 1,
+      experience: 0,
     },
-    name: figmaState.metadata.name,
   };
 }
 
