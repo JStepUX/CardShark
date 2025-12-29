@@ -465,12 +465,12 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
           mes_example: characterCard.data.mes_example,
           system_prompt: characterCard.data.system_prompt,
           post_history_instructions: characterCard.data.post_history_instructions,
-          alternate_greetings: characterCard.data.alternate_greetings,
           character_uuid: characterCard.data.character_uuid,
           tags: characterCard.data.tags,
           creator: characterCard.data.creator,
           character_version: characterCard.data.character_version,
           // Explicitly exclude character_book - lore matching should happen on backend
+          // Explicitly exclude alternate_greetings - only selected greeting is sent in chat_history
         }
       } : null;
 
