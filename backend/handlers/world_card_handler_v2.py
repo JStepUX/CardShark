@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from backend.models.world_card import (
     WorldCard, WorldCardData, WorldCardExtensions, WorldData,
-    WorldCardSummary, CreateWorldRequest, UpdateWorldRequest,
+    WorldCardSummary, CreateWorldRequest, ConvertWorldRequest, UpdateWorldRequest,
     WorldRoomPlacement, create_empty_world_card
 )
 from backend.models.world_state import GridSize, Position
@@ -121,9 +121,9 @@ class WorldCardHandlerV2:
 
         # Index in database for gallery integration
         try:
-            self.character_service.sync_character_directories()
+            self.character_service.sync_character_file(str(file_path))
         except Exception as e:
-            self.logger.log_warning(f"Failed to sync character directory after world creation: {e}")
+            self.logger.log_warning(f"Failed to sync character file after world creation: {e}")
 
         # Return summary
         return WorldCardSummary(
@@ -136,6 +136,64 @@ class WorldCardHandlerV2:
             created_at=datetime.now(timezone.utc).isoformat(),
             updated_at=datetime.now(timezone.utc).isoformat()
         )
+
+
+    def convert_character_to_world(self, request: ConvertWorldRequest) -> Optional[WorldCardSummary]:
+        """
+        Convert a character card into a new world card.
+        
+        Args:
+            request: Conversion request with source character UUID and new name
+            
+        Returns:
+            WorldCardSummary of the new world, or None if source not found
+        """
+        # Get source character
+        with self.character_service._get_session_context() as db:
+            char_data = self.character_service.get_character_by_uuid(request.character_path, db)
+            
+            if not char_data or not char_data.png_file_path:
+                self.logger.log_warning(f"Source character {request.character_path} not found for conversion")
+                return None
+                
+            source_png_path = char_data.png_file_path
+
+        # Read source metadata
+        try:
+            source_meta = self.png_handler.read_metadata(source_png_path)
+        except Exception as e:
+            self.logger.log_error(f"Failed to read source metadata: {e}")
+            return None
+
+        data = source_meta.get("data", {})
+
+        # Create new world request
+        create_req = CreateWorldRequest(
+            name=request.name,
+            description=data.get("description", ""),
+            first_mes=data.get("first_mes"),
+            system_prompt=data.get("system_prompt")
+        )
+        
+        # Read source image 
+        try:
+            with open(source_png_path, "rb") as f:
+                image_bytes = f.read()
+        except Exception as e:
+            self.logger.log_error(f"Failed to read source image: {e}")
+            return None
+            
+        # Create world using standard creation flow
+        # This creates a new UUID and embeds the world metadata
+        new_world_summary = self.create_world_card(create_req, image_bytes)
+        
+        # Post-creation: Copy extra fields like character_book
+        character_book = data.get("character_book")
+        if character_book:
+            update_req = UpdateWorldRequest(character_book=character_book)
+            self.update_world_card(new_world_summary.uuid, update_req)
+            
+        return new_world_summary
 
     def list_world_cards(self) -> List[WorldCardSummary]:
         """
@@ -185,7 +243,7 @@ class WorldCardHandlerV2:
         Returns:
             WorldCard model or None if not found
         """
-        with self.character_service.db_session_generator() as db:
+        with self.character_service._get_session_context() as db:
             character = self.character_service.get_character_by_uuid(world_uuid, db)
 
             if not character:
@@ -247,7 +305,7 @@ class WorldCardHandlerV2:
             world_card.data.tags = request.tags
 
         # Get PNG file path
-        with self.character_service.db_session_generator() as db:
+        with self.character_service._get_session_context() as db:
             character = self.character_service.get_character_by_uuid(world_uuid, db)
             if not character:
                 return None
@@ -272,7 +330,7 @@ class WorldCardHandlerV2:
 
         # Resync to update database
         try:
-            self.character_service.sync_character_directories()
+            self.character_service.sync_character_file(str(png_path))
         except Exception as e:
             self.logger.log_warning(f"Failed to sync after update: {e}")
 
@@ -297,7 +355,7 @@ class WorldCardHandlerV2:
         Returns:
             True if deleted, False if not found
         """
-        with self.character_service.db_session_generator() as db:
+        with self.character_service._get_session_context() as db:
             character = self.character_service.get_character_by_uuid(world_uuid, db)
 
             if not character:

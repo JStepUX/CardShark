@@ -285,7 +285,7 @@ class ExportHandler:
 
         # Sync to database
         try:
-            self.character_service.sync_character_directories()
+            self.character_service.sync_character_file(str(file_path))
         except Exception as e:
             self.logger.log_warning(f"Failed to sync after character import: {e}")
 
@@ -313,7 +313,7 @@ class ExportHandler:
 
         # Sync to database
         try:
-            self.character_service.sync_character_directories()
+            self.character_service.sync_character_file(str(file_path))
         except Exception as e:
             self.logger.log_warning(f"Failed to sync after room import: {e}")
 
@@ -341,6 +341,6 @@ class ExportHandler:
 
         # Sync to database
         try:
-            self.character_service.sync_character_directories()
+            self.character_service.sync_character_file(str(file_path))
         except Exception as e:
             self.logger.log_warning(f"Failed to sync after world import: {e}")

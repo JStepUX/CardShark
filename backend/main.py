@@ -100,7 +100,7 @@ from backend.log_manager import LogManager
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.png_debug_handler import PngDebugHandler
 from backend.errors import CardSharkError, ErrorType
-from backend.backyard_handler import BackyardHandler
+
 from backend.settings_manager import SettingsManager
 from backend.character_validator import CharacterValidator
 from backend.api_handler import ApiHandler
@@ -142,7 +142,7 @@ from backend.character_endpoints import router as character_router
 from backend.dependencies import get_character_service_dependency # Import from new dependencies file
 from backend.user_endpoints import router as user_router
 from backend.settings_endpoints import router as settings_router
-from backend.world_endpoints import router as world_router
+
 from backend.template_endpoints import router as template_router  # Import the new template router
 from backend.lore_endpoints import router as lore_router  # Import the lore router
 from backend.room_endpoints import router as room_router # Import the room_router
@@ -159,7 +159,7 @@ from backend.utils.user_dirs import get_users_dir # type: ignore
 # Import various handlers
 from backend.handlers.world_card_chat_handler import WorldCardChatHandler
 from backend.world_asset_handler import WorldAssetHandler
-from backend.world_card_handler import WorldCardHandler
+from backend.handlers.world_card_handler_v2 import WorldCardHandlerV2
 
 # Global configuration
 VERSION = "0.1.0"
@@ -201,9 +201,10 @@ async def lifespan(app: FastAPI):
         
         # Initialize World Handlers
         app.state.world_asset_handler = WorldAssetHandler(logger)
-        app.state.world_card_handler = WorldCardHandler(
+        app.state.world_card_handler = WorldCardHandlerV2(
             character_service=app.state.character_service,
-            asset_handler=app.state.world_asset_handler,
+            png_handler=png_handler,
+            settings_manager=settings_manager,
             logger=logger
         )
         
@@ -362,7 +363,7 @@ app.add_middleware(
 
 # Remaining handler initialization
 debug_handler = PngDebugHandler(logger)
-backyard_handler = BackyardHandler(logger)
+
 api_handler = ApiHandler(logger)
 
 template_handler = TemplateHandler(logger)
@@ -377,7 +378,7 @@ app.state.settings_manager = settings_manager
 app.state.background_handler = background_handler # Store BackgroundHandler for dependency injection
 app.state.content_filter_manager = content_filter_manager # Store ContentFilterManager for dependency injection
 app.state.template_handler = template_handler # Store TemplateHandler for dependency injection
-app.state.backyard_handler = backyard_handler # Store BackyardHandler for dependency injection
+
 app.state.lore_handler = lore_handler # Store LoreHandler for dependency injection
 # app.state.logger is already set above
 
@@ -409,7 +410,7 @@ app.include_router(world_card_crud_router) # World card CRUD V2 (PNG-based)
 app.include_router(character_router)
 app.include_router(user_router)
 app.include_router(settings_router)
-app.include_router(world_router)
+
 app.include_router(template_router)  # Include the new template router
 app.include_router(lore_router)  # Include the lore router
 app.include_router(room_router) # Include the room_router

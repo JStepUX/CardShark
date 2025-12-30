@@ -7,7 +7,7 @@ World cards are character cards with:
 - world-specific extension data in extensions.world_data
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 import uuid as uuid_module
 from backend.models.world_state import WorldState, GridSize, Position
@@ -34,7 +34,7 @@ class WorldData(BaseModel):
 
 class WorldCardExtensions(BaseModel):
     """Extensions section for world cards"""
-    card_type: str = Field("world", const=True, description="Card type identifier")
+    card_type: Literal["world"] = Field("world", description="Card type identifier")
     world_data: WorldData = Field(..., description="World-specific data")
 
     class Config:
@@ -71,7 +71,7 @@ class WorldCard(BaseModel):
     Complete world card structure
     Character Card V2 with card_type="world"
     """
-    spec: str = Field("chara_card_v2", const=True, description="Character card specification version")
+    spec: Literal["chara_card_v2"] = Field("chara_card_v2", description="Character card specification version")
     spec_version: str = Field("2.0", description="Specification version")
     data: WorldCardData = Field(..., description="World card data")
 
@@ -106,6 +106,12 @@ class CreateWorldRequest(BaseModel):
                 "system_prompt": "This is a high-fantasy medieval setting."
             }
         }
+
+
+class ConvertWorldRequest(BaseModel):
+    """Request to convert a character card into a world card"""
+    name: str = Field(..., min_length=1, description="New world name")
+    character_path: str = Field(..., description="UUID or path of the character to convert")
 
 
 class UpdateWorldRequest(BaseModel):

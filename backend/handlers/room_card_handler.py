@@ -119,7 +119,7 @@ class RoomCardHandler:
 
         # Index in database for gallery integration
         try:
-            self.character_service.sync_character_directories()
+            self.character_service.sync_character_file(str(file_path))
         except Exception as e:
             self.logger.log_warning(f"Failed to sync character directory after room creation: {e}")
 
@@ -276,7 +276,7 @@ class RoomCardHandler:
 
         # Resync to update database
         try:
-            self.character_service.sync_character_directories()
+            self.character_service.sync_character_file(str(png_path))
         except Exception as e:
             self.logger.log_warning(f"Failed to sync after update: {e}")
 
@@ -394,7 +394,7 @@ class RoomCardHandler:
 
             # Resync database to reflect changes
             try:
-                self.character_service.sync_character_directories()
+                self.character_service.sync_character_file(png_path)
             except Exception as e:
                 self.logger.log_warning(f"Failed to sync after world update: {e}")
 

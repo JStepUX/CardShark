@@ -172,6 +172,153 @@ class CharacterService:
             "absolute_image_path": str((character_lore_dir_abs / Path(image_filename).name).resolve()) # Full absolute path to the image file
         }
 
+    def sync_character_file(self, file_path: str, legacy_uuid_mappings: Dict[str, str] = None) -> bool:
+        """
+        Syncs a single character file with the database.
+        Returns True if successful (or skipped), False if failed.
+        """
+        from backend.utils.path_utils import normalize_path
+        
+        legacy_uuid_mappings = legacy_uuid_mappings or {}
+        
+        try:
+            png_file = Path(file_path)
+            if not png_file.exists():
+                 self.logger.log_warning(f"File not found for sync: {file_path}")
+                 return False
+
+            abs_png_path = normalize_path(str(png_file.resolve()))
+            file_mod_time = datetime.datetime.fromtimestamp(png_file.stat().st_mtime)
+            
+            with self._get_session_context() as db:
+                existing_char = db.query(CharacterModel).filter(CharacterModel.png_file_path == abs_png_path).first()
+
+            if existing_char and existing_char.db_metadata_last_synced_at and existing_char.db_metadata_last_synced_at >= file_mod_time:
+                # self.logger.log_info(f"Skipping {abs_png_path}, DB record is up-to-date.")
+                return True
+
+            self.logger.log_info(f"Syncing PNG: {abs_png_path}")
+            metadata = self.png_handler.read_metadata(abs_png_path)
+            
+            # Determine if this is an incomplete character (no valid metadata)
+            is_incomplete_char = not metadata or not metadata.get("data")
+            
+            if is_incomplete_char:
+                self.logger.log_warning(f"No valid CardShark metadata found in {abs_png_path}. Creating stub record for editing.")
+                # Create empty data section for incomplete characters
+                data_section = {}
+                metadata = metadata or {}
+            else:
+                data_section = metadata["data"]
+            
+            char_name = data_section.get("name") if data_section else None
+            if not char_name:
+                # Extract name from filename, removing trailing _\d+ if present
+                stem_name = png_file.stem
+                match = re.match(r"^(.*?)(_\d+)?$", stem_name)
+                if match:
+                    char_name = match.group(1)
+                else:
+                    char_name = stem_name # Fallback if regex fails
+            
+            if not char_name: # Final fallback if name is still empty
+                char_name = "Unknown Character"
+            
+            char_uuid_from_png = data_section.get("character_uuid") if data_section else None
+            final_char_uuid = char_uuid_from_png
+            original_id_for_db = None # Will be set if from legacy mapping
+
+            # Check legacy mapping if no UUID in PNG
+            if not final_char_uuid and abs_png_path in legacy_uuid_mappings:
+                final_char_uuid = legacy_uuid_mappings[abs_png_path]
+                original_id_for_db = abs_png_path # The path was the key in legacy map
+                self.logger.log_info(f"Using legacy mapped UUID {final_char_uuid} for {abs_png_path}")
+            elif not final_char_uuid:
+                final_char_uuid = str(uuid.uuid4())
+                self.logger.log_info(f"Generated new UUID {final_char_uuid} for {abs_png_path}")
+                # Ensure lore image directory exists for new UUID
+                self._ensure_lore_image_directory(final_char_uuid)
+                # TODO: Consider a mechanism to write this new UUID back to the PNG.
+
+            with self._get_session_context() as db:
+                if existing_char: # Update existing
+                    self.logger.log_info(f"Updating character {final_char_uuid} (Path: {abs_png_path}) in DB.")
+                    existing_char.character_uuid = final_char_uuid # Ensure UUID is updated if it changed
+                    existing_char.name = char_name
+                    existing_char.description = data_section.get("description")
+                    existing_char.personality = data_section.get("personality")
+                    existing_char.scenario = data_section.get("scenario")
+                    existing_char.first_mes = data_section.get("first_mes")
+                    existing_char.mes_example = data_section.get("mes_example")
+                    existing_char.creator_comment = metadata.get("creatorcomment")
+                    existing_char.tags = _as_json_str(data_section.get("tags", []))
+                    existing_char.spec_version = metadata.get("spec_version")
+                    existing_char.extensions_json = _as_json_str(data_section.get("extensions", {}))
+                    # New fields from character card spec
+                    existing_char.alternate_greetings_json = _as_json_str(data_section.get("alternate_greetings", []))
+                    existing_char.creator_notes = data_section.get("creator_notes")
+                    existing_char.system_prompt = data_section.get("system_prompt")
+                    existing_char.post_history_instructions = data_section.get("post_history_instructions")
+                    existing_char.creator = data_section.get("creator")
+                    existing_char.character_version = data_section.get("character_version")
+                    existing_char.combat_stats_json = _as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None
+                    if original_id_for_db and not existing_char.original_character_id:
+                        existing_char.original_character_id = original_id_for_db
+                    # Update is_incomplete flag - character is complete if it has valid metadata
+                    existing_char.is_incomplete = is_incomplete_char
+                    existing_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
+                    db.add(existing_char) # Mark as dirty
+                else: # Create new
+                    self.logger.log_info(f"Adding new character {final_char_uuid} (Path: {abs_png_path}) to DB{' (incomplete)' if is_incomplete_char else ''}.")
+                    new_db_char = CharacterModel(
+                        character_uuid=final_char_uuid,
+                        original_character_id=original_id_for_db,
+                        name=char_name,
+                        png_file_path=abs_png_path,
+                        description=data_section.get("description"),
+                        personality=data_section.get("personality"),
+                        scenario=data_section.get("scenario"),
+                        first_mes=data_section.get("first_mes"),
+                        mes_example=data_section.get("mes_example"),
+                        creator_comment=metadata.get("creatorcomment"),
+                        tags=_as_json_str(data_section.get("tags", [])),
+                        spec_version=metadata.get("spec_version"),
+                        extensions_json=_as_json_str(data_section.get("extensions", {})),
+                        # New fields from character card spec
+                        alternate_greetings_json=_as_json_str(data_section.get("alternate_greetings", [])),
+                        creator_notes=data_section.get("creator_notes"),
+                        system_prompt=data_section.get("system_prompt"),
+                        post_history_instructions=data_section.get("post_history_instructions"),
+                        creator=data_section.get("creator"),
+                        character_version=data_section.get("character_version"),
+                        combat_stats_json=_as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None,
+                        is_incomplete=is_incomplete_char,
+                        db_metadata_last_synced_at=datetime.datetime.utcnow()
+                    )
+                    
+                    # Check for UUID collision before adding
+                    existing_uuid_char = db.query(CharacterModel).filter(CharacterModel.character_uuid == final_char_uuid).first()
+                    if existing_uuid_char:
+                        self.logger.log_warning(f"Character with UUID {final_char_uuid} already exists (path: {existing_uuid_char.png_file_path}). Cannot add {abs_png_path} with same UUID.")
+                        # Could regenerate UUID or skip? For now, we'll error/skip to avoid unique constraint failure
+                        # But wait, if we are converting, we want a new character.
+                        # If this function is just syncing, we can't easily change the UUID on disk without rewriting.
+                        return False
+
+                    db.add(new_db_char)
+                    db.flush() # Necessary to get ID for new entries
+                    self._ensure_lore_image_directory(final_char_uuid)
+                # Sync Lore for this character (only if we have lore data)
+                if not is_incomplete_char:
+                    self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)
+                db.commit() # Commit changes for this character
+
+            return True
+
+        except Exception as e:
+            self.logger.log_error(f"Failed to process/sync PNG {file_path}: {e} - {traceback.format_exc()}")
+            return False
+
     def sync_character_directories(self):
         """
         Scans configured character directories, syncs PNG metadata with the database.
@@ -209,127 +356,8 @@ class CharacterService:
             for png_file in char_dir.rglob('*.png'):
                 abs_png_path = normalize_path(str(png_file.resolve()))
                 all_png_files_on_disk.add(abs_png_path)
-
-                try:
-                    file_mod_time = datetime.datetime.fromtimestamp(png_file.stat().st_mtime)
-                    
-                    with self._get_session_context() as db:
-                        existing_char = db.query(CharacterModel).filter(CharacterModel.png_file_path == abs_png_path).first()
-
-                    if existing_char and existing_char.db_metadata_last_synced_at and existing_char.db_metadata_last_synced_at >= file_mod_time:
-                        self.logger.log_info(f"Skipping {abs_png_path}, DB record is up-to-date.")
-                        continue
-
-                    self.logger.log_info(f"Syncing PNG: {abs_png_path}")
-                    metadata = self.png_handler.read_metadata(abs_png_path)
-                    
-                    # Determine if this is an incomplete character (no valid metadata)
-                    is_incomplete_char = not metadata or not metadata.get("data")
-                    
-                    if is_incomplete_char:
-                        self.logger.log_warning(f"No valid CardShark metadata found in {abs_png_path}. Creating stub record for editing.")
-                        # Create empty data section for incomplete characters
-                        data_section = {}
-                        metadata = metadata or {}
-                    else:
-                        data_section = metadata["data"]
-                    
-                    char_name = data_section.get("name") if data_section else None
-                    if not char_name:
-                        # Extract name from filename, removing trailing _\d+ if present
-                        stem_name = png_file.stem
-                        match = re.match(r"^(.*?)(_\d+)?$", stem_name)
-                        if match:
-                            char_name = match.group(1)
-                        else:
-                            char_name = stem_name # Fallback if regex fails
-                    
-                    if not char_name: # Final fallback if name is still empty
-                        char_name = "Unknown Character"
-                    
-                    char_uuid_from_png = data_section.get("character_uuid") if data_section else None
-                    final_char_uuid = char_uuid_from_png
-                    original_id_for_db = None # Will be set if from legacy mapping
-
-                    # Check legacy mapping if no UUID in PNG
-                    if not final_char_uuid and abs_png_path in legacy_uuid_mappings:
-                        final_char_uuid = legacy_uuid_mappings[abs_png_path]
-                        original_id_for_db = abs_png_path # The path was the key in legacy map
-                        self.logger.log_info(f"Using legacy mapped UUID {final_char_uuid} for {abs_png_path}")
-                    elif not final_char_uuid:
-                        final_char_uuid = str(uuid.uuid4())
-                        self.logger.log_info(f"Generated new UUID {final_char_uuid} for {abs_png_path}")
-                        # Ensure lore image directory exists for new UUID
-                        self._ensure_lore_image_directory(final_char_uuid)                        # TODO: Consider a mechanism to write this new UUID back to the PNG.
-
-                    with self._get_session_context() as db:
-                        if existing_char: # Update existing
-                            self.logger.log_info(f"Updating character {final_char_uuid} (Path: {abs_png_path}) in DB.")
-                            existing_char.character_uuid = final_char_uuid # Ensure UUID is updated if it changed
-                            existing_char.name = char_name
-                            existing_char.description = data_section.get("description")
-                            existing_char.personality = data_section.get("personality")
-                            existing_char.scenario = data_section.get("scenario")
-                            existing_char.first_mes = data_section.get("first_mes")
-                            existing_char.mes_example = data_section.get("mes_example")
-                            existing_char.creator_comment = metadata.get("creatorcomment")
-                            existing_char.tags = _as_json_str(data_section.get("tags", []))
-                            existing_char.spec_version = metadata.get("spec_version")
-                            existing_char.extensions_json = _as_json_str(data_section.get("extensions", {}))
-                            # New fields from character card spec
-                            existing_char.alternate_greetings_json = _as_json_str(data_section.get("alternate_greetings", []))
-                            existing_char.creator_notes = data_section.get("creator_notes")
-                            existing_char.system_prompt = data_section.get("system_prompt")
-                            existing_char.post_history_instructions = data_section.get("post_history_instructions")
-                            existing_char.creator = data_section.get("creator")
-                            existing_char.character_version = data_section.get("character_version")
-                            existing_char.combat_stats_json = _as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None
-                            if original_id_for_db and not existing_char.original_character_id:
-                                existing_char.original_character_id = original_id_for_db
-                            # Update is_incomplete flag - character is complete if it has valid metadata
-                            existing_char.is_incomplete = is_incomplete_char
-                            existing_char.db_metadata_last_synced_at = datetime.datetime.utcnow()
-                            db.add(existing_char) # Mark as dirty
-                        else: # Create new
-                            self.logger.log_info(f"Adding new character {final_char_uuid} (Path: {abs_png_path}) to DB{' (incomplete)' if is_incomplete_char else ''}.")
-                            new_db_char = CharacterModel(
-                                character_uuid=final_char_uuid,
-                                original_character_id=original_id_for_db,
-                                name=char_name,
-                                png_file_path=abs_png_path,
-                                description=data_section.get("description"),
-                                personality=data_section.get("personality"),
-                                scenario=data_section.get("scenario"),
-                                first_mes=data_section.get("first_mes"),
-                                mes_example=data_section.get("mes_example"),
-                                creator_comment=metadata.get("creatorcomment"),
-                                tags=_as_json_str(data_section.get("tags", [])),
-                                spec_version=metadata.get("spec_version"),
-                                extensions_json=_as_json_str(data_section.get("extensions", {})),
-                                # New fields from character card spec
-                                alternate_greetings_json=_as_json_str(data_section.get("alternate_greetings", [])),
-                                creator_notes=data_section.get("creator_notes"),
-                                system_prompt=data_section.get("system_prompt"),
-                                post_history_instructions=data_section.get("post_history_instructions"),
-                                creator=data_section.get("creator"),
-                                character_version=data_section.get("character_version"),
-                                combat_stats_json=_as_json_str(data_section.get("combat_stats")) if data_section.get("combat_stats") else None,
-                                is_incomplete=is_incomplete_char,
-                                db_metadata_last_synced_at=datetime.datetime.utcnow()
-                            )
-                            db.add(new_db_char)
-                            db.flush() # Necessary to get ID for new entries
-                            self._ensure_lore_image_directory(final_char_uuid)
-                        # Sync Lore for this character (only if we have lore data)
-                        if not is_incomplete_char:
-                            self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)
-                        db.commit() # Commit changes for this character
-
-                except Exception as e:
-                    self.logger.log_error(f"Failed to process/sync PNG {abs_png_path}: {e} - {traceback.format_exc()}")
-                    # Rollback any changes for this character to avoid partial state
-                    # Continue processing other characters
-        
+                
+                self.sync_character_file(abs_png_path, legacy_uuid_mappings)        
         # Prune characters from DB that no longer exist on disk
         # This is a destructive operation, ensure it's desired.
         # Could be made optional via a setting.

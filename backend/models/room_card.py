@@ -7,7 +7,7 @@ Room cards are character cards with:
 - room-specific extension data in extensions.room_data
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 import uuid as uuid_module
 
@@ -35,7 +35,7 @@ class RoomData(BaseModel):
 
 class RoomCardExtensions(BaseModel):
     """Extensions section for room cards"""
-    card_type: str = Field("room", const=True, description="Card type identifier")
+    card_type: Literal["room"] = Field("room", description="Card type identifier")
     room_data: RoomData = Field(..., description="Room-specific data")
 
     class Config:
@@ -72,7 +72,7 @@ class RoomCard(BaseModel):
     Complete room card structure
     Character Card V2 with card_type="room"
     """
-    spec: str = Field("chara_card_v2", const=True, description="Character card specification version")
+    spec: Literal["chara_card_v2"] = Field("chara_card_v2", description="Character card specification version")
     spec_version: str = Field("2.0", description="Specification version")
     data: RoomCardData = Field(..., description="Room card data")
 

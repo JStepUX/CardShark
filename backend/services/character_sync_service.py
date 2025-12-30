@@ -108,7 +108,8 @@ class CharacterSyncService:
         Process a single character file: Insert or Update.
         """
         # Get absolute path for DB storage to ensure compatibility with API endpoints
-        relative_path = str(file_path.resolve()) # Temporarily reuse variable name to minimize diff, but it holds absolute path now
+        from backend.utils.path_utils import normalize_path
+        relative_path = normalize_path(str(file_path.resolve())) # Temporarily reuse variable name to minimize diff, but it holds absolute path now
         
         # Get file modification time
         file_mtime = int(file_path.stat().st_mtime)

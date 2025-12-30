@@ -23,12 +23,12 @@ from .template_handler import TemplateHandler
 from .background_handler import BackgroundHandler
 from .content_filter_manager import ContentFilterManager
 from .lore_handler import LoreHandler
-from .backyard_handler import BackyardHandler
+
 from .handlers.world_card_chat_handler import WorldCardChatHandler
 
 # New Handlers
 from .world_asset_handler import WorldAssetHandler
-from .world_card_handler import WorldCardHandler
+from .handlers.world_card_handler_v2 import WorldCardHandlerV2
 
 # Core dependency providers
 def get_logger(request: Request) -> LogManager:
@@ -145,19 +145,14 @@ def get_world_asset_handler(request: Request) -> WorldAssetHandler:
         raise HTTPException(status_code=500, detail="World asset handler not initialized")
     return world_asset_handler
 
-def get_world_card_handler(request: Request) -> WorldCardHandler:
+def get_world_card_handler(request: Request) -> WorldCardHandlerV2:
     """Get WorldCardHandler instance from app state."""
-    world_card_handler = cast(WorldCardHandler, request.app.state.world_card_handler)
+    world_card_handler = cast(WorldCardHandlerV2, request.app.state.world_card_handler)
     if world_card_handler is None:
         raise HTTPException(status_code=500, detail="World card handler not initialized")
     return world_card_handler
 
-def get_backyard_handler(request: Request) -> BackyardHandler:
-    """Get BackyardHandler instance from app state."""
-    backyard_handler = cast(BackyardHandler, request.app.state.backyard_handler)
-    if backyard_handler is None:
-        raise HTTPException(status_code=500, detail="Backyard handler not initialized")
-    return backyard_handler
+
 
 def get_character_service(request: Request, db: Session = Depends(get_db)) -> CharacterService:
     """Get CharacterService instance from app state."""
@@ -231,9 +226,7 @@ def get_png_handler_dependency(request: Request) -> PngMetadataHandler:
     """Get PngMetadataHandler instance from app state (standardized dependency)."""
     return get_png_handler(request)
 
-def get_backyard_handler_dependency(request: Request) -> BackyardHandler:
-    """Get BackyardHandler instance from app state (standardized dependency)."""
-    return get_backyard_handler(request)
+
 
 def get_content_filter_manager_dependency(request: Request) -> ContentFilterManager:
     """Get ContentFilterManager instance from app state (standardized dependency)."""
@@ -249,6 +242,6 @@ def get_world_asset_handler_dependency(request: Request) -> WorldAssetHandler:
     """Get WorldAssetHandler instance from app state (standardized dependency)."""
     return get_world_asset_handler(request)
 
-def get_world_card_handler_dependency(request: Request) -> WorldCardHandler:
+def get_world_card_handler_dependency(request: Request) -> WorldCardHandlerV2:
     """Get WorldCardHandler instance from app state (standardized dependency)."""
     return get_world_card_handler(request)

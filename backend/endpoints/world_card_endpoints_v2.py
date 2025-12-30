@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 from backend.models.world_card import (
-    WorldCard, WorldCardSummary, CreateWorldRequest, UpdateWorldRequest
+    WorldCard, WorldCardSummary, CreateWorldRequest, ConvertWorldRequest, UpdateWorldRequest
 )
 from backend.models.world_state import GridSize
 from backend.handlers.world_card_handler_v2 import WorldCardHandlerV2
@@ -126,6 +126,39 @@ async def create_world_card(
     except Exception as e:
         logger.log_error(f"Error creating world card: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create world: {str(e)}")
+
+
+@router.post(
+    "/convert",
+    response_model=DataResponse,
+    summary="Convert a character to a world",
+    description="Creates a new world card from an existing character card"
+)
+async def convert_character_to_world(
+    request: ConvertWorldRequest,
+    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Convert character to world"""
+    try:
+        logger.log_step(f"Converting character {request.character_path} to world '{request.name}'")
+        
+        world_summary = handler.convert_character_to_world(request)
+        
+        if not world_summary:
+            raise HTTPException(status_code=404, detail="Source character not found or failed to load")
+            
+        return create_data_response({
+            "character_uuid": world_summary.uuid,
+            "world": world_summary.model_dump(),
+            "message": f"World '{request.name}' converted successfully"
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Error converting world: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to convert world: {str(e)}")
 
 
 @router.get(
@@ -264,7 +297,7 @@ async def get_world_card_image(
     """Serve the world card PNG image"""
     try:
         # Use character service to get the PNG path
-        with handler.character_service.db_session_generator() as db:
+        with handler.character_service._get_session_context() as db:
             character = handler.character_service.get_character_by_uuid(world_uuid, db)
 
             if not character or not character.png_file_path:

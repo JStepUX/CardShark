@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 # Import core services and dependencies
 from backend.log_manager import LogManager
 from backend.png_metadata_handler import PngMetadataHandler
-from backend.backyard_handler import BackyardHandler # For Backyard import endpoint
+
 from backend.settings_manager import SettingsManager
 from backend.services.character_service import CharacterService
 from backend.services.character_indexing_service import CharacterIndexingService
@@ -45,7 +45,7 @@ from backend.dependencies import (
     get_logger_dependency,
     get_character_service_dependency,
     get_png_handler_dependency,
-    get_backyard_handler_dependency,
+
     get_settings_manager_dependency,
     get_db_dependency # Import the database session dependency
 )
@@ -920,134 +920,7 @@ async def extract_lore_from_upload_endpoint(
         logger.error(f"Error extracting lore from upload: {e}")
         raise handle_generic_error(e, "extracting lore")
 
-class BackyardImportRequest(BaseModel):
-    url: str
 
-@router.post("/characters/import-backyard", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Import character from Backyard.ai URL")
-async def import_from_backyard_endpoint(
-    request: Request,
-    backyard_request: BackyardImportRequest,
-    char_service: CharacterService = Depends(get_character_service_dependency),
-    backyard_handler: BackyardHandler = Depends(get_backyard_handler_dependency),
-    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
-    settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
-    logger: LogManager = Depends(get_logger_dependency)
-):
-    """Import character from Backyard.ai URL with standardized response."""
-    try:
-        backyard_url = backyard_request.url
-        logger.info(f"POST /api/characters/import-backyard for URL: {backyard_url}")
-        
-        # Import character data using existing method - this returns V2 format
-        character_data, preview_url = backyard_handler.import_character(backyard_url)
-        if not character_data:
-            raise ValidationException("Failed to import character data from Backyard URL")
-        
-        # Generate UUID for the character
-        character_uuid = str(uuid.uuid4())
-        
-        # Add UUID to the character data
-        if 'data' not in character_data:
-            character_data['data'] = {}
-        character_data['data']['character_uuid'] = character_uuid
-        character_data['character_uuid'] = character_uuid  # Also at top level for compatibility
-        
-        # Download character image from preview URL
-        image_bytes = None
-        if preview_url:
-            try:
-                import requests
-                response = requests.get(preview_url, timeout=30)
-                response.raise_for_status()
-                image_bytes = response.content
-                
-                if not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
-                    logger.warning("Downloaded image is not a PNG, attempting to use anyway")
-                    
-            except Exception as e:
-                logger.warning(f"Failed to download preview image: {e}")
-                # Continue without image - we'll create a default PNG
-                
-        # If no image downloaded, create a simple default PNG
-        if not image_bytes:
-            from PIL import Image
-            import io
-            # Create a simple 512x512 default image
-            default_img = Image.new('RGB', (512, 512), color='lightgray')
-            img_buffer = io.BytesIO()
-            default_img.save(img_buffer, format='PNG')
-            image_bytes = img_buffer.getvalue()
-            logger.info("Created default PNG image for Backyard import")
-        
-        # Generate filename from character name
-        character_name = character_data.get('data', {}).get('name', 'imported_backyard_char')
-        # Sanitize filename
-        import re
-        sanitized_name = re.sub(r'[\\/*?:"<>|]', "", character_name)
-        sanitized_name = sanitized_name[:100] if sanitized_name else f"backyard_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
-        # Get character directory from settings
-        character_dir_setting = settings_manager.get_setting("character_directory")
-        if not character_dir_setting:
-            # Use default characters directory
-            character_dir = Path(__file__).resolve().parent.parent / "characters"
-        else:
-            character_dir = Path(character_dir_setting)
-        
-        # Ensure directory exists
-        character_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Generate unique filename to avoid collisions
-        base_filename = f"{sanitized_name}.png"
-        png_path = character_dir / base_filename
-        counter = 1
-        while png_path.exists():
-            png_path = character_dir / f"{sanitized_name}_{counter}.png"
-            counter += 1
-        
-        # Embed V2 metadata into PNG using the metadata handler
-        try:
-            final_image_bytes = png_handler.write_metadata(image_bytes, character_data)
-            logger.info("Successfully embedded V2 metadata into PNG")
-        except Exception as e:
-            logger.error(f"Failed to embed metadata into PNG: {e}")
-            raise ValidationException(f"Failed to embed character metadata: {str(e)}")
-        
-        # Save PNG file to characters directory
-        try:
-            with open(png_path, "wb") as f:
-                f.write(final_image_bytes)
-            logger.info(f"Saved character PNG to: {png_path}")
-        except Exception as e:
-            logger.error(f"Failed to save PNG file: {e}")
-            raise ValidationException(f"Failed to save character file: {str(e)}")
-        
-        # Trigger directory sync to ensure the new character is immediately available in the database
-        # This enables UUID-based image lookups and gallery refresh
-        try:
-            logger.info("Syncing character directories after Backyard import")
-            char_service.sync_character_directories()
-            logger.info("Character directory sync completed successfully")
-        except Exception as e:
-            logger.warning(f"Directory sync failed after import, but PNG was saved: {e}")
-            # Don't fail the import if sync fails - the PNG exists and will be picked up later
-        
-        # Return V2 format directly for immediate frontend use
-        # This matches what the character-metadata endpoint returns
-        response_data = {
-            "character": character_data,  # V2 format with characterData.data structure
-            "message": "Character imported successfully",
-            "file_path": str(png_path)
-        }
-        
-        logger.info(f"Successfully imported Backyard character: {character_name}")
-        return create_data_response(response_data)
-        
-    except ValidationException:
-        raise
-    except Exception as e:
-        logger.error(f"Error importing from Backyard: {e}")
-        raise handle_generic_error(e, "importing from Backyard")
 
 # Deprecated/Old Endpoints to be removed or fully refactored:
 # - /characters/{character_id}/avatar (avatar handling is part of save_card now)

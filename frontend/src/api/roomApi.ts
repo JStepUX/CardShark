@@ -37,7 +37,7 @@ export const roomApi = {
     if (request.system_prompt) formData.append('system_prompt', request.system_prompt);
     if (image) formData.append('image', image);
 
-    const response = await fetch(BASE_URL, {
+    const response = await fetch(`${BASE_URL}/`, {
       method: 'POST',
       body: formData,
     });
@@ -65,7 +65,7 @@ export const roomApi = {
    * const roomNames = rooms.map(r => r.name);
    */
   async listRooms(): Promise<RoomCardSummary[]> {
-    const response = await fetch(BASE_URL);
+    const response = await fetch(`${BASE_URL}/`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch rooms');

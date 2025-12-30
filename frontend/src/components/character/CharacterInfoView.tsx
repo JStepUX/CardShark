@@ -283,7 +283,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
       console.log('Sending world creation request:', requestBody);
 
-      const response = await fetch('/api/world-cards/create', {
+      const response = await fetch('/api/world-cards-v2/convert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
