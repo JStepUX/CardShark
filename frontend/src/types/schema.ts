@@ -127,6 +127,7 @@ export interface CharacterFile {
     is_incomplete?: boolean;
     extensions?: Record<string, any>;
     tags?: string[];
+    card_type?: "character" | "world" | "room"; // Type of card (extracted from extensions for easier filtering)
 }
 
 // Helper Functions

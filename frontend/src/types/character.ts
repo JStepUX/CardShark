@@ -18,10 +18,10 @@ export interface NpcCombatStats {
 }
 
 /**
- * Extension data for the character card, including World Card extensions.
+ * Extension data for the character card, including World Card and Room Card extensions.
  */
 export interface CharacterExtensions {
-  card_type?: "character" | "world";
+  card_type?: "character" | "world" | "room";
   world_data?: WorldData;
   [key: string]: any;
 }

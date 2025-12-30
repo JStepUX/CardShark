@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { CharacterFile } from '../../types/schema';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload, DoorOpen } from 'lucide-react';
 import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
@@ -111,8 +111,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter state for World/Character cards
-  const [filterType, setFilterType] = useState<'all' | 'character' | 'world'>('all');
+  // Filter state for Character/World/Room cards
+  const [filterType, setFilterType] = useState<'all' | 'character' | 'world' | 'room'>('all');
 
   // View mode state (Grid vs Folders)
   const [viewMode, setViewMode] = useState<'grid' | 'folder'>('grid');
@@ -176,7 +176,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     // Type Filter
     if (filterType !== 'all') {
       result = result.filter(char => {
-        const type = char.extensions?.card_type || 'character';
+        // Use top-level card_type if available, fallback to extensions.card_type
+        const type = char.card_type || char.extensions?.card_type || 'character';
         return type === filterType;
       });
     }
@@ -1012,6 +1013,15 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   }`}
               >
                 <MapIcon size={14} /> Worlds
+              </button>
+              <button
+                onClick={() => setFilterType('room')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${filterType === 'room'
+                  ? 'bg-purple-600/80 text-white shadow-sm'
+                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                  }`}
+              >
+                <DoorOpen size={14} /> Rooms
               </button>
             </div>
 
