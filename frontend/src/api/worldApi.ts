@@ -7,7 +7,6 @@ import {
   CreateWorldRequest,
   UpdateWorldRequest
 } from '../types/worldCard';
-import { GridSize } from '../types/worldV2';
 
 const BASE_URL = '/api/world-cards-v2';
 

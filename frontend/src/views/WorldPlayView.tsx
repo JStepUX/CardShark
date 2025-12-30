@@ -46,7 +46,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   // State
   const [worldCard, setWorldCard] = useState<WorldCard | null>(null);
   const [worldState, setWorldState] = useState<GridWorldState | null>(null);
-  const [gridRooms, setGridRooms] = useState<GridRoom[]>([]);
   const [currentRoom, setCurrentRoom] = useState<GridRoom | null>(null);
   const [roomNpcs, setRoomNpcs] = useState<DisplayNPC[]>([]);
   const [activeNpcId, setActiveNpcId] = useState<string | undefined>(); // Active responder, NOT session
@@ -99,7 +98,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
             console.warn(`Failed to load room ${placement.room_uuid}:`, err);
           }
         }
-        setGridRooms(loadedRooms);
 
         // Build grid for MapModal
         const gridSize = worldData.grid_size;

@@ -8,7 +8,7 @@ This handler manages CRUD operations for world card PNG files.
 
 import json
 import uuid as uuid_module
-from typing import Dict, Any, Optional, List
+from typing import Optional, List
 from pathlib import Path
 from datetime import datetime, timezone
 

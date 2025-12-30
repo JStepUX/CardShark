@@ -4,7 +4,7 @@
  * @dependencies roomApi, character API
  */
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Shield, User, Search, Check } from 'lucide-react';
+import { Plus, X, Shield, User, Search } from 'lucide-react';
 import { RoomNPC } from '../types/room';
 
 interface Character {

@@ -31,7 +31,6 @@ from backend.response_models import (
     ListResponse,
     create_data_response,
     create_list_response,
-    create_error_response,
     STANDARD_RESPONSES
 )
 
@@ -118,7 +117,7 @@ async def list_room_cards(
         room_cards = handler.list_room_cards()
 
         return create_list_response(
-            items=[r.model_dump() for r in room_cards],
+            data=[r.model_dump() for r in room_cards],
             total=len(room_cards)
         )
 

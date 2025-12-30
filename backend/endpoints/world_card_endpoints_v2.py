@@ -34,7 +34,6 @@ from backend.response_models import (
     ListResponse,
     create_data_response,
     create_list_response,
-    create_error_response,
     STANDARD_RESPONSES
 )
 
@@ -145,7 +144,7 @@ async def list_world_cards(
         world_cards = handler.list_world_cards()
 
         return create_list_response(
-            items=[w.model_dump() for w in world_cards],
+            data=[w.model_dump() for w in world_cards],
             total=len(world_cards)
         )
 
