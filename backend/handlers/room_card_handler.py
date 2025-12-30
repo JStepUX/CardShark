@@ -230,6 +230,22 @@ class RoomCardHandler:
         if request.character_book is not None:
             room_card.data.character_book = request.character_book
         if request.npcs is not None:
+            # Validate that all NPC character_uuids exist
+            with self.character_service.db_session_generator() as db:
+                for npc in request.npcs:
+                    character = self.character_service.get_character_by_uuid(npc.character_uuid, db)
+                    if not character:
+                        raise ValueError(f"Character {npc.character_uuid} not found")
+
+                    # Verify it's not a world or room card
+                    try:
+                        extensions = json.loads(character.extensions_json) if character.extensions_json else {}
+                        card_type = extensions.get("card_type", "character")
+                        if card_type in ["world", "room"]:
+                            raise ValueError(f"Character {npc.character_uuid} is a {card_type} card and cannot be used as an NPC")
+                    except (json.JSONDecodeError, AttributeError):
+                        pass  # If extensions can't be parsed, assume it's a valid character
+
             room_card.data.extensions.room_data.npcs = request.npcs
         if request.tags is not None:
             room_card.data.tags = request.tags

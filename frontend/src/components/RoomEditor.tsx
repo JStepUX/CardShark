@@ -1,16 +1,17 @@
 /**
  * Room Editor Component
  * Similar to CharacterInfoView but for room cards
- * @dependencies RichTextEditor, MessagesView, LoreView, roomApi
+ * @dependencies RichTextEditor, MessagesView, LoreView, roomApi, NPCAssignment
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Save, Loader2, AlertCircle, Check } from 'lucide-react';
-import { RoomCard, UpdateRoomRequest } from '../types/room';
+import { RoomCard, UpdateRoomRequest, RoomNPC } from '../types/room';
 import { roomApi } from '../api/roomApi';
 import RichTextEditor from './RichTextEditor';
 import MessagesView from './MessagesView';
 import LoreView from './LoreView';
+import NPCAssignment from './NPCAssignment';
 import { CharacterCard } from '../types/schema';
 
 interface Message {
@@ -115,6 +116,26 @@ export const RoomEditor: React.FC = () => {
     });
   }, []);
 
+  // NPC sync handler
+  const handleNPCsSync = useCallback((npcs: RoomNPC[]) => {
+    setRoomCard((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          extensions: {
+            ...prev.data.extensions,
+            room_data: {
+              ...prev.data.extensions.room_data,
+              npcs,
+            },
+          },
+        },
+      };
+    });
+  }, []);
+
   // Save handler
   const handleSave = async () => {
     if (!roomCard) return;
@@ -131,6 +152,7 @@ export const RoomEditor: React.FC = () => {
         system_prompt: roomCard.data.system_prompt,
         character_book: roomCard.data.character_book,
         tags: roomCard.data.tags,
+        npcs: roomCard.data.extensions.room_data.npcs,
       };
 
       await roomApi.updateRoom(roomUuid, updateRequest);
@@ -316,6 +338,14 @@ export const RoomEditor: React.FC = () => {
                 }
                 className="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="tavern, safe, social"
+              />
+            </div>
+
+            {/* NPCs */}
+            <div>
+              <NPCAssignment
+                npcs={roomCard.data.extensions.room_data.npcs}
+                onChange={handleNPCsSync}
               />
             </div>
           </div>

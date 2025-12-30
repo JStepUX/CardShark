@@ -97,6 +97,7 @@ export interface UpdateRoomRequest {
     entries: any[];
     name?: string;
   };
+  tags?: string[];
   image?: File | null;
   npcs?: RoomNPC[];
 }
