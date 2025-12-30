@@ -587,9 +587,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             navigate(targetRoute);
           } else {
             // Default navigation based on card type and state
-            const isWorldCard = character.extensions?.card_type === 'world';
+            const cardType = character.card_type || character.extensions?.card_type;
+            const isWorldCard = cardType === 'world';
+            const isRoomCard = cardType === 'room';
 
-            if (isWorldCard && character.character_uuid) {
+            if (isRoomCard && character.character_uuid) {
+              // Room cards navigate to Room Editor
+              navigate(`/room/${character.character_uuid}/edit`);
+            } else if (isWorldCard && character.character_uuid) {
               // World cards navigate to World Play view
               navigate(`/world/${character.character_uuid}/play`);
             } else if (character.is_incomplete) {
@@ -786,7 +791,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // Function to render a single character card
   const renderCharacterCard = (character: CharacterFile) => {
     const isDeleting = deletingPath === character.path;
-    const isWorld = character.extensions?.card_type === 'world';
+    const cardType = character.card_type || character.extensions?.card_type;
+    const isWorld = cardType === 'world';
+    const isRoom = cardType === 'room';
 
     return (
       <div
@@ -796,12 +803,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
           ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
           ${character.is_incomplete ? 'ring-2 ring-amber-500/70' : ''}
-          hover:shadow-xl 
+          hover:shadow-xl
         `}
         onClick={() => handleCharacterClick(character)}
         role="button"
         tabIndex={0}
-        aria-label={`Select ${isWorld ? 'world' : 'character'} ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
+        aria-label={`Select ${isWorld ? 'world' : isRoom ? 'room' : 'character'} ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
       >
         {/* Incomplete Character Indicator */}
         {character.is_incomplete && (
@@ -820,6 +827,16 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             title="World Card"
           >
             <MapIcon size={16} />
+          </div>
+        )}
+
+        {/* Room Badge */}
+        {isRoom && (
+          <div
+            className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-purple-600/80 text-white rounded-full shadow-lg backdrop-blur-sm border border-purple-500/30`}
+            title="Room Card"
+          >
+            <DoorOpen size={16} />
           </div>
         )}
 
@@ -843,7 +860,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                      opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600
                      focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-stone-800`}
           aria-label={`Info for ${character.name}`}
-          title={character.extensions?.card_type === 'world' ? "World Splash Screen" : "Basic Info & Greetings"}
+          title={isWorld ? "World Splash Screen" : isRoom ? "Room Editor" : "Basic Info & Greetings"}
         >
           <Info size={16} />
         </button>

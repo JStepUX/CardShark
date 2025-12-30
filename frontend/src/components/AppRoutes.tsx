@@ -33,6 +33,9 @@ const WorldLauncher = lazy(() => import('../views/WorldLauncher'));
 const WorldEditor = lazy(() => import('../views/WorldEditor'));
 const WorldPlayView = lazy(() => import('../views/WorldPlayView'));
 
+// Room views
+const RoomEditor = lazy(() => import('./RoomEditor'));
+
 const AppRoutes: React.FC = () => (
   // Global providers needed by most features - only essential ones
   <ComparisonProvider>
@@ -71,6 +74,13 @@ const AppRoutes: React.FC = () => (
                         <WorldPlayView />
                       </LazyRoute>
                     </ChatProvider>
+                  } />
+
+                  {/* Room Card Routes */}
+                  <Route path="room/:uuid/edit" element={
+                    <LazyRoute routeName="Room Editor">
+                      <RoomEditor />
+                    </LazyRoute>
                   } />
 
                   {/* Character routes with ImageHandler - basic editing, no chat needed */}
