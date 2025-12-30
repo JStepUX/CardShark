@@ -14,6 +14,7 @@ interface GridCanvasProps {
   onRoomCreate: (position: { x: number; y: number }) => void;
   onRoomDelete: (roomId: string) => void;
   onRoomMove: (roomId: string, newPosition: { x: number; y: number }) => void;
+  onCellClick?: (position: { x: number; y: number }, event: React.MouseEvent) => void;
 }
 
 export function GridCanvas({
@@ -25,6 +26,7 @@ export function GridCanvas({
   onRoomCreate,
   onRoomDelete,
   onRoomMove,
+  onCellClick,
 }: GridCanvasProps) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -40,14 +42,18 @@ export function GridCanvas({
 
     const room = rooms.find(r => r.position.x === x && r.position.y === y);
 
-    // Unified 'edit' tool: select existing rooms OR create new ones on empty cells
+    // Unified 'edit' tool: use onCellClick if provided to show menu, otherwise select directly
     if (activeTool === 'edit') {
-      if (room) {
-        // Select existing room
-        onRoomSelect(room);
+      if (onCellClick) {
+        // Let parent handle the click (will show CellActionMenu)
+        onCellClick({ x, y }, e);
       } else {
-        // Create new room on empty cell
-        onRoomCreate({ x, y });
+        // Fallback: direct selection (legacy behavior)
+        if (room) {
+          onRoomSelect(room);
+        } else {
+          onRoomCreate({ x, y });
+        }
       }
     } else if (activeTool === 'move') {
       // Do nothing on click in move mode, just allow dragging

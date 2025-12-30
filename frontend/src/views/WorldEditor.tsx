@@ -474,6 +474,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
             onRoomCreate={handleRoomCreate}
             onRoomDelete={handleRoomDelete}
             onRoomMove={handleRoomMove}
+            onCellClick={handleCellClick}
           />
         </div>
 
