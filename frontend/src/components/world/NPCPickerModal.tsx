@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Search, Check } from 'lucide-react';
+import { RoomNPC } from '../../types/room';
 
 interface Character {
   id: string;
@@ -10,19 +11,21 @@ interface Character {
 
 interface NPCPickerModalProps {
   availableCharacters: Character[];
-  selectedNPCs: string[];
-  onConfirm: (npcIds: string[]) => void;
+  selectedNPCs: RoomNPC[]; // Full RoomNPC objects
+  onConfirm: (npcs: RoomNPC[]) => void;
   onClose: () => void;
 }
 
-export function NPCPickerModal({ 
-  availableCharacters, 
-  selectedNPCs, 
-  onConfirm, 
-  onClose 
+export function NPCPickerModal({
+  availableCharacters,
+  selectedNPCs,
+  onConfirm,
+  onClose
 }: NPCPickerModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [tempSelected, setTempSelected] = useState<string[]>(selectedNPCs);
+  // Extract UUIDs for selection UI
+  const selectedUuids = selectedNPCs.map(npc => npc.character_uuid);
+  const [tempSelected, setTempSelected] = useState<string[]>(selectedUuids);
 
   const filteredCharacters = availableCharacters.filter(char =>
     char.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -37,7 +40,13 @@ export function NPCPickerModal({
   };
 
   const handleConfirm = () => {
-    onConfirm(tempSelected);
+    // Convert selected UUIDs to RoomNPC objects
+    // Preserve existing RoomNPC data if already selected, create new objects for new selections
+    const npcs: RoomNPC[] = tempSelected.map(uuid => {
+      const existing = selectedNPCs.find(npc => npc.character_uuid === uuid);
+      return existing || { character_uuid: uuid }; // Keep role/hostile if already set
+    });
+    onConfirm(npcs);
   };
 
   return (

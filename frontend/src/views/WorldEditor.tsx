@@ -86,7 +86,8 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
             const roomCard = await roomApi.getRoom(placement.room_uuid);
 
             // Convert RoomCard to GridRoom format using adapter
-            const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position);
+            // Pass placement data so instance NPCs/images override room card defaults
+            const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position, placement);
             loadedRooms.push(gridRoom);
           } catch (err) {
             console.warn(`Failed to load room ${placement.room_uuid}:`, err);
@@ -219,16 +220,9 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
     // Load full room card to get all details
     roomApi.getRoom(roomSummary.uuid).then(roomCard => {
-      const newRoom: GridRoom = {
-        id: roomCard.data.character_uuid || roomSummary.uuid,
-        name: roomCard.data.name,
-        description: roomCard.data.description,
-        introduction_text: roomCard.data.first_mes || '',
-        npcs: roomCard.data.extensions.room_data.npcs.map(npc => npc.character_uuid),
-        events: [],
-        connections: { north: null, south: null, east: null, west: null },
-        position: selectedCell,
-      };
+      // Use adapter to create GridRoom with deep-copied suggestedNpcs
+      // No placement data yet since this is a fresh import
+      const newRoom = roomCardToGridRoom(roomCard, selectedCell);
 
       setRooms(prev => [...prev, newRoom]);
       setIsDirty(true);
@@ -309,9 +303,9 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     setIsDirty(true);
   }, [rooms]);
 
-  const handleNPCsConfirm = useCallback((npcIds: string[]) => {
+  const handleNPCsConfirm = useCallback((npcs: import('../types/room').RoomNPC[]) => {
     if (selectedRoom) {
-      const updatedRoom = { ...selectedRoom, npcs: npcIds };
+      const updatedRoom = { ...selectedRoom, npcs };
       handleRoomUpdate(updatedRoom);
     }
     setShowNPCPicker(false);
@@ -322,9 +316,13 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
     try {
       // Convert GridRoom[] to WorldRoomPlacement[]
+      // CRITICAL: Persist instance data (NPCs, images) to world card
       const roomPlacements: WorldRoomPlacement[] = rooms.map(room => ({
         room_uuid: room.id,
         grid_position: room.position,
+        instance_npcs: room.npcs.length > 0 ? room.npcs : undefined, // Full RoomNPC[] objects
+        instance_image_path: room.image_path || undefined, // Custom image override
+        // instance_state: undefined, // Future: loot, doors, enemy HP, etc.
       }));
 
       // Calculate required grid size based on room positions
@@ -474,6 +472,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
             onRoomCreate={handleRoomCreate}
             onRoomDelete={handleRoomDelete}
             onRoomMove={handleRoomMove}
+            onCellClick={handleCellClick}
           />
         </div>
 
@@ -485,7 +484,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           onUpdate={handleRoomUpdate}
           onClose={() => setSelectedRoom(null)}
           onOpenNPCPicker={() => setShowNPCPicker(true)}
-          isVisible={!!selectedRoom && activeTool === 'edit'}
+          isVisible={!!selectedRoom}
         />
       </div>
 

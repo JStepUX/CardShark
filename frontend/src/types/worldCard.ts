@@ -3,13 +3,18 @@
 // World cards are character cards with card_type="world" and world-specific extensions
 
 import { WorldState, GridSize, Position } from './worldV2';
+import { RoomNPC } from './room';
 
 /**
  * Room placement in world grid
+ * Stores both the room template reference AND instance-specific data
  */
 export interface WorldRoomPlacement {
-  room_uuid: string; // References a room card UUID
+  room_uuid: string; // References a room card UUID (the template)
   grid_position: Position; // Where this room appears on the world grid
+  instance_npcs?: RoomNPC[]; // Full NPC assignment objects (role, hostile, etc.) - overrides room card's suggestedNpcs
+  instance_image_path?: string; // Custom image for this instance - overrides room card's default image
+  instance_state?: Record<string, any>; // Future: loot taken, doors opened, enemy HP, etc.
 }
 
 /**
