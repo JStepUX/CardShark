@@ -2,7 +2,7 @@
  * @file WorldPlayView.tsx
  * @description Main orchestrator for World Card gameplay. Integrates the existing ChatView
  *              with SidePanel (in world mode) and MapModal for navigation.
- * @dependencies worldStateApi, ChatView, SidePanel, MapModal
+ * @dependencies worldApi (V2), roomApi, ChatView, SidePanel, MapModal
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -12,8 +12,11 @@ import ChatView from '../components/chat/ChatView';
 import { SidePanel } from '../components/SidePanel';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
 import { MapModal } from '../components/world/MapModal';
+import { worldApi } from '../api/worldApi';
+import { roomApi } from '../api/roomApi';
+import type { WorldCard } from '../types/worldCard';
+import type { RoomCard } from '../types/room';
 import {
-  worldStateApi,
   GridWorldState,
   GridRoom,
   DisplayNPC,
@@ -40,7 +43,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const worldId = propWorldId || uuid || '';
 
   // State
+  const [worldCard, setWorldCard] = useState<WorldCard | null>(null);
   const [worldState, setWorldState] = useState<GridWorldState | null>(null);
+  const [gridRooms, setGridRooms] = useState<GridRoom[]>([]);
   const [currentRoom, setCurrentRoom] = useState<GridRoom | null>(null);
   const [roomNpcs, setRoomNpcs] = useState<DisplayNPC[]>([]);
   const [activeNpcId, setActiveNpcId] = useState<string | undefined>(); // Active responder, NOT session
@@ -52,7 +57,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load world data from API
+  // Load world data from API (V2)
   useEffect(() => {
     async function loadWorld() {
       if (!worldId) {
@@ -65,28 +70,76 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         setIsLoading(true);
         setError(null);
 
-        // Load world state using the grid adapter
-        const figmaState = await worldStateApi.getGridWorldState(worldId);
+        // Load world card (V2)
+        const world = await worldApi.getWorld(worldId);
+        setWorldCard(world);
 
-        if (!figmaState) {
-          setError('Failed to load world state');
-          setIsLoading(false);
-          return;
+        const worldData = world.data.extensions.world_data;
+
+        // Load all room cards
+        const loadedRooms: GridRoom[] = [];
+        for (const placement of worldData.rooms) {
+          try {
+            const roomCard = await roomApi.getRoom(placement.room_uuid);
+
+            const gridRoom: GridRoom = {
+              id: roomCard.data.character_uuid || placement.room_uuid,
+              name: roomCard.data.name,
+              description: roomCard.data.description,
+              introduction_text: roomCard.data.first_mes || '',
+              npcs: roomCard.data.extensions.room_data.npcs.map(npc => npc.character_uuid),
+              events: [],
+              connections: { north: null, south: null, east: null, west: null },
+              position: placement.grid_position,
+            };
+            loadedRooms.push(gridRoom);
+          } catch (err) {
+            console.warn(`Failed to load room ${placement.room_uuid}:`, err);
+          }
         }
+        setGridRooms(loadedRooms);
 
-        setWorldState(figmaState);
+        // Build grid for MapModal
+        const gridSize = worldData.grid_size;
+        const grid: (GridRoom | null)[][] = Array(gridSize.height)
+          .fill(null)
+          .map(() => Array(gridSize.width).fill(null));
+
+        loadedRooms.forEach(room => {
+          const { x, y } = room.position;
+          if (y >= 0 && y < gridSize.height && x >= 0 && x < gridSize.width) {
+            grid[y][x] = room;
+          }
+        });
+
+        // Create GridWorldState for backward compatibility with MapModal
+        const gridWorldState: GridWorldState = {
+          uuid: world.data.character_uuid || worldId,
+          metadata: {
+            name: world.data.name,
+            description: world.data.description,
+            system_prompt: world.data.system_prompt || '',
+          },
+          grid,
+          player_position: worldData.player_position,
+          starting_position: worldData.starting_position,
+          world_state: worldData.world_state || {},
+        };
+        setWorldState(gridWorldState);
 
         // Find current room based on player position
-        const room = figmaState.grid[figmaState.player_position.y]?.[figmaState.player_position.x];
-        if (room) {
-          setCurrentRoom(room);
+        const playerPos = worldData.player_position;
+        const currentRoom = loadedRooms.find(r => r.position.x === playerPos.x && r.position.y === playerPos.y);
+
+        if (currentRoom) {
+          setCurrentRoom(currentRoom);
 
           // Resolve NPCs in the room
-          const npcs = await resolveNpcDisplayData(room.npcs);
+          const npcs = await resolveNpcDisplayData(currentRoom.npcs);
           setRoomNpcs(npcs);
 
-          // Add introduction message via AI
-          if (room.introduction_text && !isGenerating) {
+          // Add introduction message
+          if (currentRoom.introduction_text && !isGenerating) {
             // Let ChatView handle the introduction through the narrator
           }
         }
@@ -252,9 +305,13 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     const npcs = await resolveNpcDisplayData(targetRoom.npcs);
     setRoomNpcs(npcs);
 
-    // Persist position to backend
+    // Persist position to backend (V2)
     try {
-      await worldStateApi.movePlayer(worldId, targetRoom.id);
+      if (worldCard) {
+        await worldApi.updateWorld(worldId, {
+          player_position: { x: foundX, y: foundY },
+        });
+      }
     } catch (err) {
       console.error('Failed to persist player position:', err);
     }
@@ -294,7 +351,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
     // Close map modal after navigation
     setShowMap(false);
-  }, [worldState, worldId, messages, setMessages, addMessage, activeNpcName, activeNpcId]);
+  }, [worldCard, worldState, worldId, messages, setMessages, addMessage, activeNpcName, activeNpcId]);
 
 
   // Handle room navigation - persists position to backend
