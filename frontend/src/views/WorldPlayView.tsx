@@ -16,13 +16,14 @@ import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
 import type { WorldCard } from '../types/worldCard';
 import type { RoomCard } from '../types/room';
+import type { CharacterCard } from '../types/schema';
 import {
   GridWorldState,
   GridRoom,
   DisplayNPC,
   resolveNpcDisplayData,
 } from '../utils/worldStateApi';
-import { injectRoomContext } from '../utils/worldCardAdapter';
+import { injectRoomContext, injectNPCContext } from '../utils/worldCardAdapter';
 
 interface WorldPlayViewProps {
   worldId?: string;
@@ -50,6 +51,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [roomNpcs, setRoomNpcs] = useState<DisplayNPC[]>([]);
   const [activeNpcId, setActiveNpcId] = useState<string | undefined>(); // Active responder, NOT session
   const [activeNpcName, setActiveNpcName] = useState<string>(''); // For PartyGatherModal display
+  const [activeNpcCard, setActiveNpcCard] = useState<CharacterCard | null>(null); // Active NPC's character card
   const [showMap, setShowMap] = useState(false);
   const [showPartyGatherModal, setShowPartyGatherModal] = useState(false);
   const [pendingDestination, setPendingDestination] = useState<GridRoom | null>(null);
@@ -154,16 +156,23 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     loadWorld();
   }, [worldId]);
 
-  // Inject current room context into character data for LLM generation
+  // Inject context into character data for LLM generation
+  // Two modes: Room mode (world narrator) or NPC mode (specific NPC)
   useEffect(() => {
-    if (characterData && currentRoom) {
+    if (activeNpcCard && currentRoom) {
+      // NPC conversation mode - use NPC's character card with world+room context
+      const worldCharCard = characterData; // World card loaded as base character
+      const modifiedNpcCard = injectNPCContext(activeNpcCard, worldCharCard, currentRoom);
+      setCharacterDataOverride(modifiedNpcCard);
+    } else if (characterData && currentRoom) {
+      // Room mode - use world card with room context
       const modifiedCharacterData = injectRoomContext(characterData, currentRoom);
       setCharacterDataOverride(modifiedCharacterData);
     } else {
       // Clear override if no room is set
       setCharacterDataOverride(null);
     }
-  }, [characterData, currentRoom, setCharacterDataOverride]);
+  }, [characterData, currentRoom, activeNpcCard, setCharacterDataOverride]);
 
   // Handle NPC selection - sets active responder (does NOT change session)
   const handleSelectNpc = useCallback(async (npcId: string) => {
@@ -189,9 +198,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
       const npcCharacterData = await response.json();
 
+      // Store the NPC's character card for context injection
+      setActiveNpcCard(npcCharacterData);
+
       // CRITICAL: Do NOT call setCharacterDataInContext here
       // That would trigger a new session load
-      // Instead, we track activeNpcId and use it to resolve {{char}} in prompts
+      // The context injection effect will handle using the NPC's card
 
       // Use the /api/generate-greeting endpoint with NPC character data
       const greetingResponse = await fetch('/api/generate-greeting', {
@@ -299,6 +311,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     if (!keepActiveNpc) {
       setActiveNpcId(undefined);
       setActiveNpcName('');
+      setActiveNpcCard(null);
     }
 
     // Resolve NPCs in the new room
@@ -429,6 +442,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     // Clear active NPC before transition
     setActiveNpcId(undefined);
     setActiveNpcName('');
+    setActiveNpcCard(null);
 
     await performRoomTransition(pendingDestination, false); // keepActiveNpc = false
     setPendingDestination(null);
