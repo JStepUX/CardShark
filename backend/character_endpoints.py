@@ -84,6 +84,7 @@ class CharacterAPIBase(BaseModel):
     extensions_json: Optional[Dict[str, Any]] = Field(default_factory=dict)
     original_character_id: Optional[str] = None
     is_incomplete: bool = False  # True if character has no valid metadata (needs editing)
+    card_type: str = "character"  # Extracted from extensions.card_type for easier filtering
 
     class Config:
         from_attributes = True # Changed from orm_mode for Pydantic V2
@@ -168,7 +169,14 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             elif isinstance(db_char.extensions_json, dict):
                 parsed_extensions = db_char.extensions_json
             else:
-                parsed_extensions = {}          # Handle None datetime values with defaults
+                parsed_extensions = {}
+
+        # Extract card_type from extensions, defaulting to "character"
+        card_type = parsed_extensions.get("card_type", "character")
+        if card_type not in ["character", "world", "room"]:
+            card_type = "character"
+
+        # Handle None datetime values with defaults
         now = datetime.now(tz=timezone.utc)
         created_at = db_char.created_at if db_char.created_at is not None else now
         updated_at = db_char.updated_at if db_char.updated_at is not None else now
@@ -192,7 +200,8 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             db_metadata_last_synced_at=synced_at,
             extensions_json=parsed_extensions,
             original_character_id=db_char.original_character_id,
-            is_incomplete=getattr(db_char, 'is_incomplete', False)
+            is_incomplete=getattr(db_char, 'is_incomplete', False),
+            card_type=card_type
         )
         
         return api_char
@@ -220,7 +229,8 @@ def to_api_model(db_char: CharacterDBModel, logger: LogManager) -> CharacterAPIB
             db_metadata_last_synced_at=fallback_synced_at,
             extensions_json={},
             original_character_id=db_char.original_character_id,
-            is_incomplete=getattr(db_char, 'is_incomplete', False)
+            is_incomplete=getattr(db_char, 'is_incomplete', False),
+            card_type="character"
         )
 
 # --- Character Endpoints ---
@@ -355,6 +365,12 @@ async def list_characters(
                 # Otherwise return empty UUID so the frontend uses path-based endpoints.
                 char_uuid = f_info.get("character_uuid", "")
 
+                # Extract card_type from extensions, defaulting to "character"
+                extensions = f_info.get("extensions_json", {})
+                extracted_card_type = extensions.get("card_type", "character")
+                if extracted_card_type not in ["character", "world", "room"]:
+                    extracted_card_type = "character"
+
                 characters_from_files.append(CharacterAPIBase(
                     character_uuid=char_uuid,
                     name=f_info["name"],
@@ -364,8 +380,9 @@ async def list_characters(
                     db_metadata_last_synced_at=f_info["modified"],
                     # Default other optional fields
                     description="", personality="", scenario="", first_mes="", mes_example="",
-                    creator_comment="", tags=[], spec_version="2.0", extensions_json=f_info.get("extensions_json", {}),
-                    original_character_id=None
+                    creator_comment="", tags=[], spec_version="2.0", extensions_json=extensions,
+                    original_character_id=None,
+                    card_type=extracted_card_type
                 ))
             return CharacterListResponse(characters=characters_from_files, total=len(characters_from_files))
         except Exception as e:

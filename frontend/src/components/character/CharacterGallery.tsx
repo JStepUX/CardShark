@@ -9,13 +9,14 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { CharacterFile } from '../../types/schema';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload, DoorOpen, Download } from 'lucide-react';
 import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from '../KoboldCPPDrawerManager';
 import { useCharacterSort } from '../../hooks/useCharacterSort';
+import { worldApi } from '../../api/worldApi';
 
 // Track API calls across component instances - simplified
 const apiRequestCache = {
@@ -111,8 +112,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter state for World/Character cards
-  const [filterType, setFilterType] = useState<'all' | 'character' | 'world'>('all');
+  // Filter state for Character/World/Room cards
+  const [filterType, setFilterType] = useState<'all' | 'character' | 'world' | 'room'>('all');
 
   // View mode state (Grid vs Folders)
   const [viewMode, setViewMode] = useState<'grid' | 'folder'>('grid');
@@ -176,7 +177,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     // Type Filter
     if (filterType !== 'all') {
       result = result.filter(char => {
-        const type = char.extensions?.card_type || 'character';
+        // Use top-level card_type if available, fallback to extensions.card_type
+        const type = char.card_type || char.extensions?.card_type || 'character';
         return type === filterType;
       });
     }
@@ -586,9 +588,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             navigate(targetRoute);
           } else {
             // Default navigation based on card type and state
-            const isWorldCard = character.extensions?.card_type === 'world';
+            const cardType = character.card_type || character.extensions?.card_type;
+            const isWorldCard = cardType === 'world';
+            const isRoomCard = cardType === 'room';
 
-            if (isWorldCard && character.character_uuid) {
+            if (isRoomCard && character.character_uuid) {
+              // Room cards navigate to Room Editor
+              navigate(`/room/${character.character_uuid}/edit`);
+            } else if (isWorldCard && character.character_uuid) {
               // World cards navigate to World Play view
               navigate(`/world/${character.character_uuid}/play`);
             } else if (character.is_incomplete) {
@@ -715,53 +722,20 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   };
 
-  // Handle world import
+  // Handle world import (V2 API)
   const handleImportWorld = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.zip';
+    input.accept = '.cardshark.zip';
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
 
       try {
         setIsLoading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('conflict_policy', 'skip');
-
-        const response = await fetch('/api/world-cards/import', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (response.status === 409) {
-          // Conflict - ask user
-          const shouldOverwrite = window.confirm('World already exists. Overwrite?');
-          if (shouldOverwrite) {
-            formData.set('conflict_policy', 'overwrite');
-            const retryResponse = await fetch('/api/world-cards/import', {
-              method: 'POST',
-              body: formData,
-            });
-            const retryResult = await retryResponse.json();
-            if (retryResult.success && retryResult.data) {
-              alert(`World "${retryResult.data.world_name}" imported successfully!\nNPCs: ${retryResult.data.imported_npcs} imported, ${retryResult.data.skipped_npcs} skipped`);
-              handleManualRefresh(); // Refresh gallery
-            } else {
-              throw new Error(retryResult.message || 'Failed to import world');
-            }
-          }
-          return;
-        }
-
-        const result = await response.json();
-        if (result.success && result.data) {
-          alert(`World "${result.data.world_name}" imported successfully!\nNPCs: ${result.data.imported_npcs} imported, ${result.data.skipped_npcs} skipped`);
-          handleManualRefresh(); // Refresh gallery
-        } else {
-          throw new Error(result.message || 'Failed to import world');
-        }
+        const result = await worldApi.importWorld(file);
+        alert(`${result.message}\nWorld UUID: ${result.uuid}`);
+        handleManualRefresh(); // Refresh gallery
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to import world');
       } finally {
@@ -769,6 +743,32 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       }
     };
     input.click();
+  };
+
+  // Handle world export
+  const handleExportWorld = async (event: React.MouseEvent, character: CharacterFile) => {
+    event.stopPropagation();
+
+    if (!character.character_uuid) {
+      alert('Cannot export: World UUID not found');
+      return;
+    }
+
+    try {
+      const blob = await worldApi.exportWorld(character.character_uuid);
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${character.name}.cardshark.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export world');
+    }
   };
 
   // Cancel deletion
@@ -785,7 +785,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // Function to render a single character card
   const renderCharacterCard = (character: CharacterFile) => {
     const isDeleting = deletingPath === character.path;
-    const isWorld = character.extensions?.card_type === 'world';
+    const cardType = character.card_type || character.extensions?.card_type;
+    const isWorld = cardType === 'world';
+    const isRoom = cardType === 'room';
 
     return (
       <div
@@ -795,12 +797,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
           ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
           ${character.is_incomplete ? 'ring-2 ring-amber-500/70' : ''}
-          hover:shadow-xl 
+          hover:shadow-xl
         `}
         onClick={() => handleCharacterClick(character)}
         role="button"
         tabIndex={0}
-        aria-label={`Select ${isWorld ? 'world' : 'character'} ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
+        aria-label={`Select ${isWorld ? 'world' : isRoom ? 'room' : 'character'} ${character.name}${character.is_incomplete ? ' (needs setup)' : ''}`}
       >
         {/* Incomplete Character Indicator */}
         {character.is_incomplete && (
@@ -822,11 +824,21 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           </div>
         )}
 
+        {/* Room Badge */}
+        {isRoom && (
+          <div
+            className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-purple-600/80 text-white rounded-full shadow-lg backdrop-blur-sm border border-purple-500/30`}
+            title="Room Card"
+          >
+            <DoorOpen size={16} />
+          </div>
+        )}
+
         {/* Delete Button - Only show if not in comparison selection mode */}
         {!isSecondarySelector && (
           <button
             onClick={(e) => handleTrashIconClick(e, character)}
-            className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full 
+            className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full
                        opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600
                        focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
             aria-label={`Delete ${character.name}`}
@@ -835,14 +847,28 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           </button>
         )}
 
+        {/* Export Button - Only show for world cards */}
+        {!isSecondarySelector && isWorld && (
+          <button
+            onClick={(e) => handleExportWorld(e, character)}
+            className="absolute top-2 right-10 z-10 p-1.5 bg-black/50 text-white rounded-full
+                       opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-600
+                       focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-stone-800"
+            aria-label={`Export ${character.name}`}
+            title="Export world as .cardshark.zip"
+          >
+            <Download size={16} />
+          </button>
+        )}
+
         {/* Info Button - Always show */}
         <button
           onClick={(e) => handleInfoIconClick(e, character)}
-          className={`absolute top-2 ${!isSecondarySelector ? 'right-10' : 'right-2'} z-10 p-1.5 bg-black/50 text-white rounded-full 
+          className={`absolute top-2 ${!isSecondarySelector ? (isWorld ? 'right-[4.5rem]' : 'right-10') : 'right-2'} z-10 p-1.5 bg-black/50 text-white rounded-full
                      opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600
                      focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-stone-800`}
           aria-label={`Info for ${character.name}`}
-          title={character.extensions?.card_type === 'world' ? "World Splash Screen" : "Basic Info & Greetings"}
+          title={isWorld ? "World Splash Screen" : isRoom ? "Room Editor" : "Basic Info & Greetings"}
         >
           <Info size={16} />
         </button>
@@ -1012,6 +1038,15 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   }`}
               >
                 <MapIcon size={14} /> Worlds
+              </button>
+              <button
+                onClick={() => setFilterType('room')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${filterType === 'room'
+                  ? 'bg-purple-600/80 text-white shadow-sm'
+                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                  }`}
+              >
+                <DoorOpen size={14} /> Rooms
               </button>
             </div>
 

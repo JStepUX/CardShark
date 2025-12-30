@@ -136,6 +136,8 @@ from backend.chat_endpoints import router as chat_session_router # Router for Ch
 # Import routers directly, no need for class instances
 from backend.background_endpoints import router as background_router
 from backend.room_card_endpoint import router as room_card_router
+from backend.endpoints.room_card_endpoints import router as room_card_crud_router # Room card CRUD
+from backend.endpoints.world_card_endpoints_v2 import router as world_card_crud_router # World card CRUD V2
 from backend.character_endpoints import router as character_router
 from backend.dependencies import get_character_service_dependency # Import from new dependencies file
 from backend.user_endpoints import router as user_router
@@ -402,6 +404,8 @@ app.include_router(health_router) # Include the health check router
 # app.include_router(chat_router) # This line is now handled by chat_session_router inclusion
 app.include_router(koboldcpp_router)
 app.include_router(room_card_router)
+app.include_router(room_card_crud_router) # Room card CRUD (PNG-based)
+app.include_router(world_card_crud_router) # World card CRUD V2 (PNG-based)
 app.include_router(character_router)
 app.include_router(user_router)
 app.include_router(settings_router)

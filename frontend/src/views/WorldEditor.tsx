@@ -1,7 +1,7 @@
 /**
  * @file WorldEditor.tsx
  * @description World Builder interface for creating and editing world maps.
- * @dependencies worldStateApi, GridCanvas, ToolPalette, RoomPropertiesPanel, NPCPickerModal
+ * @dependencies worldApi (V2), roomApi, GridCanvas, ToolPalette, RoomPropertiesPanel, NPCPickerModal
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -10,12 +10,13 @@ import { ToolPalette, type Tool } from '../components/world/ToolPalette';
 import { GridCanvas } from '../components/world/GridCanvas';
 import { RoomPropertiesPanel } from '../components/world/RoomPropertiesPanel';
 import { NPCPickerModal } from '../components/world/NPCPickerModal';
-import {
-  worldStateApi,
-  GridWorldState,
-  GridRoom,
-  fromGridWorldState
-} from '../utils/worldStateApi';
+import { CellActionMenu } from '../components/world/CellActionMenu';
+import { RoomGalleryPicker } from '../components/world/RoomGalleryPicker';
+import { worldApi } from '../api/worldApi';
+import { roomApi } from '../api/roomApi';
+import type { WorldCard, WorldRoomPlacement } from '../types/worldCard';
+import type { RoomCard, RoomCardSummary } from '../types/room';
+import { GridRoom } from '../utils/worldStateApi';
 
 interface WorldEditorProps {
   worldId?: string;
@@ -28,7 +29,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
   const worldId = propWorldId || uuid || '';
 
-  const [worldState, setWorldState] = useState<GridWorldState | null>(null);
+  const [worldCard, setWorldCard] = useState<WorldCard | null>(null);
   const [rooms, setRooms] = useState<GridRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<GridRoom | null>(null);
   const [activeTool, setActiveTool] = useState<Tool>('edit'); // default to unified edit tool
@@ -41,8 +42,16 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   // Responsive panel states
   const [isToolPanelCollapsed, setIsToolPanelCollapsed] = useState(false);
 
-  // Grid size state - dynamic based on world content
-  const [gridSize, setGridSize] = useState({ width: 8, height: 6 });
+  // Grid size state - from world card
+  const [gridSize, setGridSize] = useState({ width: 10, height: 10 });
+
+  // Cell action menu state
+  const [showCellMenu, setShowCellMenu] = useState(false);
+  const [cellMenuPosition, setCellMenuPosition] = useState({ x: 0, y: 0 });
+  const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
+
+  // Room gallery picker state
+  const [showRoomPicker, setShowRoomPicker] = useState(false);
 
   // Load world data and available characters
   useEffect(() => {
@@ -56,30 +65,38 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       try {
         setIsLoading(true);
 
-        // Load world state
-        const figmaState = await worldStateApi.getGridWorldState(worldId);
+        // Load world card (V2)
+        const world = await worldApi.getWorld(worldId);
+        setWorldCard(world);
 
-        if (figmaState) {
-          setWorldState(figmaState);
+        // Set grid size from world data
+        const worldData = world.data.extensions.world_data;
+        setGridSize(worldData.grid_size);
 
-          // Determine grid size from loaded state
-          if (figmaState.grid && figmaState.grid.length > 0) {
-            const height = Math.max(figmaState.grid.length, 6);
-            const width = Math.max(figmaState.grid[0]?.length || 0, 8);
-            setGridSize({ width, height });
+        // Load room cards for all placed rooms
+        const loadedRooms: GridRoom[] = [];
+        for (const placement of worldData.rooms) {
+          try {
+            const roomCard = await roomApi.getRoom(placement.room_uuid);
+
+            // Convert RoomCard to GridRoom format
+            const gridRoom: GridRoom = {
+              id: roomCard.data.character_uuid || placement.room_uuid,
+              name: roomCard.data.name,
+              description: roomCard.data.description,
+              introduction_text: roomCard.data.first_mes || '',
+              npcs: roomCard.data.extensions.room_data.npcs.map(npc => npc.character_uuid),
+              events: [], // Not yet implemented in V2
+              connections: { north: null, south: null, east: null, west: null }, // Not yet implemented in V2
+              position: placement.grid_position,
+            };
+            loadedRooms.push(gridRoom);
+          } catch (err) {
+            console.warn(`Failed to load room ${placement.room_uuid}:`, err);
+            // Continue loading other rooms
           }
-
-          // Extract rooms from grid
-          const extractedRooms: GridRoom[] = [];
-          figmaState.grid.forEach((row) => {
-            row.forEach((room) => {
-              if (room) {
-                extractedRooms.push(room);
-              }
-            });
-          });
-          setRooms(extractedRooms);
         }
+        setRooms(loadedRooms);
 
         // Load available characters for NPC picker (same approach as CharacterGallery)
         const charResponse = await fetch('/api/characters');
@@ -88,7 +105,10 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           // Handle both API response shapes
           const charList = charData.characters || charData.data || charData || [];
           const characters = charList
-            .filter((c: any) => c.extensions_json?.card_type !== 'world') // Only non-world cards as NPCs
+            .filter((c: any) => {
+              const cardType = c.extensions_json?.card_type || c.card_type;
+              return cardType !== 'world' && cardType !== 'room'; // Only character cards as NPCs
+            })
             .map((c: any) => {
               const uuid = c.character_uuid;
               const timestamp = c.updated_at ? new Date(c.updated_at).getTime() : Date.now();
@@ -148,22 +168,100 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedRoom, rooms]);
 
-  const handleRoomCreate = useCallback((position: { x: number; y: number }) => {
-    const newRoom: GridRoom = {
-      id: `room-${Date.now()}`,
-      name: 'New Room',
-      description: '',
-      introduction_text: '',
-      npcs: [],
-      events: [],
-      connections: { north: null, south: null, east: null, west: null },
-      position,
-    };
-
-    setRooms(prev => [...prev, newRoom]);
-    setSelectedRoom(newRoom);
-    setIsDirty(true);
+  const handleCellClick = useCallback((position: { x: number; y: number }, event: React.MouseEvent) => {
+    // Show cell action menu at click position
+    setSelectedCell(position);
+    setCellMenuPosition({ x: event.clientX, y: event.clientY });
+    setShowCellMenu(true);
   }, []);
+
+  const handleCreateNewRoom = useCallback(async () => {
+    if (!selectedCell) return;
+
+    try {
+      // Create a new room card via API
+      const roomSummary = await roomApi.createRoom({
+        name: 'New Room',
+        description: '',
+      });
+
+      // Add room to grid at selected position
+      const newRoom: GridRoom = {
+        id: roomSummary.uuid,
+        name: roomSummary.name,
+        description: roomSummary.description,
+        introduction_text: '',
+        npcs: [],
+        events: [],
+        connections: { north: null, south: null, east: null, west: null },
+        position: selectedCell,
+      };
+
+      setRooms(prev => [...prev, newRoom]);
+      setSelectedRoom(newRoom);
+      setIsDirty(true);
+    } catch (err) {
+      console.error('Failed to create room:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create room');
+    }
+  }, [selectedCell]);
+
+  const handleImportFromGallery = useCallback(() => {
+    setShowRoomPicker(true);
+  }, []);
+
+  const handleRoomImport = useCallback((roomSummary: RoomCardSummary) => {
+    if (!selectedCell) return;
+
+    // Load full room card to get all details
+    roomApi.getRoom(roomSummary.uuid).then(roomCard => {
+      const newRoom: GridRoom = {
+        id: roomCard.data.character_uuid || roomSummary.uuid,
+        name: roomCard.data.name,
+        description: roomCard.data.description,
+        introduction_text: roomCard.data.first_mes || '',
+        npcs: roomCard.data.extensions.room_data.npcs.map(npc => npc.character_uuid),
+        events: [],
+        connections: { north: null, south: null, east: null, west: null },
+        position: selectedCell,
+      };
+
+      setRooms(prev => [...prev, newRoom]);
+      setIsDirty(true);
+      setShowRoomPicker(false);
+    }).catch(err => {
+      console.error('Failed to import room:', err);
+      setError(err instanceof Error ? err.message : 'Failed to import room');
+    });
+  }, [selectedCell]);
+
+  const handleRoomCreate = useCallback((position: { x: number; y: number }) => {
+    // Legacy handler - now redirects to cell click
+    const mockEvent = { clientX: 0, clientY: 0 } as React.MouseEvent;
+    handleCellClick(position, mockEvent);
+  }, [handleCellClick]);
+
+  const handleEditRoom = useCallback(() => {
+    if (!selectedCell) return;
+
+    const room = rooms.find(r => r.position.x === selectedCell.x && r.position.y === selectedCell.y);
+    if (room) {
+      setSelectedRoom(room);
+    }
+  }, [selectedCell, rooms]);
+
+  const handleRemoveRoom = useCallback(() => {
+    if (!selectedCell) return;
+
+    const room = rooms.find(r => r.position.x === selectedCell.x && r.position.y === selectedCell.y);
+    if (room) {
+      setRooms(prev => prev.filter(r => r.id !== room.id));
+      if (selectedRoom?.id === room.id) {
+        setSelectedRoom(null);
+      }
+      setIsDirty(true);
+    }
+  }, [selectedCell, rooms, selectedRoom?.id]);
 
   const handleRoomDelete = useCallback((roomId: string) => {
     setRooms(prev => prev.filter(r => r.id !== roomId));
@@ -173,10 +271,24 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     setIsDirty(true);
   }, [selectedRoom?.id]);
 
-  const handleRoomUpdate = useCallback((updatedRoom: GridRoom) => {
+  const handleRoomUpdate = useCallback(async (updatedRoom: GridRoom) => {
+    // Update local state
     setRooms(prev => prev.map(r => r.id === updatedRoom.id ? updatedRoom : r));
     setSelectedRoom(updatedRoom);
     setIsDirty(true);
+
+    // Persist room card updates via roomApi
+    try {
+      await roomApi.updateRoom(updatedRoom.id, {
+        name: updatedRoom.name,
+        description: updatedRoom.description,
+        first_mes: updatedRoom.introduction_text || undefined,
+      });
+      console.log('Room card updated successfully');
+    } catch (err) {
+      console.error('Failed to update room card:', err);
+      // Continue anyway - changes are still in local state and will be saved with world
+    }
   }, []);
 
   const handleRoomMove = useCallback((roomId: string, newPosition: { x: number; y: number }) => {
@@ -202,11 +314,16 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   }, [selectedRoom, handleRoomUpdate]);
 
   const handleSave = useCallback(async () => {
-    if (!worldState || !worldId) return;
+    if (!worldCard || !worldId) return;
 
     try {
-      // Rebuild grid from rooms using CURRENT gridSize
-      // Ensure we accommodate all rooms by expanding grid if necessary (temporarily for save)
+      // Convert GridRoom[] to WorldRoomPlacement[]
+      const roomPlacements: WorldRoomPlacement[] = rooms.map(room => ({
+        room_uuid: room.id,
+        grid_position: room.position,
+      }));
+
+      // Calculate required grid size based on room positions
       let maxX = gridSize.width - 1;
       let maxY = gridSize.height - 1;
 
@@ -218,41 +335,25 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       const saveWidth = maxX + 1;
       const saveHeight = maxY + 1;
 
-      const newGrid: (GridRoom | null)[][] = Array(saveHeight)
-        .fill(null)
-        .map(() => Array(saveWidth).fill(null));
-
-      rooms.forEach(room => {
-        const { x, y } = room.position;
-        if (y >= 0 && y < saveHeight && x >= 0 && x < saveWidth) {
-          newGrid[y][x] = room;
-        }
+      // Update world card
+      await worldApi.updateWorld(worldId, {
+        rooms: roomPlacements,
+        grid_size: { width: saveWidth, height: saveHeight },
       });
 
-      const updatedState: GridWorldState = {
-        ...worldState,
-        grid: newGrid,
-      };
+      setIsDirty(false);
 
-      // Convert to codebase format and save
-      const worldData = fromGridWorldState(updatedState);
-      const success = await worldStateApi.saveWorldState(worldId, worldData);
-
-      if (success) {
-        setIsDirty(false);
-        // Update local grid size if it expanded
-        if (saveWidth > gridSize.width || saveHeight > gridSize.height) {
-          setGridSize({ width: saveWidth, height: saveHeight });
-        }
-        console.log('World saved successfully');
-      } else {
-        setError('Failed to save world');
+      // Update local grid size if it expanded
+      if (saveWidth > gridSize.width || saveHeight > gridSize.height) {
+        setGridSize({ width: saveWidth, height: saveHeight });
       }
+
+      console.log('World saved successfully');
     } catch (err) {
       console.error('Error saving world:', err);
       setError(err instanceof Error ? err.message : 'Failed to save world');
     }
-  }, [worldState, worldId, rooms, gridSize]);
+  }, [worldCard, worldId, rooms, gridSize]);
 
   const handleBack = useCallback(() => {
     if (onBack) {
@@ -289,7 +390,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     );
   }
 
-  if (!worldState) {
+  if (!worldCard) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0a0a0a] text-white">
         <div>World not found</div>
@@ -310,8 +411,8 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
             <ArrowLeft size={20} className="text-gray-400" />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-sm md:text-base font-medium truncate">{worldState.metadata.name}</h1>
-            <p className="text-xs md:text-sm text-gray-500 truncate hidden sm:block">{worldState.metadata.description}</p>
+            <h1 className="text-sm md:text-base font-medium truncate">{worldCard.data.name}</h1>
+            <p className="text-xs md:text-sm text-gray-500 truncate hidden sm:block">{worldCard.data.description}</p>
           </div>
         </div>
 
@@ -376,6 +477,29 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           selectedNPCs={selectedRoom.npcs}
           onConfirm={handleNPCsConfirm}
           onClose={() => setShowNPCPicker(false)}
+        />
+      )}
+
+      {/* Cell Action Menu */}
+      {showCellMenu && selectedCell && (
+        <CellActionMenu
+          position={cellMenuPosition}
+          isOccupied={rooms.some(r => r.position.x === selectedCell.x && r.position.y === selectedCell.y)}
+          onCreateNew={handleCreateNewRoom}
+          onImportFromGallery={handleImportFromGallery}
+          onEdit={handleEditRoom}
+          onRemove={handleRemoveRoom}
+          onClose={() => setShowCellMenu(false)}
+        />
+      )}
+
+      {/* Room Gallery Picker */}
+      {showRoomPicker && (
+        <RoomGalleryPicker
+          isOpen={showRoomPicker}
+          onClose={() => setShowRoomPicker(false)}
+          onSelect={handleRoomImport}
+          excludeRoomIds={rooms.map(r => r.id)}
         />
       )}
     </div>
