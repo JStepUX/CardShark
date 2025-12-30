@@ -17,6 +17,8 @@ from backend.models.world_card import (
 )
 from backend.models.world_state import GridSize
 from backend.handlers.world_card_handler_v2 import WorldCardHandlerV2
+from backend.handlers.room_card_handler import RoomCardHandler
+from backend.handlers.export_handler import ExportHandler
 from backend.services.character_service import CharacterService
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.settings_manager import SettingsManager
@@ -51,6 +53,27 @@ def get_world_card_handler(
 ) -> WorldCardHandlerV2:
     """Dependency injection for WorldCardHandlerV2"""
     return WorldCardHandlerV2(character_service, png_handler, settings_manager, logger)
+
+
+def get_room_card_handler(
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+) -> RoomCardHandler:
+    """Dependency injection for RoomCardHandler"""
+    return RoomCardHandler(character_service, png_handler, settings_manager, logger)
+
+
+def get_export_handler(
+    world_handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    room_handler: RoomCardHandler = Depends(get_room_card_handler),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+) -> ExportHandler:
+    """Dependency injection for ExportHandler"""
+    return ExportHandler(world_handler, room_handler, character_service, png_handler, logger)
 
 
 @router.post(
@@ -255,3 +278,85 @@ async def get_world_card_image(
     except Exception as e:
         logger.log_error(f"Error serving world image {world_uuid}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to serve world image: {str(e)}")
+
+
+@router.get(
+    "/{world_uuid}/export",
+    summary="Export world as ZIP archive",
+    description="Exports world card with all rooms and characters as .cardshark.zip"
+)
+async def export_world_card(
+    world_uuid: str,
+    handler: ExportHandler = Depends(get_export_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Export world and all dependencies as ZIP archive"""
+    try:
+        logger.log_step(f"Exporting world card: {world_uuid}")
+
+        zip_bytes, filename = handler.export_world(world_uuid)
+
+        from fastapi.responses import Response
+
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Error exporting world {world_uuid}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export world: {str(e)}")
+
+
+@router.post(
+    "/import",
+    response_model=DataResponse,
+    summary="Import world from ZIP archive",
+    description="Imports a .cardshark.zip archive with UUID regeneration"
+)
+async def import_world_card(
+    file: UploadFile = File(..., description="World archive (.cardshark.zip)"),
+    handler: ExportHandler = Depends(get_export_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Import world and all dependencies from ZIP archive"""
+    try:
+        logger.log_step(f"Importing world from file: {file.filename}")
+
+        # Validate file extension
+        if not file.filename or not file.filename.endswith('.cardshark.zip'):
+            raise HTTPException(status_code=400, detail="Invalid file: must be a .cardshark.zip archive")
+
+        # Read ZIP file
+        zip_bytes = await file.read()
+
+        # Import world
+        new_world_uuid = handler.import_world(zip_bytes)
+
+        # Get the imported world card for response
+        world_card = handler.world_handler.get_world_card(new_world_uuid)
+        if not world_card:
+            raise HTTPException(status_code=500, detail="World imported but could not be retrieved")
+
+        return create_data_response({
+            "world": {
+                "uuid": new_world_uuid,
+                "name": world_card.data.name,
+                "description": world_card.data.description
+            },
+            "message": f"World '{world_card.data.name}' imported successfully"
+        })
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.log_error(f"Import validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.log_error(f"Error importing world: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to import world: {str(e)}")

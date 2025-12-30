@@ -117,4 +117,43 @@ export const worldApi = {
   getWorldImageUrl(uuid: string): string {
     return `${BASE_URL}/${uuid}/image`;
   },
+
+  /**
+   * Export a world card as a .cardshark.zip archive
+   */
+  async exportWorld(uuid: string): Promise<Blob> {
+    const response = await fetch(`${BASE_URL}/${uuid}/export`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to export world' }));
+      throw new Error(error.detail || 'Failed to export world');
+    }
+
+    return await response.blob();
+  },
+
+  /**
+   * Import a world card from a .cardshark.zip archive
+   */
+  async importWorld(file: File): Promise<{ uuid: string; name: string; message: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${BASE_URL}/import`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to import world' }));
+      throw new Error(error.detail || 'Failed to import world');
+    }
+
+    const data = await response.json();
+    return {
+      uuid: data.data.world.uuid,
+      name: data.data.world.name,
+      message: data.data.message,
+    };
+  },
 };

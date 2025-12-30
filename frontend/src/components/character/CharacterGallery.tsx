@@ -9,13 +9,14 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { CharacterFile } from '../../types/schema';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload, DoorOpen } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Users, Info, LayoutGrid, Folder, RefreshCw, Upload, DoorOpen, Download } from 'lucide-react';
 import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import KoboldCPPDrawerManager from '../KoboldCPPDrawerManager';
 import { useCharacterSort } from '../../hooks/useCharacterSort';
+import { worldApi } from '../../api/worldApi';
 
 // Track API calls across component instances - simplified
 const apiRequestCache = {
@@ -721,53 +722,20 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   };
 
-  // Handle world import
+  // Handle world import (V2 API)
   const handleImportWorld = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.zip';
+    input.accept = '.cardshark.zip';
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
 
       try {
         setIsLoading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('conflict_policy', 'skip');
-
-        const response = await fetch('/api/world-cards/import', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (response.status === 409) {
-          // Conflict - ask user
-          const shouldOverwrite = window.confirm('World already exists. Overwrite?');
-          if (shouldOverwrite) {
-            formData.set('conflict_policy', 'overwrite');
-            const retryResponse = await fetch('/api/world-cards/import', {
-              method: 'POST',
-              body: formData,
-            });
-            const retryResult = await retryResponse.json();
-            if (retryResult.success && retryResult.data) {
-              alert(`World "${retryResult.data.world_name}" imported successfully!\nNPCs: ${retryResult.data.imported_npcs} imported, ${retryResult.data.skipped_npcs} skipped`);
-              handleManualRefresh(); // Refresh gallery
-            } else {
-              throw new Error(retryResult.message || 'Failed to import world');
-            }
-          }
-          return;
-        }
-
-        const result = await response.json();
-        if (result.success && result.data) {
-          alert(`World "${result.data.world_name}" imported successfully!\nNPCs: ${result.data.imported_npcs} imported, ${result.data.skipped_npcs} skipped`);
-          handleManualRefresh(); // Refresh gallery
-        } else {
-          throw new Error(result.message || 'Failed to import world');
-        }
+        const result = await worldApi.importWorld(file);
+        alert(`${result.message}\nWorld UUID: ${result.uuid}`);
+        handleManualRefresh(); // Refresh gallery
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to import world');
       } finally {
@@ -775,6 +743,32 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       }
     };
     input.click();
+  };
+
+  // Handle world export
+  const handleExportWorld = async (event: React.MouseEvent, character: CharacterFile) => {
+    event.stopPropagation();
+
+    if (!character.character_uuid) {
+      alert('Cannot export: World UUID not found');
+      return;
+    }
+
+    try {
+      const blob = await worldApi.exportWorld(character.character_uuid);
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${character.name}.cardshark.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export world');
+    }
   };
 
   // Cancel deletion
@@ -844,7 +838,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         {!isSecondarySelector && (
           <button
             onClick={(e) => handleTrashIconClick(e, character)}
-            className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full 
+            className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full
                        opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600
                        focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
             aria-label={`Delete ${character.name}`}
@@ -853,10 +847,24 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           </button>
         )}
 
+        {/* Export Button - Only show for world cards */}
+        {!isSecondarySelector && isWorld && (
+          <button
+            onClick={(e) => handleExportWorld(e, character)}
+            className="absolute top-2 right-10 z-10 p-1.5 bg-black/50 text-white rounded-full
+                       opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-600
+                       focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-stone-800"
+            aria-label={`Export ${character.name}`}
+            title="Export world as .cardshark.zip"
+          >
+            <Download size={16} />
+          </button>
+        )}
+
         {/* Info Button - Always show */}
         <button
           onClick={(e) => handleInfoIconClick(e, character)}
-          className={`absolute top-2 ${!isSecondarySelector ? 'right-10' : 'right-2'} z-10 p-1.5 bg-black/50 text-white rounded-full 
+          className={`absolute top-2 ${!isSecondarySelector ? (isWorld ? 'right-[4.5rem]' : 'right-10') : 'right-2'} z-10 p-1.5 bg-black/50 text-white rounded-full
                      opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600
                      focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-stone-800`}
           aria-label={`Info for ${character.name}`}
