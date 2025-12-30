@@ -8,52 +8,120 @@ cors_dev: http://localhost:6969
 auth: none (local use only)
 ```
 
-## WORLD_CARDS_API
+## WORLD_CARDS_API_V2
 ```yaml
-base_path: /api/world-cards/
+base_path: /api/world-cards-v2/
+note: PNG-based world cards using Character Card V2 spec
 
 list_worlds:
   method: GET
-  path: /api/world-cards/
-  response: array[string]
-
-get_state:
-  method: GET
-  path: /api/world-cards/{world_name}/state
-  params:
-    world_name: path
-  response:
-    world_name: string
-    current_room: string
-    rooms: object
-    player_position: string
-
-update_state:
-  method: POST
-  path: /api/world-cards/{world_name}/state
-  params:
-    world_name: path
-  body: world_state_object
-  response: success_confirmation
-
-move_player:
-  method: POST
-  path: /api/world-cards/{world_name}/move
-  params:
-    world_name: path
-  body:
-    destination: string
-    player_id: string
-  response: updated_position_and_room
+  path: /api/world-cards-v2/
+  response: array[WorldCardSummary]
 
 create_world:
   method: POST
-  path: /api/world-cards/create
-  body:
-    world_name: string
+  path: /api/world-cards-v2/
+  content_type: multipart/form-data
+  fields:
+    name: string (required)
     description: string
-    initial_room: string
-  response: created_world_state
+    grid_width: int (default 10)
+    grid_height: int (default 10)
+    first_mes: string
+    system_prompt: string
+    image: PNG file
+  response: WorldCardSummary
+  side_effect: creates PNG in characters/worlds/
+
+get_world:
+  method: GET
+  path: /api/world-cards-v2/{uuid}
+  params:
+    uuid: path (world UUID)
+  response: WorldCard (Character Card V2 + world_data extension)
+
+update_world:
+  method: PUT
+  path: /api/world-cards-v2/{uuid}
+  params:
+    uuid: path (world UUID)
+  body:
+    player_position: {x: int, y: int}
+    rooms: array[{room_uuid: string, grid_position: {x: int, y: int}}]
+  response: WorldCardSummary
+
+delete_world:
+  method: DELETE
+  path: /api/world-cards-v2/{uuid}
+  params:
+    uuid: path (world UUID)
+  side_effect: deletes PNG from characters/worlds/
+
+export_world:
+  method: GET
+  path: /api/world-cards-v2/{uuid}/export
+  params:
+    uuid: path (world UUID)
+  response: .cardshark.zip archive (world.png + rooms/*.png + characters/*.png)
+
+import_world:
+  method: POST
+  path: /api/world-cards-v2/import
+  content_type: multipart/form-data
+  fields:
+    file: .cardshark.zip archive
+  response: {world: {uuid, name, description}, message}
+  side_effect: [regenerates UUIDs, updates references, saves to characters/worlds/]
+```
+
+## ROOM_CARDS_API_V2
+```yaml
+base_path: /api/room-cards-v2/
+note: PNG-based room cards using Character Card V2 spec
+
+list_rooms:
+  method: GET
+  path: /api/room-cards-v2/
+  response: array[RoomCardSummary]
+
+create_room:
+  method: POST
+  path: /api/room-cards-v2/
+  content_type: multipart/form-data
+  fields:
+    name: string (required)
+    description: string
+    first_mes: string (introduction_text)
+    npcs: JSON array[{character_uuid, role, hostile}]
+    image: PNG file
+  response: RoomCardSummary
+  side_effect: [validates NPC UUIDs, creates PNG in characters/rooms/]
+
+get_room:
+  method: GET
+  path: /api/room-cards-v2/{uuid}
+  params:
+    uuid: path (room UUID)
+  response: RoomCard (Character Card V2 + room_data extension)
+
+update_room:
+  method: PUT
+  path: /api/room-cards-v2/{uuid}
+  params:
+    uuid: path (room UUID)
+  body:
+    name: string
+    description: string
+    first_mes: string
+    npcs: array[{character_uuid, role, hostile}]
+  response: RoomCardSummary
+
+delete_room:
+  method: DELETE
+  path: /api/room-cards-v2/{uuid}
+  params:
+    uuid: path (room UUID)
+  side_effect: deletes PNG from characters/rooms/
 ```
 
 ## CHARACTERS_API

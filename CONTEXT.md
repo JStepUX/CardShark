@@ -23,7 +23,8 @@ backend_framework: FastAPI
 backend_server: Uvicorn
 persistence_chat: SQLite (cardshark.sqlite)
 persistence_characters: PNG EXIF metadata (chara field)
-persistence_worlds: JSON (world_state.json)
+persistence_worlds: PNG EXIF metadata (V2 PNG cards)
+persistence_rooms: PNG EXIF metadata (V2 PNG cards)
 persistence_settings: JSON (settings.json)
 persistence_users: PNG EXIF metadata
 ```
@@ -50,18 +51,25 @@ identifier: chat_session_uuid
 constraint: ALL chat API calls require chat_session_uuid
 
 World:
-definition: navigable environment
-storage: world_state.json
-structure: grid of Room objects
+definition: navigable environment with PNG card storage
+storage: characters/worlds/*.png (V2 PNG card)
+structure: grid with room placements (room_uuid + grid_position)
+metadata: Character Card V2 with world_data extension
+directory: characters/worlds/
 
 Room:
 aliases: [Location]
-definition: single World grid cell
-contains: [introduction_text, description, NPCs, events]
+definition: single World grid cell with PNG card storage
+storage: characters/rooms/*.png (V2 PNG card)
+contains: [introduction_text, description, NPCs (by UUID), events]
+metadata: Character Card V2 with room_data extension
+directory: characters/rooms/
 
 NPC:
-definition: Character in Room context
-equivalence: NPC.data === Character.data
+definition: Character assigned to Room via character_uuid
+reference: room_data.npcs[].character_uuid
+includes: [role, hostile flag]
+equivalence: NPC references Character by UUID
 
 Lore:
 definition: keyword-triggered content injection
@@ -104,7 +112,7 @@ end
 subgraph contexts[contexts/]
 CC[ChatContext.tsx]
 CharC[CharacterContext.tsx]
-WSC[WorldStateContext.tsx]
+WPC[WorldPlayContext.tsx]
 APC[APIConfigContext.tsx]
 end
 subgraph api[api/]
@@ -123,12 +131,15 @@ subgraph services[services/]
 CS[chat_service.py]
 end
 subgraph handlers_be[handlers/]
-WSH[world_state_handler.py]
+WCH[world_card_handler_v2.py]
+RCH[room_card_handler.py]
+EH[export_handler.py]
 PMH[png_metadata_handler.py]
 CH[chat_handler.py]
 end
 subgraph models[models/]
-WS[world_state.py]
+WC[world_card.py]
+RC[room_card.py]
 CD[character_data.py]
 end
 end
@@ -275,26 +286,70 @@ response: v2 character data
 
 ### world_endpoints
 ```yaml
+# V2 PNG-Based World Cards API
 list_worlds:
 method: GET
-path: /api/world-cards/
-response: array
+path: /api/world-cards-v2/
+response: array of WorldCardSummary
 
-get_world_state:
+create_world:
+method: POST
+path: /api/world-cards-v2/
+request: multipart (name, description, grid_size, image)
+response: WorldCardSummary
+
+get_world:
 method: GET
-path: /api/world-cards/{world_name}/state
-response: world_state object
+path: /api/world-cards-v2/{uuid}
+response: WorldCard (Character Card V2 with world_data extension)
 
-update_world_state:
-method: POST
-path: /api/world-cards/{world_name}/state
-request: world_state object
+update_world:
+method: PUT
+path: /api/world-cards-v2/{uuid}
+request: {player_position, rooms (room placements)}
+response: WorldCardSummary
 
-move_player:
+delete_world:
+method: DELETE
+path: /api/world-cards-v2/{uuid}
+
+export_world:
+method: GET
+path: /api/world-cards-v2/{uuid}/export
+response: .cardshark.zip archive
+
+import_world:
 method: POST
-path: /api/world-cards/{world_name}/move
-request_destination: room_id
-response: updated state
+path: /api/world-cards-v2/import
+request: .cardshark.zip file
+response: imported world UUID
+
+# Room Cards API
+list_rooms:
+method: GET
+path: /api/room-cards-v2/
+response: array of RoomCardSummary
+
+create_room:
+method: POST
+path: /api/room-cards-v2/
+request: multipart (name, description, image, npcs)
+response: RoomCardSummary
+
+get_room:
+method: GET
+path: /api/room-cards-v2/{uuid}
+response: RoomCard (Character Card V2 with room_data extension)
+
+update_room:
+method: PUT
+path: /api/room-cards-v2/{uuid}
+request: {name, description, npcs}
+response: RoomCardSummary
+
+delete_room:
+method: DELETE
+path: /api/room-cards-v2/{uuid}
 ```
 
 ## INVARIANTS
@@ -331,8 +386,8 @@ start: backend/character_endpoints.py
 check: [backend/png_metadata_handler.py, frontend/src/components/CharacterInfoView.tsx, frontend/src/components/CharacterGallery.tsx]
 
 modify_world:
-start: backend/world_endpoints.py
-check: [backend/handlers/world_state_handler.py, frontend/src/views/WorldCardsView.tsx, frontend/src/views/WorldView.tsx]
+start: backend/endpoints/world_card_endpoints_v2.py
+check: [backend/handlers/world_card_handler_v2.py, backend/handlers/room_card_handler.py, backend/handlers/export_handler.py, frontend/src/views/WorldPlayView.tsx, frontend/src/views/WorldEditor.tsx, frontend/src/api/worldApi.ts]
 
 modify_api_config:
 start: frontend/src/components/APISettingsView.tsx
@@ -389,9 +444,13 @@ date: 2025-05
 change: chat persistence file->SQLite
 implication: file-based chat docs outdated
 
-world_cards:
-planning_doc: docs/plan_WorldCards2.md
-status: verify implementation matches
+v2_world_rooms_migration:
+date: 2025-12
+change: world/room persistence JSON->PNG (V2 cards)
+implementation: "Cards All The Way Down" epic
+features: [PNG-based worlds, PNG-based rooms, NPC assignments, export/import ZIP, world builder, play mode]
+removed: [world_state.json, world_state_manager.py, WorldStateApi legacy methods]
+implication: worlds and rooms are now portable PNG cards with embedded metadata
 ```
 
 ## DIRECTIVES
