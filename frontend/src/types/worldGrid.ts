@@ -2,6 +2,8 @@
 // View layer types for grid-based world UI components
 // Used by WorldEditor, WorldPlayView, MapModal, etc.
 
+import { RoomNPC } from './room';
+
 /**
  * Grid-compatible room format for UI rendering.
  * This is the view layer representation of a room on the grid.
@@ -11,7 +13,7 @@ export interface GridRoom {
     name: string;
     description: string;
     introduction_text: string;
-    npcs: string[];  // character UUIDs
+    npcs: RoomNPC[];  // Full NPC assignment objects (includes character_uuid, role, hostile, etc.)
     events: any[];
     connections: Record<string, string | null>;  // { north: 'room-id', south: null, ... }
     position: { x: number; y: number };

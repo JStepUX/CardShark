@@ -8,6 +8,7 @@
 
 import type { RoomCard } from '../types/room';
 import type { GridRoom } from '../types/worldGrid';
+import type { WorldRoomPlacement } from '../types/worldCard';
 
 /**
  * Converts a RoomCard to a GridRoom for display in the grid-based UI.
@@ -16,34 +17,55 @@ import type { GridRoom } from '../types/worldGrid';
  * and WorldPlayView. It extracts the relevant fields and formats them
  * for the grid UI components.
  *
- * @param roomCard - The RoomCard loaded from the API
+ * IMPORTANT: Instance data (NPCs, images) from WorldRoomPlacement takes precedence
+ * over room card defaults. This ensures world-specific assignments are preserved.
+ *
+ * @param roomCard - The RoomCard loaded from the API (the template)
  * @param position - Grid position where the room should be placed
+ * @param placement - Optional WorldRoomPlacement with instance-specific data (NPCs, images, state)
  * @returns GridRoom suitable for grid-based UI components
  *
  * @example
+ * // Loading from world card with instance data
  * for (const placement of worldData.rooms) {
  *   const roomCard = await roomApi.getRoom(placement.room_uuid);
- *   const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position);
+ *   const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position, placement);
  *   loadedRooms.push(gridRoom);
  * }
  *
- * @note NPCs are converted from RoomNPC[] to string[] (just UUIDs)
- * @note Events and connections are not currently populated from RoomCard
+ * @example
+ * // Importing from gallery (no instance data yet)
+ * const roomCard = await roomApi.getRoom(uuid);
+ * const gridRoom = roomCardToGridRoom(roomCard, selectedCell);
+ * // gridRoom.npcs will be deep copy of suggestedNpcs
+ *
+ * @note Instance NPCs override room card's suggestedNpcs
+ * @note Instance image_path overrides room card's default image
+ * @note Events and connections are not currently populated
  */
 export function roomCardToGridRoom(
     roomCard: RoomCard,
-    position: { x: number; y: number }
+    position: { x: number; y: number },
+    placement?: WorldRoomPlacement
 ): GridRoom {
+    // Use instance data if available, else fall back to room card defaults
+    const npcs = placement?.instance_npcs
+        ? [...placement.instance_npcs] // Use instance assignments (already full RoomNPC[])
+        : [...(roomCard.data.extensions.room_data.suggestedNpcs || [])]; // Deep copy suggested NPCs
+
+    const image_path = placement?.instance_image_path
+        || undefined; // Image accessed via roomApi.getRoomImageUrl() if not overridden
+
     return {
         id: roomCard.data.character_uuid || roomCard.data.extensions.room_data.uuid,
         name: roomCard.data.name,
         description: roomCard.data.description,
         introduction_text: roomCard.data.first_mes || '',
-        npcs: roomCard.data.extensions.room_data.npcs.map(npc => npc.character_uuid),
+        npcs, // Full RoomNPC[] objects
         events: [], // Future: could populate from room_data.events if added
         connections: { north: null, south: null, east: null, west: null }, // Future: room connections
         position,
-        image_path: undefined, // Image is accessed via roomApi.getRoomImageUrl()
+        image_path,
     };
 }
 

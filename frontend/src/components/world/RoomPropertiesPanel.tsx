@@ -99,15 +99,15 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
     }
   };
 
-  const getNpcName = (id: string) => {
-    const char = availableCharacters.find((c: any) => c.id === id);
-    return char ? char.name : id;
+  const getNpcName = (character_uuid: string) => {
+    const char = availableCharacters.find((c: any) => c.id === character_uuid);
+    return char ? char.name : character_uuid;
   };
-  const handleRemoveNPC = (npcId: string) => {
+  const handleRemoveNPC = (character_uuid: string) => {
     if (!room) return;
     onUpdate({
       ...room,
-      npcs: room.npcs.filter(id => id !== npcId),
+      npcs: room.npcs.filter(npc => npc.character_uuid !== character_uuid),
     });
   };
 
@@ -280,16 +280,18 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {room.npcs.map((npcId) => (
+                    {room.npcs.map((npc) => (
                       <div
-                        key={npcId}
+                        key={npc.character_uuid}
                         className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 flex items-center justify-between"
                       >
                         <div className="flex items-center gap-2">
                           <Users size={14} className="text-gray-500" />
-                          <span className="text-sm text-white">{getNpcName(npcId)}</span>
+                          <span className="text-sm text-white">{getNpcName(npc.character_uuid)}</span>
+                          {npc.hostile && <span className="text-xs text-red-400 ml-1">(Hostile)</span>}
+                          {npc.role && <span className="text-xs text-gray-500 ml-1">• {npc.role}</span>}
                         </div>
-                        <button className="text-gray-500 hover:text-red-400 transition-colors" onClick={() => handleRemoveNPC(npcId)}>
+                        <button className="text-gray-500 hover:text-red-400 transition-colors" onClick={() => handleRemoveNPC(npc.character_uuid)}>
                           <X size={14} />
                         </button>
                       </div>
