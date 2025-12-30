@@ -293,6 +293,7 @@ class RoomCardHandler:
     def delete_room_card(self, room_uuid: str) -> bool:
         """
         Delete a room card.
+        Also removes references from any worlds that contain this room (cascade delete).
 
         Args:
             room_uuid: Room UUID
@@ -315,10 +316,87 @@ class RoomCardHandler:
             except Exception:
                 return False
 
-            # Delete via character service (handles both DB and PNG file)
-            success = self.character_service.delete_character(room_uuid, delete_png_file=True)
+        # Cascade: Remove room from all worlds that reference it
+        self._remove_room_from_worlds(room_uuid)
 
-            if success:
-                self.logger.log_step(f"Deleted room card: {room_uuid}")
+        # Delete via character service (handles both DB and PNG file)
+        success = self.character_service.delete_character(room_uuid, delete_png_file=True)
 
-            return success
+        if success:
+            self.logger.log_step(f"Deleted room card: {room_uuid}")
+
+        return success
+
+    def _remove_room_from_worlds(self, room_uuid: str) -> None:
+        """
+        Remove a room from all worlds that reference it.
+        This is called before deleting a room to prevent orphaned references.
+
+        Args:
+            room_uuid: UUID of the room being deleted
+        """
+        characters = self.character_service.get_all_characters()
+
+        for char in characters:
+            try:
+                extensions = json.loads(char.extensions_json) if char.extensions_json else {}
+
+                # Only process world cards
+                if extensions.get("card_type") != "world":
+                    continue
+
+                world_data = extensions.get("world_data", {})
+                rooms = world_data.get("rooms", [])
+
+                # Check if this world contains the room
+                original_count = len(rooms)
+                updated_rooms = [r for r in rooms if r.get("room_uuid") != room_uuid]
+
+                if len(updated_rooms) < original_count:
+                    # Room was in this world - update it
+                    self.logger.log_step(f"Removing room {room_uuid} from world {char.character_uuid}")
+                    self._update_world_rooms(char.character_uuid, char.png_file_path, updated_rooms)
+
+            except Exception as e:
+                self.logger.log_warning(f"Error checking world {char.name} for room cascade: {e}")
+                continue
+
+    def _update_world_rooms(self, world_uuid: str, png_path: str, updated_rooms: list) -> None:
+        """
+        Update a world's rooms array after removing a deleted room.
+
+        Args:
+            world_uuid: UUID of the world to update
+            png_path: Path to the world's PNG file
+            updated_rooms: The new rooms list with the deleted room removed
+        """
+        try:
+            # Read world PNG metadata
+            metadata = self.png_handler.read_metadata(png_path)
+
+            # Update rooms in the metadata
+            if "data" in metadata and "extensions" in metadata["data"]:
+                if "world_data" in metadata["data"]["extensions"]:
+                    metadata["data"]["extensions"]["world_data"]["rooms"] = updated_rooms
+
+            # Read existing PNG image bytes
+            with open(png_path, "rb") as f:
+                image_bytes = f.read()
+
+            # Write updated metadata back to PNG
+            png_with_metadata = self.png_handler.write_metadata(image_bytes, metadata)
+
+            # Save updated PNG
+            with open(png_path, "wb") as f:
+                f.write(png_with_metadata)
+
+            self.logger.log_step(f"Updated world {world_uuid} after room removal")
+
+            # Resync database to reflect changes
+            try:
+                self.character_service.sync_character_directories()
+            except Exception as e:
+                self.logger.log_warning(f"Failed to sync after world update: {e}")
+
+        except Exception as e:
+            self.logger.log_error(f"Error updating world {world_uuid} after room deletion: {e}")

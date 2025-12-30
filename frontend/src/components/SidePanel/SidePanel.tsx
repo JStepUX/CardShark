@@ -6,7 +6,7 @@ import { CompressionToggle } from './CompressionToggle';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
 import ImagePreview from '../ImagePreview';
-import { useState, useEffect } from 'react';
+
 
 export function SidePanel({
     mode,

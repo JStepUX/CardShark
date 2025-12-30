@@ -15,15 +15,13 @@ import { MapModal } from '../components/world/MapModal';
 import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
 import type { WorldCard } from '../types/worldCard';
-import type { RoomCard } from '../types/room';
 import type { CharacterCard } from '../types/schema';
-import {
-  GridWorldState,
-  GridRoom,
-  DisplayNPC,
-  resolveNpcDisplayData,
-} from '../utils/worldStateApi';
+import type { GridWorldState, GridRoom, DisplayNPC } from '../types/worldGrid';
+import { resolveNpcDisplayData } from '../utils/worldStateApi';
+import { roomCardToGridRoom } from '../utils/roomCardAdapter';
 import { injectRoomContext, injectNPCContext } from '../utils/worldCardAdapter';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
+import { WorldLoadError } from '../components/world/WorldLoadError';
 
 interface WorldPlayViewProps {
   worldId?: string;
@@ -57,6 +55,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [missingRoomCount, setMissingRoomCount] = useState(0);
+  const [showMissingRoomWarning, setShowMissingRoomWarning] = useState(false);
 
   // Load world data from API (V2)
   useEffect(() => {
@@ -77,26 +77,26 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
         const worldData = world.data.extensions.world_data;
 
-        // Load all room cards
+        // Load all room cards, tracking any that are missing
         const loadedRooms: GridRoom[] = [];
+        let missingRooms = 0;
         for (const placement of worldData.rooms) {
           try {
             const roomCard = await roomApi.getRoom(placement.room_uuid);
 
-            const gridRoom: GridRoom = {
-              id: roomCard.data.character_uuid || placement.room_uuid,
-              name: roomCard.data.name,
-              description: roomCard.data.description,
-              introduction_text: roomCard.data.first_mes || '',
-              npcs: roomCard.data.extensions.room_data.npcs.map(npc => npc.character_uuid),
-              events: [],
-              connections: { north: null, south: null, east: null, west: null },
-              position: placement.grid_position,
-            };
+            // Convert RoomCard to GridRoom format using adapter
+            const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position);
             loadedRooms.push(gridRoom);
           } catch (err) {
             console.warn(`Failed to load room ${placement.room_uuid}:`, err);
+            missingRooms++;
           }
+        }
+
+        // Show warning if any rooms were not found (may have been deleted)
+        if (missingRooms > 0) {
+          setMissingRoomCount(missingRooms);
+          setShowMissingRoomWarning(true);
         }
 
         // Build grid for MapModal
@@ -118,12 +118,10 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           metadata: {
             name: world.data.name,
             description: world.data.description,
-            system_prompt: world.data.system_prompt || '',
           },
           grid,
           player_position: worldData.player_position,
           starting_position: worldData.starting_position,
-          world_state: worldData.world_state || {},
         };
         setWorldState(gridWorldState);
 
@@ -506,6 +504,21 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
   return (
     <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
+      {/* Missing Rooms Warning Banner */}
+      {showMissingRoomWarning && missingRoomCount > 0 && (
+        <div className="absolute top-0 left-0 right-0 bg-amber-900/90 border-b border-amber-700 px-4 py-2 flex items-center justify-between z-50">
+          <span className="text-amber-200 text-sm">
+            ⚠️ {missingRoomCount} room{missingRoomCount !== 1 ? 's' : ''} could not be loaded (may have been deleted).
+          </span>
+          <button
+            onClick={() => setShowMissingRoomWarning(false)}
+            className="text-amber-200 hover:text-white px-2 py-1 text-sm"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Chat View (Main Content) - Uses existing ChatView component */}
       <div className="flex-1 overflow-hidden">
         <ChatView disableSidePanel={true} />
@@ -548,4 +561,26 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   );
 }
 
-export default WorldPlayView;
+/**
+ * WorldPlayView wrapped with ErrorBoundary to catch rendering errors.
+ * Uses WorldLoadError as fallback for user-friendly error display.
+ */
+function WorldPlayViewWithErrorBoundary(props: WorldPlayViewProps) {
+  return (
+    <ErrorBoundary
+      fallback={
+        <WorldLoadError
+          title="World Play Error"
+          message="Something went wrong while playing this world. Please try again or go back to select a different world."
+          onRetry={() => window.location.reload()}
+          onBack={() => window.history.back()}
+        />
+      }
+      onError={(error) => console.error('WorldPlayView error:', error)}
+    >
+      <WorldPlayView {...props} />
+    </ErrorBoundary>
+  );
+}
+
+export default WorldPlayViewWithErrorBoundary;

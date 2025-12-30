@@ -9,8 +9,21 @@ import { CharacterCard } from '../types/schema';
 import { GridRoom } from './worldStateApi';
 
 /**
- * Creates a modified character card with current room information injected
- * This ensures the LLM knows the player's current location in the world
+ * Creates a modified CharacterCard with current room information injected into the scenario.
+ *
+ * This is used during World Play to provide location context to the LLM.
+ * The room description and introduction text are prepended to the world's scenario.
+ *
+ * @param worldCard - The world's character card (loaded as base character)
+ * @param currentRoom - The player's current room (from GridWorldState)
+ * @returns A cloned CharacterCard with modified scenario field
+ *
+ * @example
+ * const modifiedCard = injectRoomContext(worldCard, currentRoom);
+ * setCharacterDataOverride(modifiedCard);
+ * // LLM now receives: "You are at the Tavern. [room description] [original scenario]"
+ *
+ * @see injectNPCContext - Use this instead when an NPC is the active responder
  */
 export function injectRoomContext(
     worldCard: CharacterCard,
@@ -41,8 +54,10 @@ ${currentRoom.introduction_text || ''}
 }
 
 /**
- * Creates a modified character card for NPC conversation mode
- * Injects room, world, and NPC context for proper conversation
+ * Creates a modified CharacterCard for NPC conversation mode.
+ *
+ * Injects room, world, and NPC context for proper conversation.
+ * Use this when an NPC is summoned and should respond instead of the world narrator.
  *
  * Context assembly stack:
  * 1. world.system_prompt (in scenario)
@@ -51,6 +66,18 @@ ${currentRoom.introduction_text || ''}
  * 4. room.description (in scenario)
  * 5. character.description (preserved)
  * 6. conversation history (handled by chat system)
+ *
+ * @param npcCard - The NPC's full character card data
+ * @param worldCard - The world's character card for world-level context (optional)
+ * @param currentRoom - The room where the conversation takes place (optional)
+ * @returns A cloned CharacterCard with combined context in scenario field
+ *
+ * @example
+ * const modifiedNpcCard = injectNPCContext(npcCard, worldCard, currentRoom);
+ * setCharacterDataOverride(modifiedNpcCard);
+ * // LLM responds as the NPC with full world/room awareness
+ *
+ * @see injectRoomContext - Use this when in room/narrator mode (no specific NPC)
  */
 export function injectNPCContext(
     npcCard: CharacterCard,

@@ -1,29 +1,15 @@
 // frontend/src/utils/worldGridAdapter.ts
 // Adapter between V2 WorldState and Grid UI format
 
-import { WorldState, Room } from '../types/worldV2';
+// Import runtime types from centralized source
+import { WorldState, RuntimeRoom } from '../types/worldRuntime';
 
-// Grid UI format (used by WorldPlayView/WorldEditor)
-export interface GridRoom {
-  id: string;
-  name: string;
-  description: string;
-  introduction_text: string;
-  npcs: string[];  // Simple string IDs
-  events: any[];
-  connections: Record<string, string | null>;  // { north: 'room-id', south: null, ... }
-  position: { x: number; y: number };
-  image_path?: string;
-}
+// Import and re-export grid types from centralized source
+import type { GridRoom, GridWorldState } from '../types/worldGrid';
+export type { GridRoom, GridWorldState };
 
-export interface GridWorldState {
-  grid: (GridRoom | null)[][];
-  player_position: { x: number; y: number };
-  metadata: {
-    name: string;
-    description: string;
-  };
-}
+// Alias for backward compatibility with existing code
+type Room = RuntimeRoom;
 
 /**
  * Convert V2 Room to GridRoom

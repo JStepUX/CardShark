@@ -2,7 +2,7 @@
 // API client for V2 unified world state schema
 // This replaces worldStateApi.ts with simpler, unified types
 
-import { WorldState, Room } from '../types/worldV2';
+import { WorldState, RuntimeRoom as Room } from '../types/worldRuntime';
 
 /**
  * API client for interacting with the World Card system (V2)

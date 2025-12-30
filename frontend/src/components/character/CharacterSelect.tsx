@@ -72,7 +72,7 @@ const CharacterSelect: React.FC<CharacterSelectProps> = ({
     const handleSelectCharacter = (char: CharacterProfile) => {
         // Convert to NpcGridItem format required by WorldBuilder
         const npcItem: NpcGridItem = {
-            character_id: char.character_uuid,
+            character_uuid: char.character_uuid,
             name: char.name,
             path: char.png_file_path
         };

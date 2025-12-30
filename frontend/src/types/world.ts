@@ -1,5 +1,17 @@
 // frontend/src/types/world.ts
+// 
+// ⚠️ DEPRECATED: This file is being phased out.
+// - For runtime types (WorldState, Room, PlayerState): use './worldRuntime'
+// - For grid UI types (GridRoom, GridWorldState): use './worldGrid'
+// - For storage types (WorldCard, RoomCard): use './worldCard' and './room'
+//
 // TypeScript interfaces matching the V2 Spec in backend/models/world_data.py
+
+// Import canonical RoomNPC from room.ts to avoid duplication
+import { RoomNPC } from './room';
+
+// Re-export for convenience
+export type { RoomNPC };
 
 export enum NarratorVoice {
   DEFAULT = "default",
@@ -24,11 +36,7 @@ export interface RoomConnection {
   key_id?: string | null;
 }
 
-export interface RoomNPC {
-  character_id: string;
-  spawn_chance: number;
-  initial_dialogue?: string | null;
-}
+// Note: RoomNPC is imported from './room' - using character_uuid consistently
 
 export interface Room {
   id: string;
@@ -69,7 +77,7 @@ export interface WorldData {
 
 // Helper interface for UI components that need NPC display info
 export interface NpcGridItem {
-  character_id: string;
+  character_uuid: string;  // Aligned with RoomNPC.character_uuid
   name: string;
   path: string;
 }

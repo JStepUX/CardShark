@@ -1,132 +1,47 @@
-import { WorldData, Room, RoomNPC, RoomConnection, NarratorVoice, TimeSystem } from '../types/world';
-
+// frontend/src/utils/worldStateApi.ts
 // ============================================================================
-// DEPRECATED: This file contains legacy types and adapters for backward compatibility.
-// New code should use the V2 PNG-based world system via worldApi.ts
+// WORLD STATE API - NPC Resolution and Type Re-exports
+// ============================================================================
+// This file provides:
+//   1. Type re-exports from canonical sources for backward compatibility
+//   2. Helper function for NPC data resolution
+//
+// Type sources (canonical):
+//   - Grid UI types: '../types/worldGrid' (GridRoom, GridWorldState, DisplayNPC)
+//   - Runtime types: '../types/worldRuntime' (WorldState, RuntimeRoom, PlayerState)
+//   - Storage types: '../types/room' (RoomCard, RoomNPC)
+//   - Storage types: '../types/worldCard' (WorldCard, WorldRoomPlacement)
+//
+// For conversions between types, see:
+//   - '../utils/roomCardAdapter' - RoomCard ↔ GridRoom conversions
+//   - '../utils/worldGridAdapter' - WorldState ↔ GridWorldState conversions
+//
+// API clients:
+//   - '../api/worldApi' - World card CRUD operations
+//   - '../api/roomApi' - Room card CRUD operations
 // ============================================================================
 
-// ============================================================================
-// Grid-Based View Types (View Layer)
-// These types match what the WorldPlayView/WorldEditor components expect
-// ============================================================================
-
-export interface GridRoom {
-  id: string;
-  name: string;
-  description: string;
-  introduction_text: string;
-  npcs: string[]; // Simple string IDs
-  events: any[];
-  connections: Record<string, string | null>; // { north: 'room-id', south: null, ... }
-  position: { x: number; y: number };
-  image_path?: string;
-}
-
-export interface GridWorldState {
-  grid: (GridRoom | null)[][];
-  player_position: { x: number; y: number };
-  metadata: {
-    name: string;
-    description: string;
-    author?: string | null;
-    uuid?: string;
-    created_at?: string;
-    last_modified?: string;
-    cover_image?: string | null;
-  };
-  grid_size?: {
-    width: number;
-    height: number;
-  };
-}
-
-export interface DisplayNPC {
-  id: string;
-  name: string;
-  imageUrl: string;
-  personality?: string;
-}
-
-// ============================================================================
-// Adapter Functions
-// Convert between view layer types and codebase types at the API boundary
-// ============================================================================
+// Re-export grid types from canonical source for backward compatibility
+export type { GridRoom, GridWorldState, DisplayNPC } from '../types/worldGrid';
+import type { DisplayNPC } from '../types/worldGrid';
 
 /**
- * Convert codebase Room to grid-compatible Room
- */
-export function toGridRoom(room: Room, x: number, y: number): GridRoom {
-  // Convert RoomConnection[] to Record<string, string | null>
-  const connections: Record<string, string | null> = {
-    north: null,
-    south: null,
-    east: null,
-    west: null,
-  };
-
-  // Defensive check: ensure connections is an array
-  const roomConnections = Array.isArray(room.connections) ? room.connections : [];
-
-  roomConnections.forEach((conn) => {
-    if (conn.direction && conn.target_room_id) {
-      connections[conn.direction.toLowerCase()] = conn.target_room_id;
-    }
-  });
-
-  return {
-    id: room.id,
-    name: room.name,
-    description: room.description,
-    introduction_text: room.introduction || room.description,
-    npcs: Array.isArray(room.npcs) ? room.npcs.map((npc) => npc.character_id) : [],
-    events: [],
-    connections,
-    position: { x: room.x ?? x, y: room.y ?? y },
-    image_path: room.image_path || undefined,
-  };
-}
-
-/**
- * Convert Grid Room back to codebase Room
- */
-export function fromGridRoom(figmaRoom: GridRoom): Room {
-  // Convert Record<string, string | null> to RoomConnection[]
-  const connections: RoomConnection[] = [];
-
-  Object.entries(figmaRoom.connections).forEach(([direction, targetId]) => {
-    if (targetId) {
-      connections.push({
-        target_room_id: targetId,
-        direction: direction.charAt(0).toUpperCase() + direction.slice(1), // Capitalize
-        is_locked: false,
-      });
-    }
-  });
-
-  // Convert string[] to RoomNPC[]
-  const npcs: RoomNPC[] = figmaRoom.npcs.map((characterId) => ({
-    character_id: characterId,
-    spawn_chance: 1.0,
-  }));
-
-  return {
-    id: figmaRoom.id,
-    name: figmaRoom.name,
-    description: figmaRoom.description,
-    introduction: figmaRoom.introduction_text,
-    connections,
-    npcs,
-    items: [],
-    visited: false,
-    x: figmaRoom.position.x,
-    y: figmaRoom.position.y,
-    image_path: figmaRoom.image_path || null,
-  };
-}
-
-/**
- * Resolve NPC IDs to full character info for display
- * Fetches character data from the API
+ * Resolves NPC character UUIDs to display information for the UI.
+ *
+ * Fetches character data from the API and extracts name, image URL, and personality
+ * for each NPC. Used by NPCShowcase, SidePanel, and RoomPropertiesPanel to display
+ * NPC information without loading full character cards.
+ *
+ * @param npcIds - Array of character UUIDs assigned to a room
+ * @returns Array of DisplayNPC objects with resolved names and image URLs
+ *
+ * @example
+ * const npcs = await resolveNpcDisplayData(['uuid-1', 'uuid-2']);
+ * // Returns: [{ id: 'uuid-1', name: 'Alice', imageUrl: '/api/character-image/uuid-1.png' }]
+ *
+ * @note Returns partial results if some characters fail to resolve (no error thrown)
+ * @note Makes a network request to /api/characters on each call - consider caching
+ * @note Falls back to empty array on network error
  */
 export async function resolveNpcDisplayData(npcIds: string[]): Promise<DisplayNPC[]> {
   if (npcIds.length === 0) return [];
@@ -167,8 +82,3 @@ export async function resolveNpcDisplayData(npcIds: string[]): Promise<DisplayNP
     return [];
   }
 }
-
-// ============================================================================
-// DEPRECATED API CLIENT - Removed
-// Use worldApi.ts for V2 PNG-based world system
-// ============================================================================

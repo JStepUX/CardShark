@@ -1,4 +1,10 @@
 // frontend/src/types/worldV2.ts
+// 
+// ⚠️ DEPRECATED: This file is being phased out.
+// - For runtime types (WorldState, Room, PlayerState): use './worldRuntime'
+// - For grid UI types (GridRoom, GridWorldState): use './worldGrid'
+// - For storage types (WorldCard, RoomCard): use './worldCard' and './room'
+//
 // TypeScript interfaces matching the unified world schema
 // These types align exactly with backend/models/world_state.py
 

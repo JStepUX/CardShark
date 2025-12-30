@@ -15,8 +15,11 @@ import { RoomGalleryPicker } from '../components/world/RoomGalleryPicker';
 import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
 import type { WorldCard, WorldRoomPlacement } from '../types/worldCard';
-import type { RoomCard, RoomCardSummary } from '../types/room';
-import { GridRoom } from '../utils/worldStateApi';
+import type { RoomCardSummary } from '../types/room';
+import type { GridRoom } from '../types/worldGrid';
+import { roomCardToGridRoom } from '../utils/roomCardAdapter';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
+import { WorldLoadError } from '../components/world/WorldLoadError';
 
 interface WorldEditorProps {
   worldId?: string;
@@ -38,6 +41,8 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [availableCharacters, setAvailableCharacters] = useState<any[]>([]);
+  const [missingRoomCount, setMissingRoomCount] = useState(0);
+  const [showMissingRoomWarning, setShowMissingRoomWarning] = useState(false);
 
   // Responsive panel states
   const [isToolPanelCollapsed, setIsToolPanelCollapsed] = useState(false);
@@ -73,30 +78,29 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
         const worldData = world.data.extensions.world_data;
         setGridSize(worldData.grid_size);
 
-        // Load room cards for all placed rooms
+        // Load room cards for all placed rooms, tracking any that are missing
         const loadedRooms: GridRoom[] = [];
+        let missingRooms = 0;
         for (const placement of worldData.rooms) {
           try {
             const roomCard = await roomApi.getRoom(placement.room_uuid);
 
-            // Convert RoomCard to GridRoom format
-            const gridRoom: GridRoom = {
-              id: roomCard.data.character_uuid || placement.room_uuid,
-              name: roomCard.data.name,
-              description: roomCard.data.description,
-              introduction_text: roomCard.data.first_mes || '',
-              npcs: roomCard.data.extensions.room_data.npcs.map(npc => npc.character_uuid),
-              events: [], // Not yet implemented in V2
-              connections: { north: null, south: null, east: null, west: null }, // Not yet implemented in V2
-              position: placement.grid_position,
-            };
+            // Convert RoomCard to GridRoom format using adapter
+            const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position);
             loadedRooms.push(gridRoom);
           } catch (err) {
             console.warn(`Failed to load room ${placement.room_uuid}:`, err);
+            missingRooms++;
             // Continue loading other rooms
           }
         }
         setRooms(loadedRooms);
+
+        // Show warning if any rooms were not found (may have been deleted)
+        if (missingRooms > 0) {
+          setMissingRoomCount(missingRooms);
+          setShowMissingRoomWarning(true);
+        }
 
         // Load available characters for NPC picker (same approach as CharacterGallery)
         const charResponse = await fetch('/api/characters');
@@ -400,6 +404,21 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
   return (
     <div className="flex flex-col h-screen bg-[#0a0a0a] text-white overflow-hidden">
+      {/* Missing Rooms Warning Banner */}
+      {showMissingRoomWarning && missingRoomCount > 0 && (
+        <div className="bg-amber-900/90 border-b border-amber-700 px-4 py-2 flex items-center justify-between z-50">
+          <span className="text-amber-200 text-sm">
+            ⚠️ {missingRoomCount} room{missingRoomCount !== 1 ? 's were' : ' was'} not found and {missingRoomCount !== 1 ? 'have' : 'has'} been removed from the grid. Save to update the world.
+          </span>
+          <button
+            onClick={() => setShowMissingRoomWarning(false)}
+            className="text-amber-200 hover:text-white px-2 py-1 text-sm"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-[#141414] border-b border-[#2a2a2a] px-3 md:px-6 py-3 md:py-4 flex items-center justify-between gap-2 shrink-0 z-30 relative">
         <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
@@ -506,4 +525,26 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   );
 }
 
-export default WorldEditor;
+/**
+ * WorldEditor wrapped with ErrorBoundary to catch rendering errors.
+ * Uses WorldLoadError as fallback for user-friendly error display.
+ */
+function WorldEditorWithErrorBoundary(props: WorldEditorProps) {
+  return (
+    <ErrorBoundary
+      fallback={
+        <WorldLoadError
+          title="World Editor Error"
+          message="Something went wrong while editing this world. Please try again or go back to the gallery."
+          onRetry={() => window.location.reload()}
+          onBack={() => window.history.back()}
+        />
+      }
+      onError={(error) => console.error('WorldEditor error:', error)}
+    >
+      <WorldEditor {...props} />
+    </ErrorBoundary>
+  );
+}
+
+export default WorldEditorWithErrorBoundary;
