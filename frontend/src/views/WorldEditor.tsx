@@ -486,7 +486,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           onUpdate={handleRoomUpdate}
           onClose={() => setSelectedRoom(null)}
           onOpenNPCPicker={() => setShowNPCPicker(true)}
-          isVisible={!!selectedRoom && activeTool === 'edit'}
+          isVisible={!!selectedRoom}
         />
       </div>
 
