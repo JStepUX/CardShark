@@ -16,6 +16,7 @@ import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { useCharacter } from '../contexts/CharacterContext'; // To get character UUID
 // import { useChat } from '../contexts/ChatContext'; // Import useChat when needed
 import { useCharacterUuid } from '../hooks/useCharacterUuid'; // Import UUID hook
+import { htmlToPlainText } from '../utils/contentUtils'; // Import HTML to plain text converter
 
 interface LoreCardProps {
   item: LoreEntry;
@@ -335,7 +336,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           <label className="block text-sm text-gray-400 mb-1">Content</label>
           <RichTextEditor
             content={item.content}
-            onChange={(html) => onUpdate(item.id, { content: html })}
+            onChange={(html) => onUpdate(item.id, { content: htmlToPlainText(html) })}
             className="w-full bg-zinc-950 text-white rounded border border-zinc-800 h-32" // Apply styles, manage height
             placeholder="Enter lore content (supports Markdown)"
             preserveWhitespace={true} // Preserve formatting

@@ -14,6 +14,7 @@ import { RoomProvider, useRoom } from '../contexts/RoomContext';
 import { RoomAsCharacterProvider } from '../contexts/RoomAsCharacterContext';
 import MessagesView from './MessagesView';
 import LoreView from './LoreView';
+import { htmlToPlainText } from '../utils/contentUtils';
 
 
 /**
@@ -184,7 +185,7 @@ function RoomEditorContent() {
               <label className="block text-sm font-medium text-stone-300 mb-2">Description</label>
               <RichTextEditor
                 content={roomData.data.description}
-                onChange={(html) => handleFieldChange('description', html)}
+                onChange={(html) => handleFieldChange('description', htmlToPlainText(html))}
                 className="w-full bg-stone-800 border border-stone-700 rounded-lg h-48"
                 placeholder="Describe this room..."
                 preserveWhitespace={true}
@@ -198,7 +199,7 @@ function RoomEditorContent() {
               </label>
               <RichTextEditor
                 content={roomData.data.system_prompt || ''}
-                onChange={(html) => handleFieldChange('system_prompt', html)}
+                onChange={(html) => handleFieldChange('system_prompt', htmlToPlainText(html))}
                 className="w-full bg-stone-800 border border-stone-700 rounded-lg h-32"
                 placeholder="This is a cozy tavern where adventurers gather..."
                 preserveWhitespace={true}
