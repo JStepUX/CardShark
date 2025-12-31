@@ -85,7 +85,7 @@ const AppRoutes: React.FC = () => (
 
                   {/* Character routes with ImageHandler and ChatProvider for workshop panel */}
                   <Route path="info" element={
-                    <ChatProvider>
+                    <ChatProvider disableAutoLoad={true}>
                       <LazyRoute routeName="Character Info">
                         <ImageHandlerProvider>
                           <InfoViewRouter />
