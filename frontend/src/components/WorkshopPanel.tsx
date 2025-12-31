@@ -50,7 +50,8 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
         ...characterData,
         data: {
           ...characterData.data,
-          system_prompt: workshopPrompt
+          system_prompt: workshopPrompt,
+          first_mes: '' // Explicitly clear first_mes so it doesn't get added to the chat
         }
       };
       setCharacterDataOverride(workshopCharacter);

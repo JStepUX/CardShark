@@ -82,7 +82,7 @@ const ChatContext = createContext<ChatContextType | null>(null);
 
 export { ChatContext }; // Export the context for optional usage
 
-export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad?: boolean }> = ({ children, disableAutoLoad = false }) => {
   const { characterData } = useCharacter(); const apiConfigContext = useContext(APIConfigContext);
   const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
 
@@ -365,8 +365,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * NOTE: This effect MUST run on every mount to restore chat when returning from other routes
    */
   useEffect(() => {
-    if (!characterData?.data?.name) {
-      console.log('ChatContext useEffect: No character data name, returning');
+    if (disableAutoLoad || !characterData?.data?.name) {
+      console.log('ChatContext useEffect: Skipping auto-load (disableAutoLoad:', disableAutoLoad, 'or no character name)');
       return;
     }
 
@@ -621,7 +621,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
     setMessages(currentMsgs => { saveChat(currentMsgs); return currentMsgs; });
   }, [saveChat]); const createNewChat = useCallback(async (): Promise<string | null> => {
-    if (!characterData) return null;
+    // Use override if available (e.g. for Workshop mode with custom prompts/no greeting)
+    const effectiveCharacter = characterDataOverride || characterData;
+    if (!effectiveCharacter) return null;
 
     // Prevent concurrent chat creation
     if (isCreatingChatRef.current) {
@@ -634,7 +636,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true); setError(null); setCurrentChatId(null);
 
     try {
-      await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(characterData);
+      await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(effectiveCharacter);
       if (!newChatResp.success || !newChatResp.chat_session_uuid) {
         console.error('Failed to create new chat session backend:', newChatResp.error);
         setError(newChatResp.error || 'Failed to create new chat session.');
@@ -647,10 +649,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log(`New chat session created with ID: ${newCId}`);
 
       let initMsgs: Message[] = [];
-      if (characterData?.data.first_mes) {
-        const charN = characterData.data.name || 'Character';
+      if (effectiveCharacter.data.first_mes) {
+        const charN = effectiveCharacter.data.name || 'Character';
         const userN = currentUser?.name || 'User';
-        const subContent = characterData.data.first_mes.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN);
+        const subContent = effectiveCharacter.data.first_mes.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN);
         const firstM = MessageUtils.createAssistantMessage(subContent);
 
         // Populate variations with alternate greetings if available
@@ -673,14 +675,32 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           characterName: characterData?.data?.name || 'Unknown', chatId: newCId
         });
       }
-      setMessages(initMsgs);
+
+      // Only set initial messages if the message list is currently empty
+      // This prevents overwriting a user message that might have triggered this creation
+      if (messagesRef.current.length === 0) {
+        setMessages(initMsgs);
+      } else {
+        // If messages already exist (e.g. user prompt), keep them and prepend initMsgs if appropriate
+        // effectively merging the prompt into the new session context
+        // But typically initMsgs is just the greeting or empty.
+        // If we have a user message, we might NOT want to inject the greeting dynamically if it wasn't there.
+        // For Workshop (empty first_mes), initMsgs is empty anyway.
+        // For normal chat, if user sends message first, maybe we skip greeting? Or Prepend?
+        // Standard behavior: If user speaks first, greeting is usually suppressed or added before.
+        // Let's prepend if initMsgs exists and messagesRef doesn't start with it.
+        if (initMsgs.length > 0) {
+          setMessages(prev => [...initMsgs, ...prev]);
+        }
+      }
+
       try {
         await fetch('/api/reliable-save-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_session_uuid: newCId,
-            messages: initMsgs,
+            messages: messagesRef.current.length === 0 ? initMsgs : [...initMsgs, ...messagesRef.current], // reliable-save needs current state
             title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
           })
         });
@@ -702,7 +722,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       isCreatingChatRef.current = false; // Reset the creation flag
     }
-  }, [characterData, currentUser, saveChat]);
+  }, [characterData, characterDataOverride, currentUser, saveChat]);
 
   useEffect(() => { createNewChatRef.current = createNewChat; }, [createNewChat]);
 
