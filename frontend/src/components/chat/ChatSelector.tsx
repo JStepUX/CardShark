@@ -431,17 +431,6 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         if (result.success) {
           // Refresh chat list
           await loadAvailableChats();
-
-          // Show success message with warnings if any
-          const count = result.data.count;
-          const warnings = result.data.warnings || [];
-
-          if (warnings.length > 0) {
-            console.warn(`Imported ${count} chat(s) with ${warnings.length} warning(s):`, warnings);
-            setImportError(`Imported ${count} chat(s) with ${warnings.length} warning(s). Check console for details.`);
-          } else {
-            console.log(`Successfully imported ${count} chat session(s)`);
-          }
         } else {
           throw new Error(result.message || 'Import failed');
         }

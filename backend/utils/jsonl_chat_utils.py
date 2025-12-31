@@ -312,7 +312,7 @@ def import_jsonl_to_chat(
     jsonl_content: str,
     character_uuid: str,
     user_uuid: Optional[str] = None
-) -> Tuple[List[str], List[str]]:
+) -> List[str]:
     """
     Import JSONL formatted chat into CardShark database with smart tolerance.
     Handles variations in field names, date formats, and missing data gracefully.
@@ -324,22 +324,18 @@ def import_jsonl_to_chat(
         user_uuid: Optional user UUID
 
     Returns:
-        Tuple of (created_session_uuids, warnings)
+        List of created chat_session_uuids
     """
     import uuid
     from backend.sql_models import ChatSession, ChatMessage
 
     lines = jsonl_content.strip().split('\n')
     created_sessions = []
-    warnings = []
 
     current_session = None
     current_messages = []
-    line_number = 0
 
     for line in lines:
-        line_number += 1
-
         if not line.strip():
             # Blank line - save current session if exists
             if current_session and current_messages:
@@ -351,9 +347,8 @@ def import_jsonl_to_chat(
 
         try:
             data = json.loads(line)
-        except json.JSONDecodeError as e:
-            warnings.append(f"Line {line_number}: Invalid JSON - {str(e)}")
-            continue
+        except json.JSONDecodeError:
+            continue  # Skip invalid JSON lines
 
         # Detect if this is a metadata line (session start)
         if is_metadata_line(data):
@@ -367,10 +362,7 @@ def import_jsonl_to_chat(
 
             # Parse create_date with smart parsing
             create_date_str = fuzzy_get(data, 'create_date', 'date', 'timestamp', default='')
-            start_time = smart_parse_date(create_date_str)
-            if not start_time:
-                start_time = datetime.now()
-                warnings.append(f"Line {line_number}: Could not parse date '{create_date_str}', using current time")
+            start_time = smart_parse_date(create_date_str) or datetime.now()
 
             # Get character name for title
             char_name = fuzzy_get(data, 'character_name', 'char_name', 'character', default='Chat')
@@ -401,7 +393,6 @@ def import_jsonl_to_chat(
                     export_format_version="1.1.0"
                 )
                 current_messages = []
-                warnings.append(f"Line {line_number}: Found message without session metadata, creating implicit session")
 
             message_uuid = str(uuid.uuid4())
 
@@ -410,14 +401,10 @@ def import_jsonl_to_chat(
 
             # Get message content with fuzzy matching
             content = fuzzy_get(data, 'mes', 'message', 'content', 'text', default='')
-            if not content:
-                warnings.append(f"Line {line_number}: Empty message content")
 
             # Parse send_date with smart parsing
             send_date_str = fuzzy_get(data, 'send_date', 'timestamp', 'date', 'time', default='')
-            timestamp = smart_parse_date(send_date_str)
-            if not timestamp:
-                timestamp = datetime.now()
+            timestamp = smart_parse_date(send_date_str) or datetime.now()
 
             # Build metadata - preserve everything for compatibility
             metadata = {
@@ -475,16 +462,12 @@ def import_jsonl_to_chat(
 
             current_messages.append(message)
 
-        else:
-            # Unknown line format
-            warnings.append(f"Line {line_number}: Unrecognized format, skipping")
-
     # Save last session if exists
     if current_session and current_messages:
         _save_imported_session(db, current_session, current_messages)
         created_sessions.append(current_session.chat_session_uuid)
 
-    return created_sessions, warnings
+    return created_sessions
 
 
 def _save_imported_session(
