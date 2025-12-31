@@ -440,8 +440,8 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             </button>
           )}
 
-          {/* Workshop button - only shown in primary view */}
-          {!isSecondary && (
+          {/* Workshop button - only shown in primary view when character is loaded */}
+          {!isSecondary && characterData && (
             <button
               onClick={() => setWorkshopMode(!isWorkshopMode)}
               className={`flex items-center gap-2 px-4 py-2 ${isWorkshopMode
