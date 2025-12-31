@@ -19,7 +19,6 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
     isGenerating,
     currentUser,
     generateResponse,
-    createNewChat,
     setCharacterDataOverride,
     error,
     clearError
@@ -46,19 +45,18 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
         getDefaultPrompt(StandardPromptKey.WORKSHOP_PROMPT);
 
       // Override system prompt for workshop mode
+      // Note: We don't override first_mes because we don't want to use it at all
       const workshopCharacter = {
         ...characterData,
         data: {
           ...characterData.data,
-          system_prompt: workshopPrompt,
-          // Override first message for workshop context
-          first_mes: `Hello! I'm here to help you develop ${characterData.data.name}. What aspect of the character would you like to work on today?`
+          system_prompt: workshopPrompt
         }
       };
       setCharacterDataOverride(workshopCharacter);
 
-      // Create new chat session
-      await createNewChat();
+      // Don't create a chat session - Workshop doesn't need one
+      // The chat context will handle message state without persisting
       setIsInitialized(true);
 
       console.log('Workshop session initialized successfully');
@@ -71,7 +69,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
       console.log('Cleaning up workshop session');
       setCharacterDataOverride(null);
     };
-  }, [characterData, isInitialized, createNewChat, setCharacterDataOverride, getPrompt, getDefaultPrompt]);
+  }, [characterData, isInitialized, setCharacterDataOverride, getPrompt, getDefaultPrompt]);
 
   const handleSend = async (text: string) => {
     if (!text.trim() || isGenerating) return;
@@ -120,6 +118,16 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-2"></div>
               <div>Initializing workshop session...</div>
+            </div>
+          </div>
+        )}
+
+        {/* Initial Greeting - shown when initialized but no messages yet */}
+        {isInitialized && messages.length === 0 && (
+          <div className="flex justify-start mb-4">
+            <div className="max-w-[80%] bg-stone-800 rounded-lg p-4 shadow-md">
+              <div className="text-sm text-gray-400 mb-1">Workshop Assistant</div>
+              <div className="text-gray-100">How can I help you?</div>
             </div>
           </div>
         )}
