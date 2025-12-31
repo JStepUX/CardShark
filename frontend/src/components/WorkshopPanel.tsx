@@ -147,6 +147,8 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
             onContinue={() => {}}
             onDelete={() => {}}
             onContentChange={() => {}}
+            onNextVariation={() => {}}
+            onPrevVariation={() => {}}
           />
         ))}
         <div ref={messagesEndRef} />
@@ -159,7 +161,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
           isGenerating={isGenerating}
           currentUser={null}
           onUserSelect={() => {}} // No user switching in workshop
-          emotion={{ type: 'neutral' }} // Static emotion for workshop
+          emotion={{ primary: 'neutral', intensity: 0, valence: 0, arousal: 0 }} // Static emotion for workshop
         />
       </div>
     </div>
