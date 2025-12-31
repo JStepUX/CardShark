@@ -83,13 +83,15 @@ const AppRoutes: React.FC = () => (
                     </LazyRoute>
                   } />
 
-                  {/* Character routes with ImageHandler - basic editing, no chat needed */}
+                  {/* Character routes with ImageHandler and ChatProvider for workshop panel */}
                   <Route path="info" element={
-                    <LazyRoute routeName="Character Info">
-                      <ImageHandlerProvider>
-                        <InfoViewRouter />
-                      </ImageHandlerProvider>
-                    </LazyRoute>
+                    <ChatProvider>
+                      <LazyRoute routeName="Character Info">
+                        <ImageHandlerProvider>
+                          <InfoViewRouter />
+                        </ImageHandlerProvider>
+                      </LazyRoute>
+                    </ChatProvider>
                   } />
 
                   <Route path="lore" element={

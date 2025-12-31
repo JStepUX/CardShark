@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Edit, Copy } from 'lucide-react';
+import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Edit, Copy, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
@@ -82,7 +82,7 @@ interface CharacterInfoViewProps {
 const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = false }) => {  // Use the appropriate context based on the mode
   const navigate = useNavigate();
   const primaryContext = useCharacter();
-  const { isCompareMode, setCompareMode, secondaryCharacterData, setSecondaryCharacterData } = useComparison();
+  const { isCompareMode, setCompareMode, isWorkshopMode, setWorkshopMode, secondaryCharacterData, setSecondaryCharacterData } = useComparison();
 
   // Determine which data to use based on isSecondary prop
   const { characterData, setCharacterData } = isSecondary
@@ -437,6 +437,21 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             >
               <SplitSquareVertical className="w-4 h-4" />
               {isCompareMode ? "Close Compare" : "Compare"}
+            </button>
+          )}
+
+          {/* Workshop button - only shown in primary view */}
+          {!isSecondary && (
+            <button
+              onClick={() => setWorkshopMode(!isWorkshopMode)}
+              className={`flex items-center gap-2 px-4 py-2 ${isWorkshopMode
+                ? 'bg-purple-700 text-white'
+                : 'bg-transparent hover:bg-stone-800 text-white'
+                } rounded-lg transition-colors`}
+              title={isWorkshopMode ? "Close workshop" : "Open character workshop"}
+            >
+              <Wrench className="w-4 h-4" />
+              {isWorkshopMode ? "Close Workshop" : "Workshop"}
             </button>
           )}
 
