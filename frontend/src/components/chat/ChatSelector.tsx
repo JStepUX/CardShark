@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useChat } from '../../contexts/ChatContext';
 
-import { Plus, RefreshCw, MessageSquare, Trash2, AlertTriangle, X, Search, Filter, Download, SortAsc, SortDesc, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, MessageSquare, Trash2, AlertTriangle, X, Search, Filter, Download, Upload, SortAsc, SortDesc, ChevronDown } from 'lucide-react';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 
 interface ChatInfo {
@@ -42,6 +42,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   const [isExporting, setIsExporting] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load available chats when character changes
   useEffect(() => {
@@ -399,6 +402,56 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     }
   };
 
+  const handleImportChat = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !characterData) return;
+
+    setIsImporting(true);
+    setImportError(null);
+
+    try {
+      // Read file content
+      const content = await file.text();
+
+      // Send to backend
+      const response = await fetch('/api/import-chat-jsonl', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          character_uuid: characterData.data?.character_uuid,
+          jsonl_content: content,
+          user_uuid: null // TODO: get from user context if available
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Refresh chat list
+          await loadAvailableChats();
+          // Show success message
+          console.log(`Successfully imported ${result.data.count} chat session(s)`);
+        } else {
+          throw new Error(result.message || 'Import failed');
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Import failed with status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error importing chat:', error);
+      setImportError(error instanceof Error ? error.message : 'Failed to import chat');
+    } finally {
+      setIsImporting(false);
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   // Helper to format date from ISO string
   const formatDate = (dateString: string): string => {
     try {
@@ -565,6 +618,21 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
               </div>
             )}
           </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".jsonl"
+            onChange={handleImportChat}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isImporting}
+            title="Import chat from JSONL"
+          >
+            <Upload size={16} className={isImporting ? 'animate-pulse' : ''} />
+          </button>
           <button
             onClick={handleCreateNewChat}
             className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -667,6 +735,18 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             <span>{error}</span>
           </div>
           <button onClick={() => setError(null)} className="text-red-300 hover:text-red-100">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {importError && (
+        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded flex items-center justify-between">
+          <div className="flex items-center">
+            <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+            <span>Import Error: {importError}</span>
+          </div>
+          <button onClick={() => setImportError(null)} className="text-red-300 hover:text-red-100">
             <X size={16} />
           </button>
         </div>

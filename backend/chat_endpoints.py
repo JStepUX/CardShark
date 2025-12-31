@@ -16,6 +16,7 @@ from backend.services.database_chat_endpoint_adapters import DatabaseChatEndpoin
 from backend.database import get_db
 from backend.dependencies import get_character_service_dependency, get_logger, get_database_chat_endpoint_adapters, get_database_chat_manager # Import dependencies
 from backend.log_manager import LogManager
+from backend.utils.jsonl_chat_utils import export_multiple_chats_to_jsonl, import_jsonl_to_chat
 import logging
 
 # Import standardized response models and error handling
@@ -987,8 +988,121 @@ def update_session_settings_endpoint(
         
         response = SessionSettingsResponse(success=True)
         return create_data_response(response)
-        
+
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
         raise handle_generic_error(e, "updating session settings")
+
+
+# =============================================================================
+# JSONL IMPORT/EXPORT ENDPOINTS
+# =============================================================================
+
+@router.post("/export-chats-bulk")
+def export_chats_bulk_endpoint(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Export multiple chat sessions to JSONL format.
+    Compatible with SillyTavern/TavernAI format.
+
+    Payload:
+        character_uuid: UUID of the character
+        chat_session_uuids: List of chat session UUIDs to export
+
+    Returns:
+        JSON response with:
+            - content: JSONL formatted string
+            - filename: Suggested filename for download
+    """
+    try:
+        character_uuid = payload.get("character_uuid")
+        chat_session_uuids = payload.get("chat_session_uuids", [])
+
+        if not character_uuid:
+            raise ValidationException("character_uuid is required")
+
+        if not chat_session_uuids:
+            raise ValidationException("chat_session_uuids is required and must not be empty")
+
+        # Export chats to JSONL
+        content, filename = export_multiple_chats_to_jsonl(
+            db=db,
+            chat_session_uuids=chat_session_uuids,
+            character_uuid=character_uuid
+        )
+
+        return create_data_response({
+            "content": content,
+            "filename": filename
+        })
+
+    except ValidationException:
+        raise
+    except ValueError as e:
+        raise ValidationException(str(e))
+    except Exception as e:
+        logger.error(f"Error exporting chats to JSONL: {e}", exc_info=True)
+        raise handle_generic_error(e, "exporting chats to JSONL")
+
+
+@router.post("/import-chat-jsonl")
+def import_chat_jsonl_endpoint(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Import chat session(s) from JSONL format.
+    Compatible with SillyTavern/TavernAI format.
+
+    Payload:
+        character_uuid: UUID of the character to associate with
+        jsonl_content: JSONL formatted string
+        user_uuid: Optional UUID of the user profile
+
+    Returns:
+        JSON response with:
+            - created_sessions: List of created chat session UUIDs
+            - count: Number of sessions created
+    """
+    try:
+        character_uuid = payload.get("character_uuid")
+        jsonl_content = payload.get("jsonl_content")
+        user_uuid = payload.get("user_uuid")
+
+        if not character_uuid:
+            raise ValidationException("character_uuid is required")
+
+        if not jsonl_content:
+            raise ValidationException("jsonl_content is required")
+
+        # Verify character exists
+        character = db.query(sql_models.Character).filter(
+            sql_models.Character.character_uuid == character_uuid
+        ).first()
+
+        if not character:
+            raise NotFoundException(f"Character {character_uuid} not found")
+
+        # Import JSONL to database
+        created_sessions = import_jsonl_to_chat(
+            db=db,
+            jsonl_content=jsonl_content,
+            character_uuid=character_uuid,
+            user_uuid=user_uuid
+        )
+
+        return create_data_response({
+            "created_sessions": created_sessions,
+            "count": len(created_sessions)
+        })
+
+    except (ValidationException, NotFoundException):
+        raise
+    except Exception as e:
+        logger.error(f"Error importing JSONL chat: {e}", exc_info=True)
+        raise handle_generic_error(e, "importing JSONL chat")
