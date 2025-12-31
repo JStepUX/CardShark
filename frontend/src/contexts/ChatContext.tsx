@@ -656,8 +656,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         const firstM = MessageUtils.createAssistantMessage(subContent);
 
         // Populate variations with alternate greetings if available
-        if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
-          const alternates = characterData.data.alternate_greetings.map(alt =>
+        if (effectiveCharacter.data.alternate_greetings && Array.isArray(effectiveCharacter.data.alternate_greetings) && effectiveCharacter.data.alternate_greetings.length > 0) {
+          const alternates = effectiveCharacter.data.alternate_greetings.map(alt =>
             alt.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN)
           );
           firstM.variations = [subContent, ...alternates];
@@ -667,12 +667,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         initMsgs = [firstM];
         setLastContextWindow({
           type: 'new_chat_first_message', timestamp: new Date().toISOString(),
-          characterName: characterData.data?.name || 'Unknown', firstMessage: characterData.data.first_mes, chatId: newCId
+          characterName: effectiveCharacter.data?.name || 'Unknown', firstMessage: effectiveCharacter.data.first_mes, chatId: newCId
         });
       } else {
         setLastContextWindow({
           type: 'new_chat_empty', timestamp: new Date().toISOString(),
-          characterName: characterData?.data?.name || 'Unknown', chatId: newCId
+          characterName: effectiveCharacter?.data?.name || 'Unknown', chatId: newCId
         });
       }
 
@@ -701,7 +701,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           body: JSON.stringify({
             chat_session_uuid: newCId,
             messages: messagesRef.current.length === 0 ? initMsgs : [...initMsgs, ...messagesRef.current], // reliable-save needs current state
-            title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
+            title: effectiveCharacter.data.name ? `Chat with ${effectiveCharacter.data.name}` : undefined
           })
         });
       } catch (err) {
