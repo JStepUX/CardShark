@@ -12,6 +12,7 @@ interface ChatInputAreaProps {
   currentUser: UserProfile | null;
   onUserSelect: () => void;
   emotion: EmotionState;
+  hideUserAvatar?: boolean; // Optional prop to hide user avatar
 }
 
 const MIN_INPUT_HEIGHT = 128; // h-32 in pixels
@@ -24,6 +25,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   currentUser,
   onUserSelect,
   emotion,
+  hideUserAvatar = false,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [imageError, setImageError] = useState(false);
@@ -96,27 +98,29 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
         </div>
       )}
       <div className="flex items-start gap-4">
-        {/* User Image */}
-        <div
-          onClick={onUserSelect}
-          className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden flex-shrink-0"
-        >
-          {currentUser && !imageError ? (
-            <img
-              src={`/api/user-image/${encodeURIComponent(currentUser.filename)}`}
-              alt={currentUser.name || 'User'}
-              className="w-full h-full object-cover"
-              onError={() => {
-                console.error('User image load failed');
-                setImageError(true);
-              }}
-            />
-          ) : (
-            <div className="w-full h-full bg-transparent border border-gray-700 rounded-lg flex items-center justify-center">
-              <User className="text-gray-400" size={24} />
-            </div>
-          )}
-        </div>
+        {/* User Image - conditionally rendered */}
+        {!hideUserAvatar && (
+          <div
+            onClick={onUserSelect}
+            className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden flex-shrink-0"
+          >
+            {currentUser && !imageError ? (
+              <img
+                src={`/api/user-image/${encodeURIComponent(currentUser.filename)}`}
+                alt={currentUser.name || 'User'}
+                className="w-full h-full object-cover"
+                onError={() => {
+                  console.error('User image load failed');
+                  setImageError(true);
+                }}
+              />
+            ) : (
+              <div className="w-full h-full bg-transparent border border-gray-700 rounded-lg flex items-center justify-center">
+                <User className="text-gray-400" size={24} />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Text Input Area with Auto-grow */}
         <div

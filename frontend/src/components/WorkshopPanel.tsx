@@ -43,7 +43,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
 
       // Get workshop prompt from settings (or use default)
       const workshopPrompt = getPrompt(StandardPromptKey.WORKSHOP_PROMPT) ||
-                            getDefaultPrompt(StandardPromptKey.WORKSHOP_PROMPT);
+        getDefaultPrompt(StandardPromptKey.WORKSHOP_PROMPT);
 
       // Override system prompt for workshop mode
       const workshopCharacter = {
@@ -133,12 +133,12 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
             currentUser={currentUser || undefined}
             isGenerating={isGenerating && message.role === 'assistant'}
             // Simplified handlers for workshop v1
-            onTryAgain={() => {}}
-            onContinue={() => {}}
-            onDelete={() => {}}
-            onContentChange={() => {}}
-            onNextVariation={() => {}}
-            onPrevVariation={() => {}}
+            onTryAgain={() => { }}
+            onContinue={() => { }}
+            onDelete={() => { }}
+            onContentChange={() => { }}
+            onNextVariation={() => { }}
+            onPrevVariation={() => { }}
           />
         ))}
         <div ref={messagesEndRef} />
@@ -150,8 +150,9 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
           onSend={handleSend}
           isGenerating={isGenerating}
           currentUser={null}
-          onUserSelect={() => {}} // No user switching in workshop
+          onUserSelect={() => { }} // No user switching in workshop
           emotion={{ primary: 'neutral', intensity: 0, valence: 0, arousal: 0 }} // Static emotion for workshop
+          hideUserAvatar={true} // Hide user avatar in workshop mode
         />
       </div>
     </div>
