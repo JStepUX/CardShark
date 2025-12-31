@@ -32,7 +32,7 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({ settingsChangeCount }
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-stone-900 overflow-hidden">
+    <div className="h-full flex flex-col bg-stone-900 overflow-hidden">
       {/* Header */}
       <div className="p-4 flex justify-between items-center border-b border-stone-800">
         <div className="flex items-center">
@@ -72,7 +72,7 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({ settingsChangeCount }
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-hidden">
         {showGallery ? (
           // Show the character gallery for selection
           <CharacterGallery 

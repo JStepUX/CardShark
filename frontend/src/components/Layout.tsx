@@ -359,36 +359,33 @@ const Layout: React.FC = () => {
         onImageChange={handleImageChange}
       />
 
-      {/* Main Content Area - uses flex to properly divide space */}
-      <div className={`flex flex-col flex-1 ${(isCompareMode || isWorkshopMode) ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900`}>
-        {/* Content wrapper - flex row for side-by-side layout, takes remaining space after banner offset */}
-        <div className="flex flex-1 min-h-0 pb-8">
-          {/* Main content column */}
-          <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} min-h-0 overflow-hidden relative z-0`}>
-            {error && (
-              <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
-            )}
-            {isLoading && (
-              <div className="px-8 py-4 bg-blue-900/50 text-blue-200">
-                Loading character data...
-              </div>
-            )}
-            {/* Render the matched nested route component here */}
-            <Outlet />
-          </div>
-
-          {/* Panel slot - supports both comparison and workshop panels */}
-          {(isCompareMode || isWorkshopMode) && (
-            <div className="flex flex-col w-1/2 min-h-0 border-l border-stone-800 relative z-20 overflow-hidden">
-              {isCompareMode && <ComparisonPanel settingsChangeCount={settingsChangeCount} />}
-              {isWorkshopMode && (
-                <ChatProvider disableAutoLoad={true}>
-                  <WorkshopPanel onClose={() => setWorkshopMode(false)} />
-                </ChatProvider>
-              )}
+      {/* Main Content Area - single flex container for side-by-side layout */}
+      <div className={`flex flex-1 ${(isCompareMode || isWorkshopMode) ? 'min-w-0' : 'min-w-[600px]'} pb-8 bg-stone-900 overflow-hidden`}>
+        {/* Main content column */}
+        <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} h-full overflow-hidden relative z-0`}>
+          {error && (
+            <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
+          )}
+          {isLoading && (
+            <div className="flex-none px-8 py-4 bg-blue-900/50 text-blue-200">
+              Loading character data...
             </div>
           )}
+          {/* Render the matched nested route component here */}
+          <Outlet />
         </div>
+
+        {/* Panel slot - supports both comparison and workshop panels */}
+        {(isCompareMode || isWorkshopMode) && (
+          <div className="flex flex-col w-1/2 h-full border-l border-stone-800 relative z-20 overflow-hidden">
+            {isCompareMode && <ComparisonPanel settingsChangeCount={settingsChangeCount} />}
+            {isWorkshopMode && (
+              <ChatProvider disableAutoLoad={true}>
+                <WorkshopPanel onClose={() => setWorkshopMode(false)} />
+              </ChatProvider>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Dialogs */}
