@@ -9,6 +9,7 @@ import ComparisonPanel from "./ComparisonPanel";
 import WorkshopPanel from "./WorkshopPanel";
 import SideNav from "./SideNav";
 import { BottomBanner } from "./BottomBanner";
+import { ChatProvider } from "../contexts/ChatContext";
 
 const Layout: React.FC = () => {
   // File handling refs
@@ -375,7 +376,11 @@ const Layout: React.FC = () => {
         {(isCompareMode || isWorkshopMode) && (
           <div className="w-1/2 border-l border-stone-800">
             {isCompareMode && <ComparisonPanel settingsChangeCount={settingsChangeCount} />}
-            {isWorkshopMode && <WorkshopPanel onClose={() => setWorkshopMode(false)} />}
+            {isWorkshopMode && (
+              <ChatProvider>
+                <WorkshopPanel onClose={() => setWorkshopMode(false)} />
+              </ChatProvider>
+            )}
           </div>
         )}
       </div>
