@@ -12,6 +12,43 @@ export function htmlToText(html: string): string {
 }
 
 /**
+ * Convert HTML to plain text while preserving paragraph structure and line breaks
+ * This is specifically for converting TipTap editor HTML back to plain text for storage
+ */
+export function htmlToPlainText(html: string): string {
+  if (!html) return '';
+
+  // If already plain text (no HTML tags), return as is
+  if (!html.includes('<')) {
+    return html;
+  }
+
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+
+  // Replace <p> tags with double newlines (paragraph breaks)
+  // Replace <br> tags with single newlines
+  let text = html
+    .replace(/<\/p><p[^>]*>/gi, '\n\n')  // Paragraph breaks
+    .replace(/<p[^>]*>/gi, '')            // Opening <p> tags
+    .replace(/<\/p>/gi, '')                // Closing </p> tags
+    .replace(/<br\s*\/?>/gi, '\n')        // <br> tags
+    .replace(/<\/div><div[^>]*>/gi, '\n') // <div> breaks
+    .replace(/<div[^>]*>/gi, '')          // Opening <div> tags
+    .replace(/<\/div>/gi, '');            // Closing </div> tags
+
+  // Use a temporary div to decode HTML entities and strip remaining tags
+  temp.innerHTML = text;
+  text = temp.textContent || temp.innerText || '';
+
+  // Clean up excessive newlines (more than 2 consecutive)
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  // Trim leading/trailing whitespace
+  return text.trim();
+}
+
+/**
  * Convert markdown image syntax to HTML
  */
 export function markdownToHtml(markdown: string): string {

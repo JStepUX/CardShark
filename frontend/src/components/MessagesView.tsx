@@ -5,6 +5,7 @@ import { useAPIConfig } from '../contexts/APIConfigContext'; // API configuratio
 import RichTextEditor from './RichTextEditor'; // Import the RichTextEditor
 import { ChatStorage } from '../services/chatStorage'; // Service to call backend
 import LoadingSpinner from './common/LoadingSpinner'; // Added
+import { htmlToPlainText } from '../utils/contentUtils'; // Import HTML to plain text converter
 
 // Interface defining the structure of a message within this component's state
 interface Message {
@@ -46,7 +47,7 @@ const MessageCard: React.FC<{
     {/* Rich text editor for editing the message content */}
     <RichTextEditor
       content={message.content}
-      onChange={(html) => onUpdate(message.id, { content: html })} // Pass HTML to update handler
+      onChange={(html) => onUpdate(message.id, { content: htmlToPlainText(html) })} // Convert HTML to plain text before storing
       className="w-full bg-zinc-950 text-gray-100 rounded min-h-[100px] border border-zinc-700 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500" // Apply styles, use focus-within for border
       placeholder="Enter message content (supports Markdown)..."
       preserveWhitespace={true} // Preserve formatting

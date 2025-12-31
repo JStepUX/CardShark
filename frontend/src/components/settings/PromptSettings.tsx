@@ -10,6 +10,7 @@ import {
   newPromptSchema,
   PromptExportSchema
 } from '../../types/promptSchemas';
+import { htmlToPlainText } from '../../utils/contentUtils';
 
 interface PromptEditorProps {
   promptKey: string;
@@ -114,8 +115,9 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
       <RichTextEditor
         content={value}
         onChange={(html) => { // Use html from editor
-          setValue(html);
-          setIsEdited(html !== getPrompt(promptKey));
+          const plainText = htmlToPlainText(html);
+          setValue(plainText);
+          setIsEdited(plainText !== getPrompt(promptKey));
         }}
         className="w-full bg-stone-950 rounded-lg h-56 font-mono" // Apply styles
         placeholder="Enter prompt template (supports Markdown)..."
@@ -215,7 +217,7 @@ const NewPromptDialog: React.FC<NewPromptDialogProps> = ({
           </label>
           <RichTextEditor
             content={template}
-            onChange={setTemplate} // Pass the HTML content
+            onChange={(html) => setTemplate(htmlToPlainText(html))} // Convert HTML to plain text
             className="w-full bg-stone-950 border border-stone-700 rounded-lg h-40 font-mono" // Apply styles
             placeholder="Enter prompt template with variables like {{char}}, {{user}}, etc. (supports Markdown)"
             preserveWhitespace={true} // Preserve formatting

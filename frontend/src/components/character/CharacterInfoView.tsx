@@ -10,6 +10,7 @@ import { Dialog } from '../common/Dialog';
 import MessagesView from '../MessagesView';
 import { saveCharacterCardToPng } from '../../handlers/exportHandlers';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
+import { htmlToPlainText } from '../../utils/contentUtils';
 
 // Dedicated modal version of JsonViewer without redundant title
 const JsonViewerModal: React.FC<{
@@ -568,7 +569,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 className={`bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`} // Apply styles to container
                 placeholder="Character description (supports Markdown)"
                 content={getFieldValue('description')}
-                onChange={(html) => handleFieldChange('description', html)}
+                onChange={(html) => handleFieldChange('description', htmlToPlainText(html))}
                 preserveWhitespace={true} // Preserve newlines/whitespace
               />
             </div>
@@ -580,7 +581,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-32`}
                 placeholder="Current situation or context (supports Markdown)"
                 content={getFieldValue('scenario')}
-                onChange={(html) => handleFieldChange('scenario', html)}
+                onChange={(html) => handleFieldChange('scenario', htmlToPlainText(html))}
                 preserveWhitespace={true} // Preserve newlines/whitespace
               />
             </div>
@@ -592,7 +593,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-32`} // Apply styles, manage height
                 placeholder="Key personality traits (supports Markdown)"
                 content={getFieldValue('personality')}
-                onChange={(html) => handleFieldChange('personality', html)}
+                onChange={(html) => handleFieldChange('personality', htmlToPlainText(html))}
                 preserveWhitespace={true}
               />
             </div>
@@ -604,7 +605,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`} // Apply styles, manage height
                 placeholder="Examples of character dialogue and interactions (supports Markdown)"
                 content={getFieldValue('mes_example')}
-                onChange={(html) => handleFieldChange('mes_example', html)}
+                onChange={(html) => handleFieldChange('mes_example', htmlToPlainText(html))}
                 preserveWhitespace={true} // Crucial for dialogue formatting
               />
             </div>
@@ -617,7 +618,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                   className={`w-full h-64 bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg text-base leading-relaxed`} // Apply styles, manage height
                   placeholder="AI instructions (supports Markdown)"
                   content={getFieldValue('system_prompt')}
-                  onChange={(html) => handleFieldChange('system_prompt', html)}
+                  onChange={(html) => handleFieldChange('system_prompt', htmlToPlainText(html))}
                   preserveWhitespace={true} // Important for prompt structure
                 />
               </div>
