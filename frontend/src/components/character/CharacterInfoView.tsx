@@ -419,8 +419,8 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   }, [showOverflowMenu]);
 
   return (
-    <>
-      <div className="p-8 pb-4 flex flex-col gap-4">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-none p-8 pb-4 flex flex-col gap-4">
         <h2 className="text-lg font-semibold">
           {isSecondary ? "Comparison View" : "Primary Character Info"}
         </h2>
@@ -720,7 +720,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
         onCancel={() => setIsDeleteConfirmOpen(false)}
         onConfirm={handleDelete}
       />
-    </>
+    </div>
   );
 };
 
