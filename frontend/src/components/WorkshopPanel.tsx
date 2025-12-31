@@ -27,10 +27,13 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
 
   const [isInitialized, setIsInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages - scroll container directly to avoid affecting parent
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   }, [messages]);
 
   // Initialize workshop session on mount
@@ -97,7 +100,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Error Display */}
         {error && (
           <div className="p-3 bg-red-900/50 text-red-200 rounded-lg">
