@@ -4,6 +4,7 @@ import RichTextEditor from '../RichTextEditor';
 import MoodIndicator from '../MoodIndicator';
 import { UserProfile } from '../../types/messages';
 import { EmotionState } from '../../hooks/useEmotionDetection';
+import { htmlToPlainText } from '../../utils/contentUtils';
 
 interface ChatInputAreaProps {
   onSend: (text: string) => void;
@@ -130,7 +131,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
         >
           <RichTextEditor
             content={inputValue}
-            onChange={setInputValue}
+            onChange={(html) => setInputValue(htmlToPlainText(html))}
             className="bg-stone-950 border border-stone-800 rounded-lg flex-1 overflow-y-auto"
             placeholder="Type your message..."
             onKeyDown={handleKeyPress}

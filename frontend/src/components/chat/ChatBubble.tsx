@@ -12,7 +12,7 @@ import {
 import { Message, UserProfile } from '../../types/messages';
 import RichTextEditor from '../RichTextEditor';
 import { formatUserName } from '../../utils/formatters';
-import { markdownToHtml } from '../../utils/contentUtils';  // Import markdownToHtml directly
+import { markdownToHtml, htmlToPlainText } from '../../utils/contentUtils';  // Import markdownToHtml and htmlToPlainText
 // removeIncompleteSentences removed
 import { useSettings } from '../../contexts/SettingsContext'; // Import the settings context hook
 
@@ -421,10 +421,9 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
               // Debounce saving changes
               saveTimeoutRef.current = setTimeout(() => {
                 if (html !== htmlContent) {
-                  // The content passed to onContentChange will be stored directly 
-                  // without going through processContent again, which is correct
-                  // because we don't want to remove incomplete sentences from user edits
-                  onContentChange(html);
+                  // Convert HTML to plain text before storing to prevent HTML pollution in exports
+                  const plainText = htmlToPlainText(html);
+                  onContentChange(plainText);
                 }
               }, 1000);
 
