@@ -2,9 +2,23 @@
 import React, { createContext, useContext, useState } from 'react';
 import { CharacterCard } from '../types/schema';
 
+// Panel mode type - supports both comparison and workshop panels
+type PanelMode = 'comparison' | 'workshop' | null;
+
 interface ComparisonContextType {
+  // Panel mode control (new unified approach)
+  panelMode: PanelMode;
+  setPanelMode: (mode: PanelMode) => void;
+
+  // Backward compatibility - comparison mode
   isCompareMode: boolean;
   setCompareMode: (active: boolean) => void;
+
+  // Workshop mode
+  isWorkshopMode: boolean;
+  setWorkshopMode: (active: boolean) => void;
+
+  // Comparison panel state
   secondaryCharacterData: CharacterCard | null;
   setSecondaryCharacterData: React.Dispatch<React.SetStateAction<CharacterCard | null>>;
   secondaryImageUrl: string | undefined;
@@ -18,15 +32,35 @@ interface ComparisonContextType {
 const ComparisonContext = createContext<ComparisonContextType | null>(null);
 
 export const ComparisonProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isCompareMode, setCompareMode] = useState(false);
+  // Unified panel mode state - only one panel can be open at a time
+  const [panelMode, setPanelMode] = useState<PanelMode>(null);
+
+  // Comparison panel state
   const [secondaryCharacterData, setSecondaryCharacterData] = useState<CharacterCard | null>(null);
   const [secondaryImageUrl, setSecondaryImageUrl] = useState<string | undefined>(undefined);
   const [secondaryIsLoading, setSecondaryIsLoading] = useState(false);
   const [secondaryError, setSecondaryError] = useState<string | null>(null);
 
+  // Derived states for backward compatibility and convenience
+  const isCompareMode = panelMode === 'comparison';
+  const isWorkshopMode = panelMode === 'workshop';
+
+  // Helper methods - backward compatible with existing code
+  const setCompareMode = (active: boolean) => {
+    setPanelMode(active ? 'comparison' : null);
+  };
+
+  const setWorkshopMode = (active: boolean) => {
+    setPanelMode(active ? 'workshop' : null);
+  };
+
   const value = {
+    panelMode,
+    setPanelMode,
     isCompareMode,
     setCompareMode,
+    isWorkshopMode,
+    setWorkshopMode,
     secondaryCharacterData,
     setSecondaryCharacterData,
     secondaryImageUrl,

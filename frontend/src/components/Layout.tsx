@@ -6,6 +6,7 @@ import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
 import { AboutDialog } from "./AboutDialog";
 import ComparisonPanel from "./ComparisonPanel";
+import WorkshopPanel from "./WorkshopPanel";
 import SideNav from "./SideNav";
 import { BottomBanner } from "./BottomBanner";
 
@@ -36,8 +37,8 @@ const Layout: React.FC = () => {
     invalidateCharacterCache
   } = useCharacter();
 
-  // Comparison context
-  const { isCompareMode } = useComparison();
+  // Comparison and workshop context
+  const { isCompareMode, isWorkshopMode, setWorkshopMode } = useComparison();
 
   // We no longer need to load settings here as it's handled by the SettingsContext
 
@@ -355,9 +356,9 @@ const Layout: React.FC = () => {
       />
 
       {/* Main Content Area - added pb-8 to account for bottom banner */}
-      <div className={`flex flex-1 ${isCompareMode ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900`}>
+      <div className={`flex flex-1 ${(isCompareMode || isWorkshopMode) ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900`}>
         {/* Main content column */}
-        <div className={`flex flex-col ${isCompareMode ? 'w-1/2' : 'flex-1'} mb-8`}>
+        <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} mb-8`}>
           {error && (
             <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
           )}
@@ -370,10 +371,11 @@ const Layout: React.FC = () => {
           <Outlet />
         </div>
 
-        {/* Comparison panel (conditional) */}
-        {isCompareMode && (
+        {/* Panel slot - supports both comparison and workshop panels */}
+        {(isCompareMode || isWorkshopMode) && (
           <div className="w-1/2 border-l border-stone-800">
-            <ComparisonPanel settingsChangeCount={settingsChangeCount} />
+            {isCompareMode && <ComparisonPanel settingsChangeCount={settingsChangeCount} />}
+            {isWorkshopMode && <WorkshopPanel onClose={() => setWorkshopMode(false)} />}
           </div>
         )}
       </div>
