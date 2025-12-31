@@ -78,7 +78,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-stone-900 overflow-hidden">
+    <div className="h-full flex flex-col bg-stone-900 overflow-hidden">
       {/* Header */}
       <div className="p-4 flex justify-between items-center border-b border-stone-800">
         <div>
@@ -97,7 +97,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Error Display */}
         {error && (
           <div className="p-3 bg-red-900/50 text-red-200 rounded-lg">

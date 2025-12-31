@@ -525,7 +525,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           )}
         </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         <div className="px-8 pb-8">
           {/* Show unsaved changes notification */}
           {hasUnsavedChanges && (
