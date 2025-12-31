@@ -420,11 +420,11 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
   return (
     <>
-      <div className="p-8 pb-4 flex justify-between items-center">
+      <div className="p-8 pb-4 flex flex-col gap-4">
         <h2 className="text-lg font-semibold">
           {isSecondary ? "Comparison View" : "Primary Character Info"}
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Compare button - only shown in primary view when not already comparing */}
           {!isSecondary && (
             <button

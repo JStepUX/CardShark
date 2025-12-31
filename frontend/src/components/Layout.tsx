@@ -104,7 +104,7 @@ const Layout: React.FC = () => {
 
   // Check health on major route changes
   useEffect(() => {
-    // Only check health on route change if it's been more than 2 minutes
+    // Only check health on route change if it's because more than 2 minute
     if (Date.now() - lastHealthCheck > 120000) {
       const checkBackendOnRouteChange = async () => {
         try {
@@ -123,6 +123,9 @@ const Layout: React.FC = () => {
       };
       checkBackendOnRouteChange();
     }
+
+    // Auto-close workshop mode on route change as it should only be active in Info/Greetings
+    setWorkshopMode(false);
   }, [location.pathname, lastHealthCheck]);
 
   // File upload handler
@@ -374,7 +377,7 @@ const Layout: React.FC = () => {
 
         {/* Panel slot - supports both comparison and workshop panels */}
         {(isCompareMode || isWorkshopMode) && (
-          <div className="w-1/2 border-l border-stone-800 relative z-20">
+          <div className="w-1/2 border-l border-stone-800 relative z-20 mb-8">
             {isCompareMode && <ComparisonPanel settingsChangeCount={settingsChangeCount} />}
             {isWorkshopMode && (
               <ChatProvider>
