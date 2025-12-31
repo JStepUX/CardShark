@@ -12,6 +12,36 @@ interface WorkshopPanelProps {
   onClose: () => void;
 }
 
+// Playful nicknames for the workshop user
+const WORKSHOP_NICKNAMES = [
+  "User",
+  "Saucy Devil",
+  "Creative Genius",
+  "Story Wizard",
+  "Character Chef",
+  "Plot Architect",
+  "Narrative Ninja",
+  "Dialogue Doctor",
+  "Lore Master",
+  "World Builder",
+  "Scene Sculptor",
+  "Wordsmith",
+  "Tale Weaver",
+  "Imagination Station",
+  "Fiction Fanatic",
+  "Drama Llama",
+  "Chaos Coordinator",
+  "Sexy Creature",
+  "Vibe Curator",
+  "Storytelling Sorcerer",
+  "Creative Catalyst"
+];
+
+// Helper function to pick a random nickname
+const getRandomNickname = (): string => {
+  return WORKSHOP_NICKNAMES[Math.floor(Math.random() * WORKSHOP_NICKNAMES.length)];
+};
+
 const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
   const { characterData } = useCharacter();
   const {
@@ -26,6 +56,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
   const { getPrompt, getDefaultPrompt } = usePrompts();
 
   const [isInitialized, setIsInitialized] = useState(false);
+  const [workshopNickname] = useState(() => getRandomNickname()); // Pick nickname once on mount
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -142,7 +173,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
             key={message.id}
             message={message}
             characterName="Workshop Assistant"
-            currentUser={currentUser || undefined}
+            currentUser={workshopNickname}
             isGenerating={isGenerating && message.role === 'assistant'}
             // Simplified handlers for workshop v1
             onTryAgain={() => { }}
