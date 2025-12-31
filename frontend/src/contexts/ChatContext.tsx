@@ -649,7 +649,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       console.log(`New chat session created with ID: ${newCId}`);
 
       let initMsgs: Message[] = [];
-      if (effectiveCharacter.data.first_mes) {
+      // Only add first_mes if it exists and is not empty (Workshop mode sets it to empty string)
+      if (effectiveCharacter.data.first_mes && effectiveCharacter.data.first_mes.trim()) {
         const charN = effectiveCharacter.data.name || 'Character';
         const userN = currentUser?.name || 'User';
         const subContent = effectiveCharacter.data.first_mes.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN);
@@ -684,8 +685,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         // If messages already exist (e.g. user prompt), keep them and prepend initMsgs if appropriate
         // effectively merging the prompt into the new session context
         // But typically initMsgs is just the greeting or empty.
-        // If we have a user message, we might NOT want to inject the greeting dynamically if it wasn't there.
-        // For Workshop (empty first_mes), initMsgs is empty anyway.
+        // For Workshop (empty first_mes), initMsgs is empty anyway so nothing gets prepended.
         // For normal chat, if user sends message first, maybe we skip greeting? Or Prepend?
         // Standard behavior: If user speaks first, greeting is usually suppressed or added before.
         // Let's prepend if initMsgs exists and messagesRef doesn't start with it.
