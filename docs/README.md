@@ -45,6 +45,7 @@ python start.py
 - **[Project Structure](../.kiro/steering/structure.md)** - Repository organization
 - **[Code Conventions](../.kiro/steering/conventions.md)** - Coding standards and patterns
 - **[Tech Stack](../.kiro/steering/tech.md)** - Technologies and dependencies
+- **[World Import/Export Guide](world-import-export.md)** - How worlds are packaged and shared
 
 ### Developer Resources
 - **[Development Guide](DEVELOPMENT.md)** - Setup, testing, and build instructions
