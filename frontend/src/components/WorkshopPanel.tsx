@@ -3,25 +3,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useChat } from '../contexts/ChatContext';
+import { usePrompts } from '../hooks/usePrompts';
+import { StandardPromptKey } from '../types/promptTypes';
 import ChatInputArea from './chat/ChatInputArea';
 import ChatBubble from './chat/ChatBubble';
-
-/**
- * Workshop-specific system prompt for character development assistance
- */
-const WORKSHOP_SYSTEM_PROMPT = `You are a creative writing assistant helping to develop this character.
-Provide constructive feedback, ask clarifying questions, and suggest improvements to the character's
-description, personality, and backstory.
-
-Focus on:
-- Character consistency and depth
-- Believable motivations and backstory
-- Clear personality traits
-- Engaging dialogue examples
-- Scenario coherence
-
-Be conversational, encouraging, and specific in your feedback. Ask questions to understand the
-creator's vision before suggesting changes.`;
 
 interface WorkshopPanelProps {
   onClose: () => void;
@@ -39,6 +24,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
     error,
     clearError
   } = useChat();
+  const { getPrompt, getDefaultPrompt } = usePrompts();
 
   const [isInitialized, setIsInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,12 +41,16 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
 
       console.log('Initializing workshop session for:', characterData.data.name);
 
+      // Get workshop prompt from settings (or use default)
+      const workshopPrompt = getPrompt(StandardPromptKey.WORKSHOP_PROMPT) ||
+                            getDefaultPrompt(StandardPromptKey.WORKSHOP_PROMPT);
+
       // Override system prompt for workshop mode
       const workshopCharacter = {
         ...characterData,
         data: {
           ...characterData.data,
-          system_prompt: WORKSHOP_SYSTEM_PROMPT,
+          system_prompt: workshopPrompt,
           // Override first message for workshop context
           first_mes: `Hello! I'm here to help you develop ${characterData.data.name}. What aspect of the character would you like to work on today?`
         }
@@ -81,7 +71,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
       console.log('Cleaning up workshop session');
       setCharacterDataOverride(null);
     };
-  }, [characterData, isInitialized, createNewChat, setCharacterDataOverride]);
+  }, [characterData, isInitialized, createNewChat, setCharacterDataOverride, getPrompt, getDefaultPrompt]);
 
   const handleSend = async (text: string) => {
     if (!text.trim() || isGenerating) return;
