@@ -32,7 +32,7 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({ settingsChangeCount }
   };
 
   return (
-    <div className="h-full flex flex-col border-l border-stone-800 bg-stone-900">
+    <div className="h-full flex flex-col bg-stone-900 overflow-hidden">
       {/* Header */}
       <div className="p-4 flex justify-between items-center border-b border-stone-800">
         <div className="flex items-center">

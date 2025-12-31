@@ -486,7 +486,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
               {/* Dropdown Menu */}
               {showOverflowMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-stone-800 border border-stone-700 rounded-lg shadow-lg z-50 overflow-hidden">
+                <div className="absolute right-0 mt-2 w-56 bg-stone-800 border border-stone-700 rounded-lg shadow-lg z-10 overflow-hidden">
                   <button
                     onClick={handleDuplicate}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"

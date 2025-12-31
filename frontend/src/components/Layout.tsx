@@ -359,7 +359,7 @@ const Layout: React.FC = () => {
       {/* Main Content Area - added pb-8 to account for bottom banner */}
       <div className={`flex flex-1 ${(isCompareMode || isWorkshopMode) ? 'min-w-0' : 'min-w-[600px]'} bg-stone-900`}>
         {/* Main content column */}
-        <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} mb-8`}>
+        <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} mb-8 relative z-0`}>
           {error && (
             <div className="px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
           )}
@@ -374,7 +374,7 @@ const Layout: React.FC = () => {
 
         {/* Panel slot - supports both comparison and workshop panels */}
         {(isCompareMode || isWorkshopMode) && (
-          <div className="w-1/2 border-l border-stone-800">
+          <div className="w-1/2 border-l border-stone-800 relative z-20">
             {isCompareMode && <ComparisonPanel settingsChangeCount={settingsChangeCount} />}
             {isWorkshopMode && (
               <ChatProvider>

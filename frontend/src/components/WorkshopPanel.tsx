@@ -79,7 +79,7 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-stone-900 border-l border-stone-800">
+    <div className="h-full flex flex-col bg-stone-900 overflow-hidden">
       {/* Header */}
       <div className="p-4 flex justify-between items-center border-b border-stone-800">
         <div>
