@@ -1088,8 +1088,8 @@ def import_chat_jsonl_endpoint(
         if not character:
             raise NotFoundException(f"Character {character_uuid} not found")
 
-        # Import JSONL to database
-        created_sessions = import_jsonl_to_chat(
+        # Import JSONL to database (with smart tolerance)
+        created_sessions, warnings = import_jsonl_to_chat(
             db=db,
             jsonl_content=jsonl_content,
             character_uuid=character_uuid,
@@ -1098,7 +1098,8 @@ def import_chat_jsonl_endpoint(
 
         return create_data_response({
             "created_sessions": created_sessions,
-            "count": len(created_sessions)
+            "count": len(created_sessions),
+            "warnings": warnings  # Include any parsing warnings
         })
 
     except (ValidationException, NotFoundException):
