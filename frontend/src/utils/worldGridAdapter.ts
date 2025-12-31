@@ -20,7 +20,7 @@ export function roomToGridRoom(room: Room): GridRoom {
     name: room.name,
     description: room.description,
     introduction_text: room.introduction_text,
-    npcs: room.npcs,
+    npcs: room.npcs.map(uuid => ({ character_uuid: uuid })), // Convert string[] to RoomNPC[]
     events: room.events,
     connections: {
       north: room.connections.north,
@@ -47,7 +47,7 @@ export function gridRoomToRoom(gridRoom: GridRoom): Room {
       x: gridRoom.position.x,
       y: gridRoom.position.y,
     },
-    npcs: gridRoom.npcs,
+    npcs: gridRoom.npcs.map(npc => npc.character_uuid), // Convert RoomNPC[] to string[]
     connections: {
       north: gridRoom.connections.north || null,
       south: gridRoom.connections.south || null,

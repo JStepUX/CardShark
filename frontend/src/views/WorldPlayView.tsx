@@ -85,7 +85,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
             const roomCard = await roomApi.getRoom(placement.room_uuid);
 
             // Convert RoomCard to GridRoom format using adapter
-            const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position);
+            // Pass placement data so instance NPCs/images override room card defaults
+            const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position, placement);
             loadedRooms.push(gridRoom);
           } catch (err) {
             console.warn(`Failed to load room ${placement.room_uuid}:`, err);
@@ -133,7 +134,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           setCurrentRoom(currentRoom);
 
           // Resolve NPCs in the room
-          const npcs = await resolveNpcDisplayData(currentRoom.npcs);
+          const npcUuids = currentRoom.npcs.map(npc => npc.character_uuid);
+          const npcs = await resolveNpcDisplayData(npcUuids);
           setRoomNpcs(npcs);
 
           // Add introduction message
@@ -311,7 +313,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     }
 
     // Resolve NPCs in the new room
-    const npcs = await resolveNpcDisplayData(targetRoom.npcs);
+    const npcUuids = targetRoom.npcs.map(npc => npc.character_uuid);
+    const npcs = await resolveNpcDisplayData(npcUuids);
     setRoomNpcs(npcs);
 
     // Persist position to backend (V2)

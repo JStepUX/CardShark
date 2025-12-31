@@ -37,9 +37,9 @@ import type { WorldRoomPlacement } from '../types/worldCard';
  * // Importing from gallery (no instance data yet)
  * const roomCard = await roomApi.getRoom(uuid);
  * const gridRoom = roomCardToGridRoom(roomCard, selectedCell);
- * // gridRoom.npcs will be deep copy of suggestedNpcs
+ * // gridRoom.npcs will be deep copy of room card NPCs
  *
- * @note Instance NPCs override room card's suggestedNpcs
+ * @note Instance NPCs override room card's default NPCs
  * @note Instance image_path overrides room card's default image
  * @note Events and connections are not currently populated
  */
@@ -51,7 +51,7 @@ export function roomCardToGridRoom(
     // Use instance data if available, else fall back to room card defaults
     const npcs = placement?.instance_npcs
         ? [...placement.instance_npcs] // Use instance assignments (already full RoomNPC[])
-        : [...(roomCard.data.extensions.room_data.suggestedNpcs || [])]; // Deep copy suggested NPCs
+        : [...(roomCard.data.extensions.room_data.npcs || [])]; // Deep copy room NPCs
 
     const image_path = placement?.instance_image_path
         || undefined; // Image accessed via roomApi.getRoomImageUrl() if not overridden

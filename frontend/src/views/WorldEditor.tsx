@@ -220,7 +220,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
     // Load full room card to get all details
     roomApi.getRoom(roomSummary.uuid).then(roomCard => {
-      // Use adapter to create GridRoom with deep-copied suggestedNpcs
+      // Use adapter to create GridRoom with deep-copied NPCs
       // No placement data yet since this is a fresh import
       const newRoom = roomCardToGridRoom(roomCard, selectedCell);
 

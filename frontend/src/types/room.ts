@@ -17,7 +17,7 @@ export interface RoomNPC {
  */
 export interface RoomData {
   uuid: string; // Room UUID
-  suggestedNpcs: RoomNPC[]; // Suggested NPCs for this room template (copied to world instances)
+  npcs: RoomNPC[]; // NPCs assigned to this room (character_uuid, role, hostile, etc.)
   // Future fields can be added here:
   // connections?: RoomConnection[]; // Links to other rooms
   // items?: string[]; // Item UUIDs in the room
@@ -99,5 +99,5 @@ export interface UpdateRoomRequest {
   };
   tags?: string[];
   image?: File | null;
-  suggestedNpcs?: RoomNPC[]; // Suggested NPCs for this room template
+  npcs?: RoomNPC[]; // NPCs assigned to this room
 }
