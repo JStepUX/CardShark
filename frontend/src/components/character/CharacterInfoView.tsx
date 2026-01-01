@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Edit, Copy, Wrench } from 'lucide-react';
+import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Copy, Wrench, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
@@ -421,104 +421,135 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="flex-none p-8 pb-4 flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">
+      <div className="flex-none px-8 pt-8 pb-4 flex items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold whitespace-nowrap">
           {isSecondary ? "Comparison View" : "Primary Character Info"}
         </h2>
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Compare button - only shown in primary view when not already comparing */}
+
+        {/* Toolbar - all icon buttons */}
+        <div className="flex items-center gap-1 min-w-0">
+          {/* Tools group */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowJsonModal(true)}
+              className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+              title="View JSON"
+            >
+              <FileJson className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={() => setShowFindReplace(true)}
+              className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+              title="Find & Replace"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+
+            {!isSecondary && (
+              <>
+                <button
+                  onClick={() => {
+                    handleConvertToWorld();
+                  }}
+                  disabled={isConvertingToWorld}
+                  className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Convert to World"
+                >
+                  <Globe className={`w-5 h-5 ${isConvertingToWorld ? 'animate-spin' : ''}`} />
+                </button>
+
+                <button
+                  onClick={handleDuplicate}
+                  className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                  title="Duplicate"
+                >
+                  <Copy className="w-5 h-5" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Divider */}
+          {!isSecondary && <div className="w-px h-6 bg-stone-700 mx-1" />}
+
+          {/* Panel toggles */}
+          {!isSecondary && (
+            <div className="flex items-center gap-1">
+              {characterData && (
+                <button
+                  onClick={() => setWorkshopMode(!isWorkshopMode)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isWorkshopMode
+                      ? 'text-white bg-stone-600'
+                      : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                  }`}
+                  title={isWorkshopMode ? "Close Workshop" : "Open Workshop"}
+                >
+                  <Wrench className="w-5 h-5" />
+                </button>
+              )}
+
+              <button
+                onClick={toggleCompareMode}
+                className={`p-2 rounded-lg transition-colors ${
+                  isCompareMode
+                    ? 'text-white bg-stone-600'
+                    : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                }`}
+                title={isCompareMode ? "Close Comparison" : "Compare Characters"}
+              >
+                <SplitSquareVertical className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          {/* Divider before delete */}
+          {!isSecondary && <div className="w-px h-6 bg-stone-700 mx-1" />}
+
+          {/* Delete - destructive action */}
           {!isSecondary && (
             <button
-              onClick={toggleCompareMode}
-              className={`flex items-center gap-2 px-4 py-2 ${isCompareMode
-                ? 'bg-stone-700 text-white'
-                : 'bg-transparent hover:bg-stone-800 text-white'
-                } rounded-lg transition-colors`}
-              title={isCompareMode ? "Close comparison" : "Compare with another character"}
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              className="p-2 text-red-400/70 hover:text-red-400 hover:bg-red-900/30 rounded-lg transition-colors"
+              title="Delete Character"
             >
-              <SplitSquareVertical className="w-4 h-4" />
-              {isCompareMode ? "Close Compare" : "Compare"}
+              <Trash2 className="w-5 h-5" />
             </button>
           )}
 
-          {/* Workshop button - only shown in primary view when character is loaded */}
-          {!isSecondary && characterData && (
-            <button
-              onClick={() => setWorkshopMode(!isWorkshopMode)}
-              className={`flex items-center gap-2 px-4 py-2 ${isWorkshopMode
-                ? 'bg-purple-700 text-white'
-                : 'bg-transparent hover:bg-stone-800 text-white'
-                } rounded-lg transition-colors`}
-              title={isWorkshopMode ? "Close workshop" : "Open character workshop"}
-            >
-              <Wrench className="w-4 h-4" />
-              {isWorkshopMode ? "Close Workshop" : "Workshop"}
-            </button>
-          )}
-
-          {/* Find & Replace button */}
-          <button
-            onClick={() => setShowFindReplace(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
-          >
-            <Search className="w-4 h-4" />
-            Find & Replace
-          </button>
-
-          {/* JSON Viewer Button */}
-          <button
-            onClick={() => setShowJsonModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
-            title="View JSON"
-          >
-            <FileJson className="w-5 h-5" />
-          </button>
-
-          {/* Edit Menu - Primary View Only */}
-          {!isSecondary && (
+          {/* Overflow menu for secondary view or tight spaces */}
+          {isSecondary && (
             <div className="relative" ref={overflowMenuRef}>
               <button
                 onClick={() => setShowOverflowMenu(!showOverflowMenu)}
-                className="flex items-center gap-2 px-4 py-2 bg-transparent hover:bg-stone-800 text-white rounded-lg transition-colors"
-                title="Edit actions"
+                className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                title="More actions"
               >
-                <Edit className="w-5 h-5" />
+                <MoreHorizontal className="w-5 h-5" />
               </button>
 
-              {/* Dropdown Menu */}
               {showOverflowMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-stone-800 border border-stone-700 rounded-lg shadow-lg z-10 overflow-hidden">
+                <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-700 rounded-lg shadow-lg z-10 overflow-hidden">
                   <button
-                    onClick={handleDuplicate}
+                    onClick={() => {
+                      setShowOverflowMenu(false);
+                      setShowJsonModal(true);
+                    }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"
                   >
-                    <Copy className="w-4 h-4" />
-                    <span>Duplicate</span>
+                    <FileJson className="w-4 h-4" />
+                    <span>View JSON</span>
                   </button>
-
                   <button
                     onClick={() => {
                       setShowOverflowMenu(false);
-                      handleConvertToWorld();
+                      setShowFindReplace(true);
                     }}
-                    disabled={isConvertingToWorld}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"
                   >
-                    <Globe className={`w-4 h-4 ${isConvertingToWorld ? 'animate-spin' : ''}`} />
-                    <span>{isConvertingToWorld ? 'Converting...' : 'Convert to World'}</span>
-                  </button>
-
-                  <div className="border-t border-stone-700"></div>
-
-                  <button
-                    onClick={() => {
-                      setShowOverflowMenu(false);
-                      setIsDeleteConfirmOpen(true);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-red-400 hover:bg-red-900/30 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Delete</span>
+                    <Search className="w-4 h-4" />
+                    <span>Find & Replace</span>
                   </button>
                 </div>
               )}
