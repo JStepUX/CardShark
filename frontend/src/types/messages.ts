@@ -17,6 +17,7 @@ export interface IMessage {
   order?: number;
   parentMessageId?: string;
   status?: 'streaming' | 'complete' | 'aborted' | 'error' | 'generating_variation'; // Added status field
+  metadata?: Record<string, unknown>; // Optional metadata for special message types (e.g., combat events)
 }
 
 /**
@@ -81,7 +82,8 @@ export const MessageSchema = z.object({
   currentVariation: z.number().optional(),
   aborted: z.boolean().optional(),
   isFirst: z.boolean().optional(),
-  order: z.number().optional()
+  order: z.number().optional(),
+  metadata: z.record(z.unknown()).optional()
 });
 
 /**
