@@ -1,5 +1,27 @@
-// frontend/src/types/combat.ts
-// Combat system types - fully independent of World/Room implementation
+/**
+ * @file combat.ts
+ * @description Combat system type definitions and stat derivation formulas.
+ *
+ * This file is the single source of truth for:
+ * - All combat-related TypeScript interfaces
+ * - The stat derivation formula (deriveCombatStats)
+ * - Hit quality calculations
+ *
+ * ## Design Philosophy
+ * World creators only set ONE field on hostile NPCs: `monster_level` (1-60).
+ * All other stats (HP, damage, defense, etc.) derive from this single value.
+ *
+ * ## Stat Reference Table
+ * | Level | HP  | Damage | Defense | Speed | Armor |
+ * |-------|-----|--------|---------|-------|-------|
+ * | 1     | 25  | 2      | 5       | 3     | 0     |
+ * | 10    | 70  | 7      | 8       | 4     | 0     |
+ * | 30    | 170 | 17     | 15      | 6     | 2     |
+ * | 60    | 320 | 32     | 25      | 9     | 4     |
+ *
+ * @see /docs/combat-system.md for full documentation
+ * @see /tools/combat-simulator.js for balance testing
+ */
 
 // =============================================================================
 // Combat Stats
@@ -7,7 +29,7 @@
 
 /**
  * Derived combat stats for any combatant.
- * All stats are derived from monster_level using formulas.
+ * All stats are calculated from monster_level using deriveCombatStats().
  */
 export interface CombatStats {
   hp: number;
@@ -20,8 +42,32 @@ export interface CombatStats {
 }
 
 /**
- * Derive combat stats from monster level (1-60).
- * Single source of truth for all stat calculations.
+ * Derive all combat stats from a single monster level (1-60).
+ *
+ * This is the ONLY function that determines combatant stats. When balancing
+ * combat, modify ONLY these formulas and use the simulator to verify changes.
+ *
+ * ## Current Formulas (V1)
+ * - HP: 20 + (level × 5) → 25 to 320
+ * - Damage: 2 + floor(level / 2) → 2 to 32
+ * - Defense: 5 + floor(level / 3) → 5 to 25
+ * - Speed: 3 + floor(level / 10) → 3 to 9
+ * - Armor: floor(level / 15) → 0 to 4
+ *
+ * ## Known Balance Issues
+ * - Miss rate drops to 0% at level 26+ (attack bonus outpaces defense)
+ * - Level disparity is too punishing (0% win rate vs +5 level enemies)
+ *
+ * @param level - Monster level from 1 to 60 (clamped if out of range)
+ * @returns Complete stat block for a combatant of that level
+ *
+ * @example
+ * const goblinStats = deriveCombatStats(5);  // Level 5 goblin
+ * // { hp: 45, damage: 4, defense: 6, speed: 3, armor: 0 }
+ *
+ * @example
+ * const bossStats = deriveCombatStats(40);   // Level 40 boss
+ * // { hp: 220, damage: 22, defense: 18, speed: 7, armor: 2 }
  */
 export function deriveCombatStats(level: number): CombatStats {
   const clampedLevel = Math.max(1, Math.min(60, level));

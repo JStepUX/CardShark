@@ -1,5 +1,31 @@
-// frontend/src/services/combat/combatEngine.ts
-// Pure combat engine - reducer pattern with no side effects
+/**
+ * @file combatEngine.ts
+ * @description Pure combat engine using reducer pattern - fully testable with no side effects.
+ *
+ * ## Architecture
+ * The engine is a pure function: `combatReducer(state, action) => { state, events }`
+ * - No React dependencies
+ * - No DOM manipulation
+ * - No async operations
+ * - Deterministic given same random seed
+ *
+ * ## Combat Flow
+ * 1. `initializeCombat(data)` - Creates initial state, rolls initiative
+ * 2. `combatReducer(state, action)` - Processes player/enemy actions
+ * 3. Engine auto-advances turns and checks victory/defeat
+ *
+ * ## Key Formulas (V1)
+ * - Attack: d20 + floor(level/2) >= target.defense
+ * - Damage: attacker.damage - target.armor (min 1)
+ * - Initiative: speed + d6
+ *
+ * ## Balance Notes
+ * Current formulas have known issues at high levels (miss rate → 0%).
+ * Use `tools/combat-simulator.js` for data-driven tuning.
+ *
+ * @see /docs/combat-system.md for full documentation
+ * @see /tools/combat-simulator.js for balance testing
+ */
 
 import {
   CombatState,
@@ -38,7 +64,24 @@ export function rollD6(): number {
 // =============================================================================
 
 /**
- * Initialize combat state from init data.
+ * Initialize a new combat encounter.
+ *
+ * Creates the initial combat state including:
+ * - All combatants with derived stats
+ * - Battlefield placement (allies bottom row, enemies top row)
+ * - Initiative order (speed + d6, sorted descending)
+ *
+ * @param data - Combat initialization data (player, enemies, allies, room info)
+ * @returns Initial CombatState ready for the first turn
+ *
+ * @example
+ * const state = initializeCombat({
+ *   playerData: { id: 'player', name: 'Hero', level: 10, imagePath: null },
+ *   enemies: [{ id: 'goblin-1', name: 'Goblin', level: 5, imagePath: null }],
+ *   roomName: 'Dark Cave',
+ *   roomImagePath: null,
+ *   playerAdvantage: true,
+ * });
  */
 export function initializeCombat(data: CombatInitData): CombatState {
   const combatants: Record<string, Combatant> = {};
@@ -310,7 +353,35 @@ function checkVictoryCondition(state: CombatState): CombatState | null {
 // =============================================================================
 
 /**
- * Main reducer: process an action and return new state + events.
+ * Main combat reducer - processes an action and returns new state + events.
+ *
+ * This is the primary entry point for combat logic. It's a pure function:
+ * same inputs always produce same outputs (given same random rolls).
+ *
+ * @param state - Current combat state
+ * @param action - Action to perform (attack, defend, move, etc.)
+ * @returns Object containing:
+ *   - `state`: New combat state after action
+ *   - `events`: Array of events for narrator/UI (attack results, deaths, etc.)
+ *
+ * @example
+ * // Player attacks an enemy
+ * const { state: newState, events } = combatReducer(state, {
+ *   type: 'attack',
+ *   actorId: 'player',
+ *   targetId: 'goblin-1',
+ * });
+ *
+ * // Process events for narrator
+ * for (const event of events) {
+ *   if (event.type === 'attack_resolved') {
+ *     console.log(`${event.data.actorName} hit for ${event.data.finalDamage}!`);
+ *   }
+ * }
+ *
+ * @remarks
+ * The reducer automatically advances turns after actions that end the turn
+ * (attack, defend, overwatch, flee) and checks for victory/defeat conditions.
  */
 export function combatReducer(
   state: CombatState,
