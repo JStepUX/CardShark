@@ -635,7 +635,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
     isCreatingChatRef.current = true;
     console.log('Creating new chat');
-    setIsLoading(true); setError(null); setCurrentChatId(null);
+    // Clear all state for new chat - both React state and ref for immediate consistency
+    setIsLoading(true); setError(null); setCurrentChatId(null); setMessages([]);
+    messagesRef.current = []; // Sync ref immediately since useEffect update is async
 
     try {
       await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(effectiveCharacter);
