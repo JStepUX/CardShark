@@ -59,12 +59,28 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
+  // Filter messages to hide any first_mes that snuck in before the user's first message
+  // This handles the race condition where createNewChat might use stale characterDataOverride
+  const workshopMessages = React.useMemo(() => {
+    // Find the index of the first user message
+    const firstUserMessageIndex = messages.findIndex(m => m.role === 'user');
+
+    // If no user messages yet, show nothing (we have our hardcoded greeting)
+    if (firstUserMessageIndex === -1) {
+      return [];
+    }
+
+    // Return only messages starting from the first user message
+    // This filters out any assistant first_mes that appeared before the user spoke
+    return messages.slice(firstUserMessageIndex);
+  }, [messages]);
+
   // Auto-scroll to bottom on new messages - scroll container directly to avoid affecting parent
   useEffect(() => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [workshopMessages]);
 
   // Initialize workshop session on mount
   useEffect(() => {
@@ -156,8 +172,8 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
           </div>
         )}
 
-        {/* Initial Greeting - shown when initialized but no messages yet */}
-        {isInitialized && messages.length === 0 && (
+        {/* Initial Greeting - shown when initialized but no workshop messages yet */}
+        {isInitialized && workshopMessages.length === 0 && (
           <div className="flex justify-start mb-4">
             <div className="max-w-[80%] bg-stone-800 rounded-lg p-4 shadow-md">
               <div className="text-sm text-gray-400 mb-1">Workshop Assistant</div>
@@ -166,8 +182,8 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
           </div>
         )}
 
-        {/* Message List */}
-        {messages.map((message) => (
+        {/* Message List - filtered to hide any first_mes that appeared before user's first message */}
+        {workshopMessages.map((message) => (
           <ChatBubble
             key={message.id}
             message={message}
