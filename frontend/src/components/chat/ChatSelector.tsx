@@ -817,6 +817,11 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
                 ? "No other chats found for this character"
                 : "No previous chats found"}
           </p>
+          {activeTab === 'workshop' && (
+            <p className="text-sm text-stone-500 mt-2">
+              Workshop sessions are created from the Workshop panel
+            </p>
+          )}
           {activeTab === 'chats' && (
             <button
               onClick={handleCreateNewChat}
