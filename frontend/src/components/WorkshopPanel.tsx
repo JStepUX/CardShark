@@ -47,7 +47,6 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
   const {
     messages,
     isGenerating,
-    currentUser,
     generateResponse,
     setCharacterDataOverride,
     error,
