@@ -39,6 +39,17 @@
 - **Testing**: Jest with React Testing Library
 - **Debug logging**: Use DEBUG flag constant to gate console.log statements (set to false for production)
 
+### Built-in Utilities (Don't Reinvent)
+Before adding a dependency or writing new utility code, check if these already exist:
+
+| Need | Use | Location |
+|------|-----|----------|
+| UUID generation | `generateUUID()` | `frontend/src/utils/generateUUID.ts` |
+| Character UUID | `getCharacterUUID()` | `frontend/src/utils/generateUUID.ts` |
+| UUID validation | `uuidUtils.ts` | `frontend/src/utils/uuidUtils.ts` |
+
+**Do NOT** add packages like `uuid`, `nanoid`, or similar - we have browser-compatible implementations with fallbacks.
+
 ### Component Patterns
 - **Mode-based components**: Components that adapt UI based on mode prop (e.g., SidePanel with world/character/assistant modes)
 - **Debounced persistence**: Auto-save with debounce for user input (e.g., session notes with 1-2 second delay)
