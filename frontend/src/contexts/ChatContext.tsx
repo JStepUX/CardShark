@@ -482,22 +482,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
             messageCount: messages.length
           });
           setError(null);
-        } else if ((response.isRecoverable || (response.success && (!messages || messages.length === 0))) && characterData?.data?.first_mes) {
-          // Case 2: No chat sessions with user messages found - initialize with first_mes
+        } else if (response.isRecoverable || (response.success && (!messages || messages.length === 0))) {
+          // Case 2: No chat sessions with user messages found - initialize with first_mes (or empty bubble)
           // This happens when:
           // - Character has no chat history yet
           // - All existing chats are empty (only greeting, no user messages)
           // - Backend returned success but with empty messages array
+          // If first_mes is empty, we still create a bubble - user can use "regenerate greeting" button
           console.log('  ℹ No chat sessions with messages found, initializing with first_mes');
           console.log('  Backend response:', response.error, 'isRecoverable:', response.isRecoverable, 'success:', response.success);
 
-          const charName = characterData.data.name || 'Character';
+          const charName = characterData?.data?.name || 'Character';
           const uName = currentUser?.name || 'User';
-          const subContent = characterData.data.first_mes.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName);
+          const rawFirstMes = characterData?.data?.first_mes || '';
+          const subContent = rawFirstMes.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName);
           const firstMsg = MessageUtils.createAssistantMessage(subContent);
 
           // Populate variations with alternate greetings if available
-          if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
+          if (characterData?.data?.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
             const alternates = characterData.data.alternate_greetings.map(alt =>
               alt.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName)
             );
@@ -508,7 +510,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           setMessages([firstMsg]);
           setLastContextWindow({
             type: 'initial_message_used', timestamp: new Date().toISOString(),
-            characterName: characterData.data.name, firstMessage: characterData.data.first_mes,
+            characterName: characterData?.data?.name, firstMessage: rawFirstMes || '(empty)',
             originalLoadError: response.error
           });
 
