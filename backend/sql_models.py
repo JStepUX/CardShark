@@ -206,6 +206,9 @@ class ChatSession(Base):
     session_notes = Column(Text, nullable=True, default=None)
     compression_enabled = Column(Integer, default=0, nullable=False)  # SQLite uses INTEGER for boolean
 
+    # Chat type for distinguishing regular chats from workshop sessions
+    chat_type = Column(String, default='chat', nullable=False)  # 'chat' or 'workshop'
+
     # Relationships
     character = relationship("Character") # Add back_populates if Character links to ChatSessions
     user_profile = relationship("UserProfile", back_populates="chat_sessions")

@@ -263,17 +263,18 @@ export class ChatStorage {
 
   /**
    * Creates a new chat for a character
+   * @param character - The character to create the chat for
+   * @param chatType - Optional chat type: 'chat' (default) or 'workshop'
    */
-  static async createNewChat(character: CharacterCard | null): Promise<any> {
+  static async createNewChat(character: CharacterCard | null, chatType: 'chat' | 'workshop' = 'chat'): Promise<any> {
     if (!character) {
       console.error('Cannot create chat: No character provided');
       return { success: false, error: 'No character selected' };
     }
 
     try {
-      console.log('Creating new chat for character:', character.data?.name);
+      console.log('Creating new chat for character:', character.data?.name, 'type:', chatType);
 
-      // Extract character ID
       // Extract character ID
       const characterUuid = this.getCharacterId(character);
       if (!characterUuid || characterUuid === 'unknown-character') {
@@ -282,13 +283,13 @@ export class ChatStorage {
       }
       console.log('Using character_uuid:', characterUuid);
 
-      const payload: { character_uuid: string; user_uuid?: string; title?: string } = {
-        character_uuid: characterUuid
+      const payload: { character_uuid: string; user_uuid?: string; title?: string; chat_type?: string } = {
+        character_uuid: characterUuid,
+        chat_type: chatType
       };
       // Optional fields can be added here if available, e.g.:
       // if (currentUser?.uuid) payload.user_uuid = currentUser.uuid;
       // if (character.data?.name) payload.title = `Chat with ${character.data.name}`;
-
 
       const response = await fetch('/api/reliable-create-chat', {
         method: 'POST',

@@ -13,7 +13,10 @@ interface ChatInfo {
   messageCount: number;
   preview?: string;
   filename?: string; // For deletion and reference
+  chatType?: 'chat' | 'workshop'; // Type of chat session
 }
+
+type ChatTabType = 'chats' | 'workshop';
 
 interface ChatSelectorProps {
   onSelect?: (chatId: string) => void;
@@ -45,6 +48,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Tab state for separating Chats from Workshop sessions
+  const [activeTab, setActiveTab] = useState<ChatTabType>('chats');
 
   // Load available chats when character changes
   useEffect(() => {
@@ -135,7 +141,8 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             lastModified: formatDate(lastModified),
             rawLastModified: lastModified,
             messageCount,
-            preview: finalPreview
+            preview: finalPreview,
+            chatType: chat.chat_type || 'chat'
           } as ChatInfo;
         }).filter((chat): chat is ChatInfo => chat !== null);
 
@@ -260,6 +267,10 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
   const filteredAndSortedChats = useMemo(() => {
     let filtered = [...availableChats];
 
+    // Apply tab filter (Chats vs Workshop)
+    const tabChatType = activeTab === 'workshop' ? 'workshop' : 'chat';
+    filtered = filtered.filter(chat => (chat.chatType || 'chat') === tabChatType);
+
     // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter(chat =>
@@ -328,7 +339,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     });
 
     return filtered;
-  }, [availableChats, searchTerm, sortBy, sortOrder, dateFilter, messageCountFilter]);
+  }, [availableChats, searchTerm, sortBy, sortOrder, dateFilter, messageCountFilter, activeTab]);
 
   // Export functionality - Updated for database-centric approach
   const handleExportChats = async (format: 'json' | 'jsonl' = 'json') => {
@@ -642,13 +653,43 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="flex border-b border-stone-700 mb-4">
+        <button
+          onClick={() => setActiveTab('chats')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'chats'
+              ? 'text-orange-400 border-b-2 border-orange-400'
+              : 'text-stone-400 hover:text-stone-200'
+          }`}
+        >
+          Chats
+          <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-stone-700">
+            {availableChats.filter(c => (c.chatType || 'chat') === 'chat').length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('workshop')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'workshop'
+              ? 'text-purple-400 border-b-2 border-purple-400'
+              : 'text-stone-400 hover:text-stone-200'
+          }`}
+        >
+          Workshop
+          <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-stone-700">
+            {availableChats.filter(c => c.chatType === 'workshop').length}
+          </span>
+        </button>
+      </div>
+
       {/* Search Bar */}
-      <div className="mb-4 mt-4">
+      <div className="mb-4">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-stone-400" />
           <input
             type="text"
-            placeholder="Search chats by title or content..."
+            placeholder={`Search ${activeTab === 'workshop' ? 'workshop sessions' : 'chats'} by title or content...`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-600 rounded-lg focus:outline-none focus:border-orange-500 text-white placeholder-stone-400"
@@ -765,21 +806,31 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       {loading ? (
         <div className="loading p-8 text-center text-stone-400">
           <div className="inline-block w-8 h-8 border-4 border-stone-600 border-t-orange-500 rounded-full animate-spin mb-4"></div>
-          <p>Loading chats...</p>
+          <p>Loading {activeTab === 'workshop' ? 'workshop sessions' : 'chats'}...</p>
         </div>
-      ) : availableChats.length === 0 ? (
+      ) : filteredAndSortedChats.length === 0 ? (
         <div className="no-chats p-8 text-center text-stone-400">
           <p>
-            {currentChatId ?
-              "No other chats found for this character" :
-              "No previous chats found"}
-          </p>          <button
-            onClick={handleCreateNewChat}
-            className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading}
-          >
-            <Plus size={16} /> Start New Chat
-          </button>
+            {activeTab === 'workshop'
+              ? "No workshop sessions found for this character"
+              : currentChatId
+                ? "No other chats found for this character"
+                : "No previous chats found"}
+          </p>
+          {activeTab === 'workshop' && (
+            <p className="text-sm text-stone-500 mt-2">
+              Workshop sessions are created from the Workshop panel
+            </p>
+          )}
+          {activeTab === 'chats' && (
+            <button
+              onClick={handleCreateNewChat}
+              className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading}
+            >
+              <Plus size={16} /> Start New Chat
+            </button>
+          )}
         </div>
       ) : (
         <ul className="chat-list space-y-2 max-h-96 overflow-y-auto pr-1">

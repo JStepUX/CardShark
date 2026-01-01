@@ -1,5 +1,5 @@
 from pydantic import BaseModel # Pydantic models for World
-from typing import Optional, List
+from typing import Optional, List, Literal
 import datetime as dt # Renamed to avoid conflict with sqlalchemy.DateTime
 class WorldBase(BaseModel):
     name: str
@@ -178,6 +178,7 @@ class ChatSessionCreateV2(BaseModel):
     title: Optional[str] = None
     export_format_version: Optional[str] = None
     is_archived: Optional[bool] = False
+    chat_type: Optional[Literal['chat', 'workshop']] = 'chat'
 
 class ChatSessionUpdateV2(BaseModel):
     """Updated ChatSession update schema for database-first approach."""
@@ -197,6 +198,7 @@ class ChatSessionReadV2(BaseModel):
     title: Optional[str] = None
     export_format_version: Optional[str] = None
     is_archived: bool
+    chat_type: Optional[Literal['chat', 'workshop']] = 'chat'
     messages: Optional[List[ChatMessageRead]] = None
 
     class Config:

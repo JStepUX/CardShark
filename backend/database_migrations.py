@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Current schema version - increment when making schema changes
 # When this changes, the old database will be deleted and rebuilt fresh
-CURRENT_SCHEMA_VERSION = "2.2.0"  # Added session_notes and compression_enabled columns for Context Lens feature
+CURRENT_SCHEMA_VERSION = "2.3.0"  # Added chat_type column for Workshop session separation
 
 
 

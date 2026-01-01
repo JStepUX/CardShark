@@ -1,6 +1,6 @@
 // frontend/src/components/WorkshopPanel.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useChat } from '../contexts/ChatContext';
 import { usePrompts } from '../hooks/usePrompts';
@@ -49,15 +49,27 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
     isGenerating,
     generateResponse,
     setCharacterDataOverride,
+    createNewChat,
     error,
     clearError
   } = useChat();
   const { getPrompt, getDefaultPrompt } = usePrompts();
 
   const [isInitialized, setIsInitialized] = useState(false);
-  const [workshopNickname] = useState(() => getRandomNickname()); // Pick nickname once on mount
+  const [workshopNickname, setWorkshopNickname] = useState(() => getRandomNickname());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Handler for starting a new workshop session
+  const handleNewSession = async () => {
+    if (isGenerating) return;
+
+    // Pick a new random nickname for the new session
+    setWorkshopNickname(getRandomNickname());
+
+    // Create a new chat session (this will clear messages and create fresh session)
+    await createNewChat();
+  };
 
   // Filter messages to hide any first_mes that snuck in before the user's first message
   // This handles the race condition where createNewChat might use stale characterDataOverride
@@ -136,13 +148,23 @@ const WorkshopPanel: React.FC<WorkshopPanelProps> = ({ onClose }) => {
             Collaborate with AI to develop {characterData?.data?.name || 'your character'}
           </p>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-full hover:bg-stone-800 transition-colors"
-          title="Close workshop"
-        >
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleNewSession}
+            disabled={isGenerating}
+            className="p-1.5 rounded-full hover:bg-stone-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="New workshop session"
+          >
+            <Plus size={18} />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-stone-800 transition-colors"
+            title="Close workshop"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Messages Area */}
