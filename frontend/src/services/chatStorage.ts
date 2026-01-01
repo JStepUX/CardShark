@@ -537,14 +537,18 @@ export class ChatStorage {
       // Check if we have a chat_session_uuid and handle response appropriately
       if (data.data && data.data.chat_session_uuid) {
         // If we have messages from the updated endpoint, return success
-        if (data.success && data.data.messages) {
+        if (data.success && data.data.messages && Array.isArray(data.data.messages) && data.data.messages.length > 0) {
           return { success: true, ...data.data };
         } else {
-          // If we only have session metadata (no messages), treat as success but empty
+          // If we only have session metadata (no messages or empty messages array),
+          // treat as recoverable so first_mes can be used to initialize the chat
+          console.log('Chat session exists but has no messages, treating as recoverable for first_mes initialization');
           return {
-            success: true,
-            ...data.data,
-            messages: []
+            success: false,
+            error: "Chat session exists but has no messages",
+            isRecoverable: true,
+            first_mes_available: character?.data?.first_mes ? true : false,
+            chat_session_uuid: data.data.chat_session_uuid
           };
         }
       } else {
