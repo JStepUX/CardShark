@@ -178,6 +178,7 @@ class ChatSessionCreateV2(BaseModel):
     title: Optional[str] = None
     export_format_version: Optional[str] = None
     is_archived: Optional[bool] = False
+    chat_type: Optional[str] = 'chat'  # 'chat' or 'workshop'
 
 class ChatSessionUpdateV2(BaseModel):
     """Updated ChatSession update schema for database-first approach."""
@@ -197,6 +198,7 @@ class ChatSessionReadV2(BaseModel):
     title: Optional[str] = None
     export_format_version: Optional[str] = None
     is_archived: bool
+    chat_type: Optional[str] = 'chat'  # 'chat' or 'workshop'
     messages: Optional[List[ChatMessageRead]] = None
 
     class Config:

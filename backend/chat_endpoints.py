@@ -59,7 +59,10 @@ def create_new_chat_endpoint(
 
         # 2. Create DB record for the chat session (database-first approach)
         session_uuid = str(uuid.uuid4())
-        
+
+        # Determine chat_type - default to 'chat' if not specified
+        chat_type = payload.chat_type or 'chat'
+
         db_chat_session = sql_models.ChatSession(
             chat_session_uuid=session_uuid,
             character_uuid=payload.character_uuid,
@@ -68,9 +71,10 @@ def create_new_chat_endpoint(
             start_time=datetime.datetime.utcnow(),
             message_count=0,
             export_format_version=payload.export_format_version or "1.1.0",
-            is_archived=payload.is_archived or False
+            is_archived=payload.is_archived or False,
+            chat_type=chat_type
         )
-        
+
         db.add(db_chat_session)
         db.commit()
         db.refresh(db_chat_session)
@@ -102,11 +106,12 @@ def create_new_chat_endpoint(
             title=db_chat_session.title,
             export_format_version=db_chat_session.export_format_version,
             is_archived=db_chat_session.is_archived,
+            chat_type=db_chat_session.chat_type,
             messages=[]
         )
 
         return create_data_response(session_response)
-    
+
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
@@ -787,7 +792,10 @@ def reliable_create_chat_endpoint(
 
         # 2. Create DB record for the chat session (database-first approach)
         session_uuid = str(uuid.uuid4())
-        
+
+        # Determine chat_type - default to 'chat' if not specified
+        chat_type = payload.chat_type or 'chat'
+
         db_chat_session = sql_models.ChatSession(
             chat_session_uuid=session_uuid,
             character_uuid=payload.character_uuid,
@@ -796,9 +804,10 @@ def reliable_create_chat_endpoint(
             start_time=datetime.datetime.utcnow(),
             message_count=0,
             export_format_version=payload.export_format_version or "1.1.0",
-            is_archived=payload.is_archived or False
+            is_archived=payload.is_archived or False,
+            chat_type=chat_type
         )
-        
+
         db.add(db_chat_session)
         db.commit()
         db.refresh(db_chat_session)
@@ -810,7 +819,7 @@ def reliable_create_chat_endpoint(
                 system_content += f"Description: {character.description}\n"
             if character.personality:
                 system_content += f"Personality: {character.personality}\n"
-            
+
             chat_service.create_chat_message(
                 db=db,
                 chat_session_uuid=session_uuid,
@@ -830,11 +839,12 @@ def reliable_create_chat_endpoint(
             title=db_chat_session.title,
             export_format_version=db_chat_session.export_format_version,
             is_archived=db_chat_session.is_archived,
+            chat_type=db_chat_session.chat_type,
             messages=[]
         )
 
         return create_data_response(session_response)
-    
+
     except (NotFoundException, ValidationException):
         raise
     except Exception as e:
@@ -863,7 +873,7 @@ def reliable_list_chats_endpoint(
     try:
         # Use chat_service directly
         sessions = chat_service.get_chat_sessions_by_character(db, character_id)
-        
+
         # Convert to list of dicts as expected by frontend
         session_list = []
         for session in sessions:
@@ -872,9 +882,10 @@ def reliable_list_chats_endpoint(
                 "title": session.title,
                 "last_message_time": session.last_message_time,
                 "message_count": session.message_count,
-                "start_time": session.start_time
+                "start_time": session.start_time,
+                "chat_type": getattr(session, 'chat_type', 'chat') or 'chat'
             })
-        
+
         return create_data_response(session_list)
         
     except Exception as e:

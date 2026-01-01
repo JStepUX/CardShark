@@ -300,11 +300,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     try {
       if (!chatToSaveId) {
         console.debug('currentChatId is null, attempting to create a new chat session first.');
-        if (!characterData) {
+        const effectiveCharacter = characterDataOverride || characterData;
+        if (!effectiveCharacter) {
           console.error('Cannot create new chat session: characterData is null.');
           setError('Cannot create new chat session: No character selected.');
           return false;
-        } const newChatResponse = await ChatStorage.createNewChat(characterData);
+        }
+        // Use workshop chat type if character override is set
+        const chatType = characterDataOverride ? 'workshop' : 'chat';
+        const newChatResponse = await ChatStorage.createNewChat(effectiveCharacter, chatType);
         if (newChatResponse.success && newChatResponse.chat_session_uuid) {
           chatToSaveId = newChatResponse.chat_session_uuid;
           setCurrentChatId(chatToSaveId);
@@ -724,8 +728,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     setIsLoading(true); setError(null); setCurrentChatId(null); setMessages([]);
     messagesRef.current = []; // Sync ref immediately since useEffect update is async
 
+    // Determine chat type based on whether we're using character override (Workshop mode)
+    const chatType = characterDataOverride ? 'workshop' : 'chat';
+
     try {
-      await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(effectiveCharacter);
+      await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(effectiveCharacter, chatType);
       if (!newChatResp.success || !newChatResp.chat_session_uuid) {
         console.error('Failed to create new chat session backend:', newChatResp.error);
         setError(newChatResp.error || 'Failed to create new chat session.');
