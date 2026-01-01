@@ -189,3 +189,32 @@ export function extractBannedTokens(rules: WordSwapRule[]): string[] {
 function escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * Strips character name prefix from the beginning of AI-generated responses.
+ * Many models prepend responses with "CharacterName:" which should be removed.
+ *
+ * @param text The text content to process
+ * @param characterName The character's name to match against
+ * @returns The text with the character name prefix removed (if present)
+ *
+ * @example
+ * stripCharacterPrefix("Bob: Hello there!", "Bob") // returns "Hello there!"
+ * stripCharacterPrefix("Bob:Hello there!", "Bob") // returns "Hello there!"
+ * stripCharacterPrefix("Hello there!", "Bob") // returns "Hello there!" (no change)
+ */
+export function stripCharacterPrefix(text: string, characterName: string): string {
+  if (!text || typeof text !== 'string' || !characterName) {
+    return text;
+  }
+
+  // Escape special regex characters in the character name
+  const escapedName = escapeRegExp(characterName);
+
+  // Match the character name followed by a colon at the start of the text
+  // Allows for optional whitespace after the colon
+  // Case-insensitive to handle variations
+  const prefixPattern = new RegExp(`^${escapedName}:\\s*`, 'i');
+
+  return text.replace(prefixPattern, '');
+}
