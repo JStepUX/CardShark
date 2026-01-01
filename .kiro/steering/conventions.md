@@ -47,8 +47,15 @@ Before adding a dependency or writing new utility code, check if these already e
 | UUID generation | `generateUUID()` | `frontend/src/utils/generateUUID.ts` |
 | Character UUID | `getCharacterUUID()` | `frontend/src/utils/generateUUID.ts` |
 | UUID validation | `uuidUtils.ts` | `frontend/src/utils/uuidUtils.ts` |
+| Debounce | `debounce(fn, delay)` | `frontend/src/utils/performance.ts` |
+| Throttle | `throttle(fn, delay)` | `frontend/src/utils/performance.ts` |
+| HTML to text | `htmlToText()`, `htmlToPlainText()` | `frontend/src/utils/contentUtils.ts` |
+| Text to HTML | `textToHtmlParagraphs()` | `frontend/src/utils/contentUtils.ts` |
+| Sanitize HTML | `sanitizeHtml()` | `frontend/src/utils/contentUtils.ts` |
+| Create messages | `MessageUtils.createUserMessage()` | `frontend/src/utils/messageUtils.ts` |
+| Debounced save | `MessageUtils.createDebouncedSave()` | `frontend/src/utils/messageUtils.ts` |
 
-**Do NOT** add packages like `uuid`, `nanoid`, or similar - we have browser-compatible implementations with fallbacks.
+**Do NOT** add packages like `uuid`, `nanoid`, `lodash`, `sanitize-html`, or similar - we have lightweight implementations.
 
 ### Component Patterns
 - **Mode-based components**: Components that adapt UI based on mode prop (e.g., SidePanel with world/character/assistant modes)
