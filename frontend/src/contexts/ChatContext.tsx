@@ -482,21 +482,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
             messageCount: messages.length
           });
           setError(null);
-        } else if (response.isRecoverable && characterData?.data?.first_mes) {
-          // Case 2: No chat sessions with user messages found - initialize with first_mes
+        } else if (response.isRecoverable || (response.success && (!messages || messages.length === 0))) {
+          // Case 2: No chat sessions with user messages found - initialize with first_mes (or empty bubble)
           // This happens when:
           // - Character has no chat history yet
           // - All existing chats are empty (only greeting, no user messages)
+          // - Backend returned success but with empty messages array
+          // If first_mes is empty, we still create a bubble - user can use "regenerate greeting" button
           console.log('  ℹ No chat sessions with messages found, initializing with first_mes');
-          console.log('  Backend response:', response.error);
+          console.log('  Backend response:', response.error, 'isRecoverable:', response.isRecoverable, 'success:', response.success);
 
-          const charName = characterData.data.name || 'Character';
+          const charName = characterData?.data?.name || 'Character';
           const uName = currentUser?.name || 'User';
-          const subContent = characterData.data.first_mes.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName);
+          const rawFirstMes = characterData?.data?.first_mes || '';
+          const subContent = rawFirstMes.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName);
           const firstMsg = MessageUtils.createAssistantMessage(subContent);
 
           // Populate variations with alternate greetings if available
-          if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
+          if (characterData?.data?.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
             const alternates = characterData.data.alternate_greetings.map(alt =>
               alt.replace(/\{\{char\}\}/g, charName).replace(/\{\{user\}\}/g, uName)
             );
@@ -507,7 +510,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           setMessages([firstMsg]);
           setLastContextWindow({
             type: 'initial_message_used', timestamp: new Date().toISOString(),
-            characterName: characterData.data.name, firstMessage: characterData.data.first_mes,
+            characterName: characterData?.data?.name, firstMessage: rawFirstMes || '(empty)',
             originalLoadError: response.error
           });
 
@@ -526,8 +529,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           // Case 3: Error - no chat found and no first_mes available
           console.error('  ✗ Failed to load chat and no first_mes available for fallback');
           console.error('  Response:', response);
-          console.error('  Has first_mes:', !!characterData?.data?.first_mes);
-          setError(response.error || 'Failed to load chat & no initial message.');
+          console.error('  Has first_mes:', !!characterData?.data?.first_mes, 'first_mes value:', characterData?.data?.first_mes?.substring(0, 50));
+          console.error('  isRecoverable:', response.isRecoverable, 'success:', response.success, 'messages:', messages?.length);
+
+          // Provide a more helpful error message
+          const errorMsg = !characterData?.data?.first_mes
+            ? 'No greeting message (first_mes) is set for this character. Please add one in the character editor.'
+            : (response.error || 'Failed to load chat. Please try creating a new chat.');
+          setError(errorMsg);
           setMessages([]);
           setLastContextWindow({
             type: 'load_failed_or_no_fallback', timestamp: new Date().toISOString(),
