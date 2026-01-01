@@ -2,7 +2,7 @@
  * @file WorldPlayView.tsx
  * @description Main orchestrator for World Card gameplay. Integrates the existing ChatView
  *              with SidePanel (in world mode) and MapModal for navigation.
- * @dependencies worldApi (V2), roomApi, ChatView, SidePanel, MapModal
+ * @dependencies worldApi (V2), roomApi, ChatView, SidePanel, MapModal, CombatModal
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -12,16 +12,24 @@ import ChatView from '../components/chat/ChatView';
 import { SidePanel } from '../components/SidePanel';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
 import { MapModal } from '../components/world/MapModal';
+import { CombatModal } from '../components/combat';
 import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
 import type { WorldCard } from '../types/worldCard';
 import type { CharacterCard } from '../types/schema';
 import type { GridWorldState, GridRoom, DisplayNPC } from '../types/worldGrid';
+import type { CombatInitData, CombatState } from '../types/combat';
 import { resolveNpcDisplayData } from '../utils/worldStateApi';
 import { roomCardToGridRoom } from '../utils/roomCardAdapter';
 import { injectRoomContext, injectNPCContext } from '../utils/worldCardAdapter';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
+
+// Extended DisplayNPC with combat info from RoomNPC
+interface CombatDisplayNPC extends DisplayNPC {
+  hostile?: boolean;
+  monster_level?: number;
+}
 
 interface WorldPlayViewProps {
   worldId?: string;
@@ -45,7 +53,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [worldCard, setWorldCard] = useState<WorldCard | null>(null);
   const [worldState, setWorldState] = useState<GridWorldState | null>(null);
   const [currentRoom, setCurrentRoom] = useState<GridRoom | null>(null);
-  const [roomNpcs, setRoomNpcs] = useState<DisplayNPC[]>([]);
+  const [roomNpcs, setRoomNpcs] = useState<CombatDisplayNPC[]>([]);
   const [activeNpcId, setActiveNpcId] = useState<string | undefined>(); // Active responder, NOT session
   const [activeNpcName, setActiveNpcName] = useState<string>(''); // For PartyGatherModal display
   const [activeNpcCard, setActiveNpcCard] = useState<CharacterCard | null>(null); // Active NPC's character card
@@ -57,6 +65,10 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [missingRoomCount, setMissingRoomCount] = useState(0);
   const [showMissingRoomWarning, setShowMissingRoomWarning] = useState(false);
+
+  // Combat state
+  const [combatInitData, setCombatInitData] = useState<CombatInitData | null>(null);
+  const [isInCombat, setIsInCombat] = useState(false);
 
   // Load world data from API (V2)
   useEffect(() => {
@@ -133,10 +145,20 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         if (currentRoom) {
           setCurrentRoom(currentRoom);
 
-          // Resolve NPCs in the room
+          // Resolve NPCs in the room and merge with combat data
           const npcUuids = currentRoom.npcs.map(npc => npc.character_uuid);
-          const npcs = await resolveNpcDisplayData(npcUuids);
-          setRoomNpcs(npcs);
+          const resolvedNpcs = await resolveNpcDisplayData(npcUuids);
+
+          // Merge hostile/monster_level from room NPCs
+          const npcsWithCombatData: CombatDisplayNPC[] = resolvedNpcs.map(npc => {
+            const roomNpc = currentRoom.npcs.find(rn => rn.character_uuid === npc.id);
+            return {
+              ...npc,
+              hostile: roomNpc?.hostile,
+              monster_level: roomNpc?.monster_level,
+            };
+          });
+          setRoomNpcs(npcsWithCombatData);
 
           // Add introduction message
           if (currentRoom.introduction_text && !isGenerating) {
@@ -172,17 +194,63 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     }
   }, [characterData, currentRoom, activeNpcCard, setCharacterDataOverride]);
 
-  // Handle NPC selection - sets active responder (does NOT change session)
+  // Handle NPC selection - either starts combat (hostile) or sets active responder
   const handleSelectNpc = useCallback(async (npcId: string) => {
     if (!currentRoom) return;
 
-    const npc = roomNpcs.find(n => n.id === npcId);
+    const npc = roomNpcs.find((n: CombatDisplayNPC) => n.id === npcId);
     if (!npc) {
       console.error(`NPC not found: ${npcId}`);
       return;
     }
 
-    // Set active NPC (changes who responds, NOT the session)
+    // Check if NPC is hostile - initiate combat instead of conversation
+    if (npc.hostile) {
+      // Gather all hostile NPCs in the room for combat
+      const hostileNpcs = roomNpcs.filter((n: CombatDisplayNPC) => n.hostile);
+
+      // Build combat init data
+      const initData: CombatInitData = {
+        playerData: {
+          id: 'player',
+          name: characterData?.data?.name || 'Player',
+          level: 5, // TODO: Get from player state when implemented
+          imagePath: characterData?.data?.character_uuid
+            ? `/api/character-image/${characterData.data.character_uuid}.png`
+            : null,
+        },
+        enemies: hostileNpcs.map((enemy: CombatDisplayNPC) => ({
+          id: enemy.id,
+          name: enemy.name,
+          level: enemy.monster_level || 1,
+          imagePath: enemy.imageUrl || null,
+        })),
+        roomImagePath: currentRoom.image_path
+          ? `/api/world-assets/${worldId}/${currentRoom.image_path.split('/').pop()}`
+          : null,
+        roomName: currentRoom.name,
+        playerAdvantage: true, // Player initiated combat
+      };
+
+      setCombatInitData(initData);
+      setIsInCombat(true);
+
+      // Add combat start message
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        content: `*Combat begins against ${hostileNpcs.map((n: CombatDisplayNPC) => n.name).join(', ')}!*`,
+        timestamp: Date.now(),
+        metadata: {
+          type: 'combat_start',
+          roomId: currentRoom.id,
+        }
+      });
+
+      return;
+    }
+
+    // Non-hostile NPC - set as active responder (changes who responds, NOT the session)
     setActiveNpcId(npcId);
     setActiveNpcName(npc.name);
 
@@ -269,7 +337,55 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     } catch (err) {
       console.error('Error summoning NPC:', err);
     }
-  }, [roomNpcs, currentRoom, addMessage]);
+  }, [roomNpcs, currentRoom, addMessage, characterData, worldId]);
+
+  // Handle combat end - process results and update state
+  const handleCombatEnd = useCallback((result: CombatState['result']) => {
+    setIsInCombat(false);
+    setCombatInitData(null);
+
+    if (!result || !currentRoom) return;
+
+    if (result.outcome === 'victory') {
+      // Remove defeated enemies from the room
+      const defeatedIds = new Set(result.defeatedEnemies);
+
+      // Update room NPCs to remove defeated hostile NPCs
+      setRoomNpcs((prev: CombatDisplayNPC[]) => prev.filter((npc: CombatDisplayNPC) => !defeatedIds.has(npc.id)));
+
+      // Add victory message
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        content: `*Victory! You earned ${result.rewards?.xp || 0} XP and ${result.rewards?.gold || 0} gold.*`,
+        timestamp: Date.now(),
+        metadata: {
+          type: 'combat_victory',
+          roomId: currentRoom.id,
+          rewards: result.rewards,
+        }
+      });
+
+      // TODO: Update currentRoom.npcs in worldState to persist defeated enemies
+      // This would require updating the world card backend
+
+    } else if (result.outcome === 'defeat') {
+      // Add defeat message
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        content: '*You have been defeated. You awaken at the starting area...*',
+        timestamp: Date.now(),
+        metadata: {
+          type: 'combat_defeat',
+          roomId: currentRoom.id,
+        }
+      });
+
+      // TODO: Reset player to starting position
+      // TODO: Apply defeat penalties
+    }
+  }, [currentRoom, addMessage]);
 
   // Extracted room transition logic - shared by direct navigate and Party Gather modal
   const performRoomTransition = useCallback(async (
@@ -312,10 +428,20 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       setActiveNpcCard(null);
     }
 
-    // Resolve NPCs in the new room
+    // Resolve NPCs in the new room and merge with combat data
     const npcUuids = targetRoom.npcs.map(npc => npc.character_uuid);
-    const npcs = await resolveNpcDisplayData(npcUuids);
-    setRoomNpcs(npcs);
+    const resolvedNpcs = await resolveNpcDisplayData(npcUuids);
+
+    // Merge hostile/monster_level from room NPCs
+    const npcsWithCombatData: CombatDisplayNPC[] = resolvedNpcs.map(npc => {
+      const roomNpc = targetRoom.npcs.find(rn => rn.character_uuid === npc.id);
+      return {
+        ...npc,
+        hostile: roomNpc?.hostile,
+        monster_level: roomNpc?.monster_level,
+      };
+    });
+    setRoomNpcs(npcsWithCombatData);
 
     // Persist position to backend (V2)
     try {
@@ -558,6 +684,14 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           onBringAlong={handleBringNpcAlong}
           onLeaveHere={handleLeaveNpcHere}
           onClose={handleClosePartyGatherModal}
+        />
+      )}
+
+      {/* Combat Modal */}
+      {isInCombat && combatInitData && (
+        <CombatModal
+          initData={combatInitData}
+          onCombatEnd={handleCombatEnd}
         />
       )}
     </div>

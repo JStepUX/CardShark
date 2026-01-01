@@ -9,6 +9,7 @@ export interface RoomNPC {
   character_uuid: string;
   role?: string; // e.g., "shopkeeper", "guard", "quest_giver"
   hostile?: boolean; // Whether NPC is hostile to player
+  monster_level?: number; // Combat level 1-60 (only for hostile NPCs)
 }
 
 /**
