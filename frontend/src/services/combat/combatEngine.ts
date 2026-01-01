@@ -31,15 +31,16 @@ import {
   CombatState,
   CombatAction,
   CombatEvent,
-  CombatPhase,
   Combatant,
   Battlefield,
   CombatLogEntry,
   CombatInitData,
   HitQuality,
+  ActionType,
   calculateHitQuality,
   createCombatant,
 } from '../../types/combat';
+import { generateUUID } from '../../utils/generateUUID';
 
 // =============================================================================
 // Random Utilities
@@ -491,7 +492,7 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
     : `${actor.name}'s attack misses ${target.name}!`;
 
   const logEntry: CombatLogEntry = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     turn: state.turn,
     actorId: actor.id,
     actorName: actor.name,
@@ -575,7 +576,7 @@ function executeDefend(state: CombatState, action: CombatAction): CombatState {
   };
 
   const logEntry: CombatLogEntry = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     turn: state.turn,
     actorId: actor.id,
     actorName: actor.name,
@@ -623,7 +624,7 @@ function executeOverwatch(state: CombatState, action: CombatAction): CombatState
   };
 
   const logEntry: CombatLogEntry = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     turn: state.turn,
     actorId: actor.id,
     actorName: actor.name,
@@ -709,7 +710,7 @@ function executeMove(state: CombatState, action: CombatAction): CombatState {
     : { ...state.battlefield, enemySlots: slots };
 
   const logEntry: CombatLogEntry = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     turn: state.turn,
     actorId: actor.id,
     actorName: actor.name,
@@ -796,7 +797,7 @@ function executeSwap(state: CombatState, action: CombatAction): CombatState {
     : { ...state.battlefield, enemySlots: slots };
 
   const logEntry: CombatLogEntry = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     turn: state.turn,
     actorId: actor.id,
     actorName: actor.name,
@@ -882,7 +883,7 @@ function executeFlee(state: CombatState, action: CombatAction): CombatState {
       : { ...state.battlefield, enemySlots: slots };
 
     const logEntry: CombatLogEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       turn: state.turn,
       actorId: actor.id,
       actorName: actor.name,
@@ -919,7 +920,7 @@ function executeFlee(state: CombatState, action: CombatAction): CombatState {
   } else {
     // Failed flee attempt
     const logEntry: CombatLogEntry = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       turn: state.turn,
       actorId: actor.id,
       actorName: actor.name,

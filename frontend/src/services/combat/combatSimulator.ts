@@ -3,9 +3,7 @@
 // Run with: npx ts-node --esm src/services/combat/combatSimulator.ts
 
 import {
-  CombatState,
   CombatInitData,
-  Combatant,
   deriveCombatStats,
 } from '../../types/combat';
 import {

@@ -94,6 +94,8 @@ export function ActionButtons({
             onClick={() => isAvailable && onSelectAction(config.type)}
             disabled={disabled || !isAvailable}
             title={`${config.description} [${config.hotkey}]`}
+            aria-label={`${config.label}: ${config.description}. Hotkey: ${config.hotkey}`}
+            aria-pressed={isSelected}
             className={`
               relative flex flex-col items-center justify-center
               w-20 h-20 rounded-lg
@@ -139,6 +141,7 @@ export function ActionButtons({
       {selectedAction && (
         <button
           onClick={onCancel}
+          aria-label="Cancel current action. Hotkey: Escape"
           className="flex flex-col items-center justify-center w-20 h-20 rounded-lg bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 transition-all"
         >
           <div className="w-8 h-8 text-gray-300">

@@ -1,7 +1,7 @@
 // frontend/src/components/combat/CombatModal.tsx
 // Main combat modal - orchestrates all combat UI
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CombatState,
   CombatAction,
@@ -17,7 +17,6 @@ import {
   getValidAttackTargets,
   getValidMoveSlots,
   getValidSwapTargets,
-  canFlee,
 } from '../../services/combat/combatEngine';
 import { getEnemyAction } from '../../services/combat/enemyAI';
 import { BattlefieldGrid } from './BattlefieldGrid';
@@ -41,6 +40,9 @@ export function CombatModal({
   const [combatState, setCombatState] = useState<CombatState>(() =>
     initializeCombat(initData)
   );
+
+  // Ref to prevent double-execution of enemy turns
+  const enemyTurnInProgress = useRef(false);
 
   // UI state
   const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
@@ -97,15 +99,23 @@ export function CombatModal({
   // Handle enemy turns automatically
   useEffect(() => {
     if (combatState.phase === 'resolving' && currentActor && !currentActor.isPlayerControlled) {
+      // Guard against double-execution
+      if (enemyTurnInProgress.current) return;
+      enemyTurnInProgress.current = true;
+
       // Add a small delay for UX
       const timeout = setTimeout(() => {
         const enemyAction = getEnemyAction(combatState);
         if (enemyAction) {
           executeAction(enemyAction);
         }
+        enemyTurnInProgress.current = false;
       }, 1000);
 
-      return () => clearTimeout(timeout);
+      return () => {
+        clearTimeout(timeout);
+        enemyTurnInProgress.current = false;
+      };
     }
   }, [combatState, currentActor, executeAction]);
 

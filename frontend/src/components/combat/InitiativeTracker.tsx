@@ -1,7 +1,6 @@
 // frontend/src/components/combat/InitiativeTracker.tsx
 // Shows turn order with mini portraits
 
-import React from 'react';
 import { CombatState } from '../../types/combat';
 import { CombatCard } from './CombatCard';
 

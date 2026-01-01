@@ -1,7 +1,7 @@
 // frontend/src/components/combat/CombatLog.tsx
 // Combat log display showing turn history
 
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { CombatLogEntry } from '../../types/combat';
 
 interface CombatLogProps {

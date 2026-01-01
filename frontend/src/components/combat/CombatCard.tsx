@@ -1,7 +1,6 @@
 // frontend/src/components/combat/CombatCard.tsx
 // Individual combatant card for the battlefield
 
-import React from 'react';
 import { Combatant } from '../../types/combat';
 
 interface CombatCardProps {

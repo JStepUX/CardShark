@@ -1,8 +1,7 @@
 // frontend/src/components/combat/BattlefieldGrid.tsx
 // The 2x5 battlefield grid for combat
 
-import React from 'react';
-import { CombatState, Combatant } from '../../types/combat';
+import { CombatState } from '../../types/combat';
 import { CombatCard } from './CombatCard';
 
 interface BattlefieldGridProps {

@@ -1,7 +1,6 @@
 // frontend/src/components/combat/PlayerHUD.tsx
 // Player status display for combat
 
-import React from 'react';
 import { Combatant } from '../../types/combat';
 
 interface PlayerHUDProps {

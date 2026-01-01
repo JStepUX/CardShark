@@ -4,7 +4,6 @@
 import {
   CombatState,
   CombatAction,
-  Combatant,
 } from '../../types/combat';
 import { getValidAttackTargets, getCurrentActor } from './combatEngine';
 
