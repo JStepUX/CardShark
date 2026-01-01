@@ -1,6 +1,43 @@
 import { LoreEntry, createEmptyLoreEntry } from '../types/schema';
 import { useCharacter } from '../contexts/CharacterContext'; // Import useCharacter
 import { apiService } from '../services/apiService'; // Import apiService
+import { generateUUID } from '../utils/uuidUtils';
+
+/**
+ * Ensures the character has a UUID, generating one if missing.
+ * Updates the character data in context and returns the UUID.
+ */
+function ensureCharacterUUID(
+  characterContext: ReturnType<typeof useCharacter>
+): string {
+  const { characterData, setCharacterData } = characterContext;
+
+  if (!characterData) {
+    throw new Error('No character data available. Please select or create a character first.');
+  }
+
+  // If UUID exists, return it
+  if (characterData.data?.character_uuid) {
+    return characterData.data.character_uuid;
+  }
+
+  // Generate a new UUID and update the character
+  const newUUID = generateUUID();
+  console.log('Generated new character UUID for lore import:', newUUID);
+
+  setCharacterData(prev => {
+    if (!prev) return null;
+    return {
+      ...prev,
+      data: {
+        ...prev.data,
+        character_uuid: newUUID
+      }
+    };
+  });
+
+  return newUUID;
+}
 
 /**
  * Fetch utility with timeout capability
@@ -61,39 +98,38 @@ export async function importTsv(
     const extractedLoreEntries = await parseTsvContent(content, startIndex);
 
     if (extractedLoreEntries.length > 0) {
-      if (characterData?.data?.character_uuid) {
-        try {
-          await apiService.saveLoreEntries(characterData.data.character_uuid, extractedLoreEntries);
-          
-          setCharacterData(prevCharacterData => {
-            if (!prevCharacterData) return null;
+      // Ensure character has a UUID (generate if missing)
+      const characterUUID = ensureCharacterUUID(characterContext);
 
-            const charData = prevCharacterData.data || {};
-            const charBook = charData.character_book || { entries: [] };
-            const existingEntries = charBook.entries || [];
+      try {
+        await apiService.saveLoreEntries(characterUUID, extractedLoreEntries);
 
-            const updatedBook = {
-              ...charBook,
-              entries: [
-                ...existingEntries,
-                ...extractedLoreEntries
-              ]
-            };
-            return {
-              ...prevCharacterData,
-              data: {
-                ...charData,
-                character_book: updatedBook
-              }
-            };
-          });
-          console.log('TSV Lore entries saved successfully.');
-        } catch (saveError) {
-          console.error('Failed to save TSV lore entries:', saveError);
-          throw new Error(`Failed to save TSV lore entries: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
-        }
-      } else {
-        console.warn('Cannot save TSV lore entries: Character UUID is missing.');
+        setCharacterData(prevCharacterData => {
+          if (!prevCharacterData) return null;
+
+          const charData = prevCharacterData.data || {};
+          const charBook = charData.character_book || { entries: [] };
+          const existingEntries = charBook.entries || [];
+
+          const updatedBook = {
+            ...charBook,
+            entries: [
+              ...existingEntries,
+              ...extractedLoreEntries
+            ]
+          };
+          return {
+            ...prevCharacterData,
+            data: {
+              ...charData,
+              character_book: updatedBook
+            }
+          };
+        });
+        console.log('TSV Lore entries saved successfully.');
+      } catch (saveError) {
+        console.error('Failed to save TSV lore entries:', saveError);
+        throw new Error(`Failed to save TSV lore entries: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
       }
     }
     return extractedLoreEntries;
@@ -271,41 +307,40 @@ export async function importJson(
     const extractedLoreEntries = extractEntriesFromJson(jsonData);
 
     if (extractedLoreEntries.length > 0) {
-      const { characterData, setCharacterData } = characterContext;
-      if (characterData?.data?.character_uuid) {
-        try {
-          await apiService.saveLoreEntries(characterData.data.character_uuid, extractedLoreEntries);
-          
-          setCharacterData(prevCharacterData => {
-            if (!prevCharacterData) return null;
+      const { setCharacterData } = characterContext;
 
-            const charData = prevCharacterData.data || {};
-            const charBook = charData.character_book || { entries: [] };
-            const existingEntries = charBook.entries || [];
+      // Ensure character has a UUID (generate if missing)
+      const characterUUID = ensureCharacterUUID(characterContext);
 
-            const updatedBook = {
-              ...charBook,
-              entries: [
-                ...existingEntries,
-                ...extractedLoreEntries
-              ]
-            };
-            return {
-              ...prevCharacterData,
-              data: {
-                ...charData,
-                character_book: updatedBook
-              }
-            };
-          });
-          console.log('JSON Lore entries saved successfully.');
-        } catch (saveError) {
-          console.error('Failed to save JSON lore entries:', saveError);
-          throw new Error(`Failed to save JSON lore entries: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
-        }
-      } else {
-        console.warn('Cannot save JSON lore entries: Character UUID is missing.');
-        // Consider notifying the user that a character must be active/saved.
+      try {
+        await apiService.saveLoreEntries(characterUUID, extractedLoreEntries);
+
+        setCharacterData(prevCharacterData => {
+          if (!prevCharacterData) return null;
+
+          const charData = prevCharacterData.data || {};
+          const charBook = charData.character_book || { entries: [] };
+          const existingEntries = charBook.entries || [];
+
+          const updatedBook = {
+            ...charBook,
+            entries: [
+              ...existingEntries,
+              ...extractedLoreEntries
+            ]
+          };
+          return {
+            ...prevCharacterData,
+            data: {
+              ...charData,
+              character_book: updatedBook
+            }
+          };
+        });
+        console.log('JSON Lore entries saved successfully.');
+      } catch (saveError) {
+        console.error('Failed to save JSON lore entries:', saveError);
+        throw new Error(`Failed to save JSON lore entries: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
       }
     }
     return extractedLoreEntries;
@@ -352,44 +387,37 @@ export async function importPng(file: File, characterContext: ReturnType<typeof 
 
     // Save the extracted lore entries to the character
     if (extractedLoreEntries.length > 0) {
-      const { characterData, setCharacterData } = characterContext;
-      if (characterData?.data?.character_uuid) {
-        try {
-          await apiService.saveLoreEntries(characterData.data.character_uuid, extractedLoreEntries);
-          // Optionally, update characterData in context if the save operation returns updated character data
-          // For now, we assume the UI will refresh or the user will be notified.
-          // Example: if the backend returns the updated character with new lore:
-          // const updatedCharacter = await apiService.saveLoreEntries(...);
-          // setCharacterData(updatedCharacter);
+      const { setCharacterData } = characterContext;
 
-          // Update characterData in context by merging new lore entries
-          setCharacterData(prevCharacterData => {
-            if (!prevCharacterData) return null;
-            const updatedBook = {
-              ...prevCharacterData.data.character_book,
-              entries: [
-                ...(prevCharacterData.data.character_book?.entries || []),
-                ...extractedLoreEntries
-              ]
-            };
-            return {
-              ...prevCharacterData,
-              data: {
-                ...prevCharacterData.data,
-                character_book: updatedBook
-              }
-            };
-          });
+      // Ensure character has a UUID (generate if missing)
+      const characterUUID = ensureCharacterUUID(characterContext);
 
-          console.log('Lore entries saved successfully.');
-        } catch (saveError) {
-          console.error('Failed to save lore entries:', saveError);
-          // Propagate or handle the error as needed for the UI
-          throw new Error(`Failed to save lore entries: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
-        }
-      } else {
-        console.warn('Cannot save lore entries: Character UUID is missing.');
-        // Optionally, inform the user that the character needs to be saved first or selected.
+      try {
+        await apiService.saveLoreEntries(characterUUID, extractedLoreEntries);
+
+        // Update characterData in context by merging new lore entries
+        setCharacterData(prevCharacterData => {
+          if (!prevCharacterData) return null;
+          const updatedBook = {
+            ...prevCharacterData.data.character_book,
+            entries: [
+              ...(prevCharacterData.data.character_book?.entries || []),
+              ...extractedLoreEntries
+            ]
+          };
+          return {
+            ...prevCharacterData,
+            data: {
+              ...prevCharacterData.data,
+              character_book: updatedBook
+            }
+          };
+        });
+
+        console.log('Lore entries saved successfully.');
+      } catch (saveError) {
+        console.error('Failed to save lore entries:', saveError);
+        throw new Error(`Failed to save lore entries: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
       }
     }
 

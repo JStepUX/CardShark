@@ -57,7 +57,7 @@ interface ChatContextType {
   setCharacterDataOverride: (characterData: CharacterCard | null) => void;
   updateMessage: (messageId: string, content: string) => void;
   deleteMessage: (messageId: string) => void;
-  addMessage: (message: Message) => void;
+  addMessage: (message: Message) => Promise<{ success: boolean; error?: string }>;
   setMessages: (messages: Message[]) => void;
   cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
   generateResponse: (prompt: string, retryCount?: number) => Promise<void>;
@@ -119,7 +119,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
   const [characterDataOverride, setCharacterDataOverride] = useState<CharacterCard | null>(null);
   const currentGenerationRef = useRef<AbortController | null>(null);
   const lastCharacterId = useRef<string | null>(null); // Stores character_id for file system comparison
-  const autoSaveEnabled = useRef(true);
+  // Counter-based mutex: saves only allowed when counter is 0
+  // Increment to disable saves, decrement to re-enable (supports nested operations)
+  const autoSaveDisabledCount = useRef(0);
+  // Mutex for chat loading operations - prevents auto-load/manual-load races
+  const isLoadingChatRef = useRef(false);
+  const loadingForCharacterRef = useRef<string | null>(null); // Track which character we're loading for
   const createNewChatRef = useRef<(() => Promise<string | null>) | null>(null);
   const isCreatingChatRef = useRef(false); // Prevent concurrent chat creation
   const settingsSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -284,7 +289,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
 
   const saveChat = useCallback(async (messageList: Message[]) => {
-    if (!characterData?.data?.name || !autoSaveEnabled.current) {
+    if (!characterData?.data?.name || autoSaveDisabledCount.current > 0) {
       console.debug('Save aborted: no character data name or autoSave disabled');
       return false;
     }
@@ -371,6 +376,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     }
 
     const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
+
+    // CRITICAL: Fail fast if character has no valid UUID
+    if (!currentCharacterFileId || currentCharacterFileId === 'unknown-character') {
+      console.error('ChatContext: Character has no valid UUID, cannot load chats');
+      setError('Character is missing a valid UUID. Please re-save the character.');
+      return;
+    }
+
     const isCharacterChanged = lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId;
     const isFreshMount = !hasMountedRef.current;
 
@@ -397,6 +410,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
      * - If first_mes unavailable: Show error state
      */
     async function loadChatForCharacterInternal() {
+      // Mutex: prevent concurrent load operations
+      if (isLoadingChatRef.current) {
+        console.log('  ⚠ Chat load already in progress, skipping');
+        return;
+      }
+      isLoadingChatRef.current = true;
+      loadingForCharacterRef.current = currentCharacterFileId;
+
       try {
         setIsLoading(true);
         setError(null);
@@ -407,9 +428,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         console.log('  Requesting latest chat session from backend...');
         const response = await ChatStorage.loadLatestChat(characterData);
 
+        // CRITICAL: Check if character changed while we were loading
+        // If so, abort this load to prevent cross-character contamination
+        if (loadingForCharacterRef.current !== currentCharacterFileId) {
+          console.log('  ⚠ Character changed during load, aborting stale load');
+          return;
+        }
+
         // Handle potentially unwrapped response from ChatStorage or raw DataResponse
         const sessionData = response.data || response;
         const messages = sessionData.messages;
+
+        // Validate that loaded chat belongs to this character (if metadata available)
+        const loadedCharacterUuid = sessionData.metadata?.character_uuid || sessionData.character_uuid;
+        if (loadedCharacterUuid && loadedCharacterUuid !== currentCharacterFileId) {
+          console.error('  ✗ Loaded chat belongs to different character!', {
+            expected: currentCharacterFileId,
+            received: loadedCharacterUuid
+          });
+          setError('Loaded chat belongs to a different character. Please try again.');
+          return;
+        }
 
         // Case 1: Chat session found with messages - restore it
         if (response.success && messages && Array.isArray(messages) && messages.length > 0) {
@@ -510,16 +549,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         setIsLoading(false);
         // Always update the last character ID to prevent infinite loops
         lastCharacterId.current = currentCharacterFileId;
+        // Release the loading mutex
+        isLoadingChatRef.current = false;
+        loadingForCharacterRef.current = null;
       }
     }
 
     // Execute the chat loading function
     loadChatForCharacterInternal();
 
-    // Cleanup: Reset mount flag when component unmounts
+    // Cleanup: Reset mount flag and loading mutex when component unmounts
     return () => {
       console.log('ChatContext: Component unmounting, resetting mount flag');
       hasMountedRef.current = false;
+      isLoadingChatRef.current = false;
+      loadingForCharacterRef.current = null;
     };
   }, [characterData, resetTriggeredLoreImagesState]);
 
@@ -527,21 +571,34 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     (msgs: Message[]): Promise<boolean> => saveChat(msgs).catch(e => { console.error("Debounced saveChat err:", e); throw e; }), 500
   );
 
-  const appendMessage = useCallback(async (message: Message) => {
-    if (!characterData?.data?.name) { console.debug('Append abort: no char name'); return null; }
-    if (!currentChatId) { console.error('Append abort: currentChatId null.'); setError('No active chat session.'); return null; }
+  const appendMessage = useCallback(async (message: Message): Promise<{ success: boolean; message: Message | null; error?: string }> => {
+    if (!characterData?.data?.name) {
+      console.debug('Append abort: no char name');
+      return { success: false, message: null, error: 'No character data' };
+    }
+    if (!currentChatId) {
+      console.error('Append abort: currentChatId null.');
+      const err = 'No active chat session.';
+      setError(err);
+      return { success: false, message: null, error: err };
+    }
 
     try {
       console.debug(`Appending msg ${message.id} (${message.role}) to chat ${currentChatId}`);
       const msgToAppend = { ...message, id: message.id || crypto.randomUUID(), timestamp: message.timestamp || Date.now() };
       const result = await ChatStorage.appendMessage(currentChatId, msgToAppend);
       console.debug(`Append result for ${msgToAppend.id}:`, result?.success ? 'success' : 'failed');
-      if (!result?.success) setError(result?.error || "Failed to append message.");
-      return msgToAppend;
+      if (!result?.success) {
+        const err = result?.error || "Failed to append message.";
+        setError(err);
+        return { success: false, message: msgToAppend, error: err };
+      }
+      return { success: true, message: msgToAppend };
     } catch (err) {
       console.error('Error appending message:', err);
-      setError(err instanceof Error ? err.message : "Failed to append message.");
-      return null;
+      const errorMsg = err instanceof Error ? err.message : "Failed to append message.";
+      setError(errorMsg);
+      return { success: false, message: null, error: errorMsg };
     }
   }, [characterData, currentChatId]);
 
@@ -595,16 +652,34 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     });
   }, [debouncedSave]);
 
-  const addMessage = useCallback((message: Message) => {
+  const addMessage = useCallback(async (message: Message): Promise<{ success: boolean; error?: string }> => {
     const msgWithId = { ...message, id: message.id || crypto.randomUUID() };
-    setMessages((prev: Message[]) => {
-      const newMsgs = [...prev, msgWithId];
-      // Only use debouncedSave for new chats (no currentChatId)
-      // For existing chats, appendMessage handles persistence (avoids race condition)
-      if (message.role === 'user' && !currentChatId) debouncedSave(newMsgs);
-      return newMsgs;
-    });
-    if (message.role === 'user' && currentChatId) appendMessage(msgWithId);
+
+    // Add message to state optimistically
+    setMessages((prev: Message[]) => [...prev, msgWithId]);
+    messagesRef.current = [...messagesRef.current, msgWithId]; // Sync ref immediately
+
+    // Handle persistence based on chat state
+    if (message.role === 'user') {
+      if (currentChatId) {
+        // Existing chat: await append and handle failure
+        const result = await appendMessage(msgWithId);
+        if (!result.success) {
+          // Remove message from state on persistence failure
+          console.error('Failed to persist message, removing from state:', result.error);
+          setMessages((prev: Message[]) => prev.filter(m => m.id !== msgWithId.id));
+          messagesRef.current = messagesRef.current.filter(m => m.id !== msgWithId.id);
+          return { success: false, error: result.error };
+        }
+        return { success: true };
+      } else {
+        // New chat: use debounced save (will create chat on first save)
+        debouncedSave(messagesRef.current);
+        return { success: true }; // Optimistic - debounced save handles errors separately
+      }
+    }
+
+    return { success: true };
   }, [debouncedSave, appendMessage, currentChatId]);
 
   const handleGenerationError = useCallback((err: any, messageId: string) => {
@@ -635,7 +710,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
     isCreatingChatRef.current = true;
     console.log('Creating new chat');
-    setIsLoading(true); setError(null); setCurrentChatId(null);
+    // Clear all state for new chat - both React state and ref for immediate consistency
+    setIsLoading(true); setError(null); setCurrentChatId(null); setMessages([]);
+    messagesRef.current = []; // Sync ref immediately since useEffect update is async
 
     try {
       await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(effectiveCharacter);
@@ -832,7 +909,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         if (abortCtrl.signal.aborted) {
           console.log('Regen aborted.');
           if (bufTimer) clearTimeout(bufTimer);
-          if (buffer.length > 0) updateRegenMsgContent('', true);
+          bufTimer = null;
+          // Flush buffer synchronously without scheduling new timer
+          if (buffer.length > 0) {
+            fullContent += buffer;
+            buffer = '';
+          }
           break;
         }
         updateRegenMsgContent(chunk);
@@ -997,7 +1079,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         if (abortCtrl.signal.aborted) {
           console.log('Gen aborted by user.');
           if (bufTimer) clearTimeout(bufTimer);
-          if (buffer.length > 0) updateAssistantMsgContent('', true);
+          bufTimer = null;
+          // Flush buffer synchronously without scheduling new timer
+          if (buffer.length > 0) {
+            fullContent += buffer;
+            buffer = '';
+          }
           break;
         }
         updateAssistantMsgContent(chunk);
@@ -1220,7 +1307,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         if (abortCtrl.signal.aborted) {
           console.log('Continuation aborted.');
           if (bufTimer) clearTimeout(bufTimer);
-          if (buffer.length > 0) updateContinueMsgContent('', true);
+          bufTimer = null;
+          // Flush buffer synchronously without scheduling new timer
+          if (buffer.length > 0) {
+            appendedContent += buffer;
+            buffer = '';
+          }
           break;
         }
         updateContinueMsgContent(chunk);
@@ -1288,9 +1380,28 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
   const loadExistingChat = useCallback(async (chatIdToLoad: string) => {
     if (!characterData) { setError("No char data to load chat."); return; }
+
+    const currentCharacterUuid = ChatStorage.getCharacterId(characterData);
+    // CRITICAL: Fail fast if character has no valid UUID
+    if (!currentCharacterUuid || currentCharacterUuid === 'unknown-character') {
+      setError('Character is missing a valid UUID. Please re-save the character.');
+      return;
+    }
+
+    // Mutex: If auto-load is in progress for a different character, take over
+    // If manual load is in progress, skip (user already clicked load)
+    if (isLoadingChatRef.current && loadingForCharacterRef.current === currentCharacterUuid) {
+      console.log('Manual load skipped: load already in progress for this character');
+      return;
+    }
+
+    // Take over the loading mutex
+    isLoadingChatRef.current = true;
+    loadingForCharacterRef.current = currentCharacterUuid;
+
     console.log(`Loading existing chat: ${chatIdToLoad}`);
     setIsLoading(true); setError(null); setCurrentChatId(null);
-    autoSaveEnabled.current = false;
+    autoSaveDisabledCount.current++; // Disable saves during load
 
     try {
       // Load chat using database-centric API
@@ -1370,7 +1481,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         characterName: characterData?.data?.name, chatId: chatIdToLoad,
         error: err instanceof Error ? err.message : 'Unexpected error.'
       });
-    } finally { setIsLoading(false); autoSaveEnabled.current = true; }
+    } finally {
+      setIsLoading(false);
+      autoSaveDisabledCount.current = Math.max(0, autoSaveDisabledCount.current - 1); // Re-enable saves
+      // Release the loading mutex
+      isLoadingChatRef.current = false;
+      loadingForCharacterRef.current = null;
+    }
   }, [characterData]);
 
   const updateReasoningSettings = useCallback((settings: ReasoningSettings) => {
