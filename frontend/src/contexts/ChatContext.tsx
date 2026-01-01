@@ -24,6 +24,7 @@ import {
 import { LoreEntry, CharacterCard } from '../types/schema';
 import { buildContextMessages } from '../utils/contextBuilder';
 import { chatService, SessionSettings } from '../services/chat/chatService';
+import { stripCharacterPrefix } from '../utils/contentProcessing';
 
 interface ReasoningSettings {
   enabled: boolean;
@@ -930,9 +931,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       }
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateRegenMsgContent('', true);
 
+      // Strip character name prefix (e.g., "Bob:") that some models prepend
+      const effectiveChar = characterDataOverride || characterData;
+      const charName = effectiveChar?.data?.name || '';
+      const strippedContent = stripCharacterPrefix(fullContent, charName);
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
-          const finalFiltContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
+          const finalFiltContent = shouldUseClientFiltering ? filterText(strippedContent) : strippedContent;
           const newVars = [...origVariations, finalFiltContent];
           return {
             ...msg,
@@ -1101,9 +1106,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
 
       // Update the message status to complete and apply to React state
+      // Strip character name prefix (e.g., "Bob:") that some models prepend
+      const charName = effectiveCharacterData?.data?.name || '';
+      const strippedContent = stripCharacterPrefix(fullContent, charName);
       const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? {
         ...msg,
-        content: shouldUseClientFiltering ? filterText(fullContent) : fullContent,
+        content: shouldUseClientFiltering ? filterText(strippedContent) : strippedContent,
         status: 'complete' as const
       } : msg);
       setMessages(finalMsgs); // Apply the final status update to React state
@@ -1189,14 +1197,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       );
 
       if (result.success && result.greeting) {
+        // Strip character name prefix (e.g., "Bob:") that some models prepend
+        const charName = characterData?.data?.name || '';
+        const strippedGreeting = stripCharacterPrefix(result.greeting, charName);
         // Final update to ensure consistency and save
         setMessages(prevMsgs => {
           const updatedMsgs = prevMsgs.map(msg => {
             if (msg.id === greetingMsg.id) {
-              const newVars = [...origVariations, result.greeting!];
+              const newVars = [...origVariations, strippedGreeting];
               return {
                 ...msg,
-                content: result.greeting!,
+                content: strippedGreeting,
                 variations: newVars,
                 currentVariation: newVars.length - 1
               };
@@ -1328,9 +1339,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       }
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateContinueMsgContent('', true);
 
+      // Strip character name prefix from appended content (e.g., "Bob:") that some models prepend
+      const effectiveChar = characterDataOverride || characterData;
+      const charName = effectiveChar?.data?.name || '';
+      const strippedAppended = stripCharacterPrefix(appendedContent, charName);
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
-          const finalCombined = origContent + appendedContent;
+          const finalCombined = origContent + strippedAppended;
           const finalFilt = shouldUseClientFiltering ? filterText(finalCombined) : finalCombined;
           const newVars = msg.variations ? [...msg.variations] : [origContent];
           newVars[msg.currentVariation ?? newVars.length - 1] = finalFilt;
@@ -1342,9 +1357,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       if (!abortCtrl.signal.aborted) handleGenerationError(err, message.id);
       else {
         console.log("Continuation aborted, saving current.");
+        // Strip character name prefix from appended content
+        const effectiveChar = characterDataOverride || characterData;
+        const charName = effectiveChar?.data?.name || '';
+        const strippedAppended = stripCharacterPrefix(appendedContent, charName);
         const finalMsgs = messagesRef.current.map(msg => {
           if (msg.id === message.id) {
-            const finalCombined = origContent + appendedContent;
+            const finalCombined = origContent + strippedAppended;
             const finalFilt = shouldUseClientFiltering ? filterText(finalCombined) : finalCombined;
             const newVars = msg.variations ? [...msg.variations] : [origContent];
             newVars[msg.currentVariation ?? newVars.length - 1] = finalFilt;
