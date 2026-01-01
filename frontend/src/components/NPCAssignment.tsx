@@ -4,8 +4,9 @@
  * @dependencies roomApi, character API
  */
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Shield, User, Search } from 'lucide-react';
+import { Plus, X, Shield, User, Search, Settings } from 'lucide-react';
 import { RoomNPC } from '../types/room';
+import { NPCSettingsModal } from './NPCSettingsModal';
 
 interface Character {
   id: string;
@@ -117,6 +118,8 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
   const [showPicker, setShowPicker] = useState(false);
   const [availableCharacters, setAvailableCharacters] = useState<Character[]>([]);
   const [characterNames, setCharacterNames] = useState<Map<string, string>>(new Map());
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [editingNpcIndex, setEditingNpcIndex] = useState<number | null>(null);
 
   // Load available characters
   useEffect(() => {
@@ -171,21 +174,16 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
     onChange(npcs.filter((_, i) => i !== index));
   };
 
-  const handleUpdateRole = (index: number, role: string) => {
-    const updated = [...npcs];
-    updated[index] = {
-      ...updated[index],
-      role: role.trim() || undefined,
-    };
-    onChange(updated);
+  const handleOpenSettings = (index: number) => {
+    setEditingNpcIndex(index);
+    setShowSettingsModal(true);
   };
 
-  const handleToggleHostile = (index: number) => {
+  const handleSaveNpcSettings = (updatedNpc: RoomNPC) => {
+    if (editingNpcIndex === null) return;
+
     const updated = [...npcs];
-    updated[index] = {
-      ...updated[index],
-      hostile: !updated[index].hostile,
-    };
+    updated[editingNpcIndex] = updatedNpc;
     onChange(updated);
   };
 
@@ -213,52 +211,62 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
           {npcs.map((npc, index) => (
             <div
               key={`${npc.character_uuid}-${index}`}
-              className="bg-stone-800 border border-stone-700 rounded-lg p-4 space-y-3"
+              className="bg-stone-800 border border-stone-700 rounded-lg p-4 hover:border-stone-600 transition-colors"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <User size={16} className="text-stone-400" />
-                    <span className="font-medium text-white">
+              <div className="flex items-center justify-between gap-3">
+                {/* NPC Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <User size={16} className="text-stone-400 shrink-0" />
+                    <span className="font-medium text-white truncate">
                       {characterNames.get(npc.character_uuid) || npc.character_uuid}
                     </span>
                   </div>
 
-                  {/* Role input */}
-                  <div className="mb-2">
-                    <label className="block text-xs text-stone-400 mb-1">Role (optional)</label>
-                    <input
-                      type="text"
-                      value={npc.role || ''}
-                      onChange={(e) => handleUpdateRole(index, e.target.value)}
-                      placeholder="e.g., Innkeeper, Guard, Merchant"
-                      className="w-full bg-stone-900 border border-stone-700 rounded px-3 py-1.5 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
+                  {/* Badges */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Role badge */}
+                    {npc.role && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-900/30 border border-blue-800/50 rounded text-xs text-blue-300">
+                        {npc.role}
+                      </span>
+                    )}
 
-                  {/* Hostile toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={npc.hostile || false}
-                      onChange={() => handleToggleHostile(index)}
-                      className="w-4 h-4 rounded border-stone-700 bg-stone-900 text-red-600 focus:ring-red-500"
-                    />
-                    <Shield
-                      size={14}
-                      className={npc.hostile ? 'text-red-500' : 'text-stone-500'}
-                    />
-                    <span className="text-xs text-stone-400">Hostile</span>
-                  </label>
+                    {/* Hostile badge */}
+                    {npc.hostile && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-900/30 border border-red-800/50 rounded text-xs text-red-300">
+                        <Shield size={12} />
+                        Hostile
+                        {npc.monster_level && (
+                          <span className="ml-1 font-medium">Lv.{npc.monster_level}</span>
+                        )}
+                      </span>
+                    )}
+
+                    {/* No settings indicator */}
+                    {!npc.role && !npc.hostile && (
+                      <span className="text-xs text-stone-500 italic">No special settings</span>
+                    )}
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => handleRemoveNPC(index)}
-                  className="p-1.5 hover:bg-stone-700 rounded transition-colors shrink-0"
-                  title="Remove NPC"
-                >
-                  <X size={16} className="text-stone-500 hover:text-red-400" />
-                </button>
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleOpenSettings(index)}
+                    className="p-2 hover:bg-stone-700 rounded-lg transition-colors group"
+                    title="NPC Settings"
+                  >
+                    <Settings size={16} className="text-stone-400 group-hover:text-blue-400 transition-colors" />
+                  </button>
+                  <button
+                    onClick={() => handleRemoveNPC(index)}
+                    className="p-2 hover:bg-stone-700 rounded-lg transition-colors group"
+                    title="Remove NPC"
+                  >
+                    <X size={16} className="text-stone-400 group-hover:text-red-400 transition-colors" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -272,6 +280,20 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
         availableCharacters={availableCharacters}
         excludeIds={npcs.map(npc => npc.character_uuid)}
       />
+
+      {/* NPC Settings Modal */}
+      {showSettingsModal && editingNpcIndex !== null && (
+        <NPCSettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => {
+            setShowSettingsModal(false);
+            setEditingNpcIndex(null);
+          }}
+          npc={npcs[editingNpcIndex]}
+          npcName={characterNames.get(npcs[editingNpcIndex].character_uuid) || 'Unknown NPC'}
+          onSave={handleSaveNpcSettings}
+        />
+      )}
     </div>
   );
 };
