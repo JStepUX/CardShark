@@ -1,6 +1,43 @@
 import { LoreEntry, createEmptyLoreEntry } from '../types/schema';
 import { useCharacter } from '../contexts/CharacterContext'; // Import useCharacter
 import { apiService } from '../services/apiService'; // Import apiService
+import { generateUUID } from '../utils/uuidUtils';
+
+/**
+ * Ensures the character has a UUID, generating one if missing.
+ * Updates the character data in context and returns the UUID.
+ */
+function ensureCharacterUUID(
+  characterContext: ReturnType<typeof useCharacter>
+): string {
+  const { characterData, setCharacterData } = characterContext;
+
+  if (!characterData) {
+    throw new Error('No character data available. Please select or create a character first.');
+  }
+
+  // If UUID exists, return it
+  if (characterData.data?.character_uuid) {
+    return characterData.data.character_uuid;
+  }
+
+  // Generate a new UUID and update the character
+  const newUUID = generateUUID();
+  console.log('Generated new character UUID for lore import:', newUUID);
+
+  setCharacterData(prev => {
+    if (!prev) return null;
+    return {
+      ...prev,
+      data: {
+        ...prev.data,
+        character_uuid: newUUID
+      }
+    };
+  });
+
+  return newUUID;
+}
 
 /**
  * Fetch utility with timeout capability
@@ -61,13 +98,11 @@ export async function importTsv(
     const extractedLoreEntries = await parseTsvContent(content, startIndex);
 
     if (extractedLoreEntries.length > 0) {
-      // CRITICAL: Fail if character UUID is missing - don't silently skip persistence
-      if (!characterData?.data?.character_uuid) {
-        throw new Error('Cannot import lore: Character UUID is missing. Please save the character first.');
-      }
+      // Ensure character has a UUID (generate if missing)
+      const characterUUID = ensureCharacterUUID(characterContext);
 
       try {
-        await apiService.saveLoreEntries(characterData.data.character_uuid, extractedLoreEntries);
+        await apiService.saveLoreEntries(characterUUID, extractedLoreEntries);
 
         setCharacterData(prevCharacterData => {
           if (!prevCharacterData) return null;
@@ -272,15 +307,13 @@ export async function importJson(
     const extractedLoreEntries = extractEntriesFromJson(jsonData);
 
     if (extractedLoreEntries.length > 0) {
-      const { characterData, setCharacterData } = characterContext;
+      const { setCharacterData } = characterContext;
 
-      // CRITICAL: Fail if character UUID is missing - don't silently skip persistence
-      if (!characterData?.data?.character_uuid) {
-        throw new Error('Cannot import lore: Character UUID is missing. Please save the character first.');
-      }
+      // Ensure character has a UUID (generate if missing)
+      const characterUUID = ensureCharacterUUID(characterContext);
 
       try {
-        await apiService.saveLoreEntries(characterData.data.character_uuid, extractedLoreEntries);
+        await apiService.saveLoreEntries(characterUUID, extractedLoreEntries);
 
         setCharacterData(prevCharacterData => {
           if (!prevCharacterData) return null;
@@ -354,15 +387,13 @@ export async function importPng(file: File, characterContext: ReturnType<typeof 
 
     // Save the extracted lore entries to the character
     if (extractedLoreEntries.length > 0) {
-      const { characterData, setCharacterData } = characterContext;
+      const { setCharacterData } = characterContext;
 
-      // CRITICAL: Fail if character UUID is missing - don't silently skip persistence
-      if (!characterData?.data?.character_uuid) {
-        throw new Error('Cannot import lore: Character UUID is missing. Please save the character first.');
-      }
+      // Ensure character has a UUID (generate if missing)
+      const characterUUID = ensureCharacterUUID(characterContext);
 
       try {
-        await apiService.saveLoreEntries(characterData.data.character_uuid, extractedLoreEntries);
+        await apiService.saveLoreEntries(characterUUID, extractedLoreEntries);
 
         // Update characterData in context by merging new lore entries
         setCharacterData(prevCharacterData => {
