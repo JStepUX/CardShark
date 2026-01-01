@@ -599,7 +599,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     const msgWithId = { ...message, id: message.id || crypto.randomUUID() };
     setMessages((prev: Message[]) => {
       const newMsgs = [...prev, msgWithId];
-      if (message.role === 'user') debouncedSave(newMsgs);
+      // Only use debouncedSave for new chats (no currentChatId)
+      // For existing chats, appendMessage handles persistence (avoids race condition)
+      if (message.role === 'user' && !currentChatId) debouncedSave(newMsgs);
       return newMsgs;
     });
     if (message.role === 'user' && currentChatId) appendMessage(msgWithId);
