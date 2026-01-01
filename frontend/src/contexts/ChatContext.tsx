@@ -122,6 +122,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
   // Counter-based mutex: saves only allowed when counter is 0
   // Increment to disable saves, decrement to re-enable (supports nested operations)
   const autoSaveDisabledCount = useRef(0);
+  // Mutex for chat loading operations - prevents auto-load/manual-load races
+  const isLoadingChatRef = useRef(false);
+  const loadingForCharacterRef = useRef<string | null>(null); // Track which character we're loading for
   const createNewChatRef = useRef<(() => Promise<string | null>) | null>(null);
   const isCreatingChatRef = useRef(false); // Prevent concurrent chat creation
   const settingsSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -373,6 +376,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     }
 
     const currentCharacterFileId = ChatStorage.getCharacterId(characterData);
+
+    // CRITICAL: Fail fast if character has no valid UUID
+    if (!currentCharacterFileId || currentCharacterFileId === 'unknown-character') {
+      console.error('ChatContext: Character has no valid UUID, cannot load chats');
+      setError('Character is missing a valid UUID. Please re-save the character.');
+      return;
+    }
+
     const isCharacterChanged = lastCharacterId.current !== null && lastCharacterId.current !== currentCharacterFileId;
     const isFreshMount = !hasMountedRef.current;
 
@@ -399,6 +410,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
      * - If first_mes unavailable: Show error state
      */
     async function loadChatForCharacterInternal() {
+      // Mutex: prevent concurrent load operations
+      if (isLoadingChatRef.current) {
+        console.log('  ⚠ Chat load already in progress, skipping');
+        return;
+      }
+      isLoadingChatRef.current = true;
+      loadingForCharacterRef.current = currentCharacterFileId;
+
       try {
         setIsLoading(true);
         setError(null);
@@ -409,9 +428,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         console.log('  Requesting latest chat session from backend...');
         const response = await ChatStorage.loadLatestChat(characterData);
 
+        // CRITICAL: Check if character changed while we were loading
+        // If so, abort this load to prevent cross-character contamination
+        if (loadingForCharacterRef.current !== currentCharacterFileId) {
+          console.log('  ⚠ Character changed during load, aborting stale load');
+          return;
+        }
+
         // Handle potentially unwrapped response from ChatStorage or raw DataResponse
         const sessionData = response.data || response;
         const messages = sessionData.messages;
+
+        // Validate that loaded chat belongs to this character (if metadata available)
+        const loadedCharacterUuid = sessionData.metadata?.character_uuid || sessionData.character_uuid;
+        if (loadedCharacterUuid && loadedCharacterUuid !== currentCharacterFileId) {
+          console.error('  ✗ Loaded chat belongs to different character!', {
+            expected: currentCharacterFileId,
+            received: loadedCharacterUuid
+          });
+          setError('Loaded chat belongs to a different character. Please try again.');
+          return;
+        }
 
         // Case 1: Chat session found with messages - restore it
         if (response.success && messages && Array.isArray(messages) && messages.length > 0) {
@@ -512,16 +549,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         setIsLoading(false);
         // Always update the last character ID to prevent infinite loops
         lastCharacterId.current = currentCharacterFileId;
+        // Release the loading mutex
+        isLoadingChatRef.current = false;
+        loadingForCharacterRef.current = null;
       }
     }
 
     // Execute the chat loading function
     loadChatForCharacterInternal();
 
-    // Cleanup: Reset mount flag when component unmounts
+    // Cleanup: Reset mount flag and loading mutex when component unmounts
     return () => {
       console.log('ChatContext: Component unmounting, resetting mount flag');
       hasMountedRef.current = false;
+      isLoadingChatRef.current = false;
+      loadingForCharacterRef.current = null;
     };
   }, [characterData, resetTriggeredLoreImagesState]);
 
@@ -1338,6 +1380,25 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
   const loadExistingChat = useCallback(async (chatIdToLoad: string) => {
     if (!characterData) { setError("No char data to load chat."); return; }
+
+    const currentCharacterUuid = ChatStorage.getCharacterId(characterData);
+    // CRITICAL: Fail fast if character has no valid UUID
+    if (!currentCharacterUuid || currentCharacterUuid === 'unknown-character') {
+      setError('Character is missing a valid UUID. Please re-save the character.');
+      return;
+    }
+
+    // Mutex: If auto-load is in progress for a different character, take over
+    // If manual load is in progress, skip (user already clicked load)
+    if (isLoadingChatRef.current && loadingForCharacterRef.current === currentCharacterUuid) {
+      console.log('Manual load skipped: load already in progress for this character');
+      return;
+    }
+
+    // Take over the loading mutex
+    isLoadingChatRef.current = true;
+    loadingForCharacterRef.current = currentCharacterUuid;
+
     console.log(`Loading existing chat: ${chatIdToLoad}`);
     setIsLoading(true); setError(null); setCurrentChatId(null);
     autoSaveDisabledCount.current++; // Disable saves during load
@@ -1423,6 +1484,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     } finally {
       setIsLoading(false);
       autoSaveDisabledCount.current = Math.max(0, autoSaveDisabledCount.current - 1); // Re-enable saves
+      // Release the loading mutex
+      isLoadingChatRef.current = false;
+      loadingForCharacterRef.current = null;
     }
   }, [characterData]);
 
