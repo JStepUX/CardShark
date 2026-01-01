@@ -61,7 +61,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
     <div className="bg-stone-900 p-6 rounded-lg mb-8">
       <div className="flex justify-between items-start mb-4">
         <div>
-          <h3 className="text-lg font-medium flex items-center gap-2">
+          <h3 className="text-sm font-medium flex items-center gap-2">
             {title}
             {isCustomPrompt(promptKey) && (
               <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">Custom</span>
@@ -435,14 +435,6 @@ const PROMPT_CATEGORIES = [
           PromptVariable.DESCRIPTION,
           PromptVariable.PERSONALITY
         ]
-      },
-      {
-        key: StandardPromptKey.ASSISTANT_PROMPT,
-        title: 'Assistant Prompt',
-        description: 'System prompt for the generic CardShark assistant',
-        variables: [
-          PromptVariable.USER_NAME
-        ]
       }
     ]
   },
@@ -462,6 +454,22 @@ const PROMPT_CATEGORIES = [
           PromptVariable.PERSONALITY,
           PromptVariable.SCENARIO,
           PromptVariable.EXAMPLE_DIALOGUE
+        ]
+      },
+      {
+        key: StandardPromptKey.WORKSHOP_PROMPT,
+        title: 'Workshop System Prompt',
+        description: 'System prompt for the Workshop Panel character development assistant',
+        variables: [
+          PromptVariable.CHAR_NAME
+        ]
+      },
+      {
+        key: StandardPromptKey.ASSISTANT_PROMPT,
+        title: 'Assistant System Prompt',
+        description: 'System prompt for the generic CardShark assistant',
+        variables: [
+          PromptVariable.USER_NAME
         ]
       }
     ]
@@ -529,7 +537,7 @@ const PromptSettings: React.FC = () => {
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-2xl font-bold">Prompt Settings</h2>
+          <h2 className="text-lg font-bold">Prompt Settings</h2>
           <p className="text-gray-400 mt-1">
             Customize prompts used by the AI to control character behavior and responses
           </p>
@@ -539,7 +547,7 @@ const PromptSettings: React.FC = () => {
             variant="secondary"
             size="md"
             onClick={handleImport}
-            className="bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
+            className="hidden bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
             title="Import prompts"
           >
             <Upload size={16} />
@@ -549,7 +557,7 @@ const PromptSettings: React.FC = () => {
             variant="secondary"
             size="md"
             onClick={handleExport}
-            className="bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
+            className="hidden bg-stone-800 hover:bg-stone-700 rounded-lg flex items-center gap-2"
             title="Export prompts"
           >
             <Download size={16} />
@@ -572,7 +580,7 @@ const PromptSettings: React.FC = () => {
       {PROMPT_CATEGORIES.map(category => (
         <div key={category.id} className="mb-12">
           <div className="border-b border-stone-700 pb-2 mb-6">
-            <h3 className="text-xl font-semibold">{category.title}</h3>
+            <h3 className="text-base font-semibold">{category.title}</h3>
             <p className="text-gray-400 text-sm">{category.description}</p>
           </div>
 
@@ -592,7 +600,7 @@ const PromptSettings: React.FC = () => {
       {customPromptKeys.length > 0 && (
         <div className="mb-12">
           <div className="border-b border-stone-700 pb-2 mb-6">
-            <h3 className="text-xl font-semibold">Custom Prompts</h3>
+            <h3 className="text-base font-semibold">Custom Prompts</h3>
             <p className="text-gray-400 text-sm">
               User-defined prompts that you've created for specific purposes
             </p>
