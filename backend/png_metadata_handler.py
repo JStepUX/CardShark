@@ -303,7 +303,8 @@ class PngMetadataHandler:
                     if key not in ['chara', 'ccv3', 'exif']:  # Don't copy existing character data
                         try:
                             if isinstance(value, (str, bytes)):
-                                png_info.add_text(key, value)
+                                str_value = value if isinstance(value, str) else value.decode('utf-8', errors='ignore')
+                                png_info.add_text(key, str_value)
                                 preserved_keys.append(key)
                             elif hasattr(value, '__str__'):
                                 str_value = str(value)
