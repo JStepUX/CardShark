@@ -13,7 +13,8 @@ from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 from backend.models.world_card import (
-    WorldCard, WorldCardSummary, CreateWorldRequest, ConvertWorldRequest, UpdateWorldRequest
+    WorldCard, WorldCardSummary, CreateWorldRequest, ConvertWorldRequest, UpdateWorldRequest,
+    WorldDeletePreview
 )
 from backend.models.world_state import GridSize
 from backend.handlers.world_card_handler_v2 import WorldCardHandlerV2
@@ -252,30 +253,81 @@ async def update_world_card(
         raise HTTPException(status_code=500, detail=f"Failed to update world: {str(e)}")
 
 
-@router.delete(
-    "/{world_uuid}",
+@router.get(
+    "/{world_uuid}/delete-preview",
     response_model=DataResponse,
-    summary="Delete a world card",
-    description="Deletes a world card PNG file (does not delete associated room cards)"
+    summary="Preview world deletion",
+    description="Get a preview of what rooms will be deleted/kept when this world is deleted"
 )
-async def delete_world_card(
+async def get_delete_preview(
     world_uuid: str,
     handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
-    """Delete a world card"""
+    """Get a preview of what will happen when deleting a world"""
     try:
-        logger.log_step(f"Deleting world card: {world_uuid}")
+        logger.log_step(f"Getting delete preview for world: {world_uuid}")
 
-        success = handler.delete_world_card(world_uuid)
+        preview = handler.get_delete_preview(world_uuid)
 
-        if not success:
+        if not preview:
             raise HTTPException(status_code=404, detail=f"World card {world_uuid} not found")
 
         return create_data_response({
-            "success": True,
-            "message": "World deleted successfully"
+            "preview": preview.model_dump()
         })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Error getting delete preview for {world_uuid}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get delete preview: {str(e)}")
+
+
+@router.delete(
+    "/{world_uuid}",
+    response_model=DataResponse,
+    summary="Delete a world card",
+    description="Deletes a world card PNG file. Use delete_rooms=true to also delete auto-generated rooms."
+)
+async def delete_world_card(
+    world_uuid: str,
+    delete_rooms: bool = False,
+    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Delete a world card with optional cascade deletion of auto-generated rooms"""
+    try:
+        logger.log_step(f"Deleting world card: {world_uuid} (delete_rooms={delete_rooms})")
+
+        if delete_rooms:
+            # Use smart delete with room cascade
+            result = handler.delete_world_card_with_rooms(world_uuid, delete_generated_rooms=True)
+
+            if not result["success"]:
+                raise HTTPException(status_code=404, detail=f"World card {world_uuid} not found")
+
+            return create_data_response({
+                "success": True,
+                "world_deleted": result["world_deleted"],
+                "rooms_deleted": len(result["rooms_deleted"]),
+                "rooms_kept": len(result["rooms_kept"]),
+                "message": f"World deleted successfully. {len(result['rooms_deleted'])} auto-generated room(s) also deleted."
+            })
+        else:
+            # Simple delete without room cascade
+            success = handler.delete_world_card(world_uuid)
+
+            if not success:
+                raise HTTPException(status_code=404, detail=f"World card {world_uuid} not found")
+
+            return create_data_response({
+                "success": True,
+                "world_deleted": True,
+                "rooms_deleted": 0,
+                "rooms_kept": 0,
+                "message": "World deleted successfully"
+            })
 
     except HTTPException:
         raise

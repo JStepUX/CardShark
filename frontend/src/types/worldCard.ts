@@ -116,3 +116,34 @@ export interface UpdateWorldRequest {
   player_position?: Position;
   image?: File | null;
 }
+
+/**
+ * Information about a room for delete preview
+ */
+export interface RoomDeleteInfo {
+  uuid: string;
+  name: string;
+  reason: string; // Why this room will/won't be deleted
+}
+
+/**
+ * Preview of what will happen when a world is deleted
+ */
+export interface WorldDeletePreview {
+  world_uuid: string;
+  world_name: string;
+  rooms_to_delete: RoomDeleteInfo[]; // Rooms that will be deleted (auto-generated and orphaned)
+  rooms_to_keep: RoomDeleteInfo[]; // Rooms that will be kept (manually created or used elsewhere)
+  total_rooms: number;
+}
+
+/**
+ * Result of deleting a world with rooms
+ */
+export interface WorldDeleteResult {
+  success: boolean;
+  world_deleted: boolean;
+  rooms_deleted: number;
+  rooms_kept: number;
+  message: string;
+}

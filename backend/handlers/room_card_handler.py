@@ -89,8 +89,12 @@ class RoomCardHandler:
         # Generate UUID for the room
         room_uuid = str(uuid_module.uuid4())
 
-        # Create room card model
-        room_card = create_empty_room_card(name=request.name, room_uuid=room_uuid)
+        # Create room card model (with optional world origin tracking)
+        room_card = create_empty_room_card(
+            name=request.name,
+            room_uuid=room_uuid,
+            created_by_world_uuid=request.created_by_world_uuid
+        )
 
         # Populate fields from request
         room_card.data.description = request.description or ""
@@ -142,6 +146,10 @@ class RoomCardHandler:
             List of RoomCardSummary objects
         """
         characters = self.character_service.get_all_characters()
+
+        # Build a map of room_uuid → list of world_uuids that reference it
+        room_to_worlds = self._build_room_to_worlds_map(characters)
+
         room_cards = []
 
         for char in characters:
@@ -152,12 +160,18 @@ class RoomCardHandler:
                 if extensions.get("card_type") == "room":
                     room_data = extensions.get("room_data", {})
                     npc_count = len(room_data.get("npcs", [])) if room_data else 0
+                    created_by_world_uuid = room_data.get("created_by_world_uuid") if room_data else None
+
+                    # Look up which worlds reference this room
+                    assigned_worlds = room_to_worlds.get(char.character_uuid, [])
 
                     summary = RoomCardSummary(
                         uuid=char.character_uuid,
                         name=char.name,
                         description=char.description or "",
                         image_path=char.png_file_path,
+                        assigned_worlds=assigned_worlds,
+                        created_by_world_uuid=created_by_world_uuid,
                         npc_count=npc_count,
                         created_at=char.created_at.isoformat() if char.created_at else None,
                         updated_at=char.updated_at.isoformat() if char.updated_at else None
@@ -168,6 +182,44 @@ class RoomCardHandler:
                 continue
 
         return room_cards
+
+    def _build_room_to_worlds_map(self, characters) -> Dict[str, List[str]]:
+        """
+        Build a map of room_uuid → list of world_uuids that reference it.
+
+        Args:
+            characters: List of all characters from the database
+
+        Returns:
+            Dict mapping room UUIDs to lists of world UUIDs
+        """
+        room_to_worlds: Dict[str, List[str]] = {}
+
+        for char in characters:
+            try:
+                extensions = json.loads(char.extensions_json) if char.extensions_json else {}
+
+                # Only process world cards
+                if extensions.get("card_type") != "world":
+                    continue
+
+                world_data = extensions.get("world_data", {})
+                world_uuid = char.character_uuid
+                rooms = world_data.get("rooms", [])
+
+                # Add this world to each room's list
+                for room_placement in rooms:
+                    room_uuid = room_placement.get("room_uuid")
+                    if room_uuid:
+                        if room_uuid not in room_to_worlds:
+                            room_to_worlds[room_uuid] = []
+                        room_to_worlds[room_uuid].append(world_uuid)
+
+            except Exception as e:
+                self.logger.log_warning(f"Error processing world {char.name} for room mapping: {e}")
+                continue
+
+        return room_to_worlds
 
     def get_room_card(self, room_uuid: str) -> Optional[RoomCard]:
         """

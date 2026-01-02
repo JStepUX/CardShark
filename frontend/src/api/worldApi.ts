@@ -5,7 +5,9 @@ import {
   WorldCard,
   WorldCardSummary,
   CreateWorldRequest,
-  UpdateWorldRequest
+  UpdateWorldRequest,
+  WorldDeletePreview,
+  WorldDeleteResult
 } from '../types/worldCard';
 
 const BASE_URL = '/api/world-cards-v2';
@@ -97,9 +99,25 @@ export const worldApi = {
   },
 
   /**
-   * Delete a world card
+   * Get a preview of what will happen when deleting a world
+   * Shows which rooms will be deleted vs kept
    */
-  async deleteWorld(uuid: string): Promise<void> {
+  async getDeletePreview(uuid: string): Promise<WorldDeletePreview> {
+    const response = await fetch(`${BASE_URL}/${uuid}/delete-preview`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to get delete preview' }));
+      throw new Error(error.detail || 'Failed to get delete preview');
+    }
+
+    const data = await response.json();
+    return data.data.preview;
+  },
+
+  /**
+   * Delete a world card (simple - keeps all rooms)
+   */
+  async deleteWorld(uuid: string): Promise<WorldDeleteResult> {
     const response = await fetch(`${BASE_URL}/${uuid}`, {
       method: 'DELETE',
     });
@@ -108,6 +126,26 @@ export const worldApi = {
       const error = await response.json().catch(() => ({ detail: 'Failed to delete world' }));
       throw new Error(error.detail || 'Failed to delete world');
     }
+
+    const data = await response.json();
+    return data.data;
+  },
+
+  /**
+   * Delete a world card with optional cascade deletion of auto-generated rooms
+   */
+  async deleteWorldWithRooms(uuid: string, deleteRooms: boolean = true): Promise<WorldDeleteResult> {
+    const response = await fetch(`${BASE_URL}/${uuid}?delete_rooms=${deleteRooms}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to delete world' }));
+      throw new Error(error.detail || 'Failed to delete world');
+    }
+
+    const data = await response.json();
+    return data.data;
   },
 
   /**

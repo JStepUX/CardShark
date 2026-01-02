@@ -19,6 +19,7 @@ export interface RoomNPC {
 export interface RoomData {
   uuid: string; // Room UUID
   npcs: RoomNPC[]; // NPCs assigned to this room (character_uuid, role, hostile, etc.)
+  created_by_world_uuid?: string; // UUID of the world that auto-generated this room (null if manually created)
   // Future fields can be added here:
   // connections?: RoomConnection[]; // Links to other rooms
   // items?: string[]; // Item UUIDs in the room
@@ -70,6 +71,7 @@ export interface RoomCardSummary {
   description: string;
   image_path?: string;
   assigned_worlds?: string[]; // World UUIDs this room is assigned to (computed)
+  created_by_world_uuid?: string; // UUID of the world that auto-generated this room (null if manually created)
   npc_count?: number; // Number of NPCs in the room
   created_at?: string;
   updated_at?: string;

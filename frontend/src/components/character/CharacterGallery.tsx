@@ -14,9 +14,11 @@ import CharacterFolderView from './CharacterFolderView';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid'; // DRY, shared grid for all galleries
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
+import WorldDeleteConfirmationDialog from '../common/WorldDeleteConfirmationDialog';
 import KoboldCPPDrawerManager from '../KoboldCPPDrawerManager';
 import { useCharacterSort } from '../../hooks/useCharacterSort';
 import { worldApi } from '../../api/worldApi';
+import { roomApi } from '../../api/roomApi';
 
 // Track API calls across component instances - simplified
 const apiRequestCache = {
@@ -123,6 +125,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+
+  // State for world-specific deletion with room cascade options
+  const [isWorldDeleteConfirmOpen, setIsWorldDeleteConfirmOpen] = useState(false);
 
   // Track component instance
   const componentId = useRef(`gallery-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
@@ -646,7 +651,14 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     event.stopPropagation(); // Prevent card click
     setDeleteError(null); // Clear previous delete error
     setCharacterToDelete(character);
-    setIsDeleteConfirmOpen(true);
+
+    // Use world-specific dialog for world cards
+    const cardType = character.card_type || character.extensions?.card_type;
+    if (cardType === 'world' && character.character_uuid) {
+      setIsWorldDeleteConfirmOpen(true);
+    } else {
+      setIsDeleteConfirmOpen(true);
+    }
   };
 
   // Handle the actual API call to delete the character after confirmation
@@ -771,10 +783,95 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     }
   };
 
+  // Handle cleanup of orphaned rooms
+  const handleCleanupOrphanedRooms = async () => {
+    try {
+      // First, get the count of orphaned rooms
+      const preview = await roomApi.listOrphanedRooms();
+
+      if (preview.count === 0) {
+        alert('No orphaned rooms found. All auto-generated rooms are still in use.');
+        return;
+      }
+
+      // Confirm with user
+      const confirmed = window.confirm(
+        `Found ${preview.count} orphaned room(s) that were auto-generated but are no longer used by any world.\n\n` +
+        `Rooms to delete:\n${preview.orphaned_rooms.map(r => `• ${r.name}`).join('\n')}\n\n` +
+        `Do you want to delete them?`
+      );
+
+      if (!confirmed) return;
+
+      setIsLoading(true);
+
+      const result = await roomApi.cleanupOrphanedRooms();
+
+      if (result.success) {
+        alert(`${result.message}\n\nDeleted: ${result.deleted_names.join(', ') || 'None'}`);
+        handleManualRefresh(); // Refresh gallery
+      } else {
+        throw new Error('Cleanup failed');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to cleanup orphaned rooms');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Cancel deletion
   const handleCancelDelete = () => {
     setIsDeleteConfirmOpen(false);
     setCharacterToDelete(null);
+  };
+
+  // Cancel world deletion
+  const handleCancelWorldDelete = () => {
+    setIsWorldDeleteConfirmOpen(false);
+    setCharacterToDelete(null);
+  };
+
+  // Handle world deletion with optional room cascade
+  const handleConfirmWorldDelete = async (deleteRooms: boolean) => {
+    if (!characterToDelete || !characterToDelete.character_uuid) return;
+
+    setIsDeleting(true);
+    setDeletingPath(characterToDelete.path);
+
+    try {
+      console.log(`Deleting world: ${characterToDelete.character_uuid} (deleteRooms=${deleteRooms})`);
+
+      const result = deleteRooms
+        ? await worldApi.deleteWorldWithRooms(characterToDelete.character_uuid, true)
+        : await worldApi.deleteWorld(characterToDelete.character_uuid);
+
+      if (!result.success) {
+        throw new Error('Failed to delete world');
+      }
+
+      console.log(`Successfully deleted world: ${characterToDelete.character_uuid}`);
+      if (deleteRooms && result.rooms_deleted > 0) {
+        console.log(`Also deleted ${result.rooms_deleted} auto-generated room(s)`);
+      }
+
+      // Remove character from state
+      setCharacters(prevCharacters => prevCharacters.filter(char => char.path !== characterToDelete.path));
+
+      // Invalidate cache
+      invalidateCharacterCache();
+
+    } catch (err) {
+      console.error(`World deletion failed:`, err);
+      setDeleteError(err instanceof Error ? err.message : 'Unknown deletion error.');
+      setDeletingPath(null);
+    } finally {
+      setIsDeleting(false);
+      setIsWorldDeleteConfirmOpen(false);
+      setTimeout(() => {
+        setCharacterToDelete(null);
+      }, 300);
+    }
   };
 
   // Function to dismiss the delete error message
@@ -946,6 +1043,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   aria-label="Import world"
                 >
                   <Upload size={16} />
+                </button>
+              )}
+
+              {/* Cleanup Orphaned Rooms Button - Only show when viewing rooms */}
+              {filterType === 'room' && (
+                <button
+                  onClick={handleCleanupOrphanedRooms}
+                  className="p-2 rounded-lg border bg-red-900 border-red-700 text-red-200 hover:text-white hover:bg-red-800 transition-all"
+                  title="Delete orphaned rooms (auto-generated rooms not used by any world)"
+                  aria-label="Cleanup orphaned rooms"
+                >
+                  <Trash2 size={16} />
                 </button>
               )}
 
@@ -1152,6 +1261,16 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         isDeleting={isDeleting}
         onCancel={handleCancelDelete}
         onConfirm={handleConfirmDelete}
+      />
+
+      {/* World-specific delete confirmation dialog with room cascade options */}
+      <WorldDeleteConfirmationDialog
+        isOpen={isWorldDeleteConfirmOpen}
+        worldUuid={characterToDelete?.character_uuid || ''}
+        worldName={characterToDelete?.name || ''}
+        isDeleting={isDeleting}
+        onCancel={handleCancelWorldDelete}
+        onConfirm={handleConfirmWorldDelete}
       />
 
       {/* KoboldCPP Drawer Manager - will conditionally show the bottom drawer */}

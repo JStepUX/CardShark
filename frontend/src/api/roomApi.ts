@@ -174,4 +174,46 @@ export const roomApi = {
   getRoomImageUrl(uuid: string): string {
     return `${BASE_URL}/${uuid}/image`;
   },
+
+  /**
+   * Lists all orphaned rooms (rooms not assigned to any world that were auto-generated).
+   *
+   * @returns Object with orphaned_rooms array and count
+   */
+  async listOrphanedRooms(): Promise<{ orphaned_rooms: RoomCardSummary[]; count: number }> {
+    const response = await fetch(`${BASE_URL}/orphaned/list`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to list orphaned rooms' }));
+      throw new Error(error.detail || 'Failed to list orphaned rooms');
+    }
+
+    const data = await response.json();
+    return data.data;
+  },
+
+  /**
+   * Deletes all orphaned rooms (rooms not assigned to any world that were auto-generated).
+   *
+   * @returns Object with deletion results
+   */
+  async cleanupOrphanedRooms(): Promise<{
+    success: boolean;
+    deleted_count: number;
+    failed_count: number;
+    deleted_names: string[];
+    message: string;
+  }> {
+    const response = await fetch(`${BASE_URL}/orphaned/cleanup`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to cleanup orphaned rooms' }));
+      throw new Error(error.detail || 'Failed to cleanup orphaned rooms');
+    }
+
+    const data = await response.json();
+    return data.data;
+  },
 };

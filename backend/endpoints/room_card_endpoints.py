@@ -250,3 +250,92 @@ async def get_room_card_image(
     except Exception as e:
         logger.log_error(f"Error serving room image {room_uuid}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to serve room image: {str(e)}")
+
+
+@router.get(
+    "/orphaned/list",
+    response_model=DataResponse,
+    summary="List orphaned rooms",
+    description="Returns a list of rooms that are not assigned to any world and were auto-generated"
+)
+async def list_orphaned_rooms(
+    handler: RoomCardHandler = Depends(get_room_card_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """List rooms that are orphaned (not in any world and auto-generated)"""
+    try:
+        logger.log_step("Listing orphaned rooms")
+
+        # Get all rooms with their assigned_worlds computed
+        all_rooms = handler.list_room_cards()
+
+        # Filter to orphaned rooms:
+        # - No assigned worlds (empty assigned_worlds list)
+        # - Has a created_by_world_uuid (was auto-generated)
+        orphaned_rooms = [
+            room for room in all_rooms
+            if (not room.assigned_worlds or len(room.assigned_worlds) == 0)
+            and room.created_by_world_uuid is not None
+        ]
+
+        return create_data_response({
+            "orphaned_rooms": [r.model_dump() for r in orphaned_rooms],
+            "count": len(orphaned_rooms)
+        })
+
+    except Exception as e:
+        logger.log_error(f"Error listing orphaned rooms: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list orphaned rooms: {str(e)}")
+
+
+@router.delete(
+    "/orphaned/cleanup",
+    response_model=DataResponse,
+    summary="Delete all orphaned rooms",
+    description="Deletes all rooms that are not assigned to any world and were auto-generated"
+)
+async def cleanup_orphaned_rooms(
+    handler: RoomCardHandler = Depends(get_room_card_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Delete all orphaned auto-generated rooms"""
+    try:
+        logger.log_step("Cleaning up orphaned rooms")
+
+        # Get all rooms with their assigned_worlds computed
+        all_rooms = handler.list_room_cards()
+
+        # Filter to orphaned rooms
+        orphaned_rooms = [
+            room for room in all_rooms
+            if (not room.assigned_worlds or len(room.assigned_worlds) == 0)
+            and room.created_by_world_uuid is not None
+        ]
+
+        deleted_count = 0
+        failed_count = 0
+        deleted_names = []
+
+        for room in orphaned_rooms:
+            try:
+                if handler.delete_room_card(room.uuid):
+                    deleted_count += 1
+                    deleted_names.append(room.name)
+                    logger.log_step(f"Deleted orphaned room: {room.name}")
+                else:
+                    failed_count += 1
+            except Exception as e:
+                logger.log_warning(f"Failed to delete orphaned room {room.uuid}: {e}")
+                failed_count += 1
+
+        return create_data_response({
+            "success": True,
+            "deleted_count": deleted_count,
+            "failed_count": failed_count,
+            "deleted_names": deleted_names,
+            "message": f"Deleted {deleted_count} orphaned room(s)"
+        })
+
+    except Exception as e:
+        logger.log_error(f"Error cleaning up orphaned rooms: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup orphaned rooms: {str(e)}")
