@@ -1,4 +1,4 @@
-import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { GridRoom } from '../../utils/worldStateApi';
 import { RoomNPC } from '../../types/room';
@@ -62,10 +62,11 @@ interface RoomPropertiesPanelProps {
   onUpdate: (room: GridRoom) => void;
   onClose: () => void;
   onOpenNPCPicker?: () => void;
+  onRemoveFromCell?: () => void;
   isVisible?: boolean;
 }
 
-export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, isVisible = true }: RoomPropertiesPanelProps) {
+export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, onRemoveFromCell, isVisible = true }: RoomPropertiesPanelProps) {
   const [uploading, setUploading] = useState(false);
   const [editingField, setEditingField] = useState<{
     field: 'description' | 'introduction_text';
@@ -367,6 +368,22 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                   ({room.position.x}, {room.position.y})
                 </div>
               </div>
+
+              {/* Remove from Cell */}
+              {onRemoveFromCell && (
+                <div className="pt-4 border-t border-[#2a2a2a]">
+                  <button
+                    onClick={onRemoveFromCell}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-800/50 hover:border-red-700 rounded-lg text-red-400 hover:text-red-300 transition-colors text-sm"
+                  >
+                    <Trash2 size={16} />
+                    Remove from Cell
+                  </button>
+                  <p className="text-xs text-gray-500 text-center mt-2">
+                    Unlinks the room from this cell. The room card is preserved.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}

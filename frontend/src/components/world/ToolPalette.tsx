@@ -66,20 +66,6 @@ export function ToolPalette({ activeTool, onToolChange, onToggleCollapse }: Tool
         </div>
       </div>
 
-      <div className="p-4 border-b border-[#2a2a2a]">
-        <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-3">Templates</h3>
-        <div className="space-y-1">
-          {['Empty Room', 'Tavern', 'Forest', 'Dungeon', 'Shop'].map((template) => (
-            <button
-              key={template}
-              className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-400 hover:bg-[#1a1a1a] hover:text-white transition-colors"
-            >
-              {template}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="flex-1 p-4">
         <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Keyboard Shortcuts</h3>
         <div className="text-xs text-gray-600 space-y-1">

@@ -174,11 +174,19 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   }, [selectedRoom, rooms]);
 
   const handleCellClick = useCallback((position: { x: number; y: number }, event: React.MouseEvent) => {
-    // Show cell action menu at click position
-    setSelectedCell(position);
-    setCellMenuPosition({ x: event.clientX, y: event.clientY });
-    setShowCellMenu(true);
-  }, []);
+    // Check if cell is occupied
+    const room = rooms.find(r => r.position.x === position.x && r.position.y === position.y);
+
+    if (room) {
+      // Occupied cell: directly select the room (opens properties panel)
+      setSelectedRoom(room);
+    } else {
+      // Empty cell: show action menu for create/import
+      setSelectedCell(position);
+      setCellMenuPosition({ x: event.clientX, y: event.clientY });
+      setShowCellMenu(true);
+    }
+  }, [rooms]);
 
   const handleCreateNewRoom = useCallback(async () => {
     if (!selectedCell) return;
@@ -268,6 +276,14 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     }
     setIsDirty(true);
   }, [selectedRoom?.id]);
+
+  // Handler for removing the selected room from properties panel
+  const handleRemoveSelectedRoom = useCallback(() => {
+    if (!selectedRoom) return;
+    setRooms(prev => prev.filter(r => r.id !== selectedRoom.id));
+    setSelectedRoom(null);
+    setIsDirty(true);
+  }, [selectedRoom]);
 
   const handleRoomUpdate = useCallback(async (updatedRoom: GridRoom) => {
     // Update local state
@@ -484,6 +500,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           onUpdate={handleRoomUpdate}
           onClose={() => setSelectedRoom(null)}
           onOpenNPCPicker={() => setShowNPCPicker(true)}
+          onRemoveFromCell={handleRemoveSelectedRoom}
           isVisible={!!selectedRoom}
         />
       </div>
