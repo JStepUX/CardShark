@@ -1,6 +1,8 @@
-import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2 } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { GridRoom } from '../../utils/worldStateApi';
+import { RoomNPC } from '../../types/room';
+import { NPCSettingsModal } from '../NPCSettingsModal';
 
 // Simple Modal for full content editing
 function TextEditorModal({
@@ -70,6 +72,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
     title: string;
     value: string;
   } | null>(null);
+  const [editingNPC, setEditingNPC] = useState<RoomNPC | null>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!room || !e.target.files || e.target.files.length === 0) return;
@@ -111,6 +114,16 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
     });
   };
 
+  const handleNPCSettingsSave = (updatedNpc: RoomNPC) => {
+    if (!room) return;
+    onUpdate({
+      ...room,
+      npcs: room.npcs.map(npc =>
+        npc.character_uuid === updatedNpc.character_uuid ? updatedNpc : npc
+      ),
+    });
+  };
+
   // Overlay panel - slides in from right
   return (
     <>
@@ -125,6 +138,17 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
             }
           }}
           onClose={() => setEditingField(null)}
+        />
+      )}
+
+      {/* Modal for NPC Settings */}
+      {editingNPC && (
+        <NPCSettingsModal
+          isOpen={true}
+          onClose={() => setEditingNPC(null)}
+          npc={editingNPC}
+          npcName={getNpcName(editingNPC.character_uuid)}
+          onSave={handleNPCSettingsSave}
         />
       )}
 
@@ -285,15 +309,32 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                         key={npc.character_uuid}
                         className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 flex items-center justify-between"
                       >
-                        <div className="flex items-center gap-2">
-                          <Users size={14} className="text-gray-500" />
-                          <span className="text-sm text-white">{getNpcName(npc.character_uuid)}</span>
-                          {npc.hostile && <span className="text-xs text-red-400 ml-1">(Hostile)</span>}
-                          {npc.role && <span className="text-xs text-gray-500 ml-1">• {npc.role}</span>}
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <Users size={14} className="text-gray-500 shrink-0" />
+                          <span className="text-sm text-white truncate">{getNpcName(npc.character_uuid)}</span>
+                          {npc.hostile && (
+                            <span className="text-xs bg-red-900/50 text-red-400 px-1.5 py-0.5 rounded shrink-0">
+                              Hostile {npc.monster_level ? `Lv.${npc.monster_level}` : ''}
+                            </span>
+                          )}
+                          {npc.role && <span className="text-xs text-gray-500 truncate">• {npc.role}</span>}
                         </div>
-                        <button className="text-gray-500 hover:text-red-400 transition-colors" onClick={() => handleRemoveNPC(npc.character_uuid)}>
-                          <X size={14} />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            className="p-1 text-gray-500 hover:text-blue-400 transition-colors"
+                            onClick={() => setEditingNPC(npc)}
+                            title="NPC Settings"
+                          >
+                            <Settings size={14} />
+                          </button>
+                          <button
+                            className="p-1 text-gray-500 hover:text-red-400 transition-colors"
+                            onClick={() => handleRemoveNPC(npc.character_uuid)}
+                            title="Remove NPC"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
