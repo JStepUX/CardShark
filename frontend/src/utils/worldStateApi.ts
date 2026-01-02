@@ -54,7 +54,8 @@ export async function resolveNpcDisplayData(npcIds: string[]): Promise<DisplayNP
     }
 
     const data = await response.json();
-    const characters = data.data || data || [];
+    // Handle multiple API response formats: { characters: [...] }, { data: [...] }, or direct array
+    const characters = data.characters || data.data || (Array.isArray(data) ? data : []);
 
     const results: DisplayNPC[] = [];
 
