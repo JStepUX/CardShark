@@ -26,6 +26,7 @@ class RoomData(BaseModel):
     """
     uuid: str = Field(..., description="Unique identifier for the room")
     npcs: List[RoomNPC] = Field(default_factory=list, description="NPCs assigned to this room")
+    created_by_world_uuid: Optional[str] = Field(None, description="UUID of the world that auto-generated this room from lore (None if manually created)")
 
     # Future fields for expansion:
     # connections: List[RoomConnection] = Field(default_factory=list)
@@ -84,6 +85,7 @@ class RoomCardSummary(BaseModel):
     description: str = Field(default="", description="Room description")
     image_path: Optional[str] = Field(None, description="Path to room image PNG")
     assigned_worlds: Optional[List[str]] = Field(default_factory=list, description="World UUIDs this room is assigned to")
+    created_by_world_uuid: Optional[str] = Field(None, description="UUID of the world that auto-generated this room (None if manually created)")
     npc_count: Optional[int] = Field(0, description="Number of NPCs in the room")
     created_at: Optional[str] = Field(None, description="ISO8601 creation timestamp")
     updated_at: Optional[str] = Field(None, description="ISO8601 last update timestamp")
@@ -95,6 +97,7 @@ class CreateRoomRequest(BaseModel):
     description: Optional[str] = Field("", description="Room description")
     first_mes: Optional[str] = Field(None, description="Introduction text")
     system_prompt: Optional[str] = Field(None, description="Room atmosphere/system prompt")
+    created_by_world_uuid: Optional[str] = Field(None, description="UUID of the world auto-generating this room (internal use)")
 
     class Config:
         json_schema_extra = {
@@ -121,13 +124,14 @@ class UpdateRoomRequest(BaseModel):
         extra = "forbid"
 
 
-def create_empty_room_card(name: str, room_uuid: Optional[str] = None) -> RoomCard:
+def create_empty_room_card(name: str, room_uuid: Optional[str] = None, created_by_world_uuid: Optional[str] = None) -> RoomCard:
     """
     Helper function to create an empty room card
 
     Args:
         name: Room name
         room_uuid: Optional UUID (generates one if not provided)
+        created_by_world_uuid: Optional UUID of the world auto-generating this room
 
     Returns:
         RoomCard with minimal data
@@ -135,7 +139,7 @@ def create_empty_room_card(name: str, room_uuid: Optional[str] = None) -> RoomCa
     if room_uuid is None:
         room_uuid = str(uuid_module.uuid4())
 
-    room_data = RoomData(uuid=room_uuid, npcs=[])
+    room_data = RoomData(uuid=room_uuid, npcs=[], created_by_world_uuid=created_by_world_uuid)
     extensions = RoomCardExtensions(card_type="room", room_data=room_data)
 
     card_data = RoomCardData(

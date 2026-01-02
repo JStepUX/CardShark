@@ -131,6 +131,22 @@ class UpdateWorldRequest(BaseModel):
         extra = "forbid"
 
 
+class RoomDeleteInfo(BaseModel):
+    """Information about a room for delete preview"""
+    uuid: str = Field(..., description="Room UUID")
+    name: str = Field(..., description="Room name")
+    reason: str = Field(..., description="Why this room will/won't be deleted")
+
+
+class WorldDeletePreview(BaseModel):
+    """Preview of what will happen when a world is deleted"""
+    world_uuid: str = Field(..., description="UUID of the world to be deleted")
+    world_name: str = Field(..., description="Name of the world to be deleted")
+    rooms_to_delete: List[RoomDeleteInfo] = Field(default_factory=list, description="Rooms that will be deleted (auto-generated and orphaned)")
+    rooms_to_keep: List[RoomDeleteInfo] = Field(default_factory=list, description="Rooms that will be kept (manually created or used by other worlds)")
+    total_rooms: int = Field(0, description="Total number of rooms in this world")
+
+
 def create_empty_world_card(name: str, world_uuid: Optional[str] = None, grid_size: Optional[GridSize] = None) -> WorldCard:
     """
     Helper function to create an empty world card

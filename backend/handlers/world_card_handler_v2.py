@@ -199,7 +199,8 @@ class WorldCardHandlerV2:
             self.update_world_card(new_world_summary.uuid, update_req)
 
         # Extract locations from lore entries and create rooms
-        room_placements = self._extract_and_create_rooms_from_lore(source_meta)
+        # Pass the world UUID so rooms know which world created them
+        room_placements = self._extract_and_create_rooms_from_lore(source_meta, new_world_summary.uuid)
 
         if room_placements:
             self.logger.log_step(f"Created {len(room_placements)} rooms from lore entries")
@@ -210,12 +211,13 @@ class WorldCardHandlerV2:
 
         return new_world_summary
 
-    def _extract_and_create_rooms_from_lore(self, character_data: dict) -> List[WorldRoomPlacement]:
+    def _extract_and_create_rooms_from_lore(self, character_data: dict, world_uuid: str) -> List[WorldRoomPlacement]:
         """
         Extract locations from character lore entries and create room cards for each.
 
         Args:
             character_data: The full character card metadata
+            world_uuid: UUID of the world being created (for tracking room origin)
 
         Returns:
             List of WorldRoomPlacement objects for the created rooms
@@ -246,12 +248,13 @@ class WorldCardHandlerV2:
 
         for i, location in enumerate(locations):
             try:
-                # Create room request
+                # Create room request - tag with the world that created it
                 room_request = CreateRoomRequest(
                     name=location.name,
                     description=location.description,
                     first_mes=f"You enter {location.name}.",
-                    system_prompt=None
+                    system_prompt=None,
+                    created_by_world_uuid=world_uuid
                 )
 
                 # Create the room card
@@ -458,3 +461,176 @@ class WorldCardHandlerV2:
                 self.logger.log_step(f"Deleted world card: {world_uuid}")
 
             return success
+
+    def get_delete_preview(self, world_uuid: str) -> Optional["WorldDeletePreview"]:
+        """
+        Get a preview of what will happen when deleting a world.
+
+        Categorizes rooms into:
+        - rooms_to_delete: Auto-generated rooms that will become orphaned
+        - rooms_to_keep: Manually created rooms or rooms used by other worlds
+
+        Args:
+            world_uuid: UUID of the world to preview deletion for
+
+        Returns:
+            WorldDeletePreview or None if world not found
+        """
+        from backend.models.world_card import WorldDeletePreview, RoomDeleteInfo
+
+        # Get the world card
+        world_card = self.get_world_card(world_uuid)
+        if not world_card:
+            return None
+
+        world_name = world_card.data.name
+        world_data = world_card.data.extensions.world_data
+        room_placements = world_data.rooms
+
+        if not room_placements:
+            return WorldDeletePreview(
+                world_uuid=world_uuid,
+                world_name=world_name,
+                rooms_to_delete=[],
+                rooms_to_keep=[],
+                total_rooms=0
+            )
+
+        # Get all characters to build room info and world references
+        characters = self.character_service.get_all_characters()
+
+        # Build map of room_uuid → room info (name, created_by_world_uuid)
+        room_info_map = {}
+        for char in characters:
+            try:
+                extensions = json.loads(char.extensions_json) if char.extensions_json else {}
+                if extensions.get("card_type") == "room":
+                    room_data = extensions.get("room_data", {})
+                    room_info_map[char.character_uuid] = {
+                        "name": char.name,
+                        "created_by_world_uuid": room_data.get("created_by_world_uuid")
+                    }
+            except Exception:
+                continue
+
+        # Build map of room_uuid → list of world_uuids (excluding the world being deleted)
+        room_to_other_worlds = {}
+        for char in characters:
+            try:
+                extensions = json.loads(char.extensions_json) if char.extensions_json else {}
+                if extensions.get("card_type") == "world" and char.character_uuid != world_uuid:
+                    other_world_data = extensions.get("world_data", {})
+                    for room_placement in other_world_data.get("rooms", []):
+                        room_id = room_placement.get("room_uuid")
+                        if room_id:
+                            if room_id not in room_to_other_worlds:
+                                room_to_other_worlds[room_id] = []
+                            room_to_other_worlds[room_id].append(char.character_uuid)
+            except Exception:
+                continue
+
+        rooms_to_delete = []
+        rooms_to_keep = []
+
+        for placement in room_placements:
+            room_uuid = placement.room_uuid
+            room_info = room_info_map.get(room_uuid, {"name": "Unknown Room", "created_by_world_uuid": None})
+            room_name = room_info["name"]
+            created_by = room_info["created_by_world_uuid"]
+            other_worlds = room_to_other_worlds.get(room_uuid, [])
+
+            # Determine if this room should be deleted or kept
+            if other_worlds:
+                # Room is used by other worlds - keep it
+                rooms_to_keep.append(RoomDeleteInfo(
+                    uuid=room_uuid,
+                    name=room_name,
+                    reason=f"Used by {len(other_worlds)} other world(s)"
+                ))
+            elif created_by != world_uuid:
+                # Room was manually created or created by a different world - keep it
+                if created_by is None:
+                    reason = "Manually created (not auto-generated)"
+                else:
+                    reason = "Created by a different world"
+                rooms_to_keep.append(RoomDeleteInfo(
+                    uuid=room_uuid,
+                    name=room_name,
+                    reason=reason
+                ))
+            else:
+                # Room was auto-generated by this world and not used elsewhere - delete it
+                rooms_to_delete.append(RoomDeleteInfo(
+                    uuid=room_uuid,
+                    name=room_name,
+                    reason="Auto-generated by this world"
+                ))
+
+        return WorldDeletePreview(
+            world_uuid=world_uuid,
+            world_name=world_name,
+            rooms_to_delete=rooms_to_delete,
+            rooms_to_keep=rooms_to_keep,
+            total_rooms=len(room_placements)
+        )
+
+    def delete_world_card_with_rooms(self, world_uuid: str, delete_generated_rooms: bool = True) -> dict:
+        """
+        Delete a world card with optional cascade deletion of auto-generated rooms.
+
+        Args:
+            world_uuid: UUID of the world to delete
+            delete_generated_rooms: If True, also delete rooms that were auto-generated
+                                   by this world and are not used by other worlds
+
+        Returns:
+            Dict with deletion results:
+            - success: bool
+            - world_deleted: bool
+            - rooms_deleted: list of room UUIDs that were deleted
+            - rooms_kept: list of room UUIDs that were kept
+        """
+        from backend.handlers.room_card_handler import RoomCardHandler
+
+        result = {
+            "success": False,
+            "world_deleted": False,
+            "rooms_deleted": [],
+            "rooms_kept": []
+        }
+
+        # Get deletion preview first
+        preview = self.get_delete_preview(world_uuid)
+        if not preview:
+            return result
+
+        # Delete rooms if requested
+        if delete_generated_rooms and preview.rooms_to_delete:
+            room_handler = RoomCardHandler(
+                character_service=self.character_service,
+                png_handler=self.png_handler,
+                settings_manager=self.settings_manager,
+                logger=self.logger
+            )
+
+            for room_info in preview.rooms_to_delete:
+                try:
+                    if room_handler.delete_room_card(room_info.uuid):
+                        result["rooms_deleted"].append(room_info.uuid)
+                        self.logger.log_step(f"Deleted auto-generated room: {room_info.name}")
+                    else:
+                        result["rooms_kept"].append(room_info.uuid)
+                except Exception as e:
+                    self.logger.log_warning(f"Failed to delete room {room_info.uuid}: {e}")
+                    result["rooms_kept"].append(room_info.uuid)
+
+        # Track kept rooms
+        for room_info in preview.rooms_to_keep:
+            result["rooms_kept"].append(room_info.uuid)
+
+        # Delete the world itself
+        if self.delete_world_card(world_uuid):
+            result["world_deleted"] = True
+            result["success"] = True
+
+        return result
