@@ -63,7 +63,7 @@ class ExportHandler:
             raise ValueError(f"World {world_uuid} not found")
 
         # Get world PNG path
-        with self.character_service.db_session_generator() as db:
+        with self.character_service._get_session_context() as db:
             world_character = self.character_service.get_character_by_uuid(world_uuid, db)
             if not world_character:
                 raise ValueError(f"World character record not found: {world_uuid}")
@@ -92,7 +92,7 @@ class ExportHandler:
                     continue
 
                 # Get room PNG path
-                with self.character_service.db_session_generator() as db:
+                with self.character_service._get_session_context() as db:
                     room_character = self.character_service.get_character_by_uuid(room_uuid, db)
                     if not room_character:
                         self.logger.log_warning(f"Room character record not found: {room_uuid}, skipping")
@@ -113,7 +113,7 @@ class ExportHandler:
                         continue
 
                     # Get NPC character PNG path
-                    with self.character_service.db_session_generator() as db:
+                    with self.character_service._get_session_context() as db:
                         npc_character = self.character_service.get_character_by_uuid(npc_uuid, db)
                         if not npc_character:
                             self.logger.log_warning(f"NPC character not found: {npc_uuid}, skipping")
