@@ -237,7 +237,7 @@ async def get_room_card_image(
     """Serve the room card PNG image"""
     try:
         # Use character service to get the PNG path
-        with handler.character_service.db_session_generator() as db:
+        with handler.character_service._get_session_context() as db:
             character = handler.character_service.get_character_by_uuid(room_uuid, db)
 
             if not character or not character.png_file_path:
