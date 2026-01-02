@@ -179,7 +179,7 @@ class RoomCardHandler:
         Returns:
             RoomCard model or None if not found
         """
-        with self.character_service.db_session_generator() as db:
+        with self.character_service._get_session_context() as db:
             character = self.character_service.get_character_by_uuid(room_uuid, db)
 
             if not character:
@@ -231,7 +231,7 @@ class RoomCardHandler:
             room_card.data.character_book = request.character_book
         if request.npcs is not None:
             # Validate that all NPC character_uuids exist
-            with self.character_service.db_session_generator() as db:
+            with self.character_service._get_session_context() as db:
                 for npc in request.npcs:
                     character = self.character_service.get_character_by_uuid(npc.character_uuid, db)
                     if not character:
@@ -251,7 +251,7 @@ class RoomCardHandler:
             room_card.data.tags = request.tags
 
         # Get PNG file path
-        with self.character_service.db_session_generator() as db:
+        with self.character_service._get_session_context() as db:
             character = self.character_service.get_character_by_uuid(room_uuid, db)
             if not character:
                 return None
@@ -301,7 +301,7 @@ class RoomCardHandler:
         Returns:
             True if deleted, False if not found
         """
-        with self.character_service.db_session_generator() as db:
+        with self.character_service._get_session_context() as db:
             character = self.character_service.get_character_by_uuid(room_uuid, db)
 
             if not character:

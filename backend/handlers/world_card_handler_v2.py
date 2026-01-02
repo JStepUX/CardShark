@@ -18,10 +18,12 @@ from backend.models.world_card import (
     WorldRoomPlacement, create_empty_world_card
 )
 from backend.models.world_state import GridSize, Position
+from backend.models.room_card import CreateRoomRequest
 from backend.services.character_service import CharacterService
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.settings_manager import SettingsManager
 from backend.log_manager import LogManager
+from backend.utils.location_extractor import LocationExtractor
 
 
 class WorldCardHandlerV2:
@@ -141,21 +143,24 @@ class WorldCardHandlerV2:
     def convert_character_to_world(self, request: ConvertWorldRequest) -> Optional[WorldCardSummary]:
         """
         Convert a character card into a new world card.
-        
+
+        Automatically extracts locations from character_book lore entries and creates
+        room cards for each detected location.
+
         Args:
             request: Conversion request with source character UUID and new name
-            
+
         Returns:
             WorldCardSummary of the new world, or None if source not found
         """
         # Get source character
         with self.character_service._get_session_context() as db:
             char_data = self.character_service.get_character_by_uuid(request.character_path, db)
-            
+
             if not char_data or not char_data.png_file_path:
                 self.logger.log_warning(f"Source character {request.character_path} not found for conversion")
                 return None
-                
+
             source_png_path = char_data.png_file_path
 
         # Read source metadata
@@ -174,26 +179,102 @@ class WorldCardHandlerV2:
             first_mes=data.get("first_mes"),
             system_prompt=data.get("system_prompt")
         )
-        
-        # Read source image 
+
+        # Read source image
         try:
             with open(source_png_path, "rb") as f:
                 image_bytes = f.read()
         except Exception as e:
             self.logger.log_error(f"Failed to read source image: {e}")
             return None
-            
+
         # Create world using standard creation flow
         # This creates a new UUID and embeds the world metadata
         new_world_summary = self.create_world_card(create_req, image_bytes)
-        
+
         # Post-creation: Copy extra fields like character_book
         character_book = data.get("character_book")
         if character_book:
             update_req = UpdateWorldRequest(character_book=character_book)
             self.update_world_card(new_world_summary.uuid, update_req)
-            
+
+        # Extract locations from lore entries and create rooms
+        room_placements = self._extract_and_create_rooms_from_lore(source_meta)
+
+        if room_placements:
+            self.logger.log_step(f"Created {len(room_placements)} rooms from lore entries")
+            # Update world with room placements
+            update_req = UpdateWorldRequest(rooms=room_placements)
+            self.update_world_card(new_world_summary.uuid, update_req)
+            new_world_summary.room_count = len(room_placements)
+
         return new_world_summary
+
+    def _extract_and_create_rooms_from_lore(self, character_data: dict) -> List[WorldRoomPlacement]:
+        """
+        Extract locations from character lore entries and create room cards for each.
+
+        Args:
+            character_data: The full character card metadata
+
+        Returns:
+            List of WorldRoomPlacement objects for the created rooms
+        """
+        # Import here to avoid circular imports
+        from backend.handlers.room_card_handler import RoomCardHandler
+
+        # Use LocationExtractor to find potential locations
+        extractor = LocationExtractor(self.logger)
+        locations = extractor.extract_from_lore(character_data)
+
+        if not locations:
+            self.logger.log_step("No locations found in lore entries")
+            return []
+
+        self.logger.log_step(f"Found {len(locations)} potential locations in lore")
+
+        # Create a RoomCardHandler to create room cards
+        room_handler = RoomCardHandler(
+            character_service=self.character_service,
+            png_handler=self.png_handler,
+            settings_manager=self.settings_manager,
+            logger=self.logger
+        )
+
+        room_placements = []
+        grid_width = 10  # Default grid width for positioning
+
+        for i, location in enumerate(locations):
+            try:
+                # Create room request
+                room_request = CreateRoomRequest(
+                    name=location.name,
+                    description=location.description,
+                    first_mes=f"You enter {location.name}.",
+                    system_prompt=None
+                )
+
+                # Create the room card
+                room_summary = room_handler.create_room_card(room_request)
+
+                # Calculate grid position (spread rooms across the grid)
+                grid_x = i % grid_width
+                grid_y = i // grid_width
+
+                # Create room placement
+                placement = WorldRoomPlacement(
+                    room_uuid=room_summary.uuid,
+                    grid_position=Position(x=grid_x, y=grid_y)
+                )
+                room_placements.append(placement)
+
+                self.logger.log_step(f"Created room '{location.name}' at grid position ({grid_x}, {grid_y})")
+
+            except Exception as e:
+                self.logger.log_warning(f"Failed to create room for location '{location.name}': {e}")
+                continue
+
+        return room_placements
 
     def list_world_cards(self) -> List[WorldCardSummary]:
         """
