@@ -61,9 +61,6 @@ export function GridCanvas({
     } else if (activeTool === 'eraser' && room) {
       onRoomDelete(room.id);
       onRoomSelect(null);
-    } else if (activeTool === 'connection' && room) {
-      // Select room for connection mode
-      onRoomSelect(room);
     }
   };
 

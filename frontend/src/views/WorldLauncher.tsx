@@ -64,7 +64,7 @@ const WorldLauncher: React.FC = () => {
                   mes_example: worldCard.data.mes_example,
                   creator_notes: worldCard.data.creator_notes,
                   tags: worldCard.data.tags,
-                  extensions: worldCard.data.extensions,
+                  extensions: worldCard.data.extensions as unknown as CharacterData['data']['extensions'],
                   character_uuid: uuid,
                   creator: worldCard.data.creator,
                }
