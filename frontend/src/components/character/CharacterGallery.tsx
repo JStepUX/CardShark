@@ -113,7 +113,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filter state for Character/World/Room cards
-  const [filterType, setFilterType] = useState<'all' | 'character' | 'world' | 'room'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'character' | 'world' | 'room'>('character');
 
   // View mode state (Grid vs Folders)
   const [viewMode, setViewMode] = useState<'grid' | 'folder'>('grid');
