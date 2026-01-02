@@ -18,8 +18,6 @@ const Layout: React.FC = () => {
   // State management
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
-  const [backendStatus, setBackendStatus] = useState<"running" | "disconnected">("disconnected");
-  const [lastHealthCheck, setLastHealthCheck] = useState<number>(0);
   const location = useLocation(); // Track route changes
 
   const { settings } = useSettings();
@@ -43,53 +41,80 @@ const Layout: React.FC = () => {
 
   // We no longer need to load settings here as it's handled by the SettingsContext
 
-  // Backend status check - optimized to reduce API calls
+  // Enhanced health status with more info
+  interface HealthStatus {
+    status: 'running' | 'disconnected';
+    version?: string;
+    latency_ms?: number;
+    llm?: {
+      configured: boolean;
+      provider: string | null;
+      model: string | null;
+    };
+  }
+
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>({ status: 'disconnected' });
+  const lastHealthCheckRef = useRef<number>(0);
+  const previousStatusRef = useRef<'running' | 'disconnected'>('disconnected');
+
+  // Backend status check - frequent checks (45s) with quiet logging (only on state changes)
   useEffect(() => {
-    // Health check function with caching
-    const checkBackend = async (force = false) => {
+    const CHECK_INTERVAL = 45000; // 45 seconds for responsiveness
+
+    const checkBackend = async () => {
       const now = Date.now();
-      // Skip check if last check was less than 5 minutes ago (300000ms) and not forced
-      const CACHE_DURATION = 300000; // 5 minutes
-
-      // Try to get cached status first
-      const cachedStatus = localStorage.getItem('backendStatus');
-      const cachedTimestamp = Number(localStorage.getItem('backendStatusTimestamp') || '0');
-
-      if (!force && cachedStatus && now - cachedTimestamp < CACHE_DURATION) {
-        setBackendStatus(cachedStatus as "running" | "disconnected");
-        setLastHealthCheck(cachedTimestamp);
-        return;
-      }
 
       try {
+        const startTime = performance.now();
         const response = await fetch("/api/health");
-        const status = response.ok ? "running" : "disconnected";
-        setBackendStatus(status);
-        setLastHealthCheck(now);
+        const roundTripMs = Math.round(performance.now() - startTime);
 
-        // Cache the result
-        localStorage.setItem('backendStatus', status);
-        localStorage.setItem('backendStatusTimestamp', now.toString());
-      } catch {
-        setBackendStatus("disconnected");
-        setLastHealthCheck(now);
-        localStorage.setItem('backendStatus', "disconnected");
-        localStorage.setItem('backendStatusTimestamp', now.toString());
+        if (response.ok) {
+          const data = await response.json();
+          const newStatus: HealthStatus = {
+            status: 'running',
+            version: data.data?.version,
+            latency_ms: roundTripMs, // Use client-measured round-trip for accuracy
+            llm: data.data?.llm
+          };
+
+          // Only log on state transition
+          if (previousStatusRef.current !== 'running') {
+            console.log(`[health] Backend connected (v${newStatus.version || 'unknown'}, ${roundTripMs}ms)`);
+            previousStatusRef.current = 'running';
+          }
+
+          setHealthStatus(newStatus);
+        } else {
+          if (previousStatusRef.current !== 'disconnected') {
+            console.warn(`[health] Backend disconnected - HTTP ${response.status}`);
+            previousStatusRef.current = 'disconnected';
+          }
+          setHealthStatus({ status: 'disconnected' });
+        }
+      } catch (error) {
+        if (previousStatusRef.current !== 'disconnected') {
+          console.warn(`[health] Backend disconnected - ${error instanceof Error ? error.message : 'connection refused'}`);
+          previousStatusRef.current = 'disconnected';
+        }
+        setHealthStatus({ status: 'disconnected' });
       }
+
+      lastHealthCheckRef.current = now;
     };
 
     // Check immediately on first mount
     checkBackend();
 
-    // Set up a longer interval for periodic checks (5 minutes)
-    const interval = setInterval(() => checkBackend(), 300000);
+    // Set up interval for periodic checks (45 seconds)
+    const interval = setInterval(checkBackend, CHECK_INTERVAL);
 
-    // Add visibility change listener to check when user returns to the tab
+    // Visibility change handler - uses ref to avoid stale closure
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // Only force a check if it's been more than 2 minutes since last check
-        if (Date.now() - lastHealthCheck > 120000) {
-          checkBackend(true);
+        // Check if it's been more than 30 seconds since last check
+        if (Date.now() - lastHealthCheckRef.current > 30000) {
+          checkBackend();
         }
       }
     };
@@ -100,33 +125,15 @@ const Layout: React.FC = () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [lastHealthCheck]);
+  }, []); // Empty deps - uses refs to avoid stale closures
 
-  // Check health on major route changes
+
+
+  // Auto-close workshop mode on route change as it should only be active in Info/Greetings
   useEffect(() => {
-    // Only check health on route change if it's because more than 2 minute
-    if (Date.now() - lastHealthCheck > 120000) {
-      const checkBackendOnRouteChange = async () => {
-        try {
-          const response = await fetch("/api/health");
-          const status = response.ok ? "running" : "disconnected";
-          setBackendStatus(status);
-          setLastHealthCheck(Date.now());
-          localStorage.setItem('backendStatus', status);
-          localStorage.setItem('backendStatusTimestamp', Date.now().toString());
-        } catch {
-          setBackendStatus("disconnected");
-          setLastHealthCheck(Date.now());
-          localStorage.setItem('backendStatus', "disconnected");
-          localStorage.setItem('backendStatusTimestamp', Date.now().toString());
-        }
-      };
-      checkBackendOnRouteChange();
-    }
-
-    // Auto-close workshop mode on route change as it should only be active in Info/Greetings
     setWorkshopMode(false);
-  }, [location.pathname, lastHealthCheck]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // File upload handler
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -355,7 +362,7 @@ const Layout: React.FC = () => {
         onWorldImport={handleWorldImport}
         onSave={handleSave}
         onShowAbout={() => setShowAboutDialog(true)}
-        backendStatus={backendStatus}
+        healthStatus={healthStatus}
         onImageChange={handleImageChange}
       />
 

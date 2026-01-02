@@ -50,6 +50,18 @@ const ROUTE_IMPORTS: Record<string, () => Promise<any>> = {
   '/settings': importAPISettingsView
 };
 
+// Enhanced health status type from Layout
+interface HealthStatus {
+  status: 'running' | 'disconnected';
+  version?: string;
+  latency_ms?: number;
+  llm?: {
+    configured: boolean;
+    provider: string | null;
+    model: string | null;
+  };
+}
+
 interface SideNavProps {
   // Remove props related to internal view state management
   // currentView: View;
@@ -58,7 +70,7 @@ interface SideNavProps {
   onWorldImport: () => void;
   onSave: () => void;
   onShowAbout: () => void;
-  backendStatus: 'running' | 'disconnected';
+  healthStatus: HealthStatus;
   onImageChange?: (newImageData: string | File) => void;
 }
 
@@ -70,7 +82,7 @@ const SideNav: React.FC<SideNavProps> = ({
   onWorldImport,
   onSave,
   onShowAbout,
-  backendStatus,
+  healthStatus,
   onImageChange
 }) => {
   const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter(); // Add setters
@@ -220,16 +232,37 @@ const SideNav: React.FC<SideNavProps> = ({
                 </div>
                 <TokenCounter characterData={characterData} />
               </div>
-              <div className="mt-4 text-xs text-gray-500 flex justify-between items-center">
-                <div>
-                  Backend: {backendStatus === "running" ? "Connected" : "Disconnected"}
+              <div className="mt-4 text-xs text-gray-500 flex flex-col gap-1">
+                <div className="flex justify-between items-center">
+                  <div
+                    className="flex items-center gap-1.5 cursor-default"
+                    title={healthStatus.status === 'running'
+                      ? `Version: ${healthStatus.version || 'unknown'}\nLatency: ${healthStatus.latency_ms || '?'}ms\nLLM: ${healthStatus.llm?.configured ? `${healthStatus.llm.provider} (${healthStatus.llm.model})` : 'Not configured'}`
+                      : 'Backend server is not responding'}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${healthStatus.status === 'running' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                    />
+                    <span>
+                      {healthStatus.status === 'running'
+                        ? `v${healthStatus.version || '?'} • ${healthStatus.latency_ms || '?'}ms`
+                        : 'Disconnected'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={onShowAbout}
+                    className="text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    About
+                  </button>
                 </div>
-                <button
-                  onClick={onShowAbout}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  About
-                </button>
+                {healthStatus.status === 'running' && healthStatus.llm && (
+                  <div className="text-gray-600 truncate" title={healthStatus.llm.configured ? `${healthStatus.llm.provider}: ${healthStatus.llm.model}` : 'No LLM configured'}>
+                    LLM: {healthStatus.llm.configured
+                      ? <span className="text-gray-400">{healthStatus.llm.provider}</span>
+                      : <span className="text-amber-600">Not configured</span>}
+                  </div>
+                )}
               </div>
             </div>
           </>

@@ -342,12 +342,39 @@ register_exception_handlers(app)
 health_router = APIRouter(prefix="/api", tags=["health"])
 
 @health_router.get("/health", response_model=HealthCheckResponse, responses=STANDARD_RESPONSES)
-async def health_check():
-    """Health check endpoint with standardized response."""
+async def health_check(request: Request):
+    """Health check endpoint with standardized response including LLM provider status."""
+    import time
+    start_time = time.time()
+    
+    # Get LLM provider info from settings
+    llm_status = {
+        "configured": False,
+        "provider": None,
+        "model": None
+    }
+    
+    try:
+        current_settings = settings_manager.get_settings()
+        api_config = current_settings.get("api", {})
+        api_type = api_config.get("type", "")
+        
+        if api_type:
+            llm_status["configured"] = True
+            llm_status["provider"] = api_type
+            llm_status["model"] = api_config.get("model", "unknown")
+    except Exception as e:
+        logger.log_warning(f"Could not get LLM settings for health check: {e}")
+    
+    # Calculate response latency
+    latency_ms = round((time.time() - start_time) * 1000, 2)
+    
     return create_data_response({
         "status": "healthy",
         "version": VERSION,
-        "service": "CardShark API"
+        "service": "CardShark API",
+        "latency_ms": latency_ms,
+        "llm": llm_status
     })
 
 # Add CORS middleware to allow all origins (for development)
