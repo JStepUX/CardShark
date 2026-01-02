@@ -151,9 +151,6 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
         case 'm':
           setActiveTool('move');
           break;
-        case 'c':
-          setActiveTool('connection');
-          break;
         case 'd':
           setActiveTool('eraser');
           break;

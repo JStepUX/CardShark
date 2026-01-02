@@ -1,7 +1,7 @@
-import { Edit3, Link2, Trash2, Move, ChevronLeft } from 'lucide-react';
+import { Edit3, Trash2, Move, ChevronLeft } from 'lucide-react';
 
-// Define Tool type - simplified to 4 tools
-type Tool = 'edit' | 'move' | 'connection' | 'eraser';
+// Define Tool type - simplified to 3 tools
+type Tool = 'edit' | 'move' | 'eraser';
 
 interface ToolPaletteProps {
   activeTool: Tool;
@@ -13,7 +13,6 @@ interface ToolPaletteProps {
 const tools: { id: Tool; icon: typeof Edit3; label: string; shortcut: string; description: string }[] = [
   { id: 'edit', icon: Edit3, label: 'Edit', shortcut: 'E', description: 'Select rooms to edit properties' },
   { id: 'move', icon: Move, label: 'Move', shortcut: 'M', description: 'Drag and drop rooms to rearrange' },
-  { id: 'connection', icon: Link2, label: 'Connect', shortcut: 'C', description: 'Link rooms together' },
   { id: 'eraser', icon: Trash2, label: 'Delete', shortcut: 'D', description: 'Remove rooms' },
 ];
 

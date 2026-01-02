@@ -215,7 +215,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                   value={room.description}
                   onChange={(e) => onUpdate({ ...room, description: e.target.value })}
                   className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors resize-none mb-1"
-                  rows={2}
+                  rows={5}
                   placeholder="Describe this room..."
                 />
               </div>
@@ -240,7 +240,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                   value={room.introduction_text}
                   onChange={(e) => onUpdate({ ...room, introduction_text: e.target.value })}
                   className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors resize-none"
-                  rows={2}
+                  rows={5}
                   placeholder="Text shown when entering room..."
                 />
               </div>
@@ -318,7 +318,6 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                               Hostile {npc.monster_level ? `Lv.${npc.monster_level}` : ''}
                             </span>
                           )}
-                          {npc.role && <span className="text-xs text-gray-500 truncate">• {npc.role}</span>}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button
@@ -340,25 +339,6 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                     ))}
                   </div>
                 )}
-              </div>
-
-              {/* Connections */}
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">Connections</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['north', 'south', 'east', 'west'] as const).map((direction) => (
-                    <div
-                      key={direction}
-                      className={`bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-xs ${room.connections[direction] ? 'text-green-400' : 'text-gray-600'
-                        }`}
-                    >
-                      <div className="capitalize">{direction}</div>
-                      <div className="text-xs opacity-60">
-                        {room.connections[direction] ? 'Connected' : 'None'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
 
               {/* Position Info */}

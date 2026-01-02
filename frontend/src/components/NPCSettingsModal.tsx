@@ -16,13 +16,11 @@ interface NPCSettingsModalProps {
 }
 
 export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCSettingsModalProps) {
-    const [role, setRole] = useState(npc.role || '');
     const [hostile, setHostile] = useState(npc.hostile || false);
     const [monsterLevel, setMonsterLevel] = useState(npc.monster_level || 1);
 
     // Reset form when NPC changes
     useEffect(() => {
-        setRole(npc.role || '');
         setHostile(npc.hostile || false);
         setMonsterLevel(npc.monster_level || 1);
     }, [npc]);
@@ -32,7 +30,6 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
     const handleSave = () => {
         const updatedNpc: RoomNPC = {
             ...npc,
-            role: role.trim() || undefined,
             hostile,
             monster_level: hostile ? monsterLevel : undefined,
         };
@@ -42,7 +39,6 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
 
     const handleCancel = () => {
         // Reset to original values
-        setRole(npc.role || '');
         setHostile(npc.hostile || false);
         setMonsterLevel(npc.monster_level || 1);
         onClose();
@@ -67,24 +63,6 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
-                    {/* Role */}
-                    <div>
-                        <label className="block text-sm font-medium text-stone-300 mb-2">
-                            Role
-                            <span className="text-stone-500 font-normal ml-2">(optional)</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={role}
-                            onChange={(e) => setRole(e.target.value)}
-                            placeholder="e.g., Innkeeper, Guard, Merchant, Quest Giver"
-                            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-stone-500 focus:outline-none focus:border-blue-500 transition-colors"
-                        />
-                        <p className="text-xs text-stone-500 mt-1">
-                            Defines the NPC's function in this room (overrides character description)
-                        </p>
-                    </div>
-
                     {/* Hostile Toggle */}
                     <div className="bg-stone-800 border border-stone-700 rounded-lg p-4">
                         <label className="flex items-start gap-3 cursor-pointer">

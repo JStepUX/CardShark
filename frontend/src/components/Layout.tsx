@@ -371,7 +371,7 @@ const Layout: React.FC = () => {
       {/* Main Content Area - single flex container for side-by-side layout */}
       <div className={`flex flex-1 ${(isCompareMode || isWorkshopMode) ? 'min-w-0' : 'min-w-[600px]'} pb-8 bg-stone-900 overflow-hidden`}>
         {/* Main content column */}
-        <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} h-full overflow-hidden relative z-0`}>
+        <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} h-full overflow-hidden`}>
           {error && (
             <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
           )}
