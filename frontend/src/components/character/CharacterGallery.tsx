@@ -1013,15 +1013,6 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             {/* Type Filter Buttons */}
             <div className="flex rounded-lg bg-stone-800 p-1 border border-stone-700 flex-shrink-0">
               <button
-                onClick={() => setFilterType('all')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterType === 'all'
-                  ? 'bg-stone-600 text-white shadow-sm'
-                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                  }`}
-              >
-                All
-              </button>
-              <button
                 onClick={() => setFilterType('character')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${filterType === 'character'
                   ? 'bg-stone-600 text-white shadow-sm'
