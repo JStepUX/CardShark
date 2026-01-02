@@ -283,35 +283,15 @@ class PngMetadataHandler:
             # Log metadata size for debugging
             self.logger.log_step(f"Encoding metadata: JSON size: {len(json_str)} bytes, Base64 size: {len(base64_str)} bytes")
             
-            # Prepare PNG info
+            # Prepare PNG info - only write 'chara' chunk (SillyTavern compatible)
+            # Other metadata (ICC profiles, EXIF, etc.) is intentionally not preserved
+            # to avoid compatibility issues with binary chunks that can't be stored as text
             png_info = PngImagePlugin.PngInfo()
-            
+            png_info.add_text('chara', base64_str)
+
             # Write metadata to image
             with Image.open(BytesIO(image_data)) as img:
-                # Log original image size and format for debugging
                 self.logger.log_step(f"Original image: {img.size}, format: {img.format}")
-                
-                # Preserve existing metadata (except character data)
-                preserved_keys = []
-                for key, value in img.info.items():
-                    if key not in ['chara', 'ccv3', 'exif']:  # Don't copy existing character data
-                        try:
-                            if isinstance(value, (str, bytes)):
-                                str_value = value if isinstance(value, str) else value.decode('utf-8', errors='ignore')
-                                png_info.add_text(key, str_value)
-                                preserved_keys.append(key)
-                            elif hasattr(value, '__str__'):
-                                str_value = str(value)
-                                png_info.add_text(key, str_value)
-                                preserved_keys.append(key)
-                        except Exception as e:
-                            self.logger.log_warning(f"Could not preserve metadata key '{key}': {str(e)}")
-                
-                self.logger.log_step(f"Preserved {len(preserved_keys)} metadata keys: {preserved_keys}")
-                
-                # Add character metadata
-                png_info.add_text('chara', base64_str)
-                self.logger.log_step("Added 'chara' metadata to PNG")
                 
                 # Save image with metadata, ensuring we maintain original format and quality
                 output = BytesIO()
