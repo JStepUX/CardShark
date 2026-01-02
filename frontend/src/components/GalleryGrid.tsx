@@ -18,8 +18,8 @@ function GalleryGrid<T>({ items, renderItem, emptyMessage, className, columns }:
     );
   }
   const gridClass = columns
-    ? `grid grid-cols-${columns} gap-6 ${className || ""}`
-    : `grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-6 ${className || ""}`;
+    ? `grid grid-cols-${columns} gap-6 px-6 pt-6 ${className || ""}`
+    : `grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-6 px-6 pt-6 ${className || ""}`;
   return (
     <div className={gridClass}>
       {items.map((item, idx) => renderItem(item, idx))}
