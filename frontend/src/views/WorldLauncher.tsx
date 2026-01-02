@@ -4,6 +4,7 @@ import { useCharacter } from '../contexts/CharacterContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { ArrowLeft, Play, Hammer, Download } from 'lucide-react';
 import { CharacterData } from '../types/character';
+import { worldApi } from '../api/worldApi';
 
 const WorldLauncher: React.FC = () => {
    const { uuid } = useParams<{ uuid: string }>();
@@ -47,77 +48,53 @@ const WorldLauncher: React.FC = () => {
 
          try {
             setLoading(true);
-            // Fetch metadata
-            const response = await fetch(`/api/character/${uuid}`);
-            if (!response.ok) throw new Error('Failed to load world card');
+            // Use worldApi V2 to get consistent data with WorldEditor
+            const worldCard = await worldApi.getWorld(uuid);
 
-            const data = await response.json();
-            if (data.success && data.data) {
-               // Parse the API response into CharacterData structure
-               // The API returns CharacterAPIBase, we might need to map it or use the metadata endpoint
-               // Let's try fetching metadata directly by UUID if possible, or mapping
-
-               // Actually, let's use the same flow as Gallery: fetch metadata by path or UUID
-               // The /api/character/{uuid} endpoint returns the DB model which has extensions_json
-
-               const charData = data.data;
-
-               // Parse extensions_json if it's a string
-               let extensions = charData.extensions_json;
-               if (typeof extensions === 'string') {
-                  try {
-                     extensions = JSON.parse(extensions);
-                  } catch (e) {
-                     console.error("Failed to parse extensions_json", e);
-                     extensions = {};
-                  }
+            // Map WorldCard to CharacterData structure for compatibility
+            const mappedData: CharacterData = {
+               spec: worldCard.spec,
+               spec_version: worldCard.spec_version,
+               data: {
+                  name: worldCard.data.name,
+                  description: worldCard.data.description,
+                  personality: worldCard.data.personality,
+                  scenario: worldCard.data.scenario,
+                  first_mes: worldCard.data.first_mes,
+                  mes_example: worldCard.data.mes_example,
+                  creator_notes: worldCard.data.creator_notes,
+                  tags: worldCard.data.tags,
+                  extensions: worldCard.data.extensions,
+                  character_uuid: uuid,
+                  creator: worldCard.data.creator,
                }
+            };
 
-               // Construct CharacterData object
-               const mappedData: CharacterData = {
-                  spec: "chara_card_v2",
-                  spec_version: charData.spec_version,
-                  data: {
-                     name: charData.name,
-                     description: charData.description,
-                     personality: charData.personality,
-                     scenario: charData.scenario,
-                     first_mes: charData.first_mes,
-                     mes_example: charData.mes_example,
-                     creator_notes: charData.creator_comment,
-                     tags: charData.tags,
-                     extensions: extensions,
-                     character_uuid: uuid, // Include UUID so InfoViewRouter can get worldId
-                     // Add other fields as needed
-                  }
-               };
+            setWorldCard(mappedData);
 
-               setWorldCard(mappedData);
+            // Convert to CharacterCard format for Context (Schema mismatch adapter)
+            const contextData = {
+               name: mappedData.data.name,
+               description: mappedData.data.description || '',
+               personality: mappedData.data.personality || '',
+               scenario: mappedData.data.scenario || '',
+               first_mes: mappedData.data.first_mes || '',
+               mes_example: mappedData.data.mes_example || '',
+               creatorcomment: mappedData.data.creator_notes || '',
+               avatar: 'none',
+               chat: '',
+               talkativeness: '0.5',
+               fav: false,
+               tags: mappedData.data.tags || [],
+               spec: mappedData.spec,
+               spec_version: mappedData.spec_version || '2.0',
+               data: mappedData.data,
+               create_date: new Date().toISOString()
+            };
+            setCharacterData(contextData as any);
 
-               // Convert to CharacterCard format for Context (Schema mismatch adapter)
-               const contextData = {
-                  name: mappedData.data.name,
-                  description: mappedData.data.description || '',
-                  personality: mappedData.data.personality || '',
-                  scenario: mappedData.data.scenario || '',
-                  first_mes: mappedData.data.first_mes || '',
-                  mes_example: mappedData.data.mes_example || '',
-                  creatorcomment: mappedData.data.creator_notes || '',
-                  avatar: 'none',
-                  chat: '',
-                  talkativeness: '0.5',
-                  fav: false,
-                  tags: mappedData.data.tags || [],
-                  spec: mappedData.spec,
-                  spec_version: mappedData.spec_version || '2.0',
-                  data: mappedData.data,
-                  create_date: new Date().toISOString()
-               };
-               setCharacterData(contextData as any);
-            }
-
-            // Fetch Image
-            setImageUrl(`/api/character-image/${uuid}`);
+            // Fetch Image using V2 API
+            setImageUrl(worldApi.getWorldImageUrl(uuid));
 
          } catch (err) {
             setError(err instanceof Error ? err.message : 'Unknown error');
@@ -182,9 +159,10 @@ const WorldLauncher: React.FC = () => {
                      const rooms = worldData.rooms || [];
                      const locationCount = Object.keys(locations).length || rooms.length || 0;
 
+                     // Check both legacy 'npcs' field and new 'instance_npcs' field
                      const npcCount = Object.keys(locations).length > 0
                         ? Object.values(locations).reduce((acc: number, loc: any) => acc + (loc.npcs?.length || 0), 0)
-                        : rooms.reduce((acc: number, room: any) => acc + (room.npcs?.length || 0), 0);
+                        : rooms.reduce((acc: number, room: any) => acc + (room.instance_npcs?.length || room.npcs?.length || 0), 0);
 
                      return (
                         <div className="grid grid-cols-2 gap-4 text-sm">
