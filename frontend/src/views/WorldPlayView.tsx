@@ -20,7 +20,7 @@ import type { CharacterCard } from '../types/schema';
 import type { GridWorldState, GridRoom, DisplayNPC } from '../types/worldGrid';
 import type { CombatInitData, CombatState } from '../types/combat';
 import { resolveNpcDisplayData } from '../utils/worldStateApi';
-import { roomCardToGridRoom } from '../utils/roomCardAdapter';
+import { roomCardToGridRoom, placementToGridRoomStub } from '../utils/roomCardAdapter';
 import { injectRoomContext, injectNPCContext } from '../utils/worldCardAdapter';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
@@ -39,7 +39,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const { uuid } = useParams<{ uuid: string }>();
   const navigate = useNavigate();
   const {
-    isGenerating,
     messages,
     setMessages,
     addMessage,
@@ -70,7 +69,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [combatInitData, setCombatInitData] = useState<CombatInitData | null>(null);
   const [isInCombat, setIsInCombat] = useState(false);
 
-  // Load world data from API (V2)
+  // Load world data from API (V2) - LAZY LOADING
+  // Only fetches world card + starting room (2 API calls instead of N+1)
   useEffect(() => {
     async function loadWorld() {
       if (!worldId) {
@@ -83,49 +83,44 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         setIsLoading(true);
         setError(null);
 
-        // Load world card (V2)
+        // Load world card (V2) - single API call
         const world = await worldApi.getWorld(worldId);
         setWorldCard(world);
 
         const worldData = world.data.extensions.world_data;
-
-        // Load all room cards, tracking any that are missing
-        const loadedRooms: GridRoom[] = [];
-        let missingRooms = 0;
-        for (const placement of worldData.rooms) {
-          try {
-            const roomCard = await roomApi.getRoom(placement.room_uuid);
-
-            // Convert RoomCard to GridRoom format using adapter
-            // Pass placement data so instance NPCs/images override room card defaults
-            const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position, placement);
-            loadedRooms.push(gridRoom);
-          } catch (err) {
-            console.warn(`Failed to load room ${placement.room_uuid}:`, err);
-            missingRooms++;
-          }
-        }
-
-        // Show warning if any rooms were not found (may have been deleted)
-        if (missingRooms > 0) {
-          setMissingRoomCount(missingRooms);
-          setShowMissingRoomWarning(true);
-        }
-
-        // Build grid for MapModal
         const gridSize = worldData.grid_size;
+
+        // LAZY LOADING: Build grid from placements WITHOUT fetching each room
+        // This uses cached instance_name and instance_npcs from the world card
         const grid: (GridRoom | null)[][] = Array(gridSize.height)
           .fill(null)
           .map(() => Array(gridSize.width).fill(null));
 
-        loadedRooms.forEach(room => {
-          const { x, y } = room.position;
-          if (y >= 0 && y < gridSize.height && x >= 0 && x < gridSize.width) {
-            grid[y][x] = room;
-          }
-        });
+        // Track placements for quick lookup and count legacy rooms (missing names)
+        let legacyRoomCount = 0;
+        for (const placement of worldData.rooms) {
+          const { x, y } = placement.grid_position;
 
-        // Create GridWorldState for backward compatibility with MapModal
+          // Create GridRoom stub from placement data (no API call!)
+          const gridRoom = placementToGridRoomStub(placement);
+
+          if (y >= 0 && y < gridSize.height && x >= 0 && x < gridSize.width) {
+            grid[y][x] = gridRoom;
+          }
+
+          // Count rooms without cached names (will show "Unknown Room")
+          if (!placement.instance_name) {
+            legacyRoomCount++;
+          }
+        }
+
+        // Show warning if legacy rooms detected (suggest re-saving in editor)
+        if (legacyRoomCount > 0) {
+          console.warn(`${legacyRoomCount} rooms have no cached name. Open in World Editor and save to update.`);
+          // Optional: Could show UI warning for legacy worlds
+        }
+
+        // Create GridWorldState for MapModal
         const gridWorldState: GridWorldState = {
           uuid: world.data.character_uuid || worldId,
           metadata: {
@@ -138,31 +133,52 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         };
         setWorldState(gridWorldState);
 
-        // Find current room based on player position
+        // LAZY LOADING: Only fetch the CURRENT room's full data
         const playerPos = worldData.player_position;
-        const currentRoom = loadedRooms.find(r => r.position.x === playerPos.x && r.position.y === playerPos.y);
+        const currentPlacement = worldData.rooms.find(
+          r => r.grid_position.x === playerPos.x && r.grid_position.y === playerPos.y
+        );
 
-        if (currentRoom) {
-          setCurrentRoom(currentRoom);
+        if (currentPlacement) {
+          try {
+            // Fetch full room card for current room only
+            const roomCard = await roomApi.getRoom(currentPlacement.room_uuid);
+            const fullCurrentRoom = roomCardToGridRoom(roomCard, playerPos, currentPlacement);
 
-          // Resolve NPCs in the room and merge with combat data
-          const npcUuids = currentRoom.npcs.map(npc => npc.character_uuid);
-          const resolvedNpcs = await resolveNpcDisplayData(npcUuids);
+            // Update grid with full room data
+            if (playerPos.y >= 0 && playerPos.y < gridSize.height &&
+              playerPos.x >= 0 && playerPos.x < gridSize.width) {
+              grid[playerPos.y][playerPos.x] = fullCurrentRoom;
+            }
 
-          // Merge hostile/monster_level from room NPCs
-          const npcsWithCombatData: CombatDisplayNPC[] = resolvedNpcs.map(npc => {
-            const roomNpc = currentRoom.npcs.find(rn => rn.character_uuid === npc.id);
-            return {
-              ...npc,
-              hostile: roomNpc?.hostile,
-              monster_level: roomNpc?.monster_level,
-            };
-          });
-          setRoomNpcs(npcsWithCombatData);
+            setCurrentRoom(fullCurrentRoom);
 
-          // Add introduction message
-          if (currentRoom.introduction_text && !isGenerating) {
-            // Let ChatView handle the introduction through the narrator
+            // Resolve NPCs in the room and merge with combat data
+            const npcUuids = fullCurrentRoom.npcs.map(npc => npc.character_uuid);
+            const resolvedNpcs = await resolveNpcDisplayData(npcUuids);
+
+            // Merge hostile/monster_level from room NPCs
+            const npcsWithCombatData: CombatDisplayNPC[] = resolvedNpcs.map(npc => {
+              const roomNpc = fullCurrentRoom.npcs.find(rn => rn.character_uuid === npc.id);
+              return {
+                ...npc,
+                hostile: roomNpc?.hostile,
+                monster_level: roomNpc?.monster_level,
+              };
+            });
+            setRoomNpcs(npcsWithCombatData);
+
+            // Update worldState with the full room
+            setWorldState(prev => prev ? { ...prev, grid } : null);
+
+            console.log(`World loaded: ${worldData.rooms.length} rooms on map, 1 room fetched (lazy loading)`);
+          } catch (err) {
+            console.warn(`Failed to load starting room ${currentPlacement.room_uuid}:`, err);
+            setMissingRoomCount(1);
+            setShowMissingRoomWarning(true);
+            // Still set the stub as current room so UI doesn't break
+            const stubRoom = placementToGridRoomStub(currentPlacement);
+            setCurrentRoom(stubRoom);
           }
         }
       } catch (err) {
@@ -388,11 +404,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   }, [currentRoom, addMessage]);
 
   // Extracted room transition logic - shared by direct navigate and Party Gather modal
+  // LAZY LOADING: Fetches full room data if needed during navigation
   const performRoomTransition = useCallback(async (
-    targetRoom: GridRoom,
+    targetRoomStub: GridRoom,
     keepActiveNpc: boolean = false
   ) => {
-    if (!worldState || !worldId) return;
+    if (!worldState || !worldId || !worldCard) return;
 
     // PRUNE MESSAGES: Keep only the last 2 messages for continuity
     if (messages.length > 0) {
@@ -406,7 +423,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     let foundX = 0;
     for (let y = 0; y < worldState.grid.length; y++) {
       for (let x = 0; x < worldState.grid[y].length; x++) {
-        if (worldState.grid[y][x]?.id === targetRoom.id) {
+        if (worldState.grid[y][x]?.id === targetRoomStub.id) {
           foundY = y;
           foundX = x;
           break;
@@ -414,12 +431,41 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       }
     }
 
+    // LAZY LOADING: Fetch full room data if this is just a stub
+    // We detect stubs by checking if introduction_text is empty AND description is brief
+    // (stubs have empty introduction_text because that's not cached in placements)
+    let targetRoom = targetRoomStub;
+    const worldData = worldCard.data.extensions.world_data;
+    const placement = worldData.rooms.find(r => r.room_uuid === targetRoomStub.id);
+
+    if (placement) {
+      try {
+        // Always fetch full room data for the destination
+        // This ensures we have introduction_text, description, lore, etc.
+        const roomCard = await roomApi.getRoom(placement.room_uuid);
+        targetRoom = roomCardToGridRoom(roomCard, { x: foundX, y: foundY }, placement);
+
+        // Update the grid with full room data for future reference
+        const newGrid = [...worldState.grid.map(row => [...row])];
+        if (foundY >= 0 && foundY < newGrid.length && foundX >= 0 && foundX < newGrid[0].length) {
+          newGrid[foundY][foundX] = targetRoom;
+        }
+
+        setWorldState(prev => prev ? {
+          ...prev,
+          grid: newGrid,
+          player_position: { x: foundX, y: foundY },
+        } : null);
+
+        console.log(`Lazy loaded room: ${targetRoom.name}`);
+      } catch (err) {
+        console.error(`Failed to fetch room ${targetRoomStub.id}:`, err);
+        // Fall back to stub data
+      }
+    }
+
     // Update local state
     setCurrentRoom(targetRoom);
-    setWorldState({
-      ...worldState,
-      player_position: { x: foundX, y: foundY },
-    });
 
     // Clear active NPC unless explicitly keeping them
     if (!keepActiveNpc) {
@@ -445,11 +491,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
     // Persist position to backend (V2)
     try {
-      if (worldCard) {
-        await worldApi.updateWorld(worldId, {
-          player_position: { x: foundX, y: foundY },
-        });
-      }
+      await worldApi.updateWorld(worldId, {
+        player_position: { x: foundX, y: foundY },
+      });
     } catch (err) {
       console.error('Failed to persist player position:', err);
     }

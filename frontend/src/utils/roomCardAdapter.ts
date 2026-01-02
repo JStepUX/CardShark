@@ -96,3 +96,37 @@ export function gridRoomToRoomUpdate(gridRoom: GridRoom): {
         first_mes: gridRoom.introduction_text || undefined,
     };
 }
+
+/**
+ * Creates a lightweight GridRoom "stub" from WorldRoomPlacement data only.
+ *
+ * This enables "lazy loading" - the map can render room names and NPC indicators
+ * without fetching each room card individually. The full room data is only
+ * fetched when the player enters that room.
+ *
+ * @param placement - WorldRoomPlacement from the world card
+ * @returns GridRoom stub with enough data for map display
+ *
+ * @example
+ * // Build map grid without fetching rooms
+ * const gridRooms = worldData.rooms.map(placement =>
+ *   placementToGridRoomStub(placement)
+ * );
+ *
+ * @note Returns a "stub" - some fields are empty/defaults
+ * @note Full room data (description, lore, etc.) requires fetching the room card
+ * @note Falls back to "Unknown Room" if instance_name is not populated (legacy worlds)
+ */
+export function placementToGridRoomStub(placement: WorldRoomPlacement): GridRoom {
+    return {
+        id: placement.room_uuid,
+        name: placement.instance_name || 'Unknown Room', // Fallback for legacy worlds
+        description: placement.instance_description || '', // Brief description if cached
+        introduction_text: '', // Not included in placement - fetch on room entry
+        npcs: placement.instance_npcs ? [...placement.instance_npcs] : [], // Full RoomNPC[] for NPC count/hostile display
+        events: [], // Not populated in stubs
+        connections: { north: null, south: null, east: null, west: null }, // Not populated in stubs
+        position: placement.grid_position,
+        image_path: placement.instance_image_path,
+    };
+}

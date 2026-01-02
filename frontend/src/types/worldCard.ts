@@ -8,10 +8,15 @@ import { RoomNPC } from './room';
 /**
  * Room placement in world grid
  * Stores both the room template reference AND instance-specific data
+ * 
+ * NOTE: instance_name and instance_description enable "lazy loading" -
+ * the map can render without fetching each room card individually.
  */
 export interface WorldRoomPlacement {
   room_uuid: string; // References a room card UUID (the template)
   grid_position: Position; // Where this room appears on the world grid
+  instance_name?: string; // Room name for map display (cached from room card) - enables lazy loading
+  instance_description?: string; // Brief description for tooltips (cached from room card)
   instance_npcs?: RoomNPC[]; // Full NPC assignment objects (role, hostile, etc.) - overrides room card's default NPCs
   instance_image_path?: string; // Custom image for this instance - overrides room card's default image
   instance_state?: Record<string, any>; // Future: loot taken, doors opened, enemy HP, etc.

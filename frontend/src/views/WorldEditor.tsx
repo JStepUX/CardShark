@@ -329,10 +329,14 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
     try {
       // Convert GridRoom[] to WorldRoomPlacement[]
-      // CRITICAL: Persist instance data (NPCs, images) to world card
+      // CRITICAL: Persist instance data (NPCs, images, names) to world card
+      // The instance_name and instance_description enable "lazy loading" -
+      // the map can render without fetching each room card individually
       const roomPlacements: WorldRoomPlacement[] = rooms.map(room => ({
         room_uuid: room.id,
         grid_position: room.position,
+        instance_name: room.name, // Cache room name for map display
+        instance_description: room.description || undefined, // Cache description for tooltips
         instance_npcs: room.npcs.length > 0 ? room.npcs : undefined, // Full RoomNPC[] objects
         instance_image_path: room.image_path || undefined, // Custom image override
         // instance_state: undefined, // Future: loot, doors, enemy HP, etc.
