@@ -345,6 +345,7 @@ health_router = APIRouter(prefix="/api", tags=["health"])
 async def health_check(request: Request):
     """Health check endpoint with standardized response including LLM provider status."""
     import time
+    import httpx
     start_time = time.time()
     
     # Get LLM provider info from settings
@@ -355,27 +356,48 @@ async def health_check(request: Request):
     }
     
     try:
-        current_settings = settings_manager.get_settings()
-        api_config = current_settings.get("api", {})
-        api_type = api_config.get("type", "")
+        # Get the active API from the new settings structure (apis + activeApiId)
+        all_settings = settings_manager.settings
+        active_api_id = all_settings.get("activeApiId")
+        apis = all_settings.get("apis", {})
         
-        if api_type:
-            llm_status["configured"] = True
-            llm_status["provider"] = api_type
-            llm_status["model"] = api_config.get("model", "unknown")
+        if active_api_id and active_api_id in apis:
+            active_api = apis[active_api_id]
+            provider = active_api.get("provider", "")
+            
+            if provider and active_api.get("enabled", False):
+                llm_status["configured"] = True
+                llm_status["provider"] = provider
+                
+                # Try to get model name - check settings first
+                model_name = active_api.get("model") or active_api.get("model_info", {}).get("name")
+                
+                # For KoboldCPP, try to fetch actual loaded model from the API
+                if provider.lower() == "koboldcpp" and active_api.get("url"):
+                    try:
+                        async with httpx.AsyncClient(timeout=2.0) as client:
+                            kobold_url = active_api["url"].rstrip("/")
+                            response = await client.get(f"{kobold_url}/api/v1/model")
+                            if response.status_code == 200:
+                                model_data = response.json()
+                                # KoboldCPP returns {"result": "model_name"}
+                                model_name = model_data.get("result", model_name)
+                    except Exception:
+                        pass  # Fall back to settings value
+                
+                llm_status["model"] = model_name or "unknown"
     except Exception as e:
         logger.log_warning(f"Could not get LLM settings for health check: {e}")
     
     # Calculate response latency
     latency_ms = round((time.time() - start_time) * 1000, 2)
     
-    return create_data_response({
-        "status": "healthy",
-        "version": VERSION,
-        "service": "CardShark API",
-        "latency_ms": latency_ms,
-        "llm": llm_status
-    })
+    return HealthCheckResponse(
+        status="healthy",
+        version=VERSION,
+        latency_ms=latency_ms,
+        llm=llm_status
+    )
 
 # Add CORS middleware to allow all origins (for development)
 app.add_middleware(

@@ -71,11 +71,13 @@ const Layout: React.FC = () => {
 
         if (response.ok) {
           const data = await response.json();
+          // Parse response - handle both new format (top level) and old format (nested in data)
+          const responseData = data.data || data;
           const newStatus: HealthStatus = {
             status: 'running',
-            version: data.data?.version,
+            version: responseData.version,
             latency_ms: roundTripMs, // Use client-measured round-trip for accuracy
-            llm: data.data?.llm
+            llm: responseData.llm
           };
 
           // Only log on state transition
@@ -346,7 +348,7 @@ const Layout: React.FC = () => {
   return (
     <div className="h-screen w-screen flex bg-stone-950 text-gray-100 overflow-hidden">
       {/* Add Bottom Banner at the top level */}
-      <BottomBanner />
+      <BottomBanner healthStatus={healthStatus} />
       <input
         ref={fileInputRef}
         type="file"

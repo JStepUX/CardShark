@@ -64,12 +64,20 @@ class InternalServerErrorResponse(ErrorResponse):
     error_code: str = "INTERNAL_SERVER_ERROR"
 
 # Health check response
+class LLMStatus(BaseModel):
+    """LLM provider status information."""
+    configured: bool = False
+    provider: Optional[str] = None
+    model: Optional[str] = None
+
 class HealthCheckResponse(BaseResponse):
     """Health check endpoint response."""
     status: str = "healthy"
     version: Optional[str] = None
     uptime: Optional[str] = None
     database_status: Optional[str] = None
+    latency_ms: Optional[float] = None
+    llm: Optional[LLMStatus] = None
 
 # API test connection response
 class ConnectionTestResponse(BaseResponse):
