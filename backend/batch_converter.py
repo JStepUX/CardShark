@@ -22,6 +22,7 @@ import sys
 import os
 import json
 import traceback
+import base64
 from pathlib import Path
 from PIL import Image, PngImagePlugin
 import io
@@ -143,9 +144,8 @@ def process_character_directory(char_dir: Path, quiet_mode: bool) -> str:
                 # Alternative approach using PngInfo directly
                 try:
                     logger.log_step("Attempting alternative approach for PNG metadata")
-                    
+
                     # Convert metadata to base64
-                    import base64
                     json_str = json.dumps(validated_metadata)
                     base64_str = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
                     

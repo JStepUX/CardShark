@@ -7,21 +7,19 @@ Design Philosophy:
 - Database table (user_profile_cards) is an index/cache
 - Can be rebuilt from scratch by re-scanning users/ directory
 """
-import base64
 import datetime
 import json
 import os
 import sys
 import uuid
-from io import BytesIO
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-from PIL import Image, PngImagePlugin
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
 from backend.sql_models import UserProfileCard
+from backend.png_metadata_handler import PngMetadataHandler
 from backend.utils.path_utils import normalize_path, get_application_base_path, ensure_directory_exists
 
 
@@ -39,66 +37,35 @@ def _as_json_str(value) -> Optional[str]:
 
 class UserProfileService:
     """Service for managing user profile PNG files and their database index."""
-    
-    def __init__(self, db_session_generator, logger):
+
+    def __init__(self, db_session_generator, logger, png_handler: PngMetadataHandler = None):
         self.db_session_generator = db_session_generator
         self.logger = logger
-    
+        # Use provided handler or create one
+        self.png_handler = png_handler or PngMetadataHandler(logger)
+
     def _get_users_dir(self) -> Path:
         """Get the users directory path."""
         # Get application base path
         base_path = get_application_base_path()
         users_dir = base_path / "users"
-        
+
         # Ensure directory exists
         ensure_directory_exists(users_dir)
-        
+
         return users_dir
-    
+
     def _read_metadata_from_png(self, file_path: Path) -> dict:
         """Read user metadata from PNG file's 'chara' text chunk."""
         try:
-            with Image.open(file_path) as img:
-                if 'chara' in img.info:
-                    encoded_data = img.info['chara']
-                    if isinstance(encoded_data, bytes):
-                        encoded_data = encoded_data.decode('utf-8', errors='ignore')
-                    # Handle padding
-                    padding_needed = len(encoded_data) % 4
-                    if padding_needed:
-                        encoded_data += '=' * (4 - padding_needed)
-                    decoded_bytes = base64.b64decode(encoded_data)
-                    return json.loads(decoded_bytes.decode('utf-8'))
+            return self.png_handler.read_metadata(file_path)
         except Exception as e:
             self.logger.log_warning(f"Could not read metadata from {file_path}: {e}")
         return {}
-    
+
     def _write_metadata_to_png(self, image_data: bytes, metadata: dict) -> bytes:
         """Write user metadata to PNG file's 'chara' text chunk."""
-        # Encode metadata as base64 JSON (same format as character cards)
-        json_str = json.dumps(metadata)
-        base64_str = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
-        
-        # Prepare PNG info
-        png_info = PngImagePlugin.PngInfo()
-        
-        with Image.open(BytesIO(image_data)) as img:
-            # Preserve existing metadata (except character data)
-            for key, value in img.info.items():
-                if key not in ['chara', 'ccv3', 'exif']:
-                    try:
-                        if isinstance(value, (str, bytes)):
-                            png_info.add_text(key, value if isinstance(value, str) else value.decode('utf-8', errors='ignore'))
-                    except Exception:
-                        pass
-            
-            # Add user metadata
-            png_info.add_text('chara', base64_str)
-            
-            # Save image with metadata
-            output = BytesIO()
-            img.save(output, format="PNG", pnginfo=png_info, optimize=False)
-            return output.getvalue()
+        return self.png_handler.write_metadata(image_data, metadata)
     
     def _get_session_context(self):
         """Get a database session context."""
