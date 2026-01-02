@@ -318,7 +318,6 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                               Hostile {npc.monster_level ? `Lv.${npc.monster_level}` : ''}
                             </span>
                           )}
-                          {npc.role && <span className="text-xs text-gray-500 truncate">• {npc.role}</span>}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button

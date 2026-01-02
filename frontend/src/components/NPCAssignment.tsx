@@ -225,13 +225,6 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
 
                   {/* Badges */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Role badge */}
-                    {npc.role && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-900/30 border border-blue-800/50 rounded text-xs text-blue-300">
-                        {npc.role}
-                      </span>
-                    )}
-
                     {/* Hostile badge */}
                     {npc.hostile && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-900/30 border border-red-800/50 rounded text-xs text-red-300">
@@ -244,7 +237,7 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
                     )}
 
                     {/* No settings indicator */}
-                    {!npc.role && !npc.hostile && (
+                    {!npc.hostile && (
                       <span className="text-xs text-stone-500 italic">No special settings</span>
                     )}
                   </div>
