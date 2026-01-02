@@ -230,7 +230,8 @@ async def lifespan(app: FastAPI):
         try:
             user_profile_service = UserProfileService(
                 db_session_generator=db_session_generator,
-                logger=logger
+                logger=logger,
+                png_handler=png_handler
             )
             app.state.user_profile_service = user_profile_service
             user_profile_service.sync_users_directory()

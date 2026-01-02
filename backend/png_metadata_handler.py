@@ -85,13 +85,9 @@ class PngMetadataHandler:
                 json_str = decoded.decode('utf-8')
                 self.logger.log_step("Decoded base64 to UTF-8 string")
             except UnicodeDecodeError:
-                # Try other encodings if UTF-8 fails
-                try:
-                    json_str = decoded.decode('latin-1')
-                    self.logger.log_step("Decoded base64 to latin-1 string")
-                except:
-                    self.logger.log_warning("Couldn't decode as UTF-8 or latin-1, using bytes directly")
-                    json_str = str(decoded)  # Last resort
+                # Try latin-1 as fallback (covers all byte values 0-255)
+                json_str = decoded.decode('latin-1')
+                self.logger.log_step("Decoded base64 to latin-1 string (UTF-8 failed)")
             
             # Log a small sample of the decoded JSON for debugging
             sample_length = min(100, len(json_str))
@@ -176,25 +172,23 @@ class PngMetadataHandler:
                         except Exception as e:
                             self.logger.log_error(f"Error decoding UserComment: {str(e)}")
 
-                        # 2. If UserComment not found, check for 'chara' directly in EXIF (less standard, but possible)
-                        if 'chara' in exif:  # Directly check if 'chara' is an EXIF tag (might not be standard tag ID)
-                            self.logger.log_step("Found 'chara' tag directly in EXIF data, attempting to decode.")
-                            try:
-                                return self._decode_metadata(exif['chara']) # Try to access 'chara' directly - might fail if not standard tag ID
-                            except Exception as e:
-                                self.logger.log_error(f"Error decoding 'chara' tag from EXIF: {str(e)}")
+                    # 2. Check for 'chara' directly in EXIF (less standard, but possible)
+                    if 'chara' in exif:
+                        self.logger.log_step("Found 'chara' tag directly in EXIF data, attempting to decode.")
+                        try:
+                            return self._decode_metadata(exif['chara'])
+                        except Exception as e:
+                            self.logger.log_error(f"Error decoding 'chara' tag from EXIF: {str(e)}")
 
-
-                        # 3. Log ALL EXIF data for debugging if 'chara' or UserComment not found
-                        self.logger.log_step("UserComment and direct 'chara' tag not found in EXIF, logging all EXIF tags:")
-                        for tag_id, value in exif.items():
-                            tag_name = ExifTags.TAGS.get(tag_id, f"Unknown ({tag_id})")
-                            # Safely get a value preview
-                            try:
-                                value_preview = str(value)[:50] if value else "None"
-                            except:
-                                value_preview = f"<unrepresentable value of type {type(value).__name__}>"
-                            self.logger.log_step(f"  EXIF Tag ID: {tag_id}, Name: {tag_name}, Value: {value_preview}")
+                    # 3. Log ALL EXIF data for debugging if decoding failed
+                    self.logger.log_step("Could not decode EXIF metadata, logging all EXIF tags:")
+                    for tag_id, value in exif.items():
+                        tag_name = ExifTags.TAGS.get(tag_id, f"Unknown ({tag_id})")
+                        try:
+                            value_preview = str(value)[:50] if value else "None"
+                        except Exception:
+                            value_preview = f"<unrepresentable value of type {type(value).__name__}>"
+                        self.logger.log_step(f"  EXIF Tag ID: {tag_id}, Name: {tag_name}, Value: {value_preview}")
 
 
                 # **Fallback checks (after EXIF)** - for other potential locations, keep these for broader compatibility
@@ -303,7 +297,8 @@ class PngMetadataHandler:
                     if key not in ['chara', 'ccv3', 'exif']:  # Don't copy existing character data
                         try:
                             if isinstance(value, (str, bytes)):
-                                png_info.add_text(key, value)
+                                str_value = value if isinstance(value, str) else value.decode('utf-8', errors='ignore')
+                                png_info.add_text(key, str_value)
                                 preserved_keys.append(key)
                             elif hasattr(value, '__str__'):
                                 str_value = str(value)
