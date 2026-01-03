@@ -22,7 +22,7 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
   const [apiKey, setApiKey] = useState(settings.apiKey);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  
+
   // Update form when settings change
   useEffect(() => {
     setUrl(settings.url);
@@ -47,7 +47,7 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         // Update all settings including enabled state
         onUpdate({
@@ -99,11 +99,10 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
         <button
           onClick={handleTestConnection}
           disabled={isConnecting}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            isConnecting 
-              ? 'bg-gray-600 text-gray-300 cursor-wait' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-          }`}
+          className={`px-4 py-2 rounded-lg transition-colors ${isConnecting
+            ? 'bg-stone-600 text-gray-300 cursor-wait'
+            : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
         >
           {isConnecting ? 'Testing...' : 'Test Connection'}
         </button>
@@ -124,7 +123,7 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="http://localhost:5001"
-            className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
+            className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
                      rounded-lg focus:ring-1 focus:ring-blue-500"
           />
         </div>
@@ -142,7 +141,7 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder="Enter API key if required"
-            className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
+            className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
                      rounded-lg focus:ring-1 focus:ring-blue-500"
           />
         </div>
@@ -155,7 +154,7 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
           <select
             value={settings.template}
             onChange={(e) => onUpdate({ template: e.target.value as ChatTemplate })}
-            className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
+            className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
                      rounded-lg focus:ring-1 focus:ring-blue-500"
           >
             {Object.entries(TEMPLATE_NAMES).map(([value, label]) => (

@@ -36,14 +36,15 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   onMoveDown,
   isFirst,
   isLast
-}) => {  const [showAdvanced, setShowAdvanced] = useState(false);
+}) => {
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showImageUploader, setShowImageUploader] = useState(false);
   const { characterData } = useCharacter(); // Get character data for UUID  // Chat context will be used in future implementations
   // const chatContext = useChat();
   // const navigateToPreviewImage = chatContext?.navigateToPreviewImage;
   // const availablePreviewImages = chatContext?.availablePreviewImages;
   const { getCharacterUuid, isLoading: isUuidLoading } = useCharacterUuid();
-  
+
   // State for character UUID management
   const [charUuidString, setCharUuidString] = useState<string | null>(
     (characterData && characterData.data && typeof characterData.data.character_uuid === 'string')
@@ -78,12 +79,12 @@ export const LoreCard: React.FC<LoreCardProps> = ({
           }
           return;
         }
-        
+
         try {
           // Otherwise use our mapping system to get or generate a UUID          // Use character_uuid if available, otherwise generate a deterministic ID from name
-          const characterId = characterData.data.character_uuid || 
-                            `name-${encodeURIComponent(characterData.data.name || 'unknown')}`;
-          
+          const characterId = characterData.data.character_uuid ||
+            `name-${encodeURIComponent(characterData.data.name || 'unknown')}`;
+
           const uuid = await getCharacterUuid(characterId, characterData.data.name);
           if (charUuidString !== uuid) {
             setCharUuidString(uuid);
@@ -93,7 +94,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
         }
       }
     };
-    
+
     fetchUuid();
   }, [characterData?.data, getCharacterUuid, charUuidString]);
 
@@ -123,12 +124,12 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   };
   const getFullImagePath = (imageUuid?: string): string | undefined => {
     if (!imageUuid) return undefined;
-    
+
     // If we have a UUID (either built-in or from our mapping), use it
     if (charUuidString) {
       return `/uploads/lore_images/${charUuidString}/${imageUuid}`;
     }
-    
+
     // Fallback for characters without UUID - use a deterministic path based on character name or ID
     const characterIdentifier = characterData?.data?.name || 'unknown';
     const safeIdentifier = encodeURIComponent(characterIdentifier);
@@ -138,10 +139,10 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   let loreImageUploaderElement = null;
   if (showImageUploader) {
     // Get character identifier - either UUID or fallback
-    const characterFallbackId = characterData?.data?.name ? 
-                       `name-${encodeURIComponent(characterData.data.name)}` : 
-                       'unknown';
-    
+    const characterFallbackId = characterData?.data?.name ?
+      `name-${encodeURIComponent(characterData.data.name)}` :
+      'unknown';
+
     if (isUuidLoading) {
       // Show loading indicator while UUID is being fetched
       loreImageUploaderElement = (
@@ -169,20 +170,20 @@ export const LoreCard: React.FC<LoreCardProps> = ({
 
   return (
     <>
-    <div className={`bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg ${!item.enabled ? 'opacity-60' : ''}`}>
-      {/* Top controls row */}
-      <div className="flex items-center justify-between gap-4 mb-4">
-        {/* Left side controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onUpdate(item.id, { enabled: !item.enabled })}
-            className="text-gray-400 hover:text-blue-400 transition-colors"
-            title={!item.enabled ? 'Enable' : 'Disable'}
-          >
-            {!item.enabled ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}
-          </button>
+      <div className={`bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg ${!item.enabled ? 'opacity-60' : ''}`}>
+        {/* Top controls row */}
+        <div className="flex items-center justify-between gap-4 mb-4">
+          {/* Left side controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onUpdate(item.id, { enabled: !item.enabled })}
+              className="text-gray-400 hover:text-blue-400 transition-colors"
+              title={!item.enabled ? 'Enable' : 'Disable'}
+            >
+              {!item.enabled ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}
+            </button>
 
-          <select
+            <select
               value={item.position}
               onChange={handlePositionChange}
               className="bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
@@ -195,7 +196,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
               <option value="before_example">Before Examples</option>
               <option value="after_example">After Examples</option>
             </select>
-            
+
             {item.position === 'at_depth' && (
               <>
                 <select
@@ -223,112 +224,112 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             )}
           </div>
 
-        {/* Right side controls */}
-        <div className="flex items-center gap-1">
-           {/* Image Add/Remove Button */}
-           <button
-            onClick={() => setShowImageUploader(true)}
-            className="p-1 text-gray-400 hover:text-green-400 hover:bg-gray-800 rounded"
-            title={item.has_image ? "Change/Remove Image" : "Add Image"}
-          >
-            {item.has_image ? <FileImage size={18} /> : <ImagePlus size={18} />}
-          </button>
+          {/* Right side controls */}
+          <div className="flex items-center gap-1">
+            {/* Image Add/Remove Button */}
+            <button
+              onClick={() => setShowImageUploader(true)}
+              className="p-1 text-gray-400 hover:text-green-400 hover:bg-stone-800 rounded"
+              title={item.has_image ? "Change/Remove Image" : "Add Image"}
+            >
+              {item.has_image ? <FileImage size={18} /> : <ImagePlus size={18} />}
+            </button>
 
-          <button
-            onClick={() => onMoveUp(item.id)}
-            disabled={isFirst}
-            className={`p-1 rounded ${isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'}`}
-            title="Move up"
-          >
-            <ChevronUp size={18} />
-          </button>
+            <button
+              onClick={() => onMoveUp(item.id)}
+              disabled={isFirst}
+              className={`p-1 rounded ${isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-800'}`}
+              title="Move up"
+            >
+              <ChevronUp size={18} />
+            </button>
 
-          <button
-            onClick={() => onMoveDown(item.id)}
-            disabled={isLast}
-            className={`p-1 rounded ${isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'}`}
-            title="Move down"
-          >
-            <ChevronDown size={18} />
-          </button>
+            <button
+              onClick={() => onMoveDown(item.id)}
+              disabled={isLast}
+              className={`p-1 rounded ${isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-800'}`}
+              title="Move down"
+            >
+              <ChevronDown size={18} />
+            </button>
 
-          <button
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="p-1 text-gray-400 hover:text-blue-400 hover:bg-gray-800 rounded"
-            title="Advanced settings"
-          >
-            <Settings size={18} />
-          </button>
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="p-1 text-gray-400 hover:text-blue-400 hover:bg-stone-800 rounded"
+              title="Advanced settings"
+            >
+              <Settings size={18} />
+            </button>
 
-          <button
-            onClick={() => onDelete(item.id)}
-            className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded"
-            title="Delete entry"
-          >
-            <Trash2 size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="space-y-4">
-        {/* Primary Keys and Selective */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-sm text-gray-400">Primary Keys</label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={item.selective || false}
-                onChange={(e) => onUpdate(item.id, { selective: e.target.checked })}
-                className="form-checkbox"
-              />
-              <span className="text-sm text-gray-400">Selective</span>
-            </label>
+            <button
+              onClick={() => onDelete(item.id)}
+              className="p-1 text-gray-400 hover:text-red-400 hover:bg-stone-800 rounded"
+              title="Delete entry"
+            >
+              <Trash2 size={18} />
+            </button>
           </div>
-          <input
-            type="text"
-            value={primaryKeys}
-            onChange={(e) => setPrimaryKeys(e.target.value)}
-            onBlur={handlePrimaryKeysBlur}
-            className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
-            placeholder="Enter comma-separated keywords"
-          />
         </div>
 
-        {/* Secondary Keys and Logic (only shown if selective is true) */}
-        {item.selective && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-4">
-            <div className="w-48">
-                <label className="block text-sm text-gray-400 mb-1">Logic</label>
-                <select
-                  value={item.extensions?.selectiveLogic || WorldInfoLogic.AND_ANY}
-                  onChange={(e) => onUpdate(item.id, {
-                    extensions: { ...(item.extensions || {}), selectiveLogic: parseInt(e.target.value) }
-                  })}
-                  className="w-full bg-zinc-950 text-white rounded px-2 py-2 border border-zinc-800"
-                >
-                  <option value={WorldInfoLogic.AND_ANY}>AND ANY</option>
-                  <option value={WorldInfoLogic.AND_ALL}>AND ALL</option>
-                  <option value={WorldInfoLogic.NOT_ANY}>NOT ANY</option>
-                  <option value={WorldInfoLogic.NOT_ALL}>NOT ALL</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm text-gray-400 mb-1">Secondary Keys</label>
+        {/* Main content */}
+        <div className="space-y-4">
+          {/* Primary Keys and Selective */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm text-gray-400">Primary Keys</label>
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input
-                  type="text"
-                  value={secondaryKeys}
-                  onChange={(e) => setSecondaryKeys(e.target.value)}
-                  onBlur={handleSecondaryKeysBlur}
-                  className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
-                  placeholder="Enter comma-separated secondary keywords"
+                  type="checkbox"
+                  checked={item.selective || false}
+                  onChange={(e) => onUpdate(item.id, { selective: e.target.checked })}
+                  className="form-checkbox"
                 />
-              </div>
-              </div>
+                <span className="text-sm text-gray-400">Selective</span>
+              </label>
+            </div>
+            <input
+              type="text"
+              value={primaryKeys}
+              onChange={(e) => setPrimaryKeys(e.target.value)}
+              onBlur={handlePrimaryKeysBlur}
+              className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+              placeholder="Enter comma-separated keywords"
+            />
           </div>
-        )}
+
+          {/* Secondary Keys and Logic (only shown if selective is true) */}
+          {item.selective && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-4">
+                <div className="w-48">
+                  <label className="block text-sm text-gray-400 mb-1">Logic</label>
+                  <select
+                    value={item.extensions?.selectiveLogic || WorldInfoLogic.AND_ANY}
+                    onChange={(e) => onUpdate(item.id, {
+                      extensions: { ...(item.extensions || {}), selectiveLogic: parseInt(e.target.value) }
+                    })}
+                    className="w-full bg-zinc-950 text-white rounded px-2 py-2 border border-zinc-800"
+                  >
+                    <option value={WorldInfoLogic.AND_ANY}>AND ANY</option>
+                    <option value={WorldInfoLogic.AND_ALL}>AND ALL</option>
+                    <option value={WorldInfoLogic.NOT_ANY}>NOT ANY</option>
+                    <option value={WorldInfoLogic.NOT_ALL}>NOT ALL</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-400 mb-1">Secondary Keys</label>
+                  <input
+                    type="text"
+                    value={secondaryKeys}
+                    onChange={(e) => setSecondaryKeys(e.target.value)}
+                    onBlur={handleSecondaryKeysBlur}
+                    className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                    placeholder="Enter comma-separated secondary keywords"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -342,7 +343,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             preserveWhitespace={true} // Preserve formatting
           />
         </div>
-        
+
         {/* Image Thumbnail */}
         {item.has_image && item.image_uuid && (
           <div className="mt-2">
@@ -363,8 +364,8 @@ export const LoreCard: React.FC<LoreCardProps> = ({
 
         {/* Advanced settings panel */}
         {showAdvanced && ( // Corrected condition
-            <div className="mt-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-              <h4 className="text-sm font-medium text-gray-300 mb-3">Advanced Settings</h4>
+          <div className="mt-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
+            <h4 className="text-sm font-medium text-gray-300 mb-3">Advanced Settings</h4>
 
             {/* Special Settings */}
             <div className="grid grid-cols-2 gap-4">
@@ -485,13 +486,13 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                 placeholder="Add notes about this entry (not used by AI)"
               />
             </div>
-            </div>
-          )
+          </div>
+        )
         }
       </div>
-   
-    {loreImageUploaderElement}
-    {/* Ensure fragment has a final explicit child or comment */}
+
+      {loreImageUploaderElement}
+      {/* Ensure fragment has a final explicit child or comment */}
     </>
   );
 };

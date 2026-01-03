@@ -479,11 +479,10 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               {characterData && (
                 <button
                   onClick={() => setWorkshopMode(!isWorkshopMode)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    isWorkshopMode
+                  className={`p-2 rounded-lg transition-colors ${isWorkshopMode
                       ? 'text-white bg-stone-600'
                       : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                  }`}
+                    }`}
                   title={isWorkshopMode ? "Close Workshop" : "Open Workshop"}
                 >
                   <Wrench className="w-5 h-5" />
@@ -492,11 +491,10 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
               <button
                 onClick={toggleCompareMode}
-                className={`p-2 rounded-lg transition-colors ${
-                  isCompareMode
+                className={`p-2 rounded-lg transition-colors ${isCompareMode
                     ? 'text-white bg-stone-600'
                     : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                }`}
+                  }`}
                 title={isCompareMode ? "Close Comparison" : "Compare Characters"}
               >
                 <SplitSquareVertical className="w-5 h-5" />
@@ -720,7 +718,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             <div className="flex gap-3 justify-end">
               <button
                 onClick={handleCancelNavigation}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                className="px-4 py-2 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors"
               >
                 Cancel
               </button>

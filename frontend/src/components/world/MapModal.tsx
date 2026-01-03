@@ -58,7 +58,7 @@ export function MapModal({ worldData, currentRoomId, onNavigate, onClose }: MapM
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-stone-800 transition-colors"
             title="Close map"
           >
             <X className="w-5 h-5" />

@@ -6,9 +6,9 @@ interface DirectoryPickerProps {
   onDirectoryChange: (directory: string) => void;
 }
 
-const DirectoryPicker: React.FC<DirectoryPickerProps> = ({ 
+const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
   currentDirectory,
-  onDirectoryChange 
+  onDirectoryChange
 }) => {
   // Initialize with the currentDirectory prop value or empty string if null
   const [inputValue, setInputValue] = useState<string>(currentDirectory || '');
@@ -35,7 +35,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
     try {
       // Show loading state
       setIsLoading(true);
-      
+
       // Validate directory exists and contains PNGs
       const response = await fetch('/api/validate-directory', {
         method: 'POST',
@@ -43,12 +43,12 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ directory: inputValue.trim() })
-      });      const result = await response.json();
-      
+      }); const result = await response.json();
+
       // Handle standardized response format: {success: true, data: {exists: true, path: "..."}}
       // or legacy direct format: {exists: true, message: "..."}
       const data = result.success ? result.data : result;
-      
+
       if (data.exists) {
         setError(null);
         setValidationMessage(data.message || 'Directory validated successfully');
@@ -70,7 +70,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
   return (
     <div className="w-full space-y-2">
       <div className="text-sm text-slate-400 mb-2">
-        💡 You can use absolute paths (like <code className="bg-slate-800 px-1 rounded">C:\sillytavern\characters</code>) or relative paths (like <code className="bg-slate-800 px-1 rounded">characters</code>) from the application directory.
+        💡 You can use absolute paths (like <code className="bg-stone-800 px-1 rounded">C:\sillytavern\characters</code>) or relative paths (like <code className="bg-stone-800 px-1 rounded">characters</code>) from the application directory.
       </div>
       <form onSubmit={handleSubmit} className="flex space-x-2">
         <input
@@ -81,7 +81,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
             setError(null);
             setValidationMessage(null);
           }}
-          className="flex-grow px-3 py-2 bg-stone-950 border border-slate-700 
+          className="flex-grow px-3 py-2 bg-stone-950 border border-stone-700 
                    rounded-lg focus:ring-1 focus:ring-blue-500"
           placeholder="e.g., C:\sillytavern\characters or just 'characters'"
         />

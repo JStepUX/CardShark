@@ -94,7 +94,7 @@ function LogEntry({ entry }: { entry: CombatLogEntry }) {
 
 function HitQualityBadge({ quality }: { quality: string }) {
   const badges: Record<string, { label: string; color: string }> = {
-    miss: { label: 'Miss', color: 'bg-gray-600' },
+    miss: { label: 'Miss', color: 'bg-stone-600' },
     marginal: { label: 'Glancing', color: 'bg-yellow-700' },
     solid: { label: 'Solid', color: 'bg-orange-600' },
     crushing: { label: 'Crushing!', color: 'bg-red-600' },

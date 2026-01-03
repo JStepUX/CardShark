@@ -168,7 +168,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
         },
         {
           label: `Replace All (${matchCount})`,
-          onClick: matchCount > 0 ? handleReplaceAll : () => {},
+          onClick: matchCount > 0 ? handleReplaceAll : () => { },
           variant: matchCount > 0 ? 'primary' : 'secondary'
         }
       ]}
@@ -184,7 +184,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
             type="text"
             value={findText}
             onChange={(e) => setFindText(e.target.value)}
-            className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
+            className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
                      rounded-lg focus:ring-1 focus:ring-blue-500"
             placeholder="Text to find..."
             autoFocus
@@ -200,7 +200,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
             type="text"
             value={replaceText}
             onChange={(e) => setReplaceText(e.target.value)}
-            className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
+            className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
                      rounded-lg focus:ring-1 focus:ring-blue-500"
             placeholder="Replace with..."
           />

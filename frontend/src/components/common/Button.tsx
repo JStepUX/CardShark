@@ -22,10 +22,10 @@ const Button: React.FC<ButtonProps> = ({
 
   const variantStyles: Record<ButtonVariant, string> = {
     primary: 'bg-blue-500 hover:bg-blue-600 text-white focus:ring-blue-500',
-    secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-gray-400',
+    secondary: 'bg-stone-200 hover:bg-stone-300 text-gray-800 focus:ring-gray-400',
     destructive: 'bg-red-500 hover:bg-red-600 text-white focus:ring-red-500',
-    outline: 'border border-gray-300 hover:bg-gray-100 text-gray-700 focus:ring-blue-500',
-    ghost: 'hover:bg-gray-100 text-gray-700 focus:ring-blue-500',
+    outline: 'border border-gray-300 hover:bg-stone-100 text-gray-700 focus:ring-blue-500',
+    ghost: 'hover:bg-stone-100 text-gray-700 focus:ring-blue-500',
   };
 
   const sizeStyles: Record<ButtonSize, string> = {

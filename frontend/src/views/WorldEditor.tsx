@@ -3,7 +3,7 @@
  * @description World Builder interface for creating and editing world maps.
  * @dependencies worldApi (V2), roomApi, GridCanvas, ToolPalette, RoomPropertiesPanel, NPCPickerModal
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { ToolPalette, type Tool } from '../components/world/ToolPalette';
@@ -282,24 +282,40 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     setIsDirty(true);
   }, [selectedRoom]);
 
+  // Debounced room card persistence (separate from local state updates)
+  const debouncedRoomSaveRef = useRef<{ [roomId: string]: NodeJS.Timeout }>({});
+
   const handleRoomUpdate = useCallback(async (updatedRoom: GridRoom) => {
-    // Update local state
+    // Update local state immediately for responsive UI
     setRooms(prev => prev.map(r => r.id === updatedRoom.id ? updatedRoom : r));
     setSelectedRoom(updatedRoom);
     setIsDirty(true);
 
-    // Persist room card updates via roomApi
-    try {
-      await roomApi.updateRoom(updatedRoom.id, {
-        name: updatedRoom.name,
-        description: updatedRoom.description,
-        first_mes: updatedRoom.introduction_text || undefined,
-      });
-      console.log('Room card updated successfully');
-    } catch (err) {
-      console.error('Failed to update room card:', err);
-      // Continue anyway - changes are still in local state and will be saved with world
+    // Debounce the API call to prevent saving on every keystroke
+    if (debouncedRoomSaveRef.current[updatedRoom.id]) {
+      clearTimeout(debouncedRoomSaveRef.current[updatedRoom.id]);
     }
+
+    debouncedRoomSaveRef.current[updatedRoom.id] = setTimeout(async () => {
+      try {
+        await roomApi.updateRoom(updatedRoom.id, {
+          name: updatedRoom.name,
+          description: updatedRoom.description,
+          first_mes: updatedRoom.introduction_text || undefined,
+        });
+        console.log(`Room card "${updatedRoom.name}" saved successfully`);
+      } catch (err) {
+        console.error('Failed to update room card:', err);
+        // Continue anyway - changes are still in local state and will be saved with world
+      }
+    }, 1000); // Wait 1 second after last change before saving
+  }, []);
+
+  // Cleanup: clear all pending debounced saves on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(debouncedRoomSaveRef.current).forEach(timeout => clearTimeout(timeout));
+    };
   }, []);
 
   const handleRoomMove = useCallback((roomId: string, newPosition: { x: number; y: number }) => {

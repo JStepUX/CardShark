@@ -67,7 +67,7 @@ export function CombatCard({
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+            <div className="w-full h-full bg-stone-700 flex items-center justify-center">
               <span className="text-xs text-gray-400">
                 {combatant.name.charAt(0)}
               </span>
@@ -88,7 +88,7 @@ export function CombatCard({
       onClick={isValidTarget && !isKnockedOut ? onClick : undefined}
       className={`
         relative w-28 h-40 rounded-lg border-4 overflow-hidden
-        bg-gray-900 shadow-lg
+        bg-stone-900 shadow-lg
         ${frameColor} ${turnIndicator} ${targetGlow} ${selectedStyle} ${knockedOutStyle}
         transition-all duration-200
       `}
@@ -175,7 +175,7 @@ export function CombatCard({
             {combatant.name}
           </div>
           {/* HP bar */}
-          <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden mt-0.5">
+          <div className="relative h-2 bg-stone-700 rounded-full overflow-hidden mt-0.5">
             <div
               className={`absolute inset-y-0 left-0 ${hpBarColor} transition-all duration-300`}
               style={{ width: `${hpPercent}%` }}

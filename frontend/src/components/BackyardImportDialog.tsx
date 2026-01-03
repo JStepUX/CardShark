@@ -52,7 +52,7 @@ export function BackyardImportDialog({ isOpen, onClose, onImport }: BackyardImpo
           label: isValidating ? 'Importing...' : 'Import',
           onClick: handleImport,
           variant: 'primary'
-        }        
+        }
       ]}
       showCloseButton={false}
     >
@@ -71,7 +71,7 @@ export function BackyardImportDialog({ isOpen, onClose, onImport }: BackyardImpo
                 setUrl(e.target.value);
                 setValidationError('');
               }}
-              className="w-full px-3 py-2 bg-stone-950 border border-slate-700 
+              className="w-full px-3 py-2 bg-stone-950 border border-stone-700 
                        rounded-lg focus:ring-1 focus:ring-blue-500"
               placeholder="https://backyard.ai/hub/character/..."
               disabled={isValidating}

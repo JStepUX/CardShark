@@ -20,7 +20,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   icon: Icon,
   items,
   buttonClassName = "w-10 h-10 bg-orange-700 rounded-full flex items-center justify-center hover:bg-orange-500 transition-colors",
-  menuClassName = "absolute right-0 mt-2 w-56 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 z-10",
+  menuClassName = "absolute right-0 mt-2 w-56 bg-stone-700 border border-stone-600 rounded-lg shadow-lg py-1 z-10",
   label,
   title // Destructure title prop
 }) => {
@@ -31,8 +31,8 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        dropdownRef.current && 
-        buttonRef.current && 
+        dropdownRef.current &&
+        buttonRef.current &&
         !dropdownRef.current.contains(event.target as Node) &&
         !buttonRef.current.contains(event.target as Node)
       ) {
@@ -69,7 +69,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
                 item.onClick();
                 setIsOpen(false);
               }}
-              className="w-full px-4 py-2 text-left flex items-center hover:bg-slate-600 text-white"
+              className="w-full px-4 py-2 text-left flex items-center hover:bg-stone-600 text-white"
             >
               <item.icon className="w-4 h-4 mr-2" />
               {item.label}

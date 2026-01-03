@@ -97,7 +97,7 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -111,9 +111,8 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
           key={id}
           onClick={() => handleSelectApi(id)}
           disabled={!!isSwitchingApiTo}
-          className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors ${
-            id === activeApiId ? 'bg-blue-600/20 text-blue-300' : 'text-gray-300 hover:bg-gray-800'
-          } ${isSwitchingApiTo ? 'cursor-not-allowed opacity-70' : ''}`}
+          className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors ${id === activeApiId ? 'bg-blue-600/20 text-blue-300' : 'text-gray-300 hover:bg-stone-800'
+            } ${isSwitchingApiTo ? 'cursor-not-allowed opacity-70' : ''}`}
           role="menuitem"
         >
           {isCollapsed ? (

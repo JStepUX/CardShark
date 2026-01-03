@@ -246,7 +246,7 @@ export const WorldPlayView: React.FC = () => {
   
   return (
     <WorldPlayProvider value={{ state, actions }}>
-      <div className="flex h-screen bg-gray-900">
+      <div className="flex h-screen bg-stone-900">
         {/* Chat Area - 2/3 width */}
         <div className="flex-1 flex flex-col min-w-0">
           <WorldPlayHeader />
@@ -283,7 +283,7 @@ export const WorldPanel: React.FC<WorldPanelProps> = ({ collapsed, onToggle }) =
   
   if (collapsed) {
     return (
-      <div className="w-12 bg-gray-800 flex flex-col items-center py-4">
+      <div className="w-12 bg-stone-800 flex flex-col items-center py-4">
         <button onClick={onToggle}>
           <ChevronLeft />
         </button>
@@ -293,7 +293,7 @@ export const WorldPanel: React.FC<WorldPanelProps> = ({ collapsed, onToggle }) =
   }
   
   return (
-    <div className="w-80 bg-gray-800 flex flex-col border-l border-gray-700">
+    <div className="w-80 bg-stone-800 flex flex-col border-l border-gray-700">
       {/* Room Image */}
       <RoomDisplay room={state.currentRoom} />
       
@@ -358,7 +358,7 @@ export const MiniMap: React.FC<MiniMapProps> = ({
   return (
     <div className="p-3 border-b border-gray-700">
       <h3 className="text-sm font-semibold text-gray-400 mb-2">Map</h3>
-      <div className="relative h-32 bg-gray-900 rounded">
+      <div className="relative h-32 bg-stone-900 rounded">
         {rooms.map(room => {
           const position = roomMap.positions[room.id];
           const isCurrent = room.id === currentRoomId;
@@ -373,9 +373,9 @@ export const MiniMap: React.FC<MiniMapProps> = ({
               className={`
                 absolute w-6 h-6 rounded-full border-2 transition-all
                 ${isCurrent ? 'bg-blue-500 border-blue-300 scale-125' : ''}
-                ${isVisited && !isCurrent ? 'bg-gray-600 border-gray-500' : ''}
-                ${!isVisited && !isCurrent ? 'bg-gray-800 border-gray-700' : ''}
-                ${isAdjacent && !isCurrent ? 'hover:bg-gray-500 cursor-pointer' : ''}
+                ${isVisited && !isCurrent ? 'bg-stone-600 border-gray-500' : ''}
+                ${!isVisited && !isCurrent ? 'bg-stone-800 border-gray-700' : ''}
+                ${isAdjacent && !isCurrent ? 'hover:bg-stone-500 cursor-pointer' : ''}
                 ${!isAdjacent && !isCurrent ? 'opacity-50 cursor-not-allowed' : ''}
               `}
               style={{ left: position.x, top: position.y }}
@@ -434,7 +434,7 @@ const NPCListItem: React.FC<{ characterUuid: string; onTalk: () => void }> = ({
   if (!character) return null;
   
   return (
-    <div className="flex items-center gap-2 p-2 bg-gray-700 rounded">
+    <div className="flex items-center gap-2 p-2 bg-stone-700 rounded">
       <img 
         src={character.avatar} 
         alt={character.name}
@@ -500,8 +500,8 @@ export const ExitsList: React.FC<ExitsListProps> = ({
               className={`
                 w-full flex items-center gap-2 p-2 rounded text-left text-sm
                 ${conn.locked 
-                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
-                  : 'bg-gray-700 hover:bg-gray-600 text-white'}
+                  ? 'bg-stone-800 text-gray-500 cursor-not-allowed' 
+                  : 'bg-stone-700 hover:bg-stone-600 text-white'}
               `}
             >
               {conn.direction && (
@@ -585,8 +585,8 @@ const ActionButton: React.FC<{
     className={`
       flex items-center justify-center gap-1 p-2 rounded text-xs
       ${disabled 
-        ? 'bg-gray-800 text-gray-600 cursor-not-allowed' 
-        : 'bg-gray-700 hover:bg-gray-600 text-white'}
+        ? 'bg-stone-800 text-gray-600 cursor-not-allowed' 
+        : 'bg-stone-700 hover:bg-stone-600 text-white'}
     `}
   >
     {icon}

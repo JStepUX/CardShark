@@ -21,7 +21,7 @@ const NumberField: React.FC<{
 }> = ({ label, value, onChange, min, max, tooltip, width = 'w-32' }) => {
   // Add local state to track input value as string
   const [inputValue, setInputValue] = useState(value.toString());
-  
+
   // Update local input value when external value changes
   useEffect(() => {
     setInputValue(value.toString());
@@ -30,17 +30,17 @@ const NumberField: React.FC<{
   // Handle blur event for validation
   const handleBlur = () => {
     let val = parseFloat(inputValue);
-    
+
     // If input is invalid, reset to previous valid value
     if (isNaN(val)) {
       setInputValue(value.toString());
       return;
     }
-    
+
     // Apply min/max constraints
     if (min !== undefined && val < min) val = min;
     if (max !== undefined && val > max) val = max;
-    
+
     // Update both local input and parent state
     setInputValue(val.toString());
     onChange(val);
@@ -78,18 +78,16 @@ const SamplerOrderItem: React.FC<{
       <button
         onClick={onMoveUp}
         disabled={isFirst}
-        className={`p-1 rounded ${
-          isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-gray-700'
-        }`}
+        className={`p-1 rounded ${isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-700'
+          }`}
       >
         <ChevronUp size={16} />
       </button>
       <button
         onClick={onMoveDown}
         disabled={isLast}
-        className={`p-1 rounded ${
-          isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-gray-700'
-        }`}
+        className={`p-1 rounded ${isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-700'
+          }`}
       >
         <ChevronDown size={16} />
       </button>
@@ -146,7 +144,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     dynatemp_max: config.generation_settings?.dynatemp_max ?? 2.0,
     dynatemp_exponent: config.generation_settings?.dynatemp_exponent ?? 1.0
   });
-  
+
   useEffect(() => {
     if (config.generation_settings) {
       const newSettings = {
@@ -202,225 +200,225 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
           {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
       </div>
- 
+
       <div className={`space-y-6 pt-2 transition-expand ${expanded ? 'expanded' : ''}`}>
-          {/* Basic Settings */}
-          <div className="space-y-4">
-            <h4 className="text-sm text-gray-400">Basic Parameters</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <NumberField
-                label="Max Length"
-                value={settings.max_length}
-                onChange={val => handleSettingChange('max_length', val)}
-                min={1}
-                max={512}
-                step={1}
-                tooltip="Maximum number of tokens to generate"
-                width="w-full"
-              />
-              <NumberField
-                label="Max Context Length"
-                value={settings.max_context_length}
-                onChange={val => handleSettingChange('max_context_length', val)}
-                min={512}
-                max={16384}
-                step={128}
-                tooltip="Maximum context window size"
-                width="w-full"
-              />
-              <NumberField
-                label="Temperature"
-                value={settings.temperature}
-                onChange={val => handleSettingChange('temperature', val)}
-                min={0.0}
-                max={2}
-                step={0.05}
-                tooltip="Controls randomness (higher = more random)"
-                width="w-full"
-              />
-            </div>
-          </div>
-
-          {/* Sampling Parameters */}
-          <div className="space-y-4">
-            <h4 className="text-sm text-gray-400">Sampling Parameters</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <NumberField
-                label="Top P"
-                value={settings.top_p}
-                onChange={val => handleSettingChange('top_p', val)}
-                min={0}
-                max={1}
-                step={0.01}
-                tooltip="Nucleus sampling - consider tokens with cumulative probability"
-                width="w-full"
-              />
-              <NumberField
-                label="Top K"
-                value={settings.top_k}
-                onChange={val => handleSettingChange('top_k', val)}
-                min={0}
-                max={200}
-                step={1}
-                tooltip="Consider only the top K most likely tokens"
-                width="w-full"
-              />
-              <NumberField
-                label="Top A"
-                value={settings.top_a}
-                onChange={val => handleSettingChange('top_a', val)}
-                min={0}
-                max={1}
-                step={0.01}
-                tooltip="Dynamic adaptation of the probability threshold"
-                width="w-full"
-              />
-              <NumberField
-                label="Typical"
-                value={settings.typical}
-                onChange={val => handleSettingChange('typical', val)}
-                min={0}
-                max={1}
-                step={0.01}
-                tooltip="Selects tokens that are typical in context"
-                width="w-full"
-              />
-              <NumberField
-                label="TFS"
-                value={settings.tfs}
-                onChange={val => handleSettingChange('tfs', val)}
-                min={0}
-                max={1}
-                step={0.01}
-                tooltip="Tail-free sampling parameter"
-                width="w-full"
-              />
-              <NumberField
-                label="Min P"
-                value={settings.min_p}
-                onChange={val => handleSettingChange('min_p', val)}
-                min={0}
-                max={1}
-                step={0.01}
-                tooltip="Minimum probability threshold for token selection"
-                width="w-full"
-              />
-            </div>
-          </div>
-
-          {/* Repetition Control */}
-          <div className="space-y-4">
-            <h4 className="text-sm text-gray-400">Repetition Control</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <NumberField
-                label="Repetition Penalty"
-                value={settings.rep_pen}
-                onChange={val => handleSettingChange('rep_pen', val)}
-                min={1}
-                max={3}
-                step={0.01}
-                tooltip="Higher values penalize repetition more strongly"
-                width="w-full"
-              />
-              <NumberField
-                label="Rep Pen Range"
-                value={settings.rep_pen_range}
-                onChange={val => handleSettingChange('rep_pen_range', val)}
-                min={0}
-                max={1024}
-                step={8}
-                tooltip="How many tokens back to apply repetition penalty"
-                width="w-full"
-              />
-              <NumberField
-                label="Rep Pen Slope"
-                value={settings.rep_pen_slope}
-                onChange={val => handleSettingChange('rep_pen_slope', val)}
-                min={0}
-                max={10}
-                step={0.1}
-                tooltip="Adjusts how penalty scales with distance"
-                width="w-full"
-              />
-            </div>
-          </div>
-
-          {/* Sampler Order */}
-          <div className="space-y-4">
-            <h4 className="text-sm text-gray-400">Sampler Order</h4>
-            <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto border border-stone-700 rounded-lg p-3 bg-stone-900">
-              {settings.sampler_order.map((samplerId: number, index: number) => {
-                const sampler = SAMPLER_ORDER_OPTIONS.find(s => s.id === samplerId);
-                if (!sampler) return null;
-                return (
-                  <SamplerOrderItem
-                    key={index}
-                    sampler={sampler}
-                    index={index}
-                    isFirst={index === 0}
-                    isLast={index === settings.sampler_order.length - 1}
-                    onMoveUp={() => handleMoveSampler(index, 'up')}
-                    onMoveDown={() => handleMoveSampler(index, 'down')}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          {/* DynaTemp Settings */}
-          <div className="space-y-4">
-            <h4 className="text-sm text-gray-400">Dynamic Temperature Settings</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="dynatemp-enabled"
-                  checked={settings.dynatemp_enabled}
-                  onChange={(e) => handleSettingChange('dynatemp_enabled', e.target.checked)}
-                  className="mr-2 h-4 w-4 rounded bg-stone-700 border-stone-500 focus:ring-blue-500"
-                />
-                <label htmlFor="dynatemp-enabled" className="text-sm font-medium text-gray-300">
-                  Enable Dynamic Temperature
-                </label>
-              </div>
-            </div>
-            
-            {settings.dynatemp_enabled && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pl-6">
-                <NumberField
-                  label="Min Temperature"
-                  value={settings.dynatemp_min}
-                  onChange={val => handleSettingChange('dynatemp_min', val)}
-                  min={0.0}
-                  max={2.0}
-                  step={0.05}
-                  tooltip="Minimum temperature value at the start of generation"
-                  width="w-full"
-                />
-                <NumberField
-                  label="Max Temperature"
-                  value={settings.dynatemp_max}
-                  onChange={val => handleSettingChange('dynatemp_max', val)}
-                  min={0.0}
-                  max={2.0}
-                  step={0.05}
-                  tooltip="Maximum temperature value at the end of generation"
-                  width="w-full"
-                />
-                <NumberField
-                  label="Curve Exponent"
-                  value={settings.dynatemp_exponent}
-                  onChange={val => handleSettingChange('dynatemp_exponent', val)}
-                  min={0.1}
-                  max={3.0}
-                  step={0.1}
-                  tooltip="Curve steepness for temperature progression (higher = steeper curve)"
-                  width="w-full"
-                />
-              </div>
-            )}
+        {/* Basic Settings */}
+        <div className="space-y-4">
+          <h4 className="text-sm text-gray-400">Basic Parameters</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <NumberField
+              label="Max Length"
+              value={settings.max_length}
+              onChange={val => handleSettingChange('max_length', val)}
+              min={1}
+              max={512}
+              step={1}
+              tooltip="Maximum number of tokens to generate"
+              width="w-full"
+            />
+            <NumberField
+              label="Max Context Length"
+              value={settings.max_context_length}
+              onChange={val => handleSettingChange('max_context_length', val)}
+              min={512}
+              max={16384}
+              step={128}
+              tooltip="Maximum context window size"
+              width="w-full"
+            />
+            <NumberField
+              label="Temperature"
+              value={settings.temperature}
+              onChange={val => handleSettingChange('temperature', val)}
+              min={0.0}
+              max={2}
+              step={0.05}
+              tooltip="Controls randomness (higher = more random)"
+              width="w-full"
+            />
           </div>
         </div>
+
+        {/* Sampling Parameters */}
+        <div className="space-y-4">
+          <h4 className="text-sm text-gray-400">Sampling Parameters</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <NumberField
+              label="Top P"
+              value={settings.top_p}
+              onChange={val => handleSettingChange('top_p', val)}
+              min={0}
+              max={1}
+              step={0.01}
+              tooltip="Nucleus sampling - consider tokens with cumulative probability"
+              width="w-full"
+            />
+            <NumberField
+              label="Top K"
+              value={settings.top_k}
+              onChange={val => handleSettingChange('top_k', val)}
+              min={0}
+              max={200}
+              step={1}
+              tooltip="Consider only the top K most likely tokens"
+              width="w-full"
+            />
+            <NumberField
+              label="Top A"
+              value={settings.top_a}
+              onChange={val => handleSettingChange('top_a', val)}
+              min={0}
+              max={1}
+              step={0.01}
+              tooltip="Dynamic adaptation of the probability threshold"
+              width="w-full"
+            />
+            <NumberField
+              label="Typical"
+              value={settings.typical}
+              onChange={val => handleSettingChange('typical', val)}
+              min={0}
+              max={1}
+              step={0.01}
+              tooltip="Selects tokens that are typical in context"
+              width="w-full"
+            />
+            <NumberField
+              label="TFS"
+              value={settings.tfs}
+              onChange={val => handleSettingChange('tfs', val)}
+              min={0}
+              max={1}
+              step={0.01}
+              tooltip="Tail-free sampling parameter"
+              width="w-full"
+            />
+            <NumberField
+              label="Min P"
+              value={settings.min_p}
+              onChange={val => handleSettingChange('min_p', val)}
+              min={0}
+              max={1}
+              step={0.01}
+              tooltip="Minimum probability threshold for token selection"
+              width="w-full"
+            />
+          </div>
+        </div>
+
+        {/* Repetition Control */}
+        <div className="space-y-4">
+          <h4 className="text-sm text-gray-400">Repetition Control</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <NumberField
+              label="Repetition Penalty"
+              value={settings.rep_pen}
+              onChange={val => handleSettingChange('rep_pen', val)}
+              min={1}
+              max={3}
+              step={0.01}
+              tooltip="Higher values penalize repetition more strongly"
+              width="w-full"
+            />
+            <NumberField
+              label="Rep Pen Range"
+              value={settings.rep_pen_range}
+              onChange={val => handleSettingChange('rep_pen_range', val)}
+              min={0}
+              max={1024}
+              step={8}
+              tooltip="How many tokens back to apply repetition penalty"
+              width="w-full"
+            />
+            <NumberField
+              label="Rep Pen Slope"
+              value={settings.rep_pen_slope}
+              onChange={val => handleSettingChange('rep_pen_slope', val)}
+              min={0}
+              max={10}
+              step={0.1}
+              tooltip="Adjusts how penalty scales with distance"
+              width="w-full"
+            />
+          </div>
+        </div>
+
+        {/* Sampler Order */}
+        <div className="space-y-4">
+          <h4 className="text-sm text-gray-400">Sampler Order</h4>
+          <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto border border-stone-700 rounded-lg p-3 bg-stone-900">
+            {settings.sampler_order.map((samplerId: number, index: number) => {
+              const sampler = SAMPLER_ORDER_OPTIONS.find(s => s.id === samplerId);
+              if (!sampler) return null;
+              return (
+                <SamplerOrderItem
+                  key={index}
+                  sampler={sampler}
+                  index={index}
+                  isFirst={index === 0}
+                  isLast={index === settings.sampler_order.length - 1}
+                  onMoveUp={() => handleMoveSampler(index, 'up')}
+                  onMoveDown={() => handleMoveSampler(index, 'down')}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        {/* DynaTemp Settings */}
+        <div className="space-y-4">
+          <h4 className="text-sm text-gray-400">Dynamic Temperature Settings</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="dynatemp-enabled"
+                checked={settings.dynatemp_enabled}
+                onChange={(e) => handleSettingChange('dynatemp_enabled', e.target.checked)}
+                className="mr-2 h-4 w-4 rounded bg-stone-700 border-stone-500 focus:ring-blue-500"
+              />
+              <label htmlFor="dynatemp-enabled" className="text-sm font-medium text-gray-300">
+                Enable Dynamic Temperature
+              </label>
+            </div>
+          </div>
+
+          {settings.dynatemp_enabled && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pl-6">
+              <NumberField
+                label="Min Temperature"
+                value={settings.dynatemp_min}
+                onChange={val => handleSettingChange('dynatemp_min', val)}
+                min={0.0}
+                max={2.0}
+                step={0.05}
+                tooltip="Minimum temperature value at the start of generation"
+                width="w-full"
+              />
+              <NumberField
+                label="Max Temperature"
+                value={settings.dynatemp_max}
+                onChange={val => handleSettingChange('dynatemp_max', val)}
+                min={0.0}
+                max={2.0}
+                step={0.05}
+                tooltip="Maximum temperature value at the end of generation"
+                width="w-full"
+              />
+              <NumberField
+                label="Curve Exponent"
+                value={settings.dynatemp_exponent}
+                onChange={val => handleSettingChange('dynatemp_exponent', val)}
+                min={0.1}
+                max={3.0}
+                step={0.1}
+                tooltip="Curve steepness for temperature progression (higher = steeper curve)"
+                width="w-full"
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

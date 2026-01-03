@@ -34,16 +34,16 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
     createPackage: handleCreatePackage,
     clearSelectedPackage
   } = useFilterPackages(onUpdateRules);
-  
+
   const {
-    isLoading,    updateRules: handleUpdateRules,
+    isLoading, updateRules: handleUpdateRules,
     exportRules: handleExport,
     importRules
   } = useContentFilterRules(wordSwapRules, onUpdateRules);
-  
+
   // Inline incomplete sentences setting management
   const [isSavingIncomplete, setIsSavingIncomplete] = useState(false);
-  
+
   const handleUpdateIncompleteSentences = async (enabled: boolean) => {
     setIsSavingIncomplete(true);
     try {
@@ -51,7 +51,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
       if (onUpdateRemoveIncompleteSentences) {
         onUpdateRemoveIncompleteSentences(enabled);
       }
-      
+
       // Update the server
       await ContentFilterClient.updateRemoveIncompleteSentences(enabled);
       toast.success('Incomplete sentences setting updated');
@@ -62,7 +62,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
       setIsSavingIncomplete(false);
     }
   };
-    // Wrapper function to handle rule updates with current package context
+  // Wrapper function to handle rule updates with current package context
   const handleRulesChange = (rules: WordSwapRule[]) => {
     handleUpdateRules(rules, selectedPackageId);
   };
@@ -107,10 +107,10 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
             </p>
           </div>
         </div>
-        
+
         {/* Content Filtering section */}
         <h3 className="text-md font-medium mb-3">Content Filtering</h3>
-        
+
         <div className="bg-blue-900/20 border border-blue-700/30 p-3 rounded mb-6">
           <div className="flex items-start">
             <Info size={18} className="text-blue-400 mr-2 mt-0.5" />
@@ -127,12 +127,12 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
             </div>
           </div>
         </div>
-        
+
         {/* Filter Packages Management */}
         <div className="bg-stone-800 border border-stone-700 p-4 rounded-lg mb-6">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-md font-medium">Filter Packages</h3>
-            <button 
+            <button
               onClick={handleCreatePackage}
               className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 transition-colors rounded"
               disabled={isLoadingPackages}
@@ -140,7 +140,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
               Create New Package
             </button>
           </div>
-          
+
           {isLoadingPackages ? (
             <div className="flex justify-center py-4">
               <LoadingSpinner size={24} className="text-blue-500" />
@@ -159,17 +159,17 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button 
+                    <button
                       onClick={() => handleTogglePackage(pkg.id, pkg.is_active)}
                       className="p-1 text-gray-400 hover:text-white"
                       title={pkg.is_active ? "Deactivate package" : "Activate package"}
                     >
-                      {pkg.is_active ? 
-                        <ToggleRight className="h-5 w-5 text-green-400" /> : 
+                      {pkg.is_active ?
+                        <ToggleRight className="h-5 w-5 text-green-400" /> :
                         <ToggleLeft className="h-5 w-5" />
                       }
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleEditPackage(pkg.id)}
                       className="p-1 text-gray-400 hover:text-white"
                       title="Edit package rules"
@@ -177,7 +177,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
                       <Edit className="h-5 w-5" />
                     </button>
                     {!pkg.is_builtin && (
-                      <button 
+                      <button
                         onClick={() => handleDeletePackage(pkg.id)}
                         className="p-1 text-gray-400 hover:text-red-400"
                         title="Delete package"
@@ -188,7 +188,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
                   </div>
                 </div>
               ))}
-              
+
               {availablePackages.length === 0 && (
                 <div className="text-center py-4 text-gray-400">
                   No filter packages available
@@ -197,17 +197,17 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
             </div>
           )}
         </div>
-        
+
         {/* Rules Management */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-md font-medium">
-              {selectedPackageId ? 
-                `Editing Package: ${availablePackages.find(pkg => pkg.id === selectedPackageId)?.name || selectedPackageId}` : 
+              {selectedPackageId ?
+                `Editing Package: ${availablePackages.find(pkg => pkg.id === selectedPackageId)?.name || selectedPackageId}` :
                 'Custom Rules'
               }
             </h3>
-            
+
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={handleImport}
@@ -225,11 +225,11 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
               >
                 Export Rules
               </button>
-              
+
               {selectedPackageId && (
                 <button
                   onClick={clearSelectedPackage}
-                  className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 transition-colors rounded"
+                  className="px-3 py-1.5 text-sm bg-stone-700 hover:bg-stone-600 transition-colors rounded"
                   title="Back to all rules"
                 >
                   ← Back to All Rules
@@ -237,7 +237,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
               )}
             </div>
           </div>
-          
+
           {isLoading && (
             <div className="flex items-center text-sm text-blue-400">
               <LoadingSpinner size={16} className="mr-2" />
@@ -245,9 +245,9 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
             </div>
           )}
         </div>
-          <SubstitutionManager 
-          rules={wordSwapRules} 
-          onChange={handleRulesChange} 
+        <SubstitutionManager
+          rules={wordSwapRules}
+          onChange={handleRulesChange}
         />
       </div>
     </div>

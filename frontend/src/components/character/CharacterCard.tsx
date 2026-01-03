@@ -17,10 +17,10 @@ interface CharacterCardProps {
 const CharacterCard: React.FC<CharacterCardProps> = ({ character, onClick, onDelete, isDeleting, confirmDelete }) => {
   return (
     <div
-      className={`rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-stone-900 p-4 flex flex-col gap-2 shadow hover:shadow-md transition cursor-pointer ${isDeleting ? 'opacity-50' : ''}`}
+      className={`rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 p-4 flex flex-col gap-2 shadow hover:shadow-md transition cursor-pointer ${isDeleting ? 'opacity-50' : ''}`}
       onClick={onClick}
     >
-      <div className="w-full h-32 bg-slate-200 dark:bg-stone-800 rounded mb-2 flex items-center justify-center text-slate-400 text-4xl">
+      <div className="w-full h-32 bg-stone-200 dark:bg-stone-800 rounded mb-2 flex items-center justify-center text-slate-400 text-4xl">
         {/* You can replace with image preview logic if available */}
         <span role="img" aria-label="character">🧑‍🎤</span>
       </div>

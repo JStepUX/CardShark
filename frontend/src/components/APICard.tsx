@@ -41,7 +41,7 @@ export const APICard: React.FC<APICardProps> = ({
   const [showApiKey, setShowApiKey] = useState(false); // State for API key visibility
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false); // State for config dialog
   const [isDownloading, setIsDownloading] = useState(false); // State for KoboldCPP download
-  const [koboldStatus, setKoboldStatus] = useState<{status: string, version?: string} | null>(null); // KoboldCPP status
+  const [koboldStatus, setKoboldStatus] = useState<{ status: string, version?: string } | null>(null); // KoboldCPP status
   const { settings } = useSettings();
   const currentProviderConfig = PROVIDER_CONFIGS[editableApi.provider];
 
@@ -57,20 +57,20 @@ export const APICard: React.FC<APICardProps> = ({
     const editableApiString = JSON.stringify(editableApi);
 
     if (apiPropString !== editableApiString) {
-        // Only reset if there are no local changes OR if the base 'api' prop truly changed.
-        // The latter condition is implicitly handled if apiPropString is different.
-        // The main concern is not wiping out user input if 'api' prop re-renders with same content.
-        // A more robust check might involve comparing api.id if it's guaranteed unique and stable per config.
-        if (!hasChanges) { // If no local changes, safe to sync from prop.
-            setEditableApi(api);
-            // setHasChanges(false); // This will be handled by the next effect.
-        } else {
-            // There are local changes. If api prop string is different, it means an external update happened.
-            // User should be warned or decide how to merge. For now, we prioritize local edits if 'hasChanges' is true.
-            // This means an external save that changes 'api' prop while user has local edits won't auto-revert them.
-            // This behavior might need refinement based on desired UX for concurrent edits/external updates.
-            console.warn(`[APICard ${apiId}] 'api' prop changed but local unsaved changes exist. Local changes preserved.`);
-        }
+      // Only reset if there are no local changes OR if the base 'api' prop truly changed.
+      // The latter condition is implicitly handled if apiPropString is different.
+      // The main concern is not wiping out user input if 'api' prop re-renders with same content.
+      // A more robust check might involve comparing api.id if it's guaranteed unique and stable per config.
+      if (!hasChanges) { // If no local changes, safe to sync from prop.
+        setEditableApi(api);
+        // setHasChanges(false); // This will be handled by the next effect.
+      } else {
+        // There are local changes. If api prop string is different, it means an external update happened.
+        // User should be warned or decide how to merge. For now, we prioritize local edits if 'hasChanges' is true.
+        // This means an external save that changes 'api' prop while user has local edits won't auto-revert them.
+        // This behavior might need refinement based on desired UX for concurrent edits/external updates.
+        console.warn(`[APICard ${apiId}] 'api' prop changed but local unsaved changes exist. Local changes preserved.`);
+      }
     }
 
     // Diagnostic log for models_directory in APICard
@@ -146,9 +146,9 @@ export const APICard: React.FC<APICardProps> = ({
 
     // If not enabled, but required fields are present, try to test and enable
     if (!configToPersist.enabled &&
-        configToPersist.url &&
-        (!providerConfig.requiresApiKey || configToPersist.apiKey) &&
-        configToPersist.model // Assuming model selection is a prerequisite for a functional API
+      configToPersist.url &&
+      (!providerConfig.requiresApiKey || configToPersist.apiKey) &&
+      configToPersist.model // Assuming model selection is a prerequisite for a functional API
     ) {
       testedImplicitly = true;
       setIsLoading(true);
@@ -290,11 +290,11 @@ export const APICard: React.FC<APICardProps> = ({
   // Download KoboldCPP
   const handleDownloadKoboldCPP = async () => {
     if (isDownloading) return;
-    
+
     // Test toast to verify sonner is working
     console.log('Testing toast functionality...');
     toast.info('Testing toast - this should appear immediately');
-    
+
     setIsDownloading(true);
     try {
       // First check if KoboldCPP is running
@@ -317,7 +317,7 @@ export const APICard: React.FC<APICardProps> = ({
       } else {
         console.log('Status check failed:', statusCheck.status);
       }
-      
+
       // Try streaming download first for better UX
       const response = await fetch('/api/koboldcpp/download', {
         method: 'POST',
@@ -325,7 +325,7 @@ export const APICard: React.FC<APICardProps> = ({
           'Accept': 'text/event-stream, application/json'
         }
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         if (errorData.error_code === 'running') {
@@ -338,7 +338,7 @@ export const APICard: React.FC<APICardProps> = ({
         }
         return;
       }
-      
+
       // Check if we got a streaming response
       const contentType = response.headers.get('content-type');
       if (contentType?.includes('text/event-stream')) {
@@ -361,12 +361,12 @@ export const APICard: React.FC<APICardProps> = ({
       setIsDownloading(false);
     }
   };
-  
+
   const handleBrowserDownload = async () => {
     try {
       const response = await fetch('/api/koboldcpp/download-url');
       const data = await response.json();
-      
+
       if (data.status === 'success') {
         window.open(data.download_url, '_blank');
         toast.success('Opening download in browser. Please save the file to your KoboldCPP directory.');
@@ -382,7 +382,7 @@ export const APICard: React.FC<APICardProps> = ({
       toast.info('Opened GitHub releases page as fallback.');
     }
   };
-  
+
   const checkKoboldStatus = async () => {
     try {
       const response = await fetch('/api/koboldcpp/status');
@@ -394,31 +394,31 @@ export const APICard: React.FC<APICardProps> = ({
       console.error('Failed to check KoboldCPP status:', error);
     }
   };
-  
+
   const handleStreamingDownload = async (response: Response) => {
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Stream reader not available');
-    
+
     const decoder = new TextDecoder();
     let downloadToast: string | number | undefined;
-    
+
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         const lines = decoder.decode(value).split('\n').filter(line => line.trim());
-        
+
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.substring(6));
-              
+
               if (data.error) {
                 toast.error(`Download error: ${data.error}`);
                 return;
               }
-              
+
               if (data.status === 'completed') {
                 if (downloadToast) {
                   toast.dismiss(downloadToast);
@@ -427,7 +427,7 @@ export const APICard: React.FC<APICardProps> = ({
                 await checkKoboldStatus(); // Refresh status
                 return;
               }
-              
+
               // Show progress toast
               if (data.percent !== undefined) {
                 const message = `Downloading KoboldCPP... ${Math.round(data.percent)}%`;
@@ -471,7 +471,7 @@ export const APICard: React.FC<APICardProps> = ({
               <span className="ml-1">Active</span>
             </div>
           )}
-           {hasChanges && (
+          {hasChanges && (
             <div className="flex items-center gap-1 px-2 py-1 rounded-full text-sm bg-yellow-900/50 text-yellow-300" title="Unsaved changes">
               <AlertTriangle className="w-3 h-3" />
             </div>
@@ -492,14 +492,14 @@ export const APICard: React.FC<APICardProps> = ({
           </button>
           <button
             onClick={() => setIsConfigDialogOpen(true)}
-            className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-800 rounded"
+            className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-stone-800 rounded"
             title="Configure API Settings"
           >
             <SettingsIcon size={18} />
           </button>
           <button
             onClick={onRemove}
-            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded"
+            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-stone-800 rounded"
             title="Remove API"
           >
             <Trash2 size={18} />
@@ -585,7 +585,7 @@ export const APICard: React.FC<APICardProps> = ({
                 <button
                   onClick={handleBrowserDownload}
                   disabled={isDownloading}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   title="Download KoboldCPP in browser (manual installation)"
                 >
                   <Globe2 className="w-4 h-4" />
@@ -598,7 +598,7 @@ export const APICard: React.FC<APICardProps> = ({
                 <button
                   onClick={handleDownloadKoboldCPP}
                   disabled={isDownloading}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   title="Download the latest version of KoboldCPP from GitHub (will replace current version)"
                 >
                   <Download className="w-4 h-4" />
@@ -607,7 +607,7 @@ export const APICard: React.FC<APICardProps> = ({
                 <button
                   onClick={handleBrowserDownload}
                   disabled={isDownloading}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   title="Download KoboldCPP in browser (manual installation)"
                 >
                   <Globe2 className="w-4 h-4" />
@@ -646,17 +646,17 @@ export const APICard: React.FC<APICardProps> = ({
           </div>
         </div>
       )}
- 
+
       {/* --- Model Selector Integration --- */}
       {(editableApi.provider === APIProvider.KOBOLD || editableApi.provider === APIProvider.OPENROUTER || editableApi.provider === APIProvider.FEATHERLESS) ? (
-         <ModelSelector
-            apiUrl={editableApi.url || ''}
-            provider={editableApi.provider as APIProvider} // Use the imported ModelSelector
-            modelsDirectory={settings.models_directory || settings.model_directory || ''}
-            selectedModel={editableApi.model}
-            onChange={(model) => handleLocalUpdate({ model })}
-            apiKey={editableApi.apiKey}
-          />
+        <ModelSelector
+          apiUrl={editableApi.url || ''}
+          provider={editableApi.provider as APIProvider} // Use the imported ModelSelector
+          modelsDirectory={settings.models_directory || settings.model_directory || ''}
+          selectedModel={editableApi.model}
+          onChange={(model) => handleLocalUpdate({ model })}
+          apiKey={editableApi.apiKey}
+        />
       ) : currentProviderConfig.availableModels ? ( // Fallback basic selector
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">Model</label>
@@ -722,37 +722,37 @@ export const APICard: React.FC<APICardProps> = ({
           {editableApi.model_info?.name || editableApi.model || "No model selected"}
         </div>
       </div>
-      
+
       {/* Action Buttons */}
       <div className="flex justify-end gap-3 pt-2">
-          {!isActive && editableApi.enabled && (
-            <button
-              onClick={onSetActive}
-              disabled={isLoading || hasChanges}
-              className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={hasChanges ? "Save changes before setting active" : (editableApi.enabled ? "Set as active API" : "You must connect the API first")}
-            >
-              Set Active
-            </button>
-          )}
-          {editableApi.enabled ? (
-            <button
-              onClick={handleDisconnect}
-              disabled={isLoading}
-              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              Disconnect
-            </button>
-          ) : (
-            <button
-              onClick={handleTest}
-              disabled={isLoading || !editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={(!editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)) ? "URL and API Key (if required) must be set to test" : "Test Connection"}
-            >
-              {isLoading ? 'Testing...' : 'Test Connection'}
-            </button>
-          )}
+        {!isActive && editableApi.enabled && (
+          <button
+            onClick={onSetActive}
+            disabled={isLoading || hasChanges}
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={hasChanges ? "Save changes before setting active" : (editableApi.enabled ? "Set as active API" : "You must connect the API first")}
+          >
+            Set Active
+          </button>
+        )}
+        {editableApi.enabled ? (
+          <button
+            onClick={handleDisconnect}
+            disabled={isLoading}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            Disconnect
+          </button>
+        ) : (
+          <button
+            onClick={handleTest}
+            disabled={isLoading || !editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={(!editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)) ? "URL and API Key (if required) must be set to test" : "Test Connection"}
+          >
+            {isLoading ? 'Testing...' : 'Test Connection'}
+          </button>
+        )}
       </div>
 
       {/* Last Tested Info */}

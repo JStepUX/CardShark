@@ -110,9 +110,9 @@ const MessagesView: React.FC = () => {
     // Ensure exactly one message is marked as 'isFirst' if messages exist
     const firstIndex = initialMessages.findIndex(m => m.isFirst);
     if (firstIndex > 0) { // If 'isFirst' is not the first element, correct it
-        initialMessages.forEach((m, index) => m.isFirst = (index === firstIndex));
+      initialMessages.forEach((m, index) => m.isFirst = (index === firstIndex));
     } else if (firstIndex === -1 && initialMessages.length > 0) { // If no message is marked 'isFirst', mark the first one
-        initialMessages[0].isFirst = true;
+      initialMessages[0].isFirst = true;
     }
 
     setMessages(initialMessages);
@@ -140,16 +140,16 @@ const MessagesView: React.FC = () => {
   // Delete a message card by its ID
   const handleDeleteMessage = useCallback((id: string) => {
     setMessages(prev => {
-        const remaining = prev.filter(msg => msg.id !== id);
-        // If the deleted message was the primary 'isFirst', and others remain,
-        // designate the new first message in the list as the primary.
-        if (remaining.length > 0 && !remaining.some(m => m.isFirst)) {
-            // Sort remaining by order before assigning 'isFirst'
-            remaining.sort((a, b) => a.order - b.order);
-            remaining[0].isFirst = true;
-        }
-        // Re-calculate order based on new array indices for consistency
-        return remaining.map((msg, index) => ({ ...msg, order: index }));
+      const remaining = prev.filter(msg => msg.id !== id);
+      // If the deleted message was the primary 'isFirst', and others remain,
+      // designate the new first message in the list as the primary.
+      if (remaining.length > 0 && !remaining.some(m => m.isFirst)) {
+        // Sort remaining by order before assigning 'isFirst'
+        remaining.sort((a, b) => a.order - b.order);
+        remaining[0].isFirst = true;
+      }
+      // Re-calculate order based on new array indices for consistency
+      return remaining.map((msg, index) => ({ ...msg, order: index }));
     });
     setError(null);
   }, []);
@@ -178,13 +178,13 @@ const MessagesView: React.FC = () => {
 
     // Check if the API is configured and enabled
     if (!apiConfig.enabled) {
-        setError("API is not enabled. Please configure and enable it in Settings.");
-        return;
+      setError("API is not enabled. Please configure and enable it in Settings.");
+      return;
     }
     // Basic check for API URL
     if (!apiConfig.url) {
-        setError("API URL is missing. Please configure it in Settings.");
-        return;
+      setError("API URL is missing. Please configure it in Settings.");
+      return;
     }
 
     setIsGeneratingGreeting(true); // Set loading state
@@ -195,28 +195,28 @@ const MessagesView: React.FC = () => {
 
     // Add a placeholder message immediately
     setMessages(prev => {
-        const newMessage: Message = {
-            id: newMessageId,
-            content: '',
-            isFirst: prev.length === 0,
-            order: prev.length,
-        };
-        return [...prev, newMessage];
+      const newMessage: Message = {
+        id: newMessageId,
+        content: '',
+        isFirst: prev.length === 0,
+        order: prev.length,
+      };
+      return [...prev, newMessage];
     });
 
     try {
       // Use streaming greeting generation
       const result = await ChatStorage.generateGreetingStream(
-          characterData, 
-          apiConfig,
-          (chunk) => {
-              // Update message content as chunks arrive
-              setMessages(prev => prev.map(msg => 
-                  msg.id === newMessageId 
-                      ? { ...msg, content: msg.content + chunk }
-                      : msg
-              ));
-          }
+        characterData,
+        apiConfig,
+        (chunk) => {
+          // Update message content as chunks arrive
+          setMessages(prev => prev.map(msg =>
+            msg.id === newMessageId
+              ? { ...msg, content: msg.content + chunk }
+              : msg
+          ));
+        }
       );
 
       if (!result.success) {
@@ -224,7 +224,7 @@ const MessagesView: React.FC = () => {
         setMessages(prev => prev.filter(msg => msg.id !== newMessageId));
         throw new Error(result.message || 'Greeting generation failed on the backend.');
       }
-      
+
       // If success, the message is already fully populated via the stream
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred during generation.');
@@ -263,7 +263,7 @@ const MessagesView: React.FC = () => {
 
     // Prevent unnecessary updates if the relevant data hasn't actually changed
     if (characterData.data.first_mes === firstMessageContent &&
-        JSON.stringify(characterData.data.alternate_greetings || []) === JSON.stringify(alternateGreetings)) {
+      JSON.stringify(characterData.data.alternate_greetings || []) === JSON.stringify(alternateGreetings)) {
       // console.log("Messages sync skipped: No change detected.");
       return; // Exit if no actual change to sync
     }
@@ -299,11 +299,10 @@ const MessagesView: React.FC = () => {
             <button
               onClick={handleGenerateGreeting}
               disabled={isGeneratingGreeting || !apiConfig?.enabled}
-              className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 ${
-                isGeneratingGreeting || !apiConfig?.enabled
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 ${isGeneratingGreeting || !apiConfig?.enabled
+                  ? 'bg-stone-600 text-gray-400 cursor-not-allowed'
                   : 'bg-purple-600 text-white hover:bg-purple-700 focus:ring-purple-500'
-              }`}
+                }`}
               title={!apiConfig?.enabled ? "API is not enabled in Settings" : "Generate a new greeting using AI"}
             >
               {/* Loading Spinner/Icon */}
@@ -335,7 +334,7 @@ const MessagesView: React.FC = () => {
           {/* Button to dismiss the error */}
           <button onClick={() => setError(null)} className="p-1 text-red-100 hover:text-white rounded-full hover:bg-red-700/50" aria-label="Dismiss error">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>

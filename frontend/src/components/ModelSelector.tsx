@@ -77,18 +77,18 @@ const OpenRouterModelSelector: React.FC<OpenRouterModelSelectorProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-       const response = await fetch('/api/openrouter/models', { // Placeholder endpoint
+      const response = await fetch('/api/openrouter/models', { // Placeholder endpoint
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: apiUrl, apiKey: apiKey })
       });
-       if (!response.ok) {
+      if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
       }
       const fetchedData = await response.json();
       if (!fetchedData.success) {
-         throw new Error(fetchedData.error || 'Backend failed to fetch models');
+        throw new Error(fetchedData.error || 'Backend failed to fetch models');
       }
       // Add explicit types to sort callback parameters
       const validModels = (fetchedData.models || [])
@@ -129,9 +129,9 @@ const OpenRouterModelSelector: React.FC<OpenRouterModelSelectorProps> = ({
           <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
         </div>
       ) : !apiKey ? (
-         <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">API Key required to load models.</div>
+        <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">API Key required to load models.</div>
       ) : models.length === 0 && !isLoading ? (
-         <div className="text-gray-400">No models found.</div>
+        <div className="text-gray-400">No models found.</div>
       ) : (
         <select
           value={selectedModel || ''} // Ensure value is controlled
@@ -196,28 +196,28 @@ const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
   const fetchModels = async () => {
     // Guard clause already handled by the effect, but good for direct calls if any
     if (!apiKey) {
-        setError("API Key required to load Featherless models.");
-        setModels([]);
-        return;
+      setError("API Key required to load Featherless models.");
+      setModels([]);
+      return;
     }
     setIsLoading(true);
     setError(null);
     try {
-       const response = await fetch('/api/featherless/models', { // Placeholder endpoint
+      const response = await fetch('/api/featherless/models', { // Placeholder endpoint
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: apiUrl, apiKey: apiKey })
       });
-       if (!response.ok) {
+      if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
       }
       const fetchedData = await response.json();
-       if (!fetchedData.success) {
-         throw new Error(fetchedData.error || 'Backend failed to fetch models');
+      if (!fetchedData.success) {
+        throw new Error(fetchedData.error || 'Backend failed to fetch models');
       }
-       // Add explicit types to sort callback parameters
-       const validModels = (fetchedData.models || [])
+      // Add explicit types to sort callback parameters
+      const validModels = (fetchedData.models || [])
         .filter((model: FeatherlessModelInfo) => model.id && model.name)
         .sort((a: FeatherlessModelInfo, b: FeatherlessModelInfo) => (a.name || "").localeCompare(b.name || ""));
       setModels(validModels);
@@ -239,7 +239,7 @@ const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-gray-300 mb-1">Featherless Model</label>
-       <input
+      <input
         type="text"
         placeholder="Search models..."
         value={searchTerm}
@@ -253,41 +253,41 @@ const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
         </div>
       ) : error ? (
         <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
-           <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
+          <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
         </div>
-       ) : !apiKey ? (
-         <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">API Key required to load models.</div>
+      ) : !apiKey ? (
+        <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">API Key required to load models.</div>
       ) : models.length === 0 && !isLoading ? (
-         <div className="text-gray-400">No models found.</div>
+        <div className="text-gray-400">No models found.</div>
       ) : (
         <>
           <select
-          value={selectedModel || ''} // Ensure value is controlled
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 text-sm"
-          size={Math.min(10, filteredModels.length + 1)}
-          disabled={isLoading}
-        >
-           <option value="" disabled={!!selectedModel}>-- Select a Model --</option>
-          {filteredModels.length === 0 && searchTerm && (
-            <option value="" disabled>No models match "{searchTerm}"</option>
-          )}
-          {filteredModels.map((model) => (
-            <option key={model.id} value={model.id} title={model.description}>
-              {model.name} ({model.id})
-              {model.context_length && ` - Context: ${model.context_length}`}
-              {model.max_tokens && ` - Max Tokens: ${model.max_tokens}`}
-            </option>
-          ))}
-        </select>
-{selectedModel && filteredModels.length > 0 && (() => {
-        const currentModelDetails = filteredModels.find(m => m.id === selectedModel);
-        return currentModelDetails ? (
-          <div className="mt-2 text-xs text-gray-400">
-            Selected: <span className="font-semibold text-gray-200">{currentModelDetails.name} ({currentModelDetails.id})</span>
-          </div>
-        ) : null;
-      })()}
+            value={selectedModel || ''} // Ensure value is controlled
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 text-sm"
+            size={Math.min(10, filteredModels.length + 1)}
+            disabled={isLoading}
+          >
+            <option value="" disabled={!!selectedModel}>-- Select a Model --</option>
+            {filteredModels.length === 0 && searchTerm && (
+              <option value="" disabled>No models match "{searchTerm}"</option>
+            )}
+            {filteredModels.map((model) => (
+              <option key={model.id} value={model.id} title={model.description}>
+                {model.name} ({model.id})
+                {model.context_length && ` - Context: ${model.context_length}`}
+                {model.max_tokens && ` - Max Tokens: ${model.max_tokens}`}
+              </option>
+            ))}
+          </select>
+          {selectedModel && filteredModels.length > 0 && (() => {
+            const currentModelDetails = filteredModels.find(m => m.id === selectedModel);
+            return currentModelDetails ? (
+              <div className="mt-2 text-xs text-gray-400">
+                Selected: <span className="font-semibold text-gray-200">{currentModelDetails.name} ({currentModelDetails.id})</span>
+              </div>
+            ) : null;
+          })()}
         </>
       )}
     </div>
@@ -325,15 +325,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     if (isKobold && modelsDirectory) {
       fetchLocalModels();
     } else if (isKobold && !modelsDirectory) {
-        setError("Model directory not set in General Settings.");
-        setModels([]);
+      setError("Model directory not set in General Settings.");
+      setModels([]);
     }
   }, [isKobold, modelsDirectory]);
 
   const fetchLocalModels = async () => {
     if (!modelsDirectory) {
-        console.log("[ModelSelector] fetchLocalModels skipped: no modelsDirectory");
-        return;
+      console.log("[ModelSelector] fetchLocalModels skipped: no modelsDirectory");
+      return;
     }
     console.log(`[ModelSelector] fetchLocalModels called for directory: ${modelsDirectory}`);
     setIsLoading(true);
@@ -371,45 +371,45 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   // KoboldCPP Connection Handlers using placeholder backend endpoints
   const handleConnectKobold = async () => {
     if (selectedModel && modelsDirectory) {
-       setIsLoading(true);
-       setError(null);      try {
-         console.log(`Requesting backend to connect KoboldCPP with model: ${selectedModel}`);
-         console.log(`Models directory: ${modelsDirectory}`);
-         
-         const response = await fetch('/api/koboldcpp/connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model_path: selectedModel, models_directory: modelsDirectory })
-         });
-          
-         if (!response.ok) {
-            console.error(`Failed to connect KoboldCPP. Status: ${response.status}`);
-            let errorMessage = `HTTP error! status: ${response.status}`;
-            
-            try {
-              const errorData = await response.json();
-              errorMessage = errorData.detail || errorData.error?.message || errorMessage;
-              console.error("Error details:", errorData);
-            } catch (parseError) {
-              console.error("Failed to parse error response:", parseError);
-            }
-            
-            throw new Error(`Failed to connect KoboldCPP: ${errorMessage}`);
-         }
-          
-          const result = await response.json();
-         if (!result.success) {
-            throw new Error(result.error || 'Backend failed to start KoboldCPP');
-         }
-          toast.info("KoboldCPP server starting...");
+      setIsLoading(true);
+      setError(null); try {
+        console.log(`Requesting backend to connect KoboldCPP with model: ${selectedModel}`);
+        console.log(`Models directory: ${modelsDirectory}`);
+
+        const response = await fetch('/api/koboldcpp/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_path: selectedModel, models_directory: modelsDirectory })
+        });
+
+        if (!response.ok) {
+          console.error(`Failed to connect KoboldCPP. Status: ${response.status}`);
+          let errorMessage = `HTTP error! status: ${response.status}`;
+
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.detail || errorData.error?.message || errorMessage;
+            console.error("Error details:", errorData);
+          } catch (parseError) {
+            console.error("Failed to parse error response:", parseError);
+          }
+
+          throw new Error(`Failed to connect KoboldCPP: ${errorMessage}`);
+        }
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || 'Backend failed to start KoboldCPP');
+        }
+        toast.info("KoboldCPP server starting...");
         setTimeout(refreshKoboldStatus, 5000); // Refresh status after delay
       } catch (error) {
-         const message = error instanceof Error ? error.message : "Unknown error";
+        const message = error instanceof Error ? error.message : "Unknown error";
         console.error("Failed to connect KoboldCPP:", error);
         setError(`Failed to start KoboldCPP: ${message}`);
         toast.error(`KoboldCPP Error: ${message}`);
       } finally {
-         setIsLoading(false);
+        setIsLoading(false);
       }
     } else {
       setError("Please select a model and ensure model directory is set.");
@@ -418,40 +418,40 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   };
 
   const handleDisconnectKobold = async () => {
-     setIsLoading(true);
-     setError(null);     try {
-        console.log("Requesting backend to disconnect KoboldCPP");
-        const response = await fetch('/api/koboldcpp/disconnect', { method: 'POST' });
-         
-        if (!response.ok) {
-           console.error(`Failed to disconnect KoboldCPP. Status: ${response.status}`);
-           let errorMessage = `HTTP error! status: ${response.status}`;
-           
-           try {
-             const errorData = await response.json();
-             errorMessage = errorData.detail || errorData.error?.message || errorMessage;
-             console.error("Error details:", errorData);
-           } catch (parseError) {
-             console.error("Failed to parse error response:", parseError);
-           }
-           
-           throw new Error(`Failed to disconnect KoboldCPP: ${errorMessage}`);
+    setIsLoading(true);
+    setError(null); try {
+      console.log("Requesting backend to disconnect KoboldCPP");
+      const response = await fetch('/api/koboldcpp/disconnect', { method: 'POST' });
+
+      if (!response.ok) {
+        console.error(`Failed to disconnect KoboldCPP. Status: ${response.status}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.error?.message || errorMessage;
+          console.error("Error details:", errorData);
+        } catch (parseError) {
+          console.error("Failed to parse error response:", parseError);
         }
-         
-        const result = await response.json();
-        if (!result.success) {
-           throw new Error(result.message || 'Backend failed to stop KoboldCPP');
-        }
-        toast.info("KoboldCPP server stopping...");
-        setTimeout(refreshKoboldStatus, 3000); // Refresh status after delay
-     } catch (error) {
-         const message = error instanceof Error ? error.message : "Unknown error";
-        console.error("Failed to disconnect KoboldCPP:", error);
-        setError(`Failed to stop KoboldCPP: ${message}`);
-        toast.error(`KoboldCPP Error: ${message}`);
-     } finally {
-        setIsLoading(false);
-     }
+
+        throw new Error(`Failed to disconnect KoboldCPP: ${errorMessage}`);
+      }
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.message || 'Backend failed to stop KoboldCPP');
+      }
+      toast.info("KoboldCPP server stopping...");
+      setTimeout(refreshKoboldStatus, 3000); // Refresh status after delay
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("Failed to disconnect KoboldCPP:", error);
+      setError(`Failed to stop KoboldCPP: ${message}`);
+      toast.error(`KoboldCPP Error: ${message}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Filter local models
@@ -485,10 +485,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           </div>
         ) : error ? (
           <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
-             <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
+            <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
           </div>
         ) : !modelsDirectory ? (
-             <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">Model directory not set in General Settings.</div>
+          <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">Model directory not set in General Settings.</div>
         ) : models.length === 0 && !isLoading ? (
           <div className="text-gray-400">No models found in directory: {modelsDirectory}</div>
         ) : (
@@ -501,7 +501,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 size={Math.min(10, filteredLocalModels.length + 1)}
                 disabled={isLoading}
               >
-                 <option value="" disabled={!!selectedModel}>-- Select a Model --</option>
+                <option value="" disabled={!!selectedModel}>-- Select a Model --</option>
                 {filteredLocalModels.length === 0 && searchTerm && (
                   <option value="" disabled>No models match "{searchTerm}"</option>
                 )}
@@ -516,7 +516,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <button
                   onClick={handleDisconnectKobold}
                   disabled={isLoading} // Disable button during connect/disconnect actions
-                  className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-sm flex-shrink-0"
+                  className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-stone-500 disabled:cursor-not-allowed text-sm flex-shrink-0"
                   title="Stop KoboldCPP Server (via backend)"
                 >
                   Stop
@@ -525,7 +525,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <button
                   onClick={handleConnectKobold}
                   disabled={!selectedModel || !modelsDirectory || isLoading}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-sm flex-shrink-0"
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-stone-500 disabled:cursor-not-allowed text-sm flex-shrink-0"
                   title={!selectedModel || !modelsDirectory ? "Select a model and set model directory first" : "Start KoboldCPP Server with selected model (via backend)"}
                 >
                   Start
@@ -534,7 +534,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             </div>
             {/* Display running status - removed model name check as it's not available from hook */}
             {koboldHookStatus?.is_running && (
-               <p className="text-xs text-green-400 mt-1">KoboldCPP running.</p>
+              <p className="text-xs text-green-400 mt-1">KoboldCPP running.</p>
             )}
           </>
         )}

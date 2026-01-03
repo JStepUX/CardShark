@@ -24,18 +24,18 @@ const DEFAULT_MODELS = {
 export const ApiProviderSelector: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const [selectedApiId, setSelectedApiId] = useState<string>('');
-  
+
   useEffect(() => {
     // If there's an active API in settings, select it
     if (settings?.apis) {
       const apiIds = Object.keys(settings.apis);
       if (apiIds.length > 0) {
         // If there's a currently active API in settings.api, use its ID
-        const activeApiId = apiIds.find(id => 
-          settings.api?.url === settings.apis[id].url && 
+        const activeApiId = apiIds.find(id =>
+          settings.api?.url === settings.apis[id].url &&
           settings.api?.apiKey === settings.apis[id].apiKey
         );
-        
+
         if (activeApiId) {
           setSelectedApiId(activeApiId);
         } else {
@@ -45,7 +45,7 @@ export const ApiProviderSelector: React.FC = () => {
       }
     }
   }, [settings?.apis, settings?.api]);
-  
+
   const handleAddProvider = () => {
     // Generate unique ID for new provider
     const newId = `api-${Date.now()}`;
@@ -58,19 +58,19 @@ export const ApiProviderSelector: React.FC = () => {
       enabled: false,
       templateId: 'mistral'
     };
-    
+
     const updatedApis = { ...(settings?.apis || {}), [newId]: newProvider };
     updateSettings({ apis: updatedApis });
     setSelectedApiId(newId);
   };
-  
+
   const handleSelectProvider = (apiId: string) => {
     if (settings?.apis && apiId in settings.apis) {
       const selectedApi = settings.apis[apiId];
       setSelectedApiId(apiId);
-      
+
       // Convert APIConfig to the format expected by settings.api
-      updateSettings({ 
+      updateSettings({
         api: {
           enabled: selectedApi.enabled || false,
           url: selectedApi.url || '',
@@ -78,29 +78,29 @@ export const ApiProviderSelector: React.FC = () => {
           templateId: selectedApi.templateId || 'mistral',
           lastConnectionStatus: selectedApi.lastConnectionStatus,
           model_info: selectedApi.model_info
-        } 
+        }
       });
     }
   };
-  
+
   const handleUpdateProvider = (apiId: string, updates: Partial<APIConfig>) => {
     if (settings?.apis && apiId in settings.apis) {
       const updatedProvider = { ...settings.apis[apiId], ...updates };
-      
+
       // Update model default if provider type changed
       if (updates.provider && updates.provider !== settings.apis[apiId].provider) {
         updatedProvider.model = DEFAULT_MODELS[updates.provider] || '';
       }
-      
+
       const updatedApis = { ...settings.apis, [apiId]: updatedProvider };
       updateSettings({ apis: updatedApis });
-      
+
       // If this is the active API, update that too
-      const isActiveApi = settings.api?.url === settings.apis[apiId].url && 
-                        settings.api?.apiKey === settings.apis[apiId].apiKey;
-                        
+      const isActiveApi = settings.api?.url === settings.apis[apiId].url &&
+        settings.api?.apiKey === settings.apis[apiId].apiKey;
+
       if (isActiveApi) {
-        updateSettings({ 
+        updateSettings({
           api: {
             enabled: updatedProvider.enabled || false,
             url: updatedProvider.url || '',
@@ -113,21 +113,21 @@ export const ApiProviderSelector: React.FC = () => {
       }
     }
   };
-  
+
   const handleDeleteProvider = (apiId: string) => {
     if (settings?.apis && apiId in settings.apis) {
       const updatedApis = { ...settings.apis };
       delete updatedApis[apiId];
       updateSettings({ apis: updatedApis });
-      
+
       // If this was the active API, select another one
-      const isActiveApi = settings.api?.url === settings.apis[apiId].url && 
-                        settings.api?.apiKey === settings.apis[apiId].apiKey;
-                        
+      const isActiveApi = settings.api?.url === settings.apis[apiId].url &&
+        settings.api?.apiKey === settings.apis[apiId].apiKey;
+
       if (isActiveApi) {
         const firstAvailableApi = Object.values(updatedApis)[0];
         if (firstAvailableApi) {
-          updateSettings({ 
+          updateSettings({
             api: {
               enabled: firstAvailableApi.enabled || false,
               url: firstAvailableApi.url || '',
@@ -145,7 +145,7 @@ export const ApiProviderSelector: React.FC = () => {
       }
     }
   };
-  
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -159,15 +159,14 @@ export const ApiProviderSelector: React.FC = () => {
           Add Provider
         </Button>
       </div>
-      
+
       {/* Provider List */}
       <div className="space-y-2 max-h-60 overflow-y-auto">
         {Object.values(settings?.apis || {}).map(api => (
-          <div 
+          <div
             key={api.id}
-            className={`p-3 border rounded cursor-pointer transition-colors ${
-              selectedApiId === api.id ? 'border-blue-500 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/30' : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800'
-            }`}
+            className={`p-3 border rounded cursor-pointer transition-colors ${selectedApiId === api.id ? 'border-blue-500 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/30' : 'border-gray-200 hover:bg-stone-50 dark:border-gray-700 dark:hover:bg-stone-800'
+              }`}
             onClick={() => api.id && handleSelectProvider(api.id)}
           >
             <div className="flex justify-between items-center">
@@ -177,18 +176,18 @@ export const ApiProviderSelector: React.FC = () => {
             <div className="text-sm text-gray-600 dark:text-gray-400 truncate">{api.url}</div>
           </div>
         ))}
-        
+
         {(!settings?.apis || Object.keys(settings.apis).length === 0) && (
           <div className="text-center py-4 text-gray-500 dark:text-gray-400">
             No API providers configured. Add one to get started.
           </div>
         )}
       </div>
-      
+
       {/* Selected Provider Form */}
       {selectedApiId && settings?.apis && selectedApiId in settings.apis && (
         <ApiProviderForm
-          api={settings.apis[selectedApiId]} 
+          api={settings.apis[selectedApiId]}
           onUpdate={(updates) => handleUpdateProvider(selectedApiId, updates)}
           onDelete={() => handleDeleteProvider(selectedApiId)}
           onSelect={() => handleSelectProvider(selectedApiId)}
@@ -221,7 +220,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
                 onUpdate({ provider: e.target.value as APIProvider });
               }
             }}
-            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
           >
             {PROVIDER_TYPES.map(provider => (
               <option key={provider.id} value={provider.id}>
@@ -230,7 +229,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
             ))}
           </select>
         </div>
-        
+
         <div>
           <label htmlFor="api-enabled" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Status
@@ -249,7 +248,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           </div>
         </div>
       </div>
-      
+
       <div>
         <label htmlFor="api-url" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           API URL
@@ -259,16 +258,16 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           type="text"
           value={api.url || ''}
           onChange={(e) => onUpdate({ url: e.target.value })}
-          placeholder={api.provider === APIProvider.KOBOLD ? 'http://localhost:5001' : 
-                      api.provider === APIProvider.OPENAI ? 'https://api.openai.com/v1' :
-                      api.provider === APIProvider.CLAUDE ? 'https://api.anthropic.com/v1/messages' : 
-                      api.provider === APIProvider.GEMINI ? 'https://generativelanguage.googleapis.com/v1beta/models' :
-                      api.provider === APIProvider.FEATHERLESS ? 'https://api.featherless.ai/v1' :
-                      'https://api.openrouter.ai/api/v1'}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+          placeholder={api.provider === APIProvider.KOBOLD ? 'http://localhost:5001' :
+            api.provider === APIProvider.OPENAI ? 'https://api.openai.com/v1' :
+              api.provider === APIProvider.CLAUDE ? 'https://api.anthropic.com/v1/messages' :
+                api.provider === APIProvider.GEMINI ? 'https://generativelanguage.googleapis.com/v1beta/models' :
+                  api.provider === APIProvider.FEATHERLESS ? 'https://api.featherless.ai/v1' :
+                    'https://api.openrouter.ai/api/v1'}
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
         />
       </div>
-      
+
       <div>
         <label htmlFor="api-key" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           API Key {api.provider !== APIProvider.KOBOLD && <span className="text-red-500">*</span>}
@@ -278,14 +277,14 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           type="password"
           value={api.apiKey || ''}
           onChange={(e) => onUpdate({ apiKey: e.target.value })}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
           placeholder={api.provider === APIProvider.KOBOLD ? '(Optional)' : 'Required for this provider'}
         />
       </div>
-      
+
       {/* Model Selection */}
       <ModelSelector api={api} onUpdate={onUpdate} />
-      
+
       <div className="flex justify-between pt-2">
         <Button
           variant="primary"
@@ -295,7 +294,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
         >
           Use This Provider
         </Button>
-        
+
         <Button
           variant="destructive"
           size="md"
@@ -312,7 +311,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
 // Model selector component with provider-specific model options
 const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIConfig>) => void }> = ({ api, onUpdate }) => {
   // Model lists for different providers
-  const modelOptions: Record<APIProvider, Array<{id: string, name: string}>> = {
+  const modelOptions: Record<APIProvider, Array<{ id: string, name: string }>> = {
     [APIProvider.KOBOLD]: [
       { id: '', name: 'Default (Use model loaded in KoboldCPP)' }
     ],
@@ -352,7 +351,7 @@ const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIC
   };
 
   const options = api.provider ? modelOptions[api.provider] || [] : [];
-  
+
   return (
     <div>
       <label htmlFor="api-model" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -363,7 +362,7 @@ const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIC
           id="api-model"
           value={api.model || ''}
           onChange={(e) => onUpdate({ model: e.target.value })}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
         >
           {options.map(model => (
             <option key={model.id} value={model.id}>
@@ -377,7 +376,7 @@ const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIC
           type="text"
           value={api.model || ''}
           onChange={(e) => onUpdate({ model: e.target.value })}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
           placeholder="Enter model name"
         />
       )}

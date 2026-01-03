@@ -76,7 +76,7 @@ export function WorldLoadError({
                     {onBack && (
                         <button
                             onClick={onBack}
-                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center gap-2 transition-colors"
+                            className="px-4 py-2 bg-stone-700 hover:bg-stone-600 rounded-lg flex items-center gap-2 transition-colors"
                         >
                             <ArrowLeft size={16} />
                             <span>Go Back</span>

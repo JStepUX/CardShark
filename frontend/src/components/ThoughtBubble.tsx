@@ -14,7 +14,8 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   isGenerating,
   onContentChange,
   characterName
-}) => {  return (
+}) => {
+  return (
     <div className="w-full rounded-lg transition-colors bg-stone-800 text-gray-300 self-start
                     border border-dashed border-stone-600 relative mt-6 mb-0 performance-contain performance-transform">
       {/* Bubble decorations */}
@@ -23,7 +24,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         <div className="w-3 h-3 bg-stone-800 border border-dashed border-stone-600 rounded-full ml-1"></div>
         <div className="w-4 h-4 bg-stone-800 border border-dashed border-stone-600 rounded-full ml-1"></div>
       </div>
-      
+
       {/* Header */}
       <div className="px-4 pt-2 flex justify-between items-center performance-contain">
         <div className="text-sm text-gray-500">
@@ -36,7 +37,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         {isGenerating ? (
           <div className="whitespace-pre-wrap break-words performance-contain performance-transform">
             {message.content}
-            <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
+            <span className="inline-block w-2 h-4 bg-stone-400 ml-1 animate-pulse"></span>
           </div>
         ) : (
           <div

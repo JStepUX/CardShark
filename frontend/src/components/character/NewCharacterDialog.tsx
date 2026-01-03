@@ -7,10 +7,10 @@ interface NewCharacterDialogProps {
   onNewCharacter: () => void;
 }
 
-export function NewCharacterDialog({ 
-  isOpen, 
-  onDiscard, 
-  onNewCharacter 
+export function NewCharacterDialog({
+  isOpen,
+  onDiscard,
+  onNewCharacter
 }: NewCharacterDialogProps) {
   const [name, setName] = useState('');
 
@@ -49,7 +49,7 @@ export function NewCharacterDialog({
             id="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 
+            className="mt-1 block w-full rounded-md bg-stone-700 border-gray-600 
                      text-white focus:border-blue-500 focus:ring-blue-500"
             placeholder="Enter character name"
             autoFocus

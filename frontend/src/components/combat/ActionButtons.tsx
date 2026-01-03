@@ -104,7 +104,7 @@ export function ActionButtons({
                 ? 'bg-amber-600 border-2 border-amber-400 shadow-lg shadow-amber-500/30'
                 : isAvailable
                   ? 'bg-stone-800 hover:bg-stone-600 border-2 border-stone-700'
-                  : 'bg-gray-800 border-2 border-gray-700 opacity-50 cursor-not-allowed'
+                  : 'bg-stone-800 border-2 border-gray-700 opacity-50 cursor-not-allowed'
               }
             `}
           >
@@ -142,7 +142,7 @@ export function ActionButtons({
         <button
           onClick={onCancel}
           aria-label="Cancel current action. Hotkey: Escape"
-          className="flex flex-col items-center justify-center w-20 h-20 rounded-lg bg-gray-700 hover:bg-gray-600 border-2 border-gray-600 transition-all"
+          className="flex flex-col items-center justify-center w-20 h-20 rounded-lg bg-stone-700 hover:bg-stone-600 border-2 border-gray-600 transition-all"
         >
           <div className="w-8 h-8 text-gray-300">
             <CancelIcon />

@@ -52,7 +52,7 @@ export function PartyGatherModal({
                 <div className="border-t border-gray-800 px-6 py-4 flex gap-3">
                     <button
                         onClick={onLeaveHere}
-                        className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                        className="flex-1 px-4 py-2 bg-stone-700 hover:bg-stone-600 text-white rounded-lg transition-colors"
                     >
                         Stay Here
                     </button>

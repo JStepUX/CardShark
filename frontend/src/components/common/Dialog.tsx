@@ -20,10 +20,10 @@ interface DialogProps {
   className?: string; // Added className prop
 }
 
-export function Dialog({ 
-  isOpen, 
-  onClose, 
-  children, 
+export function Dialog({
+  isOpen,
+  onClose,
+  children,
   title,
   buttons = [],
   showCloseButton = false,
@@ -76,7 +76,7 @@ export function Dialog({
           <div className="px-6 py-4 flex-grow overflow-y-auto performance-contain">
             {children}
           </div>
-          
+
           {/* Footer with Buttons */}
           {(buttons.length > 0 || showCloseButton) && (
             <div className="px-6 py-4 border-t border-stone-700 flex justify-end gap-2 performance-contain performance-transform">
@@ -96,7 +96,7 @@ export function Dialog({
                   }
                 } else { // Handles 'secondary' or undefined from DialogButton interface
                   buttonPropsVariant = 'ghost';
-                  buttonPropsClassName = `text-gray-300 hover:text-white hover:bg-gray-700 ${buttonPropsClassName}`.trim();
+                  buttonPropsClassName = `text-gray-300 hover:text-white hover:bg-stone-700 ${buttonPropsClassName}`.trim();
                 }
 
                 return (

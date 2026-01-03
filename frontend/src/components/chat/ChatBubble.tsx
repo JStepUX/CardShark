@@ -407,7 +407,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
             {/* Animating cursor for generating state */}
-            <span className="inline-block w-2 h-4 bg-gray-400 ml-1 animate-pulse"></span>
+            <span className="inline-block w-2 h-4 bg-stone-400 ml-1 animate-pulse"></span>
           </div>
         ) : (
           /* Rich text editor for editable content */

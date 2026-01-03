@@ -10,12 +10,12 @@ import { importJson, importTsv, importPng } from '../handlers/importHandlers';
 function isLoreEntry(value: unknown): value is LoreEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<LoreEntry>;
-  
+
   // Check required fields
   if (!Array.isArray(entry.keys)) return false;
   if (typeof entry.content !== 'string') return false;
   if (typeof entry.insertion_order !== 'number') return false;
-  
+
   return true;
 }
 
@@ -30,7 +30,7 @@ const LoreView: React.FC = () => {
     if (!characterData?.data?.character_book?.entries) return [];
 
     const rawEntries = characterData.data.character_book.entries;
-    
+
     let entriesArray: LoreEntry[] = [];
     if (Array.isArray(rawEntries)) {
       entriesArray = rawEntries;
@@ -62,7 +62,7 @@ const LoreView: React.FC = () => {
   const filteredEntries = useMemo(() => {
     if (!searchTerm) return entries;
     const term = searchTerm.toLowerCase();
-    
+
     return entries.filter((entry: LoreEntry) => {
       const keys = Array.isArray(entry.keys) ? entry.keys : [];
       return keys.some(key => key.toLowerCase().includes(term));
@@ -152,7 +152,7 @@ const LoreView: React.FC = () => {
 
   const tsvFileImportLogic = (file: File): Promise<LoreEntry[]> => {
     // importTsv now expects the file object and characterContext, similar to importJson
-    return importTsv(file, characterContext); 
+    return importTsv(file, characterContext);
   };
 
   const pngFileImportLogic = (file: File): Promise<LoreEntry[]> => {
@@ -193,25 +193,25 @@ const LoreView: React.FC = () => {
 
   const handleMoveEntry = (id: number, direction: 'up' | 'down') => {
     if (!characterData) return;
-    
+
     const index = entries.findIndex(e => e.id === id);
     if (index === -1) return;
-    
+
     const updatedEntries = [...entries];
-    
+
     if (direction === 'up' && index > 0) {
-      [updatedEntries[index], updatedEntries[index - 1]] = 
-      [updatedEntries[index - 1], updatedEntries[index]];
+      [updatedEntries[index], updatedEntries[index - 1]] =
+        [updatedEntries[index - 1], updatedEntries[index]];
     } else if (direction === 'down' && index < updatedEntries.length - 1) {
-      [updatedEntries[index], updatedEntries[index + 1]] = 
-      [updatedEntries[index + 1], updatedEntries[index]];
+      [updatedEntries[index], updatedEntries[index + 1]] =
+        [updatedEntries[index + 1], updatedEntries[index]];
     }
-    
+
     const reorderedEntries = updatedEntries.map((entry, idx) => ({
       ...entry,
       id: idx + 1
     }));
-    
+
     updateCharacterData(reorderedEntries);
   };
 
@@ -231,7 +231,7 @@ const LoreView: React.FC = () => {
                 { icon: FileText, label: 'Import from TSV', onClick: handleImportTsv },
                 { icon: Image, label: 'Import from PNG', onClick: handleImportPng }
               ]}
-              buttonClassName="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+              buttonClassName="p-2 hover:bg-stone-700 rounded-lg transition-colors"
             />
             <button
               onClick={handleAddEntry}
@@ -248,7 +248,7 @@ const LoreView: React.FC = () => {
           placeholder="Search keys..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 bg-stone-950 rounded-lg border-slate-700"
+          className="px-4 py-2 bg-stone-950 rounded-lg border-stone-700"
         />
 
         {error && (

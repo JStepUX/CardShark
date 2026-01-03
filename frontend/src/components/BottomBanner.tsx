@@ -39,7 +39,7 @@ export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '', heal
 
   // Determine API status display
   const getStatusColor = (config: APIConfig | null) => {
-    if (!config) return 'bg-gray-400';
+    if (!config) return 'bg-stone-400';
 
     if (!config.enabled) return 'bg-red-500'; // API disabled/offline
 
@@ -131,7 +131,7 @@ export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '', heal
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <div className={`w-2 h-2 rounded-full ${api.lastConnectionStatus?.connected ? 'bg-green-500' : 'bg-gray-400'} mr-2`}></div>
+                      <div className={`w-2 h-2 rounded-full ${api.lastConnectionStatus?.connected ? 'bg-green-500' : 'bg-stone-400'} mr-2`}></div>
                       {api.name || api.provider}
                     </div>
                     {isSwitching && api.id === activeApiId && (

@@ -1015,7 +1015,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
             <div className="flex items-center gap-2">
               {/* View Toggle */}
-              <div className="flex bg-stone-800 border border-slate-600 rounded-lg p-1 mr-1">
+              <div className="flex bg-stone-800 border border-stone-600 rounded-lg p-1 mr-1">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
@@ -1064,7 +1064,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                 disabled={isRefreshing || !currentDirectory}
                 className={`p-2 rounded-lg border transition-all ${isRefreshing
                   ? 'bg-stone-700 border-stone-600 text-slate-500 cursor-wait'
-                  : 'bg-stone-800 border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-stone-700'
+                  : 'bg-stone-800 border-stone-600 text-slate-400 hover:text-slate-200 hover:bg-stone-700'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                 title="Refresh gallery (check for new/modified/deleted files)"
                 aria-label="Refresh gallery"
@@ -1076,7 +1076,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               <div className="relative" ref={sortDropdownRef}>
                 <button
                   onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                  className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-slate-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded-lg text-sm text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                   aria-label="Sort characters"
                 >
                   <ArrowUpDown size={16} className="text-slate-400" />
@@ -1157,7 +1157,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search characters by name..."
-                className="w-full px-4 py-2 bg-stone-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-2 bg-stone-800 border border-stone-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>

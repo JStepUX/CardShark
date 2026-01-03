@@ -267,7 +267,7 @@ export function CombatModal({
         </div>
 
         {/* Right side: Combat log + Initiative */}
-        <div className="w-80 flex flex-col border-l border-gray-800 bg-gray-900/80">
+        <div className="w-80 flex flex-col border-l border-gray-800 bg-stone-900/80">
           {/* Initiative tracker */}
           <div className="border-b border-gray-800 flex-shrink-0">
             <InitiativeTracker state={combatState} />
@@ -281,7 +281,7 @@ export function CombatModal({
       </div>
 
       {/* Bottom HUD - prevent from being pushed down */}
-      <div className="relative border-t border-gray-800 bg-gray-900/90 px-6 py-4 flex-shrink-0">
+      <div className="relative border-t border-gray-800 bg-stone-900/90 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           {/* Player HUD (left) */}
           {playerCombatant && (
@@ -305,7 +305,7 @@ export function CombatModal({
         {/* Turn indicator */}
         {!isPlayerTurn && currentActor && (
           <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full">
-            <div className="bg-gray-800 border border-gray-700 rounded-t px-4 py-1 text-sm text-gray-400">
+            <div className="bg-stone-800 border border-gray-700 rounded-t px-4 py-1 text-sm text-gray-400">
               {currentActor.name}'s turn...
             </div>
           </div>

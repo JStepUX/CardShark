@@ -24,7 +24,7 @@ export function PlayerHUD({ player, apRemaining }: PlayerHUDProps) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+          <div className="w-full h-full bg-stone-700 flex items-center justify-center">
             <span className="text-xl text-gray-400 font-bold">
               {player.name.charAt(0)}
             </span>
@@ -38,7 +38,7 @@ export function PlayerHUD({ player, apRemaining }: PlayerHUDProps) {
           <span className="text-white font-semibold">{player.name}</span>
           <span className="text-sm text-gray-400">Lv.{player.level}</span>
         </div>
-        <div className="relative h-6 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+        <div className="relative h-6 bg-stone-800 rounded-full overflow-hidden border border-gray-700">
           <div
             className={`absolute inset-y-0 left-0 ${hpBarColor} transition-all duration-300`}
             style={{ width: `${hpPercent}%` }}
@@ -58,8 +58,8 @@ export function PlayerHUD({ player, apRemaining }: PlayerHUDProps) {
           <div
             key={i}
             className={`w-4 h-4 rounded-full border-2 ${i < apRemaining
-                ? 'bg-red-500 border-red-400'
-                : 'bg-gray-700 border-gray-600'
+              ? 'bg-red-500 border-red-400'
+              : 'bg-stone-700 border-gray-600'
               }`}
           />
         ))}
