@@ -240,8 +240,8 @@ export function CombatModal({
         />
       )}
 
-      {/* Main content */}
-      <div className="relative flex-1 flex">
+      {/* Main content - constrained to not overflow */}
+      <div className="relative flex-1 flex min-h-0 overflow-hidden">
         {/* Left side: Battlefield */}
         <div className="flex-1 flex flex-col">
           {/* Battlefield area */}
@@ -267,14 +267,14 @@ export function CombatModal({
           </div>
 
           {/* Combat log - Fixed height with scroll */}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <CombatLog log={combatState.log} currentTurn={combatState.turn} />
           </div>
         </div>
       </div>
 
-      {/* Bottom HUD */}
-      <div className="relative border-t border-gray-800 bg-gray-900/90 px-6 py-4">
+      {/* Bottom HUD - prevent from being pushed down */}
+      <div className="relative border-t border-gray-800 bg-gray-900/90 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           {/* Player HUD (left) */}
           {playerCombatant && (
