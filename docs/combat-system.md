@@ -77,9 +77,9 @@ Each turn, the active combatant has **2 Action Points (AP)**:
 
 | Action    | AP Cost | Ends Turn | Notes |
 |-----------|---------|-----------|-------|
-| Attack    | 2       | Yes       | Roll d20 + (level/2) vs target defense |
-| Defend    | 1       | Yes       | +2 Defense until next turn |
-| Overwatch | 2       | Yes       | Reaction shot at -1 when enemy acts |
+| Attack    | 2       | Yes       | Roll d20 + (level/2) vs target defense, damage ±3 variance |
+| Defend    | 1       | Yes       | +2 to +4 Defense until next turn (variable) |
+| Overwatch | 2       | Yes       | Reaction shot with -1 to -3 accuracy penalty |
 | Move      | 1-2     | Maybe     | 1 AP adjacent empty, 2 AP if passing ally |
 | Swap      | 1       | No        | Switch with adjacent ally |
 | Flee      | 2       | Yes       | Must be at edge (slot 0 or 4) |
@@ -87,13 +87,24 @@ Each turn, the active combatant has **2 Action Points (AP)**:
 ### Attack Resolution
 ```
 attackRoll = d20 + floor(attacker.level / 2)
-hit = attackRoll >= target.defense + (target.isDefending ? 2 : 0)
+hit = attackRoll >= target.defense + (target.defendBonus if defending)
 
 if (hit):
-  rawDamage = attacker.damage
+  damageVariance = d7 - 4          // -3 to +3 variance
+  rawDamage = max(1, attacker.damage + damageVariance)
   finalDamage = max(1, rawDamage - target.armor)
   target.hp -= finalDamage
 ```
+
+### Combat Variability
+
+To keep combat interesting, several mechanics include random variance:
+
+| Mechanic | Variance | Notes |
+|----------|----------|-------|
+| Damage | ±3 | d7-4 added to base damage |
+| Defend | +2 to +4 Defense | Roll d3+1 when defending |
+| Overwatch | -1 to -3 accuracy | Penalty applied to reaction shots |
 
 ### Hit Quality (for narrator hints)
 | Quality     | Condition           | Narrator Hint |
@@ -104,9 +115,10 @@ if (hit):
 | crushing    | margin >= 8         | Devastating strike |
 | armor_soak  | hit but armor ate it| Clang, stagger |
 
-### Victory/Defeat
+### Victory/Defeat/Flee
 - **Victory**: All enemies knocked out → XP and gold rewards
 - **Defeat**: All allies knocked out → Return to start, HP at 25%
+- **Fled**: Player successfully escapes → No penalties, enemies remain in room
 
 ## Battlefield Layout
 

@@ -11,7 +11,7 @@ interface PlayerHUDProps {
 export function PlayerHUD({ player, apRemaining }: PlayerHUDProps) {
   // HP bar calculations
   const hpPercent = Math.max(0, (player.currentHp / player.maxHp) * 100);
-  const hpBarColor = hpPercent > 50 ? 'bg-red-600' : hpPercent > 25 ? 'bg-yellow-500' : 'bg-red-500';
+  const hpBarColor = hpPercent > 50 ? 'bg-red-500' : hpPercent > 25 ? 'bg-red-600' : 'bg-red-700';
 
   return (
     <div className="flex items-center gap-4">
@@ -44,7 +44,7 @@ export function PlayerHUD({ player, apRemaining }: PlayerHUDProps) {
             style={{ width: `${hpPercent}%` }}
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-white text-sm font-bold drop-shadow">
+            <span className="text-white text-xs font-bold drop-shadow">
               HP: {player.currentHp}/{player.maxHp}
             </span>
           </div>
@@ -57,11 +57,10 @@ export function PlayerHUD({ player, apRemaining }: PlayerHUDProps) {
         {[0, 1].map(i => (
           <div
             key={i}
-            className={`w-4 h-4 rounded-full border-2 ${
-              i < apRemaining
-                ? 'bg-yellow-500 border-yellow-400'
+            className={`w-4 h-4 rounded-full border-2 ${i < apRemaining
+                ? 'bg-red-500 border-red-400'
                 : 'bg-gray-700 border-gray-600'
-            }`}
+              }`}
           />
         ))}
       </div>

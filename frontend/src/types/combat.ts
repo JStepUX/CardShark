@@ -118,6 +118,8 @@ export interface Combatant {
   isDefending: boolean;
   isOverwatching: boolean;
   isKnockedOut: boolean;
+  defendBonus?: number;      // Variable defense boost when defending (2-4)
+  overwatchPenalty?: number; // Variable accuracy penalty for overwatch (1-3)
 
   // UI state (clears after render)
   recentDamage: number | null;
@@ -275,6 +277,7 @@ export interface CombatLogEntry {
     damage?: number;
     hitQuality?: HitQuality;
     special?: 'killing_blow' | 'fled' | 'fled_failed';
+    defendBonus?: number;
   };
   mechanicalText: string;  // "Aria strikes Goblin for 14 damage!"
   narratorText?: string;   // AI-generated flavor (added async)

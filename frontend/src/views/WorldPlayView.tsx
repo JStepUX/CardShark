@@ -408,6 +408,21 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       // TODO: Update currentRoom.npcs in worldState to persist defeated enemies
       // This would require updating the world card backend
 
+    } else if (result.outcome === 'fled') {
+      // Player escaped - no penalties, stay in current room
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        content: '*You managed to escape from combat. The enemies remain in the area...*',
+        timestamp: Date.now(),
+        metadata: {
+          type: 'combat_fled',
+          roomId: currentRoom.id,
+        }
+      });
+
+      // Note: NPCs are NOT removed - they're still there if player returns
+
     } else if (result.outcome === 'defeat') {
       // Add defeat message
       addMessage({

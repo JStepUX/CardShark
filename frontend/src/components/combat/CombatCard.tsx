@@ -25,7 +25,7 @@ export function CombatCard({
 
   // Calculate HP percentage for bar
   const hpPercent = Math.max(0, (combatant.currentHp / combatant.maxHp) * 100);
-  const hpBarColor = hpPercent > 50 ? 'bg-green-500' : hpPercent > 25 ? 'bg-yellow-500' : 'bg-red-500';
+  const hpBarColor = hpPercent > 50 ? 'bg-red-500' : hpPercent > 25 ? 'bg-red-600' : 'bg-red-700';
 
   // Card frame color based on team
   const frameColor = combatant.isPlayerControlled

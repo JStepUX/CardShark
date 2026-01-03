@@ -60,6 +60,30 @@ export function rollD6(): number {
   return Math.floor(Math.random() * 6) + 1;
 }
 
+/**
+ * Roll damage variance: -3 to +3 (d7 - 4).
+ * Adds excitement to combat without wildly unbalancing it.
+ */
+export function rollDamageVariance(): number {
+  return Math.floor(Math.random() * 7) - 3; // -3 to +3
+}
+
+/**
+ * Roll defend bonus: 2-4 (d3 + 1).
+ * Defending grants variable defense boost.
+ */
+export function rollDefendBonus(): number {
+  return Math.floor(Math.random() * 3) + 2; // 2, 3, or 4
+}
+
+/**
+ * Roll overwatch penalty: 1-3.
+ * Reaction shots are less accurate.
+ */
+export function rollOverwatchPenalty(): number {
+  return Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+}
+
 // =============================================================================
 // Initialization
 // =============================================================================
@@ -450,8 +474,8 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
   });
   const adjacencyBonus = hasAdjacentAlly ? 1 : 0;
 
-  // Target defense (with defend bonus if applicable)
-  const targetDefense = target.defense + (target.isDefending ? 2 : 0);
+  // Target defense (with variable defend bonus if applicable)
+  const targetDefense = target.defense + (target.isDefending ? (target.defendBonus || 2) : 0);
 
   const finalAttack = totalAttack + adjacencyBonus;
   const hit = finalAttack >= targetDefense;
@@ -462,8 +486,9 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
   let hitQuality: HitQuality = 'miss';
 
   if (hit) {
-    rawDamage = actor.damage;
-    finalDamage = Math.max(1, rawDamage - target.armor); // Minimum 1 damage
+    const damageVariance = rollDamageVariance();
+    rawDamage = Math.max(1, actor.damage + damageVariance); // Base damage ± variance, min 1
+    finalDamage = Math.max(1, rawDamage - target.armor); // After armor, min 1 damage
     hitQuality = calculateHitQuality(finalAttack, targetDefense, rawDamage, finalDamage);
   }
 
@@ -569,10 +594,14 @@ function executeDefend(state: CombatState, action: CombatAction): CombatState {
     return state;
   }
 
+  // Roll variable defend bonus (2-4 instead of flat +2)
+  const defendBonus = rollDefendBonus();
+
   const updatedActor: Combatant = {
     ...actor,
     apRemaining: 0, // Ends turn
     isDefending: true,
+    defendBonus, // Store the rolled bonus
   };
 
   const logEntry: CombatLogEntry = {
@@ -581,8 +610,8 @@ function executeDefend(state: CombatState, action: CombatAction): CombatState {
     actorId: actor.id,
     actorName: actor.name,
     actionType: 'defend',
-    result: {},
-    mechanicalText: `${actor.name} takes a defensive stance.`,
+    result: { defendBonus },
+    mechanicalText: `${actor.name} takes a defensive stance (+${defendBonus} Defense).`,
   };
 
   const newState: CombatState = {
@@ -598,7 +627,7 @@ function executeDefend(state: CombatState, action: CombatAction): CombatState {
         type: 'defend_activated',
         turn: state.turn,
         actorId: actor.id,
-        data: { actorName: actor.name },
+        data: { actorName: actor.name, defendBonus },
       },
     ],
   };
@@ -617,10 +646,14 @@ function executeOverwatch(state: CombatState, action: CombatAction): CombatState
     return state;
   }
 
+  // Roll variable overwatch penalty (1-3)
+  const overwatchPenalty = rollOverwatchPenalty();
+
   const updatedActor: Combatant = {
     ...actor,
     apRemaining: 0,
     isOverwatching: true,
+    overwatchPenalty, // Store penalty for when overwatch triggers
   };
 
   const logEntry: CombatLogEntry = {
@@ -876,8 +909,6 @@ function executeFlee(state: CombatState, action: CombatAction): CombatState {
     const slots = isAlly ? [...state.battlefield.allySlots] : [...state.battlefield.enemySlots];
     slots[actor.slotPosition] = null;
 
-    updatedActor.isKnockedOut = true; // Effectively "out of combat"
-
     const updatedBattlefield: Battlefield = isAlly
       ? { ...state.battlefield, allySlots: slots }
       : { ...state.battlefield, enemySlots: slots };
@@ -891,6 +922,49 @@ function executeFlee(state: CombatState, action: CombatAction): CombatState {
       result: { special: 'fled' },
       mechanicalText: `${actor.name} flees from combat!`,
     };
+
+    // If THE player flees, end combat immediately with 'fled' outcome
+    // This is NOT the same as defeat - player escapes without penalty
+    if (actor.isPlayer) {
+      const fledState: CombatState = {
+        ...state,
+        phase: 'victory', // Use 'victory' phase for UI, but 'fled' outcome
+        combatants: {
+          ...state.combatants,
+          [actor.id]: { ...updatedActor, isKnockedOut: false }, // NOT knocked out, escaped!
+        },
+        battlefield: updatedBattlefield,
+        log: [...state.log, logEntry],
+        result: {
+          outcome: 'fled',
+          survivingAllies: Object.values(state.combatants)
+            .filter(c => c.isPlayerControlled && !c.isKnockedOut)
+            .map(c => c.id),
+          defeatedEnemies: Object.values(state.combatants)
+            .filter(c => !c.isPlayerControlled && c.isKnockedOut)
+            .map(c => c.id),
+        },
+        pendingEvents: [
+          ...state.pendingEvents,
+          {
+            type: 'flee_attempted',
+            turn: state.turn,
+            actorId: actor.id,
+            data: {
+              actorName: actor.name,
+              success: true,
+              fleeRoll,
+              fleeDc,
+            },
+          },
+        ],
+      };
+
+      return fledState;
+    }
+
+    // For non-player allies fleeing, mark as "out of combat" and continue
+    updatedActor.isKnockedOut = true;
 
     const newState: CombatState = {
       ...state,

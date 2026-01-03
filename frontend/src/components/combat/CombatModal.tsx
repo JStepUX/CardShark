@@ -202,15 +202,22 @@ export function CombatModal({
 
   // Combat end screens
   if (combatState.phase === 'victory') {
+    const isFled = combatState.result?.outcome === 'fled';
+
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
         <div className="text-center">
-          <h1 className="text-5xl font-bold text-green-500 mb-4">VICTORY!</h1>
-          {combatState.result?.rewards && (
+          <h1 className={`text-5xl font-bold mb-4 ${isFled ? 'text-amber-500' : 'text-green-500'}`}>
+            {isFled ? 'ESCAPED!' : 'VICTORY!'}
+          </h1>
+          {!isFled && combatState.result?.rewards && (
             <div className="text-white text-xl space-y-2">
               <p>+{combatState.result.rewards.xp} XP</p>
               <p>+{combatState.result.rewards.gold} Gold</p>
             </div>
+          )}
+          {isFled && (
+            <p className="text-gray-300">You fled from combat successfully.</p>
           )}
           <p className="text-gray-400 mt-4">Combat ended in {combatState.turn} turns</p>
         </div>
