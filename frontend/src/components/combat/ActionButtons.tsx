@@ -103,7 +103,7 @@ export function ActionButtons({
               ${isSelected
                 ? 'bg-amber-600 border-2 border-amber-400 shadow-lg shadow-amber-500/30'
                 : isAvailable
-                  ? 'bg-amber-700 hover:bg-amber-600 border-2 border-amber-800'
+                  ? 'bg-stone-800 hover:bg-stone-600 border-2 border-stone-700'
                   : 'bg-gray-800 border-2 border-gray-700 opacity-50 cursor-not-allowed'
               }
             `}
