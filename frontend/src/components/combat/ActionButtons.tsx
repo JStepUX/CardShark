@@ -124,7 +124,7 @@ export function ActionButtons({
               w-5 h-5 rounded-full
               flex items-center justify-center
               text-xs font-bold
-              ${canAfford ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}
+              ${canAfford ? 'bg-purple-600 text-white' : 'bg-red-600 text-white'}
             `}>
               {config.apCost}
             </div>
