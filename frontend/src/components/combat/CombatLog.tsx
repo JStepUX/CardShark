@@ -2,14 +2,16 @@
 // Combat log display showing turn history
 
 import { useEffect, useRef } from 'react';
-import { CombatLogEntry } from '../../types/combat';
+import { CombatLogEntry, Combatant, CombatState } from '../../types/combat';
 
 interface CombatLogProps {
   log: CombatLogEntry[];
   currentTurn: number;
+  currentActor?: Combatant | null;
+  state?: CombatState;
 }
 
-export function CombatLog({ log, currentTurn }: CombatLogProps) {
+export function CombatLog({ log, currentTurn, currentActor, state }: CombatLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new entries added
@@ -22,11 +24,15 @@ export function CombatLog({ log, currentTurn }: CombatLogProps) {
   // Get the most recent entries (last 5 or so for display)
   const recentEntries = log.slice(-10);
 
+  // Color based on whose turn it is
+  const isPlayerTurn = currentActor?.isPlayerControlled ?? true;
+  const turnColor = isPlayerTurn ? 'text-blue-400' : 'text-red-400';
+
   return (
     <div className="flex flex-col h-full">
       {/* Turn counter header */}
       <div className="px-4 py-2 border-b border-gray-700 flex-shrink-0">
-        <h3 className="text-lg font-bold text-white">
+        <h3 className={`text-lg font-bold ${turnColor}`}>
           Combat Turn #{currentTurn}
         </h3>
       </div>
@@ -40,7 +46,7 @@ export function CombatLog({ log, currentTurn }: CombatLogProps) {
           <p className="text-gray-500 text-sm italic">Combat begins...</p>
         ) : (
           recentEntries.map(entry => (
-            <LogEntry key={entry.id} entry={entry} />
+            <LogEntry key={entry.id} entry={entry} state={state} />
           ))
         )}
       </div>
@@ -48,19 +54,23 @@ export function CombatLog({ log, currentTurn }: CombatLogProps) {
   );
 }
 
-function LogEntry({ entry }: { entry: CombatLogEntry }) {
+function LogEntry({ entry, state }: { entry: CombatLogEntry; state?: CombatState }) {
   // Determine styling based on action type and result
   const isAttack = entry.actionType === 'attack';
   const isHit = entry.result.hit;
   const isKillingBlow = entry.result.special === 'killing_blow';
 
-  // Mechanical result color
+  // Check if actor is player-controlled
+  const actor = state?.combatants[entry.actorId];
+  const isPlayerAction = actor?.isPlayerControlled ?? false;
+
+  // Mechanical result color - based on who's acting
   let mechanicalColor = 'text-gray-300';
   if (isAttack) {
     if (isKillingBlow) {
-      mechanicalColor = 'text-red-400 font-bold';
+      mechanicalColor = isPlayerAction ? 'text-blue-400 font-bold' : 'text-red-400 font-bold';
     } else if (isHit) {
-      mechanicalColor = 'text-red-400';
+      mechanicalColor = isPlayerAction ? 'text-blue-400' : 'text-red-400';
     } else {
       mechanicalColor = 'text-gray-400';
     }

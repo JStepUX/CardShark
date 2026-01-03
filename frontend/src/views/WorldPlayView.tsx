@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { useCharacter } from '../contexts/CharacterContext';
+import { useAPIConfig } from '../contexts/APIConfigContext';
 import ChatView from '../components/chat/ChatView';
 import { SidePanel } from '../components/SidePanel';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
@@ -46,6 +47,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     currentUser
   } = useChat();
   const { characterData } = useCharacter();
+  const { apiConfig } = useAPIConfig();
 
   const worldId = propWorldId || uuid || '';
 
@@ -310,13 +312,32 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       // That would trigger a new session load
       // The context injection effect will handle using the NPC's card
 
+      // Check if API is configured
+      if (!apiConfig) {
+        console.error('No API configuration available for greeting generation');
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant' as const,
+          content: `*${npc.name} enters the scene*`,
+          timestamp: Date.now(),
+          metadata: {
+            type: 'npc_introduction',
+            npcId: npcId,
+            roomId: currentRoom.id,
+            characterId: npcCharacterData.data?.character_uuid,
+            generated: false
+          }
+        });
+        return;
+      }
+
       // Use the /api/generate-greeting endpoint with NPC character data
       const greetingResponse = await fetch('/api/generate-greeting', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           character_data: npcCharacterData,
-          api_config: null // Use default API config
+          api_config: apiConfig // Use actual API config instead of null
         })
       });
 
@@ -376,7 +397,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     } catch (err) {
       console.error('Error summoning NPC:', err);
     }
-  }, [roomNpcs, currentRoom, addMessage, characterData, worldId]);
+  }, [roomNpcs, currentRoom, addMessage, characterData, worldId, apiConfig, currentUser]);
 
   // Handle combat end - process results and update state
   const handleCombatEnd = useCallback((result: CombatState['result']) => {

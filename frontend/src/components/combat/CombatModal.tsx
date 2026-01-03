@@ -48,6 +48,10 @@ export function CombatModal({
   const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
   const [targetingMode, setTargetingMode] = useState<'none' | 'attack' | 'move' | 'swap'>('none');
 
+  // Animation state - tracks which combatants are currently animating
+  const [attackingId, setAttackingId] = useState<string | null>(null);
+  const [beingAttackedId, setBeingAttackedId] = useState<string | null>(null);
+
   // Derived state
   const currentActor = getCurrentActor(combatState);
   const isPlayerTurn = currentActor?.isPlayerControlled ?? false;
@@ -75,6 +79,48 @@ export function CombatModal({
 
   // Process action and update state
   const executeAction = useCallback((action: CombatAction) => {
+    // Trigger attack animation for melee attacks
+    if (action.type === 'attack' && action.targetId) {
+      const attacker = combatState.combatants[action.actorId];
+
+      // Only animate melee attacks (we'll add ranged projectiles later)
+      if (attacker?.weaponType === 'melee') {
+        // Start animation
+        setAttackingId(action.actorId);
+        setBeingAttackedId(action.targetId);
+
+        // Wait for animation to complete before resolving combat
+        setTimeout(() => {
+          const { state: newState, events } = combatReducer(combatState, action);
+          setCombatState(newState);
+
+          // Clear animation state
+          setAttackingId(null);
+          setBeingAttackedId(null);
+
+          // Clear UI state
+          setSelectedAction(null);
+          setTargetingMode('none');
+
+          // Send events to narrator if callback provided
+          if (events.length > 0 && onNarratorRequest) {
+            onNarratorRequest(events);
+          }
+
+          // Check for combat end
+          if (newState.phase === 'victory' || newState.phase === 'defeat') {
+            // Small delay before calling end callback for UX
+            setTimeout(() => {
+              onCombatEnd(newState.result);
+            }, 1500);
+          }
+        }, 400); // Animation plays for 600ms, but we start resolving at 400ms for overlap
+
+        return; // Early return to prevent immediate execution
+      }
+    }
+
+    // For non-attack actions or ranged attacks, execute immediately
     const { state: newState, events } = combatReducer(combatState, action);
     setCombatState(newState);
 
@@ -262,6 +308,8 @@ export function CombatModal({
               targetingMode={targetingMode}
               onSelectTarget={handleSelectTarget}
               onSelectMoveSlot={handleSelectMoveSlot}
+              attackingId={attackingId}
+              beingAttackedId={beingAttackedId}
             />
           </div>
         </div>
@@ -275,7 +323,12 @@ export function CombatModal({
 
           {/* Combat log - Fixed height with scroll */}
           <div className="flex-1 min-h-0 overflow-hidden">
-            <CombatLog log={combatState.log} currentTurn={combatState.turn} />
+            <CombatLog
+              log={combatState.log}
+              currentTurn={combatState.turn}
+              currentActor={currentActor}
+              state={combatState}
+            />
           </div>
         </div>
       </div>

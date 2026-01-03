@@ -13,6 +13,9 @@ interface BattlefieldGridProps {
   targetingMode: 'none' | 'attack' | 'move' | 'swap';
   onSelectTarget: (targetId: string) => void;
   onSelectMoveSlot: (slot: number) => void;
+  // Animation state
+  attackingId?: string | null;
+  beingAttackedId?: string | null;
 }
 
 export function BattlefieldGrid({
@@ -24,6 +27,8 @@ export function BattlefieldGrid({
   targetingMode,
   onSelectTarget,
   onSelectMoveSlot,
+  attackingId = null,
+  beingAttackedId = null,
 }: BattlefieldGridProps) {
   const renderSlot = (
     slotIndex: number,
@@ -80,6 +85,9 @@ export function BattlefieldGrid({
         isValidTarget={isValidTarget && targetingMode !== 'none'}
         isSelected={isSelected}
         onClick={() => onSelectTarget(combatantId!)}
+        isAttacking={combatantId === attackingId}
+        isBeingAttacked={combatantId === beingAttackedId}
+        isEnemyRow={isEnemyRow}
       />
     );
   };

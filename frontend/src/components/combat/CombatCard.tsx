@@ -10,6 +10,10 @@ interface CombatCardProps {
   isSelected: boolean;
   onClick?: () => void;
   size?: 'normal' | 'mini';
+  // Animation states
+  isAttacking?: boolean;
+  isBeingAttacked?: boolean;
+  isEnemyRow?: boolean; // Used to determine attack direction
 }
 
 export function CombatCard({
@@ -19,6 +23,9 @@ export function CombatCard({
   isSelected,
   onClick,
   size = 'normal',
+  isAttacking = false,
+  isBeingAttacked = false,
+  isEnemyRow = false,
 }: CombatCardProps) {
   const isMini = size === 'mini';
   const isKnockedOut = combatant.isKnockedOut;
@@ -47,6 +54,16 @@ export function CombatCard({
   const knockedOutStyle = isKnockedOut
     ? 'grayscale opacity-50 rotate-3'
     : '';
+
+  // Attack animation classes - direction based on row
+  // Enemies (top row) attack downward, Players (bottom row) attack upward
+  const attackAnimationClass = isAttacking
+    ? (isEnemyRow ? 'animate-melee-attack-down z-50' : 'animate-melee-attack-up z-50')
+    : '';
+  const hitAnimationClass = isBeingAttacked ? 'animate-take-hit' : '';
+
+  // Remove overflow-hidden during animations to allow movement
+  const overflowClass = (isAttacking || isBeingAttacked) ? '' : 'overflow-hidden';
 
   if (isMini) {
     // Mini card for initiative tracker
@@ -87,9 +104,11 @@ export function CombatCard({
     <div
       onClick={isValidTarget && !isKnockedOut ? onClick : undefined}
       className={`
-        relative w-28 h-40 rounded-lg border-4 overflow-hidden
+        relative w-28 h-40 rounded-lg border-4
         bg-stone-900 shadow-lg
+        ${overflowClass}
         ${frameColor} ${turnIndicator} ${targetGlow} ${selectedStyle} ${knockedOutStyle}
+        ${attackAnimationClass} ${hitAnimationClass}
         transition-all duration-200
       `}
     >
