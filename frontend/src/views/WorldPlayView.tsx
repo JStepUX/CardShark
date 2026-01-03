@@ -245,6 +245,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       return;
     }
 
+    // Prevent re-clicking already bound allies
+    if (!npc.hostile && activeNpcId === npcId) {
+      console.log(`NPC ${npc.name} is already bound. Use regenerate button to get a new greeting.`);
+      return;
+    }
+
     // Check if NPC is hostile - initiate combat instead of conversation
     if (npc.hostile) {
       // Gather all hostile NPCs in the room for combat
@@ -331,6 +337,24 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         return;
       }
 
+      // Create a placeholder message immediately for visual feedback
+      const introMessageId = crypto.randomUUID();
+      const placeholderMessage = {
+        id: introMessageId,
+        role: 'assistant' as const,
+        content: '...',
+        timestamp: Date.now(),
+        metadata: {
+          type: 'npc_introduction',
+          npcId: npcId,
+          roomId: currentRoom.id,
+          characterId: npcCharacterData.data?.character_uuid,
+          generated: true
+        }
+      };
+
+      addMessage(placeholderMessage);
+
       // Use the /api/generate-greeting endpoint with NPC character data
       const greetingResponse = await fetch('/api/generate-greeting', {
         method: 'POST',
@@ -343,57 +367,72 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
       if (!greetingResponse.ok) {
         console.error('Failed to generate NPC introduction');
+        // Update the placeholder with fallback message
+        (setMessages as any)((prev: any) => prev.map((msg: any) =>
+          msg.id === introMessageId
+            ? { ...msg, content: `*${npc.name} enters the scene*` }
+            : msg
+        ));
         return;
       }
 
-      // Stream the response
-      const reader = greetingResponse.body?.getReader();
-      const decoder = new TextDecoder();
+      // Stream the response using PromptHandler for consistent behavior
+      const { PromptHandler } = await import('../handlers/promptHandler');
+
       let generatedIntro = '';
+      const bufferInterval = 50; // Match ChatContext streaming interval
+      let buffer = '';
+      let bufTimer: NodeJS.Timeout | null = null;
 
-      if (reader) {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
+      const updateIntroContent = (chunk: string, isFinal = false) => {
+        buffer += chunk;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\\n');
+        if (bufTimer) clearTimeout(bufTimer);
+        bufTimer = setTimeout(() => {
+          const curBuf = buffer;
+          buffer = '';
+          generatedIntro += curBuf;
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.token) {
-                  generatedIntro += parsed.token;
-                }
-              } catch (e) {
-                // Ignore parsing errors for partial chunks
-              }
-            }
-          }
-        }
-      }
-
-      // Add the generated entrance to the SAME session (not a new one)
-      const introMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: generatedIntro.trim() || `*${npc.name} enters the scene*`,
-        timestamp: Date.now(),
-        metadata: {
-          type: 'npc_introduction',
-          npcId: npcId,
-          roomId: currentRoom.id,
-          characterId: npcCharacterData.data?.character_uuid,
-          generated: true
-        }
+          // Update the message with streaming content
+          // Type assertion needed because ChatContext type definition doesn't include functional form
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === introMessageId
+              ? { ...msg, content: generatedIntro }
+              : msg
+          ));
+        }, isFinal ? 0 : bufferInterval);
       };
 
-      addMessage(introMessage);
+      try {
+        for await (const chunk of PromptHandler.streamResponse(greetingResponse)) {
+          updateIntroContent(chunk);
+        }
 
-      console.log(`Summoned NPC: ${npc.name} (active responder, same session)`);
+        // Flush any remaining buffer
+        if (buffer.length > 0) {
+          updateIntroContent('', true);
+        }
+
+        // Final update with complete content
+        (setMessages as any)((prev: any) => prev.map((msg: any) =>
+          msg.id === introMessageId
+            ? {
+              ...msg,
+              content: generatedIntro.trim() || `*${npc.name} enters the scene*`
+            }
+            : msg
+        ));
+
+        console.log(`Summoned NPC: ${npc.name} (active responder, same session)`);
+      } catch (streamErr) {
+        console.error('Error streaming NPC greeting:', streamErr);
+        // Update with fallback on error
+        (setMessages as any)((prev: any) => prev.map((msg: any) =>
+          msg.id === introMessageId
+            ? { ...msg, content: `*${npc.name} enters the scene*` }
+            : msg
+        ));
+      }
     } catch (err) {
       console.error('Error summoning NPC:', err);
     }
@@ -461,6 +500,34 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       // TODO: Apply defeat penalties
     }
   }, [currentRoom, addMessage]);
+
+  // Handle dismissing a bound NPC
+  const handleDismissNpc = useCallback((npcId: string) => {
+    if (!currentRoom) return;
+
+    const npc = roomNpcs.find((n: CombatDisplayNPC) => n.id === npcId);
+    if (!npc) return;
+
+    // Clear the active NPC
+    setActiveNpcId(undefined);
+    setActiveNpcName('');
+    setActiveNpcCard(null);
+
+    // Add farewell message
+    addMessage({
+      id: crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: `*${npc.name} returns to what they were doing*`,
+      timestamp: Date.now(),
+      metadata: {
+        type: 'npc_dismissed',
+        npcId: npcId,
+        roomId: currentRoom.id,
+      }
+    });
+
+    console.log(`Dismissed NPC: ${npc.name}`);
+  }, [roomNpcs, currentRoom, addMessage]);
 
   // Extracted room transition logic - shared by direct navigate and Party Gather modal
   // LAZY LOADING: Fetches full room data if needed during navigation
@@ -763,6 +830,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         npcs={roomNpcs}
         activeNpcId={activeNpcId}
         onSelectNpc={handleSelectNpc}
+        onDismissNpc={handleDismissNpc}
         onOpenMap={handleOpenMap}
         isCollapsed={isPanelCollapsed}
         onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}

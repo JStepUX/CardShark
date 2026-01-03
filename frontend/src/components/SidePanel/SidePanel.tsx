@@ -16,6 +16,7 @@ export function SidePanel({
     npcs = [],
     activeNpcId,
     onSelectNpc,
+    onDismissNpc,
     onOpenMap,
     worldId,
     characterName,
@@ -72,6 +73,7 @@ export function SidePanel({
                 npcs={npcs}
                 activeNpcId={activeNpcId}
                 onSelectNpc={onSelectNpc}
+                onDismissNpc={onDismissNpc}
                 onOpenMap={onOpenMap}
                 worldId={worldId}
                 sessionNotes={sessionNotes}
@@ -105,6 +107,7 @@ function WorldModeContent({
     npcs,
     activeNpcId,
     onSelectNpc,
+    onDismissNpc,
     onOpenMap,
     worldId,
     sessionNotes,
@@ -116,6 +119,7 @@ function WorldModeContent({
     npcs: any[];
     activeNpcId?: string;
     onSelectNpc?: (id: string) => void;
+    onDismissNpc?: (id: string) => void;
     onOpenMap?: () => void;
     worldId?: string;
     sessionNotes: string;
@@ -157,6 +161,7 @@ function WorldModeContent({
                 npcs={npcs}
                 activeNpcId={activeNpcId}
                 onSelectNpc={onSelectNpc || (() => { })}
+                onDismissNpc={onDismissNpc}
             />
 
             {/* Map Button */}

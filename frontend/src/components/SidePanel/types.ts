@@ -12,6 +12,7 @@ export interface SidePanelProps {
     npcs?: DisplayNPC[];
     activeNpcId?: string;
     onSelectNpc?: (id: string) => void;
+    onDismissNpc?: (id: string) => void;
     onOpenMap?: () => void;
     worldId?: string;
 

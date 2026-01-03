@@ -6,9 +6,10 @@ interface NPCShowcaseProps {
   npcs: DisplayNPC[];
   activeNpcId?: string;
   onSelectNpc: (id: string) => void;
+  onDismissNpc?: (id: string) => void;
 }
 
-export function NPCShowcase({ npcs, activeNpcId, onSelectNpc }: NPCShowcaseProps) {
+export function NPCShowcase({ npcs, activeNpcId, onSelectNpc, onDismissNpc }: NPCShowcaseProps) {
   if (npcs.length === 0) {
     return (
       <div className="py-8 px-4 text-center border-t border-b border-gray-800">
@@ -28,6 +29,7 @@ export function NPCShowcase({ npcs, activeNpcId, onSelectNpc }: NPCShowcaseProps
             npc={npc}
             isActive={activeNpcId === npc.id}
             onClick={() => onSelectNpc(npc.id)}
+            onDismiss={onDismissNpc ? () => onDismissNpc(npc.id) : undefined}
           />
         ))}
       </div>
