@@ -262,12 +262,12 @@ export function CombatModal({
         {/* Right side: Combat log + Initiative */}
         <div className="w-80 flex flex-col border-l border-gray-800 bg-gray-900/80">
           {/* Initiative tracker */}
-          <div className="border-b border-gray-800">
+          <div className="border-b border-gray-800 flex-shrink-0">
             <InitiativeTracker state={combatState} />
           </div>
 
-          {/* Combat log */}
-          <div className="flex-1 overflow-hidden">
+          {/* Combat log - Fixed height with scroll */}
+          <div className="flex-1 min-h-0">
             <CombatLog log={combatState.log} currentTurn={combatState.turn} />
           </div>
         </div>

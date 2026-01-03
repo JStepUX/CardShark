@@ -332,15 +332,21 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       // CRITICAL: Persist instance data (NPCs, images, names) to world card
       // The instance_name and instance_description enable "lazy loading" -
       // the map can render without fetching each room card individually
-      const roomPlacements: WorldRoomPlacement[] = rooms.map(room => ({
-        room_uuid: room.id,
-        grid_position: room.position,
-        instance_name: room.name, // Cache room name for map display
-        instance_description: room.description || undefined, // Cache description for tooltips
-        instance_npcs: room.npcs.length > 0 ? room.npcs : undefined, // Full RoomNPC[] objects
-        instance_image_path: room.image_path || undefined, // Custom image override
-        // instance_state: undefined, // Future: loot, doors, enemy HP, etc.
-      }));
+      const roomPlacements: WorldRoomPlacement[] = rooms.map(room => {
+        console.log(`Saving room ${room.name} at (${room.position.x},${room.position.y}):`, {
+          npcCount: room.npcs.length,
+          npcs: room.npcs
+        });
+        return {
+          room_uuid: room.id,
+          grid_position: room.position,
+          instance_name: room.name, // Cache room name for map display
+          instance_description: room.description || undefined, // Cache description for tooltips
+          instance_npcs: room.npcs.length > 0 ? room.npcs : undefined, // Full RoomNPC[] objects
+          instance_image_path: room.image_path || undefined, // Custom image override
+          // instance_state: undefined, // Future: loot, doors, enemy HP, etc.
+        };
+      });
 
       // Calculate required grid size based on room positions
       let maxX = gridSize.width - 1;

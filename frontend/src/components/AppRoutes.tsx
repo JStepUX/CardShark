@@ -68,7 +68,7 @@ const AppRoutes: React.FC = () => (
                     </LazyRoute>
                   } />
                   <Route path="world/:uuid/play" element={
-                    <ChatProvider>
+                    <ChatProvider disableAutoLoad={true}>
                       <LazyRoute routeName="World Play">
                         <HighlightStylesUpdater />
                         <WorldPlayView />

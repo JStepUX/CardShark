@@ -14,9 +14,17 @@ from backend.models.world_state import WorldState, GridSize, Position
 
 
 class WorldRoomPlacement(BaseModel):
-    """Room placement in world grid"""
+    """Room placement in world grid with instance-specific overrides"""
     room_uuid: str = Field(..., description="UUID of the room card")
     grid_position: Position = Field(..., description="Position on the world grid")
+    
+    # Instance-specific overrides (for lazy loading and world-specific customization)
+    instance_name: Optional[str] = Field(None, description="Cached room name for map display (lazy loading)")
+    instance_description: Optional[str] = Field(None, description="Cached room description for tooltips")
+    instance_npcs: Optional[List[Dict[str, Any]]] = Field(None, description="Instance-specific NPC assignments (overrides room card defaults)")
+    instance_image_path: Optional[str] = Field(None, description="Custom image path override for this instance")
+    # instance_state: Optional[Dict[str, Any]] = Field(None, description="Future: instance state (loot, doors, enemy HP, etc.)")
+
 
 
 class WorldData(BaseModel):

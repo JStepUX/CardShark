@@ -42,7 +42,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     messages,
     setMessages,
     addMessage,
-    setCharacterDataOverride
+    setCharacterDataOverride,
+    currentUser
   } = useChat();
   const { characterData } = useCharacter();
 
@@ -168,8 +169,30 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
             });
             setRoomNpcs(npcsWithCombatData);
 
+            // Debug logging for NPC data
+            console.log('Initial room NPCs loaded:', npcsWithCombatData);
+            console.log('Placement instance_npcs:', currentPlacement.instance_npcs);
+            console.log('Room card NPCs:', fullCurrentRoom.npcs);
+
             // Update worldState with the full room
             setWorldState(prev => prev ? { ...prev, grid } : null);
+
+            // Add room introduction as first message (prevents world's first_mes from showing)
+            if (fullCurrentRoom.introduction_text) {
+              const roomIntroMessage = {
+                id: crypto.randomUUID(),
+                role: 'assistant' as const,
+                content: fullCurrentRoom.introduction_text,
+                timestamp: Date.now(),
+                metadata: {
+                  type: 'room_introduction',
+                  roomId: fullCurrentRoom.id
+                }
+              };
+
+              // Set as the first message (clears any auto-loaded messages)
+              setMessages([roomIntroMessage]);
+            }
 
             console.log(`World loaded: ${worldData.rooms.length} rooms on map, 1 room fetched (lazy loading)`);
           } catch (err) {
@@ -229,11 +252,11 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       const initData: CombatInitData = {
         playerData: {
           id: 'player',
-          name: characterData?.data?.name || 'Player',
+          name: currentUser?.name || 'Player',
           level: 5, // TODO: Get from player state when implemented
-          imagePath: characterData?.data?.character_uuid
-            ? `/api/character-image/${characterData.data.character_uuid}.png`
-            : null,
+          imagePath: currentUser?.filename
+            ? `/users/${currentUser.filename}`
+            : null, // Generic user icon will be used as fallback in combat UI
         },
         enemies: hostileNpcs.map((enemy: CombatDisplayNPC) => ({
           id: enemy.id,
