@@ -7,7 +7,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
 import { MarkdownSyntaxHighlighter } from './tiptap/extensions/MarkdownSyntaxHighlighter';
 import { MarkdownImage } from './tiptap/extensions/MarkdownImage';
-import { markdownToHtml, textToHtmlParagraphs } from '../utils/contentUtils';
+import { htmlToPlainText, markdownToHtml, textToHtmlParagraphs } from '../utils/contentUtils';
 
 // Import the CSS file
 import './tiptap/tiptap.css';
@@ -110,8 +110,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       },
     },
   });  // Update content from props (for external changes)
+  // Compare using htmlToPlainText on both sides to ensure consistent normalization
+  // This prevents the editor from resetting on every keystroke due to HTML vs plain text mismatch
   useEffect(() => {
-    if (editor && editor.getHTML() !== content) {
+    const editorPlainText = htmlToPlainText(editor?.getHTML() || '');
+    const contentPlainText = htmlToPlainText(content || '');
+    if (editor && editorPlainText !== contentPlainText) {
       // Save current cursor position before updating
       if (editor.isFocused) {
         cursorPosRef.current = editor.state.selection;

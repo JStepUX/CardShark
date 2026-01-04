@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Image, RefreshCw } from 'lucide-react';
-import BackgroundSelector, { Background } from '../BackgroundSelector';
+import { Image, RefreshCw, ImagePlus } from 'lucide-react';
+import { UnifiedImageGallery, ImageSelection } from '../common/UnifiedImageGallery';
+
+export interface Background {
+  id: string;
+  name: string;
+  url: string;
+  filename: string;
+  isDefault?: boolean;
+  isAnimated?: boolean;
+  aspectRatio?: number;
+}
 
 export interface BackgroundSettings {
   background: Background | null;
@@ -16,20 +26,13 @@ interface ChatBackgroundSettingsProps {
   onClose: () => void;
 }
 
-// Aspect ratio options for preview
-const ASPECT_RATIOS = [
-  { name: 'Desktop (16:9)', value: 16/9 },
-  { name: 'Square (1:1)', value: 1 },
-  { name: 'Mobile (9:20)', value: 9/20 },
-];
-
 const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
   settings,
   onSettingsChange,
   onClose
 }) => {
   const [localSettings, setLocalSettings] = useState<BackgroundSettings>({ ...settings, moodEnabled: false });
-  const [previewRatio, setPreviewRatio] = useState<number>(16/9);
+  const [showGallery, setShowGallery] = useState(false);
   
   // Update local settings when props change
   useEffect(() => {
@@ -49,7 +52,16 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
   };
   
   // Handle background selection
-  const handleBackgroundSelect = (background: Background | null) => {
+  const handleBackgroundSelect = (imageSelection: ImageSelection) => {
+    const background: Background = {
+      id: imageSelection.id,
+      name: imageSelection.name,
+      url: imageSelection.url,
+      filename: imageSelection.filename,
+      isAnimated: imageSelection.isAnimated,
+      aspectRatio: imageSelection.aspectRatio,
+      isDefault: false
+    };
     updateSettings({ background });
   };
   
@@ -66,17 +78,6 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
   
   // Determine if current background is a GIF
   const isAnimatedGif = localSettings.background?.isAnimated || false;
-
-  // Calculate preview container size based on aspect ratio
-  // This ensures consistent width across different aspect ratios
-  const previewContainerStyle = {
-    width: '100%',
-    maxWidth: '400px',
-    height: previewRatio < 1 
-      ? '300px'  // For portrait orientation (mobile), fix the height
-      : 'auto',  // For landscape and square, let height adjust based on ratio
-    margin: '0 auto' // Center the preview
-  };
   
   return (
     <div className="p-6 bg-stone-900 rounded-lg space-y-6 w-full max-w-2xl">
@@ -84,36 +85,16 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
         <Image size={20} />
         Background Settings
       </h2>
-      
+
       {/* Preview */}
-      <div className="space-y-2">
-        <div className="flex justify-between items-center">
-          <h3 className="text-sm font-medium">Preview</h3>
-          <div className="flex gap-2">
-            {ASPECT_RATIOS.map((ratio) => (
-              <button
-                key={ratio.name}
-                onClick={() => setPreviewRatio(ratio.value)}
-                className={`px-2 py-1 text-xs rounded ${
-                  previewRatio === ratio.value 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-stone-800 text-gray-300'
-                }`}
-              >
-                {ratio.name}
-              </button>
-            ))}
-          </div>
-        </div>
-        
-        <div 
-          className="mx-auto rounded-lg overflow-hidden border border-stone-700" 
-          style={previewContainerStyle}
-        >
-          <div 
-            className="relative w-full h-full"
+      <div className="space-y-3 pt-2">
+        <h3 className="text-sm font-medium">Preview</h3>
+
+        <div className="mx-auto rounded-lg overflow-hidden border border-stone-700 w-full max-w-md">
+          <div
+            className="relative w-full"
             style={{
-              aspectRatio: previewRatio,
+              aspectRatio: 16/9,
               backgroundColor: 'rgb(28, 25, 23)', // bg-stone-900
               backgroundImage: localSettings.background?.url ? `url(${localSettings.background.url})` : 'none',
               backgroundSize: 'cover',
@@ -144,10 +125,42 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
       </div>
       
       {/* Background Selection */}
-      <BackgroundSelector
-        selected={localSettings.background}
-        onSelect={handleBackgroundSelect}
-      />
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium">Background Image</h3>
+
+        {/* Current background preview */}
+        {localSettings.background && (
+          <div className="flex items-center gap-3 p-3 bg-stone-800 rounded-lg">
+            <div className="w-20 h-12 bg-stone-700 rounded overflow-hidden flex-shrink-0">
+              <img
+                src={localSettings.background.url}
+                alt={localSettings.background.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white truncate" title={localSettings.background.name}>
+                {localSettings.background.name}
+              </p>
+            </div>
+            <button
+              onClick={() => updateSettings({ background: null })}
+              className="px-3 py-1.5 text-xs bg-stone-700 hover:bg-stone-600 rounded flex-shrink-0"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {/* Action button */}
+        <button
+          onClick={() => setShowGallery(true)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+        >
+          <ImagePlus size={18} />
+          {localSettings.background ? 'Change Background' : 'Select Background'}
+        </button>
+      </div>
       
       {/* Transparency Slider */}
       <div className="space-y-2">
@@ -229,6 +242,16 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Unified Gallery Modal */}
+      <UnifiedImageGallery
+        isOpen={showGallery}
+        onClose={() => setShowGallery(false)}
+        onSelect={handleBackgroundSelect}
+        mode="background"
+        showGallery={true}
+        showUserLibrary={true}
+      />
     </div>
   );
 };

@@ -34,34 +34,43 @@ async def get_gallery_themes(
 ):
     """
     Get available gallery themes and their image counts.
-    Returns manifest of all themed galleries.
+    Scans the gallery_images directory at runtime.
     """
     try:
-        manifest_path = get_asset_path("backend/gallery_metadata.json")
+        gallery_dir = get_asset_path("gallery_images")
 
-        logger.log_info(f"Looking for gallery manifest at: {manifest_path}")
-        logger.log_info(f"File exists: {manifest_path.exists()}")
+        logger.log_info(f"Scanning gallery directory at: {gallery_dir}")
 
-        if not manifest_path.exists():
-            logger.log_warning(f"Gallery manifest not found at {manifest_path} - no gallery images available")
+        if not gallery_dir.exists() or not gallery_dir.is_dir():
+            logger.log_warning(f"Gallery directory not found at {gallery_dir} - no gallery images available")
             return create_data_response({"themes": {}})
 
-        with open(manifest_path, 'r', encoding='utf-8') as f:
-            manifest = json.load(f)
+        themes = {}
 
-        # Transform for frontend: include image counts
-        themes = {
-            theme_name: {
-                "count": len(images),
-                "images": [img['filename'] for img in images]
-            }
-            for theme_name, images in manifest.items()
-        }
+        # Scan each subdirectory as a theme
+        for theme_dir in gallery_dir.iterdir():
+            if not theme_dir.is_dir():
+                continue
 
+            theme_name = theme_dir.name
+            images = []
+
+            # Supported image formats
+            for ext in ['*.png', '*.jpg', '*.jpeg', '*.webp', '*.gif']:
+                images.extend(theme_dir.glob(ext))
+
+            if images:
+                themes[theme_name] = {
+                    "count": len(images),
+                    "images": sorted([img.name for img in images])
+                }
+                logger.log_info(f"Found theme '{theme_name}' with {len(images)} images")
+
+        logger.log_info(f"Gallery scan complete: {len(themes)} themes, {sum(t['count'] for t in themes.values())} total images")
         return create_data_response({"themes": themes})
 
     except Exception as e:
-        logger.log_error(f"Error loading gallery themes: {str(e)}")
+        logger.log_error(f"Error scanning gallery themes: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to load gallery themes")
 
 @router.get("/image/{theme}/{filename}")

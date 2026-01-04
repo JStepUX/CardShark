@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { GridRoom } from '../../utils/worldStateApi';
 import { RoomNPC } from '../../types/room';
 import { NPCSettingsModal } from '../NPCSettingsModal';
-import { RoomImageGalleryModal } from './RoomImageGalleryModal';
+import { UnifiedImageGallery, ImageSelection } from '../common/UnifiedImageGallery';
 
 // Simple Modal for full content editing
 function TextEditorModal({
@@ -127,42 +127,16 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
     });
   };
 
-  const handleSelectGalleryImage = async (galleryUrl: string) => {
+  const handleSelectGalleryImage = async (imageSelection: ImageSelection) => {
     if (!room) return;
 
-    try {
-      setUploading(true);
+    // The UnifiedImageGallery in 'room' mode already handles uploading to world-assets
+    // We just need to extract the path from the URL
+    const pathParts = imageSelection.url.split('/');
+    const filename = pathParts[pathParts.length - 1];
+    const worldUuid = pathParts[pathParts.length - 2];
 
-      // Fetch the gallery image
-      const response = await fetch(galleryUrl);
-      if (!response.ok) throw new Error('Failed to fetch gallery image');
-
-      const blob = await response.blob();
-
-      // Convert to File and upload to world assets
-      const filename = galleryUrl.split('/').pop() || 'gallery_image.png';
-      const file = new File([blob], filename, { type: blob.type });
-
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const uploadResponse = await fetch(`/api/world-assets/${worldId}`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!uploadResponse.ok) throw new Error('Upload failed');
-
-      const data = await uploadResponse.json();
-      if (data.success && data.data) {
-        onUpdate({ ...room, image_path: data.data.path });
-      }
-    } catch (error) {
-      console.error('Error setting gallery image:', error);
-      alert('Failed to set gallery image');
-    } finally {
-      setUploading(false);
-    }
+    onUpdate({ ...room, image_path: `${worldUuid}/${filename}` });
   };
 
   const handleUploadCustom = () => {
@@ -200,11 +174,14 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
       )}
 
       {/* Gallery Modal */}
-      <RoomImageGalleryModal
+      <UnifiedImageGallery
         isOpen={showGalleryModal}
         onClose={() => setShowGalleryModal(false)}
-        onSelectGalleryImage={handleSelectGalleryImage}
-        onUploadCustom={handleUploadCustom}
+        onSelect={handleSelectGalleryImage}
+        mode="room"
+        showGallery={true}
+        showUserLibrary={false}
+        worldId={worldId}
       />
 
       {/* Panel */}

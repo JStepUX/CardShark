@@ -36,8 +36,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     <div className="flex-none p-4 border-b border-stone-800 relative z-10 flex justify-between items-center">
       <h2 className="text-xl font-semibold">{characterName}</h2>
       <div className="flex items-center gap-2">
-        {/* Reasoning Toggle */}
-        <label className="flex items-center gap-2 cursor-pointer">
+        {/* Reasoning Toggle - HIDDEN: Not supporting thinking models yet */}
+        {/* <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
             checked={reasoningSettings.enabled}
@@ -60,7 +60,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             />
             <span className="text-xs text-gray-300">Visible</span>
           </label>
-        )}
+        )} */}
         {/* End Reasoning Toggle */}
         <button onClick={onShowContextWindow} className="p-1 text-gray-400 hover:text-white" title="View Context Window">
           <Eye size={18} />
