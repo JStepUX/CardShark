@@ -508,16 +508,17 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     const npc = roomNpcs.find((n: CombatDisplayNPC) => n.id === npcId);
     if (!npc) return;
 
-    // Clear the active NPC
+    // Clear the active NPC - this removes their full character card from context
+    // Room context will still include basic NPC presence info
     setActiveNpcId(undefined);
     setActiveNpcName('');
     setActiveNpcCard(null);
 
-    // Add farewell message
+    // Add dismissal message
     addMessage({
       id: crypto.randomUUID(),
       role: 'assistant' as const,
-      content: `*${npc.name} returns to what they were doing*`,
+      content: `${npc.name} has been dismissed, but will remain in the area.`,
       timestamp: Date.now(),
       metadata: {
         type: 'npc_dismissed',
@@ -526,7 +527,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       }
     });
 
-    console.log(`Dismissed NPC: ${npc.name}`);
+    console.log(`Dismissed NPC: ${npc.name} - full character context cleared`);
   }, [roomNpcs, currentRoom, addMessage]);
 
   // Extracted room transition logic - shared by direct navigate and Party Gather modal
