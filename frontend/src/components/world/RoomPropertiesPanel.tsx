@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { GridRoom } from '../../utils/worldStateApi';
 import { RoomNPC } from '../../types/room';
 import { NPCSettingsModal } from '../NPCSettingsModal';
+import { RoomImageGalleryModal } from './RoomImageGalleryModal';
 
 // Simple Modal for full content editing
 function TextEditorModal({
@@ -74,6 +75,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
     value: string;
   } | null>(null);
   const [editingNPC, setEditingNPC] = useState<RoomNPC | null>(null);
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!room || !e.target.files || e.target.files.length === 0) return;
@@ -125,6 +127,50 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
     });
   };
 
+  const handleSelectGalleryImage = async (galleryUrl: string) => {
+    if (!room) return;
+
+    try {
+      setUploading(true);
+
+      // Fetch the gallery image
+      const response = await fetch(galleryUrl);
+      if (!response.ok) throw new Error('Failed to fetch gallery image');
+
+      const blob = await response.blob();
+
+      // Convert to File and upload to world assets
+      const filename = galleryUrl.split('/').pop() || 'gallery_image.png';
+      const file = new File([blob], filename, { type: blob.type });
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadResponse = await fetch(`/api/world-assets/${worldId}`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!uploadResponse.ok) throw new Error('Upload failed');
+
+      const data = await uploadResponse.json();
+      if (data.success && data.data) {
+        onUpdate({ ...room, image_path: data.data.path });
+      }
+    } catch (error) {
+      console.error('Error setting gallery image:', error);
+      alert('Failed to set gallery image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUploadCustom = () => {
+    // Trigger existing file input
+    const input = document.getElementById('room-image-upload') as HTMLInputElement;
+    if (input) input.click();
+  };
+
   // Overlay panel - slides in from right
   return (
     <>
@@ -152,6 +198,14 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
           onSave={handleNPCSettingsSave}
         />
       )}
+
+      {/* Gallery Modal */}
+      <RoomImageGalleryModal
+        isOpen={showGalleryModal}
+        onClose={() => setShowGalleryModal(false)}
+        onSelectGalleryImage={handleSelectGalleryImage}
+        onUploadCustom={handleUploadCustom}
+      />
 
       {/* Panel */}
       <div
@@ -248,45 +302,44 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
               {/* Cover Image */}
               <div>
                 <label className="block text-xs text-gray-400 mb-2">Cover Image</label>
-                <div className="relative group">
-                  <div className={`
-                    w-full aspect-video bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg overflow-hidden flex items-center justify-center
-                    ${!room.image_path ? 'py-8' : ''}
-                  `}>
-                    {room.image_path ? (
-                      <img
-                        src={`/api/world-assets/${worldId}/${room.image_path.split('/').pop()}`}
-                        alt="Room cover"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-gray-500">
-                        <ImageIcon size={24} />
-                        <span className="text-xs">No image set</span>
-                      </div>
-                    )}
 
-                    {/* Overlay/Upload Button */}
-                    <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                      <div className="flex flex-col items-center gap-2 text-white">
-                        {uploading ? (
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-                        ) : (
-                          <>
-                            <Upload size={24} />
-                            <span className="text-xs">Upload Image</span>
-                          </>
-                        )}
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={handleImageUpload}
-                        disabled={uploading}
-                      />
-                    </label>
+                {/* Current Image Preview */}
+                {room.image_path && (
+                  <div className="w-full aspect-video bg-[#0a0a0a] rounded-lg overflow-hidden border border-[#2a2a2a] mb-2">
+                    <img
+                      src={`/api/world-assets/${worldId}/${room.image_path.split('/').pop()}`}
+                      alt="Room"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = '/pngPlaceholder.png';
+                      }}
+                    />
                   </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowGalleryModal(true)}
+                    disabled={uploading}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+                  >
+                    <ImageIcon size={16} />
+                    {uploading ? 'Uploading...' : 'Choose from Gallery'}
+                  </button>
+
+                  <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#2a2a2a] hover:bg-[#3a3a3a] cursor-pointer rounded-lg text-sm transition-colors">
+                    <Upload size={16} />
+                    Upload Custom
+                    <input
+                      id="room-image-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
                 </div>
               </div>
 

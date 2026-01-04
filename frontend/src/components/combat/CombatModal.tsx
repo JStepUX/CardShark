@@ -288,7 +288,7 @@ export function CombatModal({
       {/* Room backdrop (blurred) */}
       {combatState.roomImagePath && (
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-20 blur-sm"
+          className="absolute inset-0 bg-cover bg-center opacity-100"
           style={{ backgroundImage: `url(${combatState.roomImagePath})` }}
         />
       )}

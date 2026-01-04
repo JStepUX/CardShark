@@ -147,6 +147,7 @@ from backend.template_endpoints import router as template_router  # Import the n
 from backend.lore_endpoints import router as lore_router  # Import the lore router
 from backend.room_endpoints import router as room_router # Import the room_router
 from backend.world_asset_endpoints import router as world_asset_router # Import the world asset router
+from backend.gallery_endpoints import router as gallery_router # Import the gallery router
 from backend.npc_room_assignment_endpoints import router as npc_room_assignment_router # Import the new NPC-Room assignment router
 # from backend.character_inventory_endpoints import router as character_inventory_router # REMOVED - functionality integrated into CharacterService
 # from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
@@ -467,6 +468,7 @@ app.include_router(lore_router)  # Include the lore router
 app.include_router(room_router) # Include the room_router
 app.include_router(npc_room_assignment_router) # Include the new NPC-Room assignment router
 app.include_router(world_asset_router) # Include the world asset router
+app.include_router(gallery_router) # Include the gallery router
 # app.include_router(character_inventory_router) # REMOVED
 # app.include_router(world_chat_router) # Removed, functionality merged into world_router
 app.include_router(background_router)

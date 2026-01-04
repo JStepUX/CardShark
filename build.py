@@ -222,6 +222,52 @@ def clean_build():
         log(f"Clean failed: {str(e)}")
         return False
 
+def discover_gallery_images():
+    """Scan gallery_images directory and create manifest"""
+    try:
+        import json
+        log("Discovering gallery images...", "INFO")
+        gallery_dir = BASE_DIR / 'gallery_images'
+
+        if not gallery_dir.exists():
+            log("No gallery_images directory found, skipping gallery packing", "WARNING")
+            return {}
+
+        manifest = {}
+        theme_dirs = [d for d in gallery_dir.iterdir() if d.is_dir()]
+
+        for theme_dir in theme_dirs:
+            theme_name = theme_dir.name
+            images = []
+
+            # Supported image formats
+            for ext in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
+                images.extend(theme_dir.glob(ext))
+
+            if images:
+                manifest[theme_name] = [
+                    {
+                        'filename': img.name,
+                        'path': f'gallery_images/{theme_name}/{img.name}',
+                        'size': img.stat().st_size
+                    }
+                    for img in images
+                ]
+                log(f"Found {len(images)} images in theme '{theme_name}'", "DEBUG")
+
+        # Write manifest to backend directory
+        manifest_path = BASE_DIR / 'backend' / 'gallery_metadata.json'
+        with open(manifest_path, 'w', encoding='utf-8') as f:
+            json.dump(manifest, f, indent=2)
+
+        log(f"Gallery manifest created: {len(manifest)} themes, total images: {sum(len(v) for v in manifest.values())}", "INFO")
+        return manifest
+
+    except Exception as e:
+        log(f"Failed to discover gallery images: {str(e)}", "ERROR")
+        log(traceback.format_exc(), "ERROR")
+        return {}
+
 def create_spec_file():
     """Create PyInstaller spec file with complete dependencies"""
     try:
@@ -248,6 +294,7 @@ backend_datas = [
     ('backend/models/*', 'backend/models'),    ('backend/utils/*', 'backend/utils'),
     ('backend/services/*.py', 'backend/services'),  # Add services directory for character_service
     ('backend/default_room.png', 'backend'),         # Add default room image
+    ('backend/gallery_metadata.json', 'backend'),    # Add gallery manifest
     ('content_filters/*.json', 'content_filters'),   # Add content filters JSON files
     ('content_filters/builtin/*.json', 'content_filters/builtin'),  # Add builtin filter packages
     ('uploads', 'uploads'),  # Add uploads directory
@@ -263,8 +310,17 @@ koboldcpp_dir.mkdir(exist_ok=True)
 #     ('KoboldCPP', 'KoboldCPP'),
 # ]
 
-# Combine all data files - no longer including KoboldCPP files
-all_datas = frontend_datas + backend_datas  # removed koboldcpp_datas
+# Collect gallery images dynamically
+gallery_datas = []
+gallery_dir = Path('gallery_images')
+if gallery_dir.exists():
+    for theme_dir in gallery_dir.iterdir():
+        if theme_dir.is_dir():
+            theme_name = theme_dir.name
+            gallery_datas.append((f'gallery_images/{theme_name}/*', f'gallery_images/{theme_name}'))
+
+# Combine all data files
+all_datas = frontend_datas + backend_datas + gallery_datas
 
 # Verified backend modules that exist in your project
 hidden_imports = [    # Core FastAPI and dependencies
@@ -653,15 +709,23 @@ def main():
         log("Backend dependencies installation failed", "ERROR")
         sys.exit(1)
     log("Backend dependencies installed", "INFO")
-    
-    # Step 5: Create Spec File
+
+    # Step 5: Discover Gallery Images
+    log("Discovering gallery images...", "INFO")
+    gallery_manifest = discover_gallery_images()
+    if gallery_manifest:
+        log(f"Gallery images discovered: {sum(len(v) for v in gallery_manifest.values())} total", "INFO")
+    else:
+        log("No gallery images found or discovery failed", "WARNING")
+
+    # Step 6: Create Spec File
     log("Creating PyInstaller spec file...", "INFO")
     if not create_spec_file():
         log("Spec file creation failed", "ERROR")
         sys.exit(1)
     log("Spec file created", "INFO")
-    
-    # Step 6: Build Executable
+
+    # Step 7: Build Executable
     log("Building executable...", "INFO")
     if not build_executable():
         log("Executable build failed", "ERROR")
