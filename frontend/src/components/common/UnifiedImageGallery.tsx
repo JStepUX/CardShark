@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Upload, Loader2, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { X, Search, Upload, Loader2, Image as ImageIcon } from 'lucide-react';
 import { MediaLibrary, MediaItem } from '../media/MediaLibrary';
 import { ImageUploader } from '../media/ImageUploader';
 import { ImageEditor } from '../media/ImageEditor';
@@ -373,21 +373,19 @@ export function UnifiedImageGallery({
               <div className="flex gap-2">
                 <button
                   onClick={() => setActiveTab('gallery')}
-                  className={`px-4 py-2 rounded-t-lg transition-colors ${
-                    activeTab === 'gallery'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                  }`}
+                  className={`px-4 py-2 rounded-t-lg transition-colors ${activeTab === 'gallery'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                    }`}
                 >
                   Themed Gallery ({themes.reduce((sum, t) => sum + t.count, 0)})
                 </button>
                 <button
                   onClick={() => setActiveTab('library')}
-                  className={`px-4 py-2 rounded-t-lg transition-colors ${
-                    activeTab === 'library'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                  }`}
+                  className={`px-4 py-2 rounded-t-lg transition-colors ${activeTab === 'library'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                    }`}
                 >
                   Your Library ({userImages.length})
                 </button>
@@ -417,11 +415,10 @@ export function UnifiedImageGallery({
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   <button
                     onClick={handleAllThemesToggle}
-                    className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                      searchAllThemes
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                    }`}
+                    className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${searchAllThemes
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                      }`}
                   >
                     All ({themes.reduce((sum, t) => sum + t.count, 0)})
                   </button>
@@ -436,11 +433,10 @@ export function UnifiedImageGallery({
                         setSelectedTheme(theme.name);
                         setSearchQuery('');
                       }}
-                      className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                        selectedTheme === theme.name && !searchAllThemes
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                      }`}
+                      className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${selectedTheme === theme.name && !searchAllThemes
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                        }`}
                     >
                       {theme.name.replace('_', ' ')} ({theme.count})
                     </button>
@@ -538,10 +534,11 @@ export function UnifiedImageGallery({
               <div className="flex-1 overflow-y-auto p-6">
                 <MediaLibrary
                   items={filteredUserImages}
-                  onSelect={handleUserImageSelect}
+                  selectedId={null}
+                  onSelect={(item) => item && handleUserImageSelect(item)}
                   onDelete={handleUserImageDelete}
                   onAdd={() => setShowUploadModal(true)}
-                  aspectRatio={16/9}
+                  aspectRatio={16 / 9}
                   allowNone={true}
                 />
               </div>
@@ -561,8 +558,7 @@ export function UnifiedImageGallery({
       {showUploadModal && (
         <ImageUploader
           onFileSelect={handleFileSelect}
-          onClose={() => setShowUploadModal(false)}
-          isUploading={isUploading}
+          isLoading={isUploading}
         />
       )}
 

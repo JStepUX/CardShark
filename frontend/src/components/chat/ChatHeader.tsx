@@ -8,15 +8,8 @@ import React from 'react';
 import { Eye, Wallpaper, MessageSquare, Plus } from 'lucide-react';
 // CharacterCard import removed
 
-interface ReasoningSettings {
-  enabled: boolean;
-  visible: boolean;
-}
-
 interface ChatHeaderProps {
   characterName: string;
-  reasoningSettings: ReasoningSettings;
-  onReasoningSettingsChange: (settings: ReasoningSettings) => void;
   onShowContextWindow: () => void;
   onShowBackgroundSettings: () => void;
   onShowChatSelector: () => void;
@@ -25,8 +18,6 @@ interface ChatHeaderProps {
 
 const ChatHeader: React.FC<ChatHeaderProps> = ({
   characterName,
-  reasoningSettings,
-  onReasoningSettingsChange,
   onShowContextWindow,
   onShowBackgroundSettings,
   onShowChatSelector,

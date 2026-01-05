@@ -36,16 +36,12 @@ import { JournalModal } from '../SidePanel/JournalModal';
 // Reserved for future world card functionality
 // import { Room, WorldData } from '../../types/world';
 
-// Define the ReasoningSettings interface
-interface ReasoningSettings {
-  enabled: boolean;
-  visible: boolean;
-}
+
 
 // Local storage keys
 const BACKGROUND_SETTINGS_KEY = 'cardshark_background_settings';
 
-import { DEFAULT_BACKGROUND_SETTINGS, DEFAULT_REASONING_SETTINGS } from '../../constants/defaults';
+import { DEFAULT_BACKGROUND_SETTINGS } from '../../constants/defaults';
 
 // Custom hook for stall detection
 export const useStallDetection = (
@@ -134,7 +130,6 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     currentUser,
     lastContextWindow,
     generatingId,
-    reasoningSettings: hookReasoningSettings,
     generateResponse,
     regenerateMessage,
     cycleVariation,
@@ -144,7 +139,6 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     setCurrentUser,
     loadExistingChat,
     createNewChat: handleNewChat,
-    updateReasoningSettings,
     clearError: clearHookError,
     currentChatId,
     continueResponse,
@@ -274,20 +268,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     if (hookError) clearHookError();
   }, [localError, hookError, clearHookError]);
 
-  const [reasoningSettings, setReasoningSettings] = useState<ReasoningSettings>(
-    hookReasoningSettings || DEFAULT_REASONING_SETTINGS
-  );
 
-  useEffect(() => {
-    if (hookReasoningSettings) {
-      setReasoningSettings(hookReasoningSettings);
-    }
-  }, [hookReasoningSettings]);
-
-  const handleReasoningSettingsChange = (settings: ReasoningSettings) => {
-    setReasoningSettings(settings);
-    updateReasoningSettings(settings);
-  };
 
   useEffect(() => {
     const handleFirstMessageCreation = (event: Event) => {
@@ -467,9 +448,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
 
       {/* Header */}
       <ChatHeader
-        characterName={characterData.data.name || ''}
-        reasoningSettings={reasoningSettings}
-        onReasoningSettingsChange={handleReasoningSettingsChange}
+        characterName={characterData?.data.name || 'Character'}
         onShowContextWindow={() => setShowContextWindow(true)}
         onShowBackgroundSettings={() => setShowBackgroundSettings(true)}
         onShowChatSelector={() => setShowChatSelector(true)}
@@ -505,7 +484,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
               )}
               {messages.map((message) => (
                 <React.Fragment key={message.id}>
-                  {message.role === 'thinking' && reasoningSettings.visible ? (
+                  {message.role === 'thinking' ? (
                     <ThoughtBubble
                       message={message}
                       isGenerating={message.status === 'streaming'}

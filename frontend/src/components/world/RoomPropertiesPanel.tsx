@@ -139,11 +139,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
     onUpdate({ ...room, image_path: `${worldUuid}/${filename}` });
   };
 
-  const handleUploadCustom = () => {
-    // Trigger existing file input
-    const input = document.getElementById('room-image-upload') as HTMLInputElement;
-    if (input) input.click();
-  };
+
 
   // Overlay panel - slides in from right
   return (

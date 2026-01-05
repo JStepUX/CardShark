@@ -90,10 +90,10 @@ export function injectNPCContext(
     // Strip fields that conflict with World Play context
     // In World Play mode, the world/room provide scenario and system prompt
     // NPCs only contribute: personality, description, dialogue examples
-    delete modifiedCard.data.first_mes;        // Pre-written greeting (location-specific)
-    delete modifiedCard.data.alt_greetings;    // Alternative greetings (location-specific)
-    delete modifiedCard.data.scenario;         // Original situation context (conflicts with room)
-    delete modifiedCard.data.system_prompt;    // System-level instructions (world provides this)
+    modifiedCard.data.first_mes = '';              // Pre-written greeting (location-specific)
+    modifiedCard.data.alternate_greetings = [];    // Alternative greetings (location-specific)
+    modifiedCard.data.scenario = '';               // Original situation context (conflicts with room)
+    modifiedCard.data.system_prompt = '';          // System-level instructions (world provides this)
 
     // Build comprehensive context from world and room only
     const contextParts: string[] = [];
