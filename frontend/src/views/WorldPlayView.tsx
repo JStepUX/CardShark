@@ -11,6 +11,7 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import ChatView from '../components/chat/ChatView';
 import { SidePanel } from '../components/SidePanel';
+import { JournalModal } from '../components/SidePanel/JournalModal';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
 import { MapModal } from '../components/world/MapModal';
 import { CombatModal } from '../components/combat';
@@ -44,7 +45,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     setMessages,
     addMessage,
     setCharacterDataOverride,
-    currentUser
+    currentUser,
+    sessionNotes,
+    setSessionNotes
   } = useChat();
   const { characterData } = useCharacter();
   const { apiConfig } = useAPIConfig();
@@ -60,6 +63,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [activeNpcName, setActiveNpcName] = useState<string>(''); // For PartyGatherModal display
   const [activeNpcCard, setActiveNpcCard] = useState<CharacterCard | null>(null); // Active NPC's character card
   const [showMap, setShowMap] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
   const [showPartyGatherModal, setShowPartyGatherModal] = useState(false);
   const [pendingDestination, setPendingDestination] = useState<GridRoom | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
@@ -337,6 +341,11 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         return;
       }
 
+      // Inject world + room context into NPC character data for greeting generation
+      // This ensures the NPC's introduction is aware of their current location
+      const worldCharCard = characterData; // World card loaded as base character
+      const npcWithContext = injectNPCContext(npcCharacterData, worldCharCard, currentRoom);
+
       // Create a placeholder message immediately for visual feedback
       const introMessageId = crypto.randomUUID();
       const placeholderMessage = {
@@ -355,12 +364,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
       addMessage(placeholderMessage);
 
-      // Use the /api/generate-greeting endpoint with NPC character data
+      // Use the /api/generate-greeting endpoint with context-injected NPC data
       const greetingResponse = await fetch('/api/generate-greeting', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          character_data: npcCharacterData,
+          character_data: npcWithContext,
           api_config: apiConfig // Use actual API config instead of null
         })
       });
@@ -836,6 +845,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         isCollapsed={isPanelCollapsed}
         onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
         worldId={worldId}
+        onOpenJournal={() => setShowJournal(true)}
       />
 
       {/* Map Modal */}
@@ -864,6 +874,15 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         <CombatModal
           initData={combatInitData}
           onCombatEnd={handleCombatEnd}
+        />
+      )}
+
+      {/* Journal Modal */}
+      {showJournal && (
+        <JournalModal
+          sessionNotes={sessionNotes}
+          setSessionNotes={setSessionNotes}
+          onClose={() => setShowJournal(false)}
         />
       )}
     </div>

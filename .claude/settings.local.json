@@ -5,7 +5,9 @@
       "Bash(curl:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

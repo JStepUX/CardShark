@@ -30,6 +30,7 @@ import ChatBackgroundLayer from './ChatBackgroundLayer';
 import ChatHeader from './ChatHeader';
 import ChatInputArea from './ChatInputArea';
 import { SidePanel } from '../SidePanel';
+import { JournalModal } from '../SidePanel/JournalModal';
 
 // Types and Utilities
 // Reserved for future world card functionality
@@ -103,6 +104,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
+  const [showJournal, setShowJournal] = useState(false);
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false);
 
   // Reserved for future world card functionality
@@ -147,7 +149,9 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     currentChatId,
     continueResponse,
     regenerateGreeting,
-    isCompressing
+    isCompressing,
+    sessionNotes,
+    setSessionNotes
   } = useChat();
 
   const { getPrompt, getDefaultPrompt, isLoading: isPromptsLoading } = usePrompts();
@@ -571,6 +575,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
             characterName={characterData.data.name}
             onImageChange={handleImageChange}
             onUnloadCharacter={handleUnloadCharacter}
+            onOpenJournal={() => setShowJournal(true)}
           />
         )}
       </div>
@@ -604,6 +609,13 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
             onClose={() => setShowBackgroundSettings(false)}
           />
         </div>
+      )}
+      {showJournal && (
+        <JournalModal
+          sessionNotes={sessionNotes}
+          setSessionNotes={setSessionNotes}
+          onClose={() => setShowJournal(false)}
+        />
       )}
     </div>
   );

@@ -824,7 +824,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
   const regenerateMessage = useCallback(async (message: Message, retryCount: number = 0) => {
     if (!characterData || message.role !== 'assistant') return;
-    if (!currentChatId) { setError("Cannot regen: No active chat."); return; }
+
+    // Create chat session if needed (same logic as generateResponse)
+    let effectiveChatId = currentChatId;
+    if (!effectiveChatId) {
+      console.log("No currentChatId, creating new chat for regeneration.");
+      if (createNewChatRef.current) {
+        effectiveChatId = await createNewChatRef.current();
+        if (!effectiveChatId) {
+          console.error("Failed to establish chat session for regeneration.");
+          setError("Failed to establish chat. Try creating a new chat.");
+          return;
+        }
+      } else {
+        setError("Chat creation function not available.");
+        return;
+      }
+    }
 
     const msgIdx = messagesRef.current.findIndex(m => m.id === message.id);
     if (msgIdx <= 0) return;
@@ -847,7 +863,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       const context = buildGenerationContext(
         {
           type: 'regenerate',
-          chatSessionUuid: currentChatId,
+          chatSessionUuid: effectiveChatId,
           characterData: characterDataOverride || characterData,
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,
@@ -875,7 +891,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       const response = await executeGeneration(
         {
           type: 'regenerate',
-          chatSessionUuid: currentChatId,
+          chatSessionUuid: effectiveChatId,
           characterData: characterDataOverride || characterData,
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,
@@ -1241,7 +1257,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
   const continueResponse = useCallback(async (message: Message) => {
     if (!characterData || message.role !== 'assistant' || !message.content) return;
-    if (!currentChatId) { setError("Cannot continue: No active chat."); return; }
+
+    // Create chat session if needed (same logic as generateResponse)
+    let effectiveChatId = currentChatId;
+    if (!effectiveChatId) {
+      console.log("No currentChatId, creating new chat for continuation.");
+      if (createNewChatRef.current) {
+        effectiveChatId = await createNewChatRef.current();
+        if (!effectiveChatId) {
+          console.error("Failed to establish chat session for continuation.");
+          setError("Failed to establish chat. Try creating a new chat.");
+          return;
+        }
+      } else {
+        setError("Chat creation function not available.");
+        return;
+      }
+    }
 
     const msgIdx = messagesRef.current.findIndex(m => m.id === message.id);
     if (msgIdx === -1) return;
@@ -1259,7 +1291,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       const context = buildGenerationContext(
         {
           type: 'continue',
-          chatSessionUuid: currentChatId,
+          chatSessionUuid: effectiveChatId,
           characterData: characterDataOverride || characterData,
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,
@@ -1288,7 +1320,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       const response = await executeGeneration(
         {
           type: 'continue',
-          chatSessionUuid: currentChatId,
+          chatSessionUuid: effectiveChatId,
           characterData: characterDataOverride || characterData,
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,

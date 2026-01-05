@@ -1,7 +1,6 @@
-import { Map, ChevronLeft, ChevronRight, Swords, Package, BookOpen, Scroll } from 'lucide-react';
+import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll } from 'lucide-react';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { SidePanelProps } from './types';
-import { SessionNotes } from './SessionNotes';
 import { CompressionToggle } from './CompressionToggle';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
@@ -22,8 +21,10 @@ export function SidePanel({
     characterName,
     onImageChange,
     onUnloadCharacter,
+    onOpenJournal,
 }: SidePanelProps) {
-    const { sessionNotes, setSessionNotes, compressionEnabled, setCompressionEnabled, sessionName, setSessionName } = useChat();
+    const { compressionEnabled, setCompressionEnabled, sessionName, setSessionName } = useChat();
+
     if (isCollapsed) {
         return (
             <div className="w-12 bg-[#1a1a1a] border-l border-gray-800 flex flex-col items-center py-4">
@@ -76,26 +77,23 @@ export function SidePanel({
                 onDismissNpc={onDismissNpc}
                 onOpenMap={onOpenMap}
                 worldId={worldId}
-                sessionNotes={sessionNotes}
-                setSessionNotes={setSessionNotes}
                 compressionEnabled={compressionEnabled}
                 setCompressionEnabled={setCompressionEnabled}
+                onOpenJournal={onOpenJournal}
             />}
 
             {mode === 'character' && <CharacterModeContent
-                sessionNotes={sessionNotes}
-                setSessionNotes={setSessionNotes}
                 compressionEnabled={compressionEnabled}
                 setCompressionEnabled={setCompressionEnabled}
                 onImageChange={onImageChange}
                 onUnloadCharacter={onUnloadCharacter}
+                onOpenJournal={onOpenJournal}
             />}
 
             {mode === 'assistant' && <AssistantModeContent
-                sessionNotes={sessionNotes}
-                setSessionNotes={setSessionNotes}
                 compressionEnabled={compressionEnabled}
                 setCompressionEnabled={setCompressionEnabled}
+                onOpenJournal={onOpenJournal}
             />}
         </div>
     );
@@ -110,10 +108,9 @@ function WorldModeContent({
     onDismissNpc,
     onOpenMap,
     worldId,
-    sessionNotes,
-    setSessionNotes,
     compressionEnabled,
-    setCompressionEnabled
+    setCompressionEnabled,
+    onOpenJournal
 }: {
     currentRoom?: any;
     npcs: any[];
@@ -122,10 +119,9 @@ function WorldModeContent({
     onDismissNpc?: (id: string) => void;
     onOpenMap?: () => void;
     worldId?: string;
-    sessionNotes: string;
-    setSessionNotes: (notes: string) => void;
     compressionEnabled: boolean;
     setCompressionEnabled: (enabled: boolean) => void;
+    onOpenJournal?: () => void;
 }) {
     return (
         <>
@@ -164,27 +160,28 @@ function WorldModeContent({
                 onDismissNpc={onDismissNpc}
             />
 
-            {/* Map Button */}
+            {/* Map & Journal Buttons */}
             <div className="px-4 py-4 border-b border-gray-800">
-                <button
-                    onClick={onOpenMap}
-                    className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
-                >
-                    <Map className="w-5 h-5 text-blue-400" />
-                    <div className="text-left flex-1">
-                        <div className="text-sm text-white">World Map</div>
-                        <div className="text-xs text-gray-500">Navigate between rooms</div>
-                    </div>
-                </button>
-            </div>
-
-            {/* Session Notes */}
-            <div className="px-4 py-4 border-b border-gray-800">
-                <h3 className="text-xs text-gray-500 uppercase tracking-wide mb-2">Session Notes</h3>
-                <SessionNotes
-                    value={sessionNotes}
-                    onChange={setSessionNotes}
-                />
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        onClick={onOpenMap}
+                        className="bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-3 py-3 flex flex-col items-center gap-2 transition-colors"
+                        title="World Map - Navigate between rooms"
+                    >
+                        <Map className="w-5 h-5 text-blue-400" />
+                        <span className="text-xs text-white">Map</span>
+                    </button>
+                    {onOpenJournal && (
+                        <button
+                            onClick={onOpenJournal}
+                            className="bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-3 py-3 flex flex-col items-center gap-2 transition-colors"
+                            title="Journal - Session notes and memories"
+                        >
+                            <BookOpen className="w-5 h-5 text-blue-400" />
+                            <span className="text-xs text-white">Journal</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Compression Toggle */}
@@ -199,9 +196,7 @@ function WorldModeContent({
             <div className="px-4 py-4 flex-1">
                 <h3 className="text-xs text-gray-600 uppercase tracking-wide mb-3">Coming Soon</h3>
                 <div className="grid grid-cols-2 gap-2">
-                    <PlaceholderButton icon={Swords} label="Combat" />
                     <PlaceholderButton icon={Package} label="Inventory" />
-                    <PlaceholderButton icon={BookOpen} label="Journal" />
                     <PlaceholderButton icon={Scroll} label="Quests" />
                 </div>
             </div>
@@ -211,19 +206,17 @@ function WorldModeContent({
 
 // Character Mode Content
 function CharacterModeContent({
-    sessionNotes,
-    setSessionNotes,
     compressionEnabled,
     setCompressionEnabled,
     onImageChange,
-    onUnloadCharacter
+    onUnloadCharacter,
+    onOpenJournal
 }: {
-    sessionNotes: string;
-    setSessionNotes: (notes: string) => void;
     compressionEnabled: boolean;
     setCompressionEnabled: (enabled: boolean) => void;
     onImageChange?: (newImageData: string | File) => void;
     onUnloadCharacter?: () => void;
+    onOpenJournal?: () => void;
 }) {
     // Get the actual image URL from CharacterContext (same as gallery uses)
     const { imageUrl } = useCharacter();
@@ -243,14 +236,21 @@ function CharacterModeContent({
                 </div>
             </div>
 
-            {/* Session Notes */}
-            <div className="px-4 py-4 border-b border-gray-800">
-                <h3 className="text-xs text-gray-500 uppercase tracking-wide mb-2">Session Notes</h3>
-                <SessionNotes
-                    value={sessionNotes}
-                    onChange={setSessionNotes}
-                />
-            </div>
+            {/* Journal Button */}
+            {onOpenJournal && (
+                <div className="px-4 py-4 border-b border-gray-800">
+                    <button
+                        onClick={onOpenJournal}
+                        className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
+                    >
+                        <BookOpen className="w-5 h-5 text-blue-400" />
+                        <div className="text-left flex-1">
+                            <div className="text-sm text-white">Journal</div>
+                            <div className="text-xs text-gray-500">Session notes and memories</div>
+                        </div>
+                    </button>
+                </div>
+            )}
 
             {/* Compression Toggle */}
             <div className="px-4 py-4">
@@ -265,26 +265,31 @@ function CharacterModeContent({
 
 // Assistant Mode Content
 function AssistantModeContent({
-    sessionNotes,
-    setSessionNotes,
     compressionEnabled,
-    setCompressionEnabled
+    setCompressionEnabled,
+    onOpenJournal
 }: {
-    sessionNotes: string;
-    setSessionNotes: (notes: string) => void;
     compressionEnabled: boolean;
     setCompressionEnabled: (enabled: boolean) => void;
+    onOpenJournal?: () => void;
 }) {
     return (
         <>
-            {/* Session Notes */}
-            <div className="px-4 py-4 border-b border-gray-800">
-                <h3 className="text-xs text-gray-500 uppercase tracking-wide mb-2">Session Notes</h3>
-                <SessionNotes
-                    value={sessionNotes}
-                    onChange={setSessionNotes}
-                />
-            </div>
+            {/* Journal Button */}
+            {onOpenJournal && (
+                <div className="px-4 py-4 border-b border-gray-800">
+                    <button
+                        onClick={onOpenJournal}
+                        className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
+                    >
+                        <BookOpen className="w-5 h-5 text-blue-400" />
+                        <div className="text-left flex-1">
+                            <div className="text-sm text-white">Journal</div>
+                            <div className="text-xs text-gray-500">Session notes and memories</div>
+                        </div>
+                    </button>
+                </div>
+            )}
 
             {/* Compression Toggle */}
             <div className="px-4 py-4">

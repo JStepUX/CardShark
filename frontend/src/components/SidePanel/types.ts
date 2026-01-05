@@ -20,4 +20,7 @@ export interface SidePanelProps {
     characterName?: string;
     onImageChange?: (newImageData: string | File) => void;
     onUnloadCharacter?: () => void;
+
+    // Journal modal callback (used in all modes)
+    onOpenJournal?: () => void;
 }

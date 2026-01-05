@@ -87,10 +87,18 @@ export function injectNPCContext(
     // Clone the NPC card to avoid mutating the original
     const modifiedCard: CharacterCard = JSON.parse(JSON.stringify(npcCard));
 
-    // Build comprehensive context from world, room, and NPC
+    // Strip fields that conflict with World Play context
+    // In World Play mode, the world/room provide scenario and system prompt
+    // NPCs only contribute: personality, description, dialogue examples
+    delete modifiedCard.data.first_mes;        // Pre-written greeting (location-specific)
+    delete modifiedCard.data.alt_greetings;    // Alternative greetings (location-specific)
+    delete modifiedCard.data.scenario;         // Original situation context (conflicts with room)
+    delete modifiedCard.data.system_prompt;    // System-level instructions (world provides this)
+
+    // Build comprehensive context from world and room only
     const contextParts: string[] = [];
 
-    // World context
+    // World context (system prompt and scenario)
     if (worldCard) {
         if (worldCard.data.system_prompt) {
             contextParts.push(`[World Context: ${worldCard.data.name}]`);
@@ -98,7 +106,7 @@ export function injectNPCContext(
         }
     }
 
-    // Room context
+    // Room context (location, description, introduction)
     if (currentRoom) {
         contextParts.push(`\n[Current Location: ${currentRoom.name}]`);
         if (currentRoom.description) {
@@ -109,11 +117,10 @@ export function injectNPCContext(
         }
     }
 
-    // Combine with NPC's original scenario
-    const originalScenario = npcCard.data.scenario || '';
+    // Set the combined world + room context as the scenario
+    // NPC's personality and description are preserved automatically
     const combinedContext = contextParts.join('\n');
-
-    modifiedCard.data.scenario = `${combinedContext}\n\n${originalScenario}`;
+    modifiedCard.data.scenario = combinedContext;
 
     return modifiedCard;
 }
