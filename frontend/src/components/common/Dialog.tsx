@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import Button from './Button';
 
 interface DialogButton {
@@ -15,9 +16,15 @@ interface DialogProps {
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
+  icon?: React.ReactNode; // Optional icon to display next to title
   buttons?: DialogButton[];
-  showCloseButton?: boolean;
+  showCloseButton?: boolean; // Show close button in footer
+  showHeaderCloseButton?: boolean; // Show X button in header
   className?: string; // Added className prop
+  backgroundColor?: string; // Custom background color (default: bg-stone-800)
+  borderColor?: string; // Custom border color (default: border-stone-700)
+  backdropClassName?: string; // Custom backdrop styling (default: bg-black/50)
+  zIndex?: string; // Custom z-index (default: z-50)
 }
 
 export function Dialog({
@@ -25,9 +32,15 @@ export function Dialog({
   onClose,
   children,
   title,
+  icon,
   buttons = [],
   showCloseButton = false,
-  className = "max-w-md" // Default max width
+  showHeaderCloseButton = false,
+  className = "max-w-md", // Default max width
+  backgroundColor = "bg-stone-800",
+  borderColor = "border-stone-700",
+  backdropClassName = "bg-black/50",
+  zIndex = "z-50"
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -51,25 +64,37 @@ export function Dialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 overflow-y-auto"
+      className={`fixed inset-0 ${zIndex} overflow-y-auto`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'dialog-title' : undefined}
     >
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className={`fixed inset-0 ${backdropClassName}`} onClick={onClose} />
       <div className="min-h-screen px-4 flex items-center justify-center">
         {/* The flex container now handles centering */}
         <div
           ref={dialogRef}
           // Changed to flex layout to allow fixed footer
-          className={`${className} my-8 text-left transition-all transform bg-stone-800 shadow-xl rounded-lg flex flex-col max-h-[calc(100vh-4rem)] performance-contain performance-transform`}
+          className={`${className} my-8 text-left transition-all transform ${backgroundColor} shadow-xl rounded-lg flex flex-col max-h-[calc(100vh-4rem)] performance-contain performance-transform`}
         >
           {/* Header */}
           {title && (
-            <div className="px-6 py-4 border-b border-stone-700 performance-contain">
-              <h2 id="dialog-title" className="text-lg font-semibold text-white">
-                {title}
-              </h2>
+            <div className={`px-6 py-4 border-b ${borderColor} performance-contain flex items-center justify-between`}>
+              <div className="flex items-center gap-3">
+                {icon}
+                <h2 id="dialog-title" className="text-lg font-medium text-white">
+                  {title}
+                </h2>
+              </div>
+              {showHeaderCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-stone-800 transition-colors"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
           )}
           {/* Scrollable Content Area */}
@@ -79,7 +104,7 @@ export function Dialog({
 
           {/* Footer with Buttons */}
           {(buttons.length > 0 || showCloseButton) && (
-            <div className="px-6 py-4 border-t border-stone-700 flex justify-end gap-2 performance-contain performance-transform">
+            <div className={`px-6 py-4 border-t ${borderColor} flex justify-end gap-2 performance-contain performance-transform`}>
               {buttons.map((button, index) => {
                 let buttonPropsVariant: 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost' = 'primary';
                 let buttonPropsClassName = button.className || '';

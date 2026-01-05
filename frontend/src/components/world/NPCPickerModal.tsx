@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Search, Check } from 'lucide-react';
+import { Search, Check } from 'lucide-react';
+import { Dialog } from '../common/Dialog';
 import { RoomNPC } from '../../types/room';
 
 interface Character {
@@ -50,26 +51,25 @@ export function NPCPickerModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-8">
-      <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-[#2a2a2a] flex items-center justify-between">
-          <div>
-            <h2 className="mb-1">Add NPCs to Room</h2>
-            <p className="text-sm text-gray-500">
-              {tempSelected.length} character{tempSelected.length !== 1 ? 's' : ''} selected
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
-          >
-            <X size={20} className="text-gray-400" />
-          </button>
-        </div>
+    <Dialog
+      isOpen={true}
+      onClose={onClose}
+      title="Add NPCs to Room"
+      showHeaderCloseButton={true}
+      className="max-w-4xl w-full"
+      backgroundColor="bg-[#141414]"
+      borderColor="border-[#2a2a2a]"
+      backdropClassName="bg-black/80"
+    >
+      {/* Subtitle */}
+      <div className="mb-4">
+        <p className="text-sm text-gray-500">
+          {tempSelected.length} character{tempSelected.length !== 1 ? 's' : ''} selected
+        </p>
+      </div>
 
-        {/* Search */}
-        <div className="p-6 border-b border-[#2a2a2a]">
+      {/* Search */}
+      <div className="mb-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
             <input
@@ -82,8 +82,8 @@ export function NPCPickerModal({
           </div>
         </div>
 
-        {/* Character Grid */}
-        <div className="flex-1 overflow-y-auto p-6">
+      {/* Character Grid */}
+      <div className="overflow-y-auto max-h-[400px] -mx-6 px-6">
           <div className="grid grid-cols-4 gap-4">
             {filteredCharacters.map((char) => {
               const isSelected = tempSelected.includes(char.id);
@@ -119,32 +119,31 @@ export function NPCPickerModal({
               );
             })}
           </div>
-        </div>
+      </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-[#2a2a2a] flex items-center justify-between">
+      {/* Footer */}
+      <div className="pt-6 mt-6 border-t border-[#2a2a2a] -mx-6 px-6 flex items-center justify-between">
+        <button
+          onClick={() => setTempSelected([])}
+          className="text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          Clear Selection
+        </button>
+        <div className="flex gap-3">
           <button
-            onClick={() => setTempSelected([])}
-            className="text-sm text-gray-400 hover:text-white transition-colors"
+            onClick={onClose}
+            className="px-4 py-2 bg-[#2a2a2a] hover:bg-[#3a3a3a] rounded-lg transition-colors text-sm"
           >
-            Clear Selection
+            Cancel
           </button>
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-[#2a2a2a] hover:bg-[#3a3a3a] rounded-lg transition-colors text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirm}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-sm"
-            >
-              Add {tempSelected.length} NPC{tempSelected.length !== 1 ? 's' : ''}
-            </button>
-          </div>
+          <button
+            onClick={handleConfirm}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-sm"
+          >
+            Add {tempSelected.length} NPC{tempSelected.length !== 1 ? 's' : ''}
+          </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

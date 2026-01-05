@@ -1,4 +1,5 @@
-import { X, Map as MapIcon, Users, Skull } from 'lucide-react';
+import { Map as MapIcon, Users, Skull } from 'lucide-react';
+import { Dialog } from '../common/Dialog';
 import { GridWorldState, GridRoom } from '../../utils/worldStateApi';
 
 interface MapModalProps {
@@ -42,31 +43,20 @@ export function MapModal({ worldData, currentRoomId, onNavigate, onClose }: MapM
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-[100] p-8"
-      onClick={onClose}
+    <Dialog
+      isOpen={true}
+      onClose={onClose}
+      title={worldData.metadata.name}
+      icon={<MapIcon className="w-5 h-5 text-blue-400" />}
+      showHeaderCloseButton={true}
+      className="max-w-5xl w-full"
+      backgroundColor="bg-[#1a1a1a]"
+      borderColor="border-gray-800"
+      backdropClassName="bg-black/85 backdrop-blur-sm"
+      zIndex="z-[100]"
     >
-      <div
-        className="bg-[#1a1a1a] rounded-xl border border-gray-700 shadow-2xl max-w-5xl w-full max-h-[85vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Minimal Header */}
-        <div className="flex items-center justify-between border-b border-gray-800 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <MapIcon className="w-5 h-5 text-blue-400" />
-            <h2 className="text-lg font-medium text-white">{worldData.metadata.name}</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-stone-800 transition-colors"
-            title="Close map"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Grid */}
-        <div className="p-8">
+      {/* Grid */}
+      <div className="p-2">
           <div className="inline-block border border-gray-800 bg-[#0a0a0a]">
             {Array.from({ length: gridSize.height }).map((_, y) => (
               <div key={y} className="flex">
@@ -137,28 +127,27 @@ export function MapModal({ worldData, currentRoomId, onNavigate, onClose }: MapM
               </div>
             ))}
           </div>
-        </div>
+      </div>
 
-        {/* Legend */}
-        <div className="border-t border-gray-800 px-6 py-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-600/20 border border-blue-500 rounded" />
-            <span className="text-gray-400">Current Room</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-[#2a2a2a] border border-gray-600 rounded" />
-            <span className="text-gray-400">Click to Travel</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-blue-400" />
-            <span className="text-gray-400">Friendly NPCs</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Skull className="w-4 h-4 text-red-500" />
-            <span className="text-gray-400">Hostile NPCs</span>
-          </div>
+      {/* Legend */}
+      <div className="border-t border-gray-800 px-6 py-4 flex flex-wrap gap-x-6 gap-y-2 text-xs mt-2">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-blue-600/20 border border-blue-500 rounded" />
+          <span className="text-gray-400">Current Room</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-[#2a2a2a] border border-gray-600 rounded" />
+          <span className="text-gray-400">Click to Travel</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-blue-400" />
+          <span className="text-gray-400">Friendly NPCs</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Skull className="w-4 h-4 text-red-500" />
+          <span className="text-gray-400">Hostile NPCs</span>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
