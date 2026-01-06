@@ -1,6 +1,6 @@
 # Pixi.js Integration Plan for CardShark Combat System
 
-**Date**: 2026-01-06
+**Date**: 2026-01-06 (Updated)
 **Branch**: `claude/plan-pixi-integration-gfcMf`
 **Status**: Planning Phase
 
@@ -8,158 +8,160 @@
 
 This plan outlines the integration of pixi.js into CardShark's combat system to enable advanced card game mechanics (Hearthstone/Gwent-style) including card movement, sprite-based attacks, projectiles, and particle effects.
 
-**Key Finding**: The current combat system architecture is **well-suited for pixi.js integration** due to its pure reducer-based engine that separates game logic from rendering.
+**Key Finding**: Combat is only **10-15% implemented**, making this the **perfect time to build fresh** with pixi.js rather than migrating existing code.
+
+**Strategy**: Build new `PixiCombatModal` in parallel with existing CSS implementation, reach feature parity, then delete old code.
 
 ## Table of Contents
 
 1. [Current System Analysis](#current-system-analysis)
-2. [Integration Approaches](#integration-approaches)
-3. [Recommended Approach](#recommended-approach)
+2. [Why Build Fresh Instead of Migrate](#why-build-fresh-instead-of-migrate)
+3. [Parallel Development Strategy](#parallel-development-strategy)
 4. [Technical Decisions](#technical-decisions)
 5. [Asset Pipeline](#asset-pipeline)
 6. [Build System Changes](#build-system-changes)
-7. [Migration Strategy](#migration-strategy)
+7. [Implementation Phases](#implementation-phases)
 8. [Risk Assessment](#risk-assessment)
-9. [Implementation Phases](#implementation-phases)
 
 ---
 
 ## Current System Analysis
 
-### Strengths (Advantages for Pixi.js Integration)
+### What's Actually Implemented (Minimal)
 
-1. **Clean Architecture**: Combat engine (`combatEngine.ts`) is pure, stateless, and UI-agnostic
+Looking at the current combat system:
+
+**✅ Core Engine (~80% of value, 100% reusable)**:
+- `combatEngine.ts` - Pure reducer pattern, UI-agnostic
+- Combat logic: attack, defend, move, swap, flee, overwatch
+- Initiative system, turn management
+- Event emission for animations
+- **No changes needed** - works with any rendering layer
+
+**✅ Basic CSS UI (~20% complete)**:
+- `CombatModal.tsx` - React container
+- `CombatCard.tsx` - Basic card display with HP bars
+- `BattlefieldGrid.tsx` - 2×5 grid layout
+- `ActionButtons.tsx`, `CombatLog.tsx`, `PlayerHUD.tsx` - UI chrome
+- 2 CSS animations: `melee-attack-up`, `melee-attack-down`
+
+**❌ Not Implemented**:
+- Ranged attack visuals (only `weaponType: 'ranged'` field exists)
+- Particle effects
+- Advanced animations (projectiles, explosions, screen shake)
+- Drag-and-drop movement
+- Polish (smooth transitions, juice)
+
+**Assessment**: Combat is at **10-15% of a finished system**. Perfect stage to switch rendering approaches.
+
+### Strengths (Advantages for Pixi.js)
+
+1. **Clean Architecture**: Combat engine is pure and stateless
    - Uses reducer pattern: `combatReducer(state, action) => { state, events }`
    - No React dependencies in engine code
-   - Perfect for integration with any rendering layer (React, Pixi.js, or both)
+   - Can be rendered by CSS, Pixi.js, or even CLI
 
-2. **Event-Based System**: Combat already emits events (`CombatEvent[]`)
+2. **Event-Based System**: Combat emits events (`CombatEvent[]`)
    - `attack_resolved`, `character_defeated`, `combat_victory`, etc.
-   - Easy to hook particle effects and animations to these events
+   - Easy to hook particle effects and animations to events
 
-3. **CSS Animation Foundation**: Existing melee animations use Tailwind
-   - `animate-melee-attack-up`, `animate-melee-attack-down`, `take-hit`
-   - 600ms duration, GPU-accelerated transforms
-   - **Migration path**: Keep CSS for UI chrome, add pixi.js for card/battlefield rendering
-
-4. **Grid-Based Positioning**: Battlefield is 2×5 slots
+3. **Grid-Based Positioning**: Battlefield is 2×5 slots
    - `battlefield.enemySlots[0-4]`, `battlefield.allySlots[0-4]`
    - Easy to map to pixi.js coordinates
 
-### Current Limitations
-
-1. **CSS Animations**: Cannot do complex sprite trails, particle effects, or physics
-2. **No Drag-and-Drop**: Card movement is click-based (select action → click slot)
-3. **Static Card Rendering**: PNG images with CSS overlays (HP bars, damage numbers)
-4. **Ranged Attacks Not Implemented**: Architecture exists (`weaponType: 'ranged'`) but no visuals
+4. **Early Stage**: Minimal code to replace (~500 lines of React/CSS)
 
 ---
 
-## Integration Approaches
+## Why Build Fresh Instead of Migrate
 
-### Option A: Hybrid Approach (React UI + Pixi.js Battlefield) ⭐ RECOMMENDED
+### The Migration Tax
 
-**Architecture**:
-```
-┌─────────────────────────────────────────┐
-│ CombatModal (React)                     │
-│  ├─ ActionButtons (React/Tailwind)      │
-│  ├─ PlayerHUD (React/Tailwind)          │
-│  ├─ CombatLog (React/Tailwind)          │
-│  ├─ InitiativeTracker (React/Tailwind)  │
-│  └─ PixiBattlefield (Pixi.js Canvas)    │  ← NEW
-│      ├─ Card Sprites                    │
-│      ├─ Particle Effects                │
-│      ├─ Projectile Trails               │
-│      └─ Battlefield Grid                │
-└─────────────────────────────────────────┘
-```
+Migrating existing UI code to pixi.js means:
+- Converting React components to pixi.js sprites (complex)
+- Maintaining two rendering paths during transition (bug-prone)
+- Translating CSS animations to pixi.js (tedious)
+- Testing hybrid state synchronization (fragile)
 
-**Pros**:
-- Minimal disruption to existing UI
-- Leverage React for complex UI (buttons, modals, logs)
-- Leverage Pixi.js for visual effects and animations
-- Incremental migration path
-- Keep Tailwind styling for UI chrome
+**Cost**: 2-3 weeks of careful, incremental migration work
 
-**Cons**:
-- Two rendering systems to coordinate
-- Need to sync React state → Pixi.js stage
-- Potential performance overhead (mitigated by React memoization)
+### The Fresh Build Advantage
 
-**Best For**: CardShark's use case (complex UI + visual combat)
+Building fresh with pixi.js means:
+- Design for pixi.js patterns from day 1 (cleaner)
+- No CSS baggage or backwards compatibility
+- Old version stays functional as reference (safer)
+- Rethink UX with canvas capabilities in mind (better)
+- Delete old code when done (satisfying)
+
+**Cost**: 1-2 weeks to reach feature parity, then delete ~500 lines
+
+### Decision: Build Fresh ✅
+
+Since combat is only 10-15% complete:
+- **Lower Risk**: Old combat keeps working
+- **Faster**: No complex migration logic
+- **Better**: Design for pixi.js capabilities from start
+- **Cleaner**: No hybrid rendering complexity
 
 ---
 
-### Option B: Full Pixi.js Rewrite
+## Parallel Development Strategy
 
-**Architecture**:
+### Architecture
+
 ```
-┌─────────────────────────────────────────┐
-│ CombatModal (React - container only)    │
-│  └─ PixiCombatView (Pixi.js Canvas)     │
-│      ├─ Card Sprites                    │
-│      ├─ Action Buttons (Pixi.js UI)     │
-│      ├─ HUD (Pixi.js Text/Sprites)      │
-│      ├─ Combat Log (Pixi.js Text)       │
-│      └─ Particle Effects                │
-└─────────────────────────────────────────┘
+Frontend
+├── components/combat/
+│   ├── CombatModal.tsx              ← OLD (CSS-based, keep as reference)
+│   ├── CombatCard.tsx               ← OLD
+│   ├── BattlefieldGrid.tsx          ← OLD
+│   └── pixi/
+│       ├── PixiCombatModal.tsx      ← NEW (pixi.js-based)
+│       ├── PixiBattlefield.tsx      ← NEW
+│       ├── CombatantSprite.tsx      ← NEW
+│       ├── ParticleEmitter.ts       ← NEW
+│       └── animations/
+│           ├── attackAnimation.ts   ← NEW
+│           └── particleEffects.ts   ← NEW
+└── services/combat/
+    ├── combatEngine.ts              ← UNCHANGED (reuse as-is)
+    ├── enemyAI.ts                   ← UNCHANGED
+    └── combatSimulator.ts           ← UNCHANGED
 ```
 
-**Pros**:
-- Unified rendering system
-- Better performance (single canvas, no DOM overhead)
-- More game-like feel
+### Feature Flag
 
-**Cons**:
-- **Large refactor**: Rewrite all UI components in Pixi.js
-- Lose Tailwind styling benefits
-- Lose React ecosystem (accessibility, forms, routing)
-- Higher complexity for UI interactions (buttons, tooltips, modals)
-- **Not recommended for CardShark**: The app is primarily a chat/card management tool with combat as one feature
-
----
-
-### Option C: Incremental (CSS → CSS + Particles → Pixi.js)
-
-**Phase 1**: Add pixi.js for particle effects only
 ```tsx
-<BattlefieldGrid> {/* React/CSS */}
-  <PixiParticleLayer /> {/* Pixi.js overlay for explosions, trails */}
-</BattlefieldGrid>
+// WorldPlayView.tsx
+const USE_PIXI_COMBAT = true; // Toggle for testing
+
+{combatActive && (
+  USE_PIXI_COMBAT ? (
+    <PixiCombatModal
+      initData={combatInitData}
+      onCombatEnd={handleCombatEnd}
+    />
+  ) : (
+    <CombatModal
+      initData={combatInitData}
+      onCombatEnd={handleCombatEnd}
+    />
+  )
+)}
 ```
 
-**Phase 2**: Migrate card rendering to Pixi.js sprites
+### Development Flow
 
-**Phase 3**: Add drag-and-drop physics
+**Phase 1-3**: Build `PixiCombatModal` to feature parity
+- All actions work (attack, move, defend, overwatch, flee)
+- Better visuals than CSS version from day 1
+- Test both versions side-by-side
 
-**Pros**:
-- Lowest risk, gradual rollout
-- Can ship incremental improvements
-- Validate approach before full commitment
-
-**Cons**:
-- Longer timeline
-- Temporary complexity managing both systems
-- Need to maintain CSS animations during transition
-
----
-
-## Recommended Approach
-
-### ✅ Hybrid Approach (Option A) with Incremental Rollout (Option C strategy)
-
-**Rationale**:
-1. CardShark is a **multi-purpose app** (chat, character management, world building) where combat is one feature
-2. React/Tailwind excels at UI chrome (modals, forms, settings)
-3. Pixi.js excels at visual effects and animations
-4. Incremental rollout reduces risk and allows for course correction
-
-**Migration Path**:
-1. **Phase 1**: Pixi.js particle effects overlay (explosions, hit sparks)
-2. **Phase 2**: Pixi.js card sprites (replace CombatCard React component)
-3. **Phase 3**: Drag-and-drop movement with physics
-4. **Phase 4**: Ranged attack projectiles with sprite trails
+**Phase 4**: Delete CSS combat
+- Remove `CombatModal.tsx`, `CombatCard.tsx`, `BattlefieldGrid.tsx`
+- Remove Tailwind combat animations
+- ~500 lines deleted, codebase simplified
 
 ---
 
@@ -171,12 +173,12 @@ This plan outlines the integration of pixi.js into CardShark's combat system to 
 
 **Why**:
 ```tsx
-// With @pixi/react
-import { Stage, Sprite, Container } from '@pixi/react';
+// Declarative API (React-like)
+import { Stage, Sprite, Container, Graphics } from '@pixi/react';
 
 function PixiBattlefield({ combatState }) {
   return (
-    <Stage width={800} height={600}>
+    <Stage width={800} height={600} options={{ backgroundColor: 0x1a1a1a }}>
       <Container>
         {Object.values(combatState.combatants).map(combatant => (
           <CombatantSprite key={combatant.id} combatant={combatant} />
@@ -190,158 +192,100 @@ function PixiBattlefield({ combatState }) {
 **Pros**:
 - Declarative API (React-like syntax)
 - Automatic lifecycle management
-- State synchronization handled by library
+- State synchronization built-in
 - TypeScript support
 
 **Cons**:
 - Additional dependency (~50KB)
-- Less control than manual Pixi.js
-- Potential bugs in wrapper library
-
-**Alternative**: Manual Pixi.js with `useEffect` hooks
-```tsx
-function PixiBattlefield({ combatState }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const appRef = useRef<PIXI.Application>();
-
-  useEffect(() => {
-    if (!canvasRef.current) return;
-
-    // Initialize Pixi.js application
-    const app = new PIXI.Application({
-      view: canvasRef.current,
-      width: 800,
-      height: 600,
-    });
-    appRef.current = app;
-
-    return () => app.destroy();
-  }, []);
-
-  useEffect(() => {
-    // Update stage when combatState changes
-    if (!appRef.current) return;
-    updatePixiStage(appRef.current.stage, combatState);
-  }, [combatState]);
-
-  return <canvas ref={canvasRef} />;
-}
-```
-
-**Recommendation**: Start with `@pixi/react` for faster iteration, migrate to manual if needed
 
 ---
 
 ### 2. Animation System
 
-**Decision**: Use **GSAP** (GreenSock Animation Platform) for tweening
+**Decision**: Start with **Pixi.js ticker only**, add GSAP later if needed
 
 **Why**:
-- Industry-standard animation library (used by Hearthstone)
-- Powerful easing functions and timelines
-- Integrates well with Pixi.js
-- Better performance than CSS for complex sequences
+- Pixi.js has built-in animation via `ticker` (60fps loop)
+- Simple lerp + easing functions handle most cases
+- One less dependency to learn (~150KB saved)
+- Prove we need GSAP before adding it
 
-**Example**:
+**Pixi.js Animation Example**:
 ```tsx
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
+// Basic attack animation with ticker
+function animateAttack(sprite: PIXI.Sprite, onComplete: () => void) {
+  const startY = sprite.y;
+  const endY = startY - 80;
+  let progress = 0;
 
-// Register Pixi.js plugin
-gsap.registerPlugin(PixiPlugin);
-PixiPlugin.registerPIXI(PIXI);
+  const animate = (delta: number) => {
+    progress += delta / 60 * 2; // 2 = speed multiplier
 
-// Animate card attack
-gsap.timeline()
-  .to(cardSprite, {
-    pixi: { y: "-=100", rotation: -15, scaleX: 1.2, scaleY: 1.2 },
-    duration: 0.3,
-    ease: "back.out(1.7)"
-  })
-  .to(cardSprite, {
-    pixi: { y: "+=100", rotation: 0, scaleX: 1, scaleY: 1 },
-    duration: 0.3,
-    ease: "power2.in"
-  });
+    if (progress >= 1) {
+      sprite.y = startY;
+      app.ticker.remove(animate);
+      onComplete();
+      return;
+    }
+
+    // Ease out cubic
+    const t = 1 - Math.pow(1 - progress, 3);
+    sprite.y = startY + (endY - startY) * t;
+  };
+
+  app.ticker.add(animate);
+}
 ```
 
-**Alternatives**:
-- **Pixi.js Tweenjs**: Lightweight, but less powerful
-- **CSS animations**: Can't animate Pixi.js sprites
-- **Manual lerp**: Too low-level, reinventing the wheel
+**When to Add GSAP**:
+- Complex timeline sequences (wind-up → strike → recoil → return)
+- Need advanced easing (elastic, bounce with overshoot)
+- Animation code becomes hard to maintain
 
 ---
 
 ### 3. State Management
 
-**Decision**: Keep existing reducer pattern, sync to Pixi.js stage
+**Decision**: Keep existing reducer pattern, React state as single source of truth
 
 **Architecture**:
 ```
 User Action
   ↓
-combatReducer(state, action)
-  ↓
-{ newState, events }
+combatReducer(state, action) → { newState, events }
   ↓
 React setCombatState(newState)
   ↓
-Pixi.js useEffect hook detects state change
+Pixi.js useEffect hook detects change
   ↓
 updatePixiStage(stage, newState)
   ↓
-GSAP animations triggered by events
+Events trigger animations (ticker-based)
 ```
 
 **State Flow**:
 1. **Single source of truth**: `CombatState` in React
 2. **Pixi.js stage is view layer**: Reacts to state changes
-3. **Events trigger animations**: `CombatEvent[]` → GSAP timelines
-
-**Example**:
-```tsx
-function PixiBattlefield({ combatState, events }) {
-  const stageRef = useRef<PIXI.Container>();
-
-  // Update stage when state changes
-  useEffect(() => {
-    if (!stageRef.current) return;
-    syncStageToCombatState(stageRef.current, combatState);
-  }, [combatState]);
-
-  // Trigger animations when events fire
-  useEffect(() => {
-    events.forEach(event => {
-      if (event.type === 'attack_resolved') {
-        playAttackAnimation(event.actorId, event.targetId);
-      }
-    });
-  }, [events]);
-
-  // ...
-}
-```
+3. **Events trigger animations**: `CombatEvent[]` → pixi.js animations
 
 ---
 
 ### 4. Card Rendering
 
-**Decision**: Hybrid approach - Pixi.js sprites for cards, HTML overlay for complex UI
+**Decision**: Full pixi.js rendering (sprites + graphics API)
 
 **Card Layers**:
 1. **Pixi.js Sprite**: Character portrait (base layer)
-2. **Pixi.js Graphics**: HP bar, stat badges
-3. **HTML Overlay** (optional): Complex tooltips, status effects with icons
-
-**Why hybrid**:
-- Pixi.js: Fast rendering, easy transforms (position, rotation, scale)
-- HTML: Better typography, accessibility, rich content
+2. **Pixi.js Graphics**: HP bar, stat badges, borders
+3. **Pixi.js Text**: Name, level, stats
 
 **Example**:
 ```tsx
-function CombatantSprite({ combatant }) {
+function CombatantSprite({ combatant, x, y }) {
+  const hpPercent = combatant.currentHp / combatant.maxHp;
+
   return (
-    <Container x={slotToX(combatant.slotPosition)} y={slotToY(...)}>
+    <Container x={x} y={y}>
       {/* Portrait */}
       <Sprite
         texture={PIXI.Texture.from(combatant.imagePath)}
@@ -349,17 +293,27 @@ function CombatantSprite({ combatant }) {
         height={160}
       />
 
-      {/* HP Bar (Pixi.js Graphics) */}
+      {/* HP Bar */}
       <Graphics
         draw={g => {
           g.clear();
+          // Background
           g.beginFill(0x333333);
-          g.drawRect(0, 140, 112, 8);
+          g.drawRect(8, 140, 96, 8);
+          // Fill
           g.beginFill(0xff0000);
-          const hpWidth = (combatant.currentHp / combatant.maxHp) * 112;
-          g.drawRect(0, 140, hpWidth, 8);
+          g.drawRect(8, 140, 96 * hpPercent, 8);
           g.endFill();
         }}
+      />
+
+      {/* Name */}
+      <Text
+        text={combatant.name}
+        x={56}
+        y={150}
+        anchor={0.5}
+        style={{ fontSize: 12, fill: 0xffffff }}
       />
     </Container>
   );
@@ -372,82 +326,65 @@ function CombatantSprite({ combatant }) {
 
 ### Asset Types Needed
 
-1. **Card Sprites**: 112×160px PNG (same as current)
+1. **Card Sprites**: 112×160px PNG (reuse existing character images)
 2. **Particle Textures**: 32×32px PNG (sparks, smoke, blood)
 3. **Projectile Sprites**: 16×16px or 32×32px (arrows, fireballs)
-4. **Effect Sprites**: Sprite sheets for explosions, impacts
+4. **Effect Sprites**: Sprite sheets for explosions, impacts (optional)
 
 ### Loading Strategy
 
-**Option 1**: Preload all assets at combat start
+**Use Pixi.js Assets API (v8)**:
 ```tsx
-useEffect(() => {
-  const loader = PIXI.Loader.shared;
+import { Assets } from 'pixi.js';
 
-  // Load character images
-  combatState.combatants.forEach(c => {
-    if (c.imagePath) {
-      loader.add(c.id, c.imagePath);
-    }
-  });
+// Preload at combat start
+async function loadCombatAssets(combatState: CombatState) {
+  const assets = [
+    // Character images
+    ...Object.values(combatState.combatants).map(c => ({
+      alias: c.id,
+      src: c.imagePath
+    })),
+    // Particle textures
+    { alias: 'spark', src: '/assets/particles/spark.png' },
+    { alias: 'explosion', src: '/assets/particles/explosion.png' },
+  ];
 
-  // Load particle textures
-  loader.add('spark', '/assets/particles/spark.png');
-  loader.add('explosion', '/assets/particles/explosion.png');
-
-  loader.load(() => {
-    setAssetsLoaded(true);
-  });
-}, []);
+  await Assets.load(assets);
+}
 ```
 
-**Option 2**: Lazy load as needed (current approach)
-- React already loads images via `<img src={combatant.imagePath}>`
-- Can reuse loaded images: `PIXI.Texture.from(imagePath)`
+### Asset Structure
 
-**Recommendation**: Option 2 for character images, Option 1 for effect assets
-
----
+```
+frontend/
+  public/
+    assets/
+      particles/
+        spark.png          # 32×32 white spark
+        explosion.png      # 64×64 explosion sprite sheet
+        smoke.png          # 32×32 smoke puff
+        blood-splatter.png # 32×32 blood
+      projectiles/
+        arrow.png          # 16×16 arrow sprite
+        fireball.png       # 32×32 fireball sprite
+        lightning-bolt.png # 16×32 lightning
+```
 
 ### PyInstaller Integration
 
-**Challenge**: Bundle Pixi.js assets with executable
-
-**Solution**: Add to `build.py` data files
+**Add to `build.py` data files**:
 ```python
 # In create_spec_file():
 frontend_datas = [
     ('frontend/dist/*', 'frontend'),
     ('frontend/dist/assets/*', 'frontend/assets'),
     ('frontend/dist/assets/particles/*', 'frontend/assets/particles'),  # NEW
+    ('frontend/dist/assets/projectiles/*', 'frontend/assets/projectiles'),  # NEW
 ]
 ```
 
-**Asset Structure**:
-```
-frontend/
-  public/
-    assets/
-      particles/
-        spark.png
-        explosion.png
-        smoke.png
-        blood-splatter.png
-      projectiles/
-        arrow.png
-        fireball.png
-        lightning-bolt.png
-```
-
-**Vite Config**: Ensure assets are copied to dist
-```ts
-// vite.config.ts (already configured correctly)
-build: {
-  outDir: 'dist',
-  assetsDir: 'assets',
-  // Assets in public/ are automatically copied to dist/
-}
-```
+**Vite automatically copies `public/assets/` to `dist/assets/`** - no config changes needed.
 
 ---
 
@@ -459,35 +396,33 @@ build: {
 ```json
 {
   "dependencies": {
-    "pixi.js": "^8.0.0",          // Latest stable (2024)
-    "@pixi/react": "^7.1.2",      // React wrapper
-    "gsap": "^3.12.5"             // Animation library
+    "pixi.js": "^8.0.0",
+    "@pixi/react": "^7.1.2"
   }
 }
 ```
 
 **Size Impact**:
-- `pixi.js`: ~500KB (minified)
-- `@pixi/react`: ~50KB
-- `gsap`: ~150KB
-- **Total**: ~700KB added to bundle
+- `pixi.js`: ~500KB (minified + gzip: ~150KB)
+- `@pixi/react`: ~50KB (minified + gzip: ~15KB)
+- **Total**: ~165KB gzipped (acceptable for desktop app)
 
-**Mitigation**:
-- Enable tree-shaking (Vite does this automatically)
-- Use `pixi.js-legacy` only if needed for older browsers
-- Consider code-splitting combat module
+**GSAP deferred** - add later only if needed (~50KB gzipped)
 
 ---
 
 ### 2. Vite Configuration
 
-**No changes needed** - current config already supports static assets
+**No changes needed** - current config already supports:
+- Static asset bundling
+- TypeScript
+- Tree-shaking
+- Code-splitting
 
-Optional optimization:
+Optional optimization (defer to later):
 ```ts
-// vite.config.ts
+// vite.config.ts - code-split combat module
 export default defineConfig({
-  // ...
   build: {
     rollupOptions: {
       output: {
@@ -495,9 +430,8 @@ export default defineConfig({
           'combat': [
             'pixi.js',
             '@pixi/react',
-            'gsap',
             './src/services/combat/combatEngine',
-            './src/components/combat/PixiBattlefield',
+            './src/components/combat/pixi/PixiCombatModal',
           ]
         }
       }
@@ -510,152 +444,156 @@ export default defineConfig({
 
 ### 3. PyInstaller Spec File
 
-**Update `build.py` → `create_spec_file()`**:
+**No changes needed** - frontend assets already bundled correctly.
 
-```python
-hidden_imports = [
-    # ... existing imports ...
-
-    # No new hidden imports needed for pixi.js
-    # (it's bundled in frontend JS, not a Python module)
-]
-
-# Asset files already configured correctly
-frontend_datas = [
-    ('frontend/dist/*', 'frontend'),
-    ('frontend/dist/assets/*', 'frontend/assets'),
-    # Pixi.js assets will be in dist/assets/ automatically
-]
-```
-
-**No changes needed** - frontend build already bundles everything into `dist/`
+`build.py` already handles `frontend/dist/*` → PyInstaller automatically includes all pixi.js bundles.
 
 ---
 
-## Migration Strategy
+## Implementation Phases
 
-### Phase 1: Foundation (1-2 days)
+### Phase 1: Foundation (2-3 days)
 
-**Goal**: Set up Pixi.js infrastructure without breaking existing combat
+**Goal**: Get pixi.js rendering basic battlefield with static cards
 
 **Tasks**:
-1. Install dependencies (`pixi.js`, `@pixi/react`, `gsap`)
-2. Create `PixiBattlefield.tsx` component (renders empty stage)
-3. Add to `CombatModal.tsx` as overlay (hidden by default)
-4. Create `usePixiSync` hook to sync combat state → Pixi.js stage
-5. Add dev toggle to switch between CSS and Pixi.js rendering
+1. Install dependencies (`pixi.js`, `@pixi/react`)
+2. Create `PixiCombatModal.tsx` (empty stage)
+3. Create `PixiBattlefield.tsx` (2×5 grid with empty slots)
+4. Create `CombatantSprite.tsx` (render card with portrait + HP bar)
+5. Add feature flag to switch between CSS and Pixi versions
+6. Wire up combat state → pixi.js rendering (no animations yet)
 
-**Deliverable**: Working Pixi.js canvas that mirrors CSS battlefield (no animations yet)
+**Deliverable**: Static pixi.js battlefield that shows all combatants
 
 **Files Created**:
+- `frontend/src/components/combat/pixi/PixiCombatModal.tsx`
 - `frontend/src/components/combat/pixi/PixiBattlefield.tsx`
 - `frontend/src/components/combat/pixi/CombatantSprite.tsx`
-- `frontend/src/hooks/usePixiSync.ts`
+- `frontend/src/components/combat/pixi/PixiActionButtons.tsx`
 
 **Validation**:
-- [ ] Pixi.js canvas renders 2×5 grid
-- [ ] Combatant sprites appear in correct slots
+- [ ] Pixi.js canvas renders without errors
+- [ ] All combatants appear in correct slots
 - [ ] HP bars update when state changes
+- [ ] Can switch between CSS and Pixi versions with feature flag
 - [ ] No performance degradation
 
 ---
 
-### Phase 2: Particle Effects (2-3 days)
+### Phase 2: Core Actions + Simple Animations (3-4 days)
 
-**Goal**: Add visual flair to existing animations
+**Goal**: Implement all combat actions with basic animations
+
+**Tasks**:
+1. Implement action buttons (Attack, Defend, Move, Overwatch, Flee)
+2. Wire up actions → combat reducer → pixi.js updates
+3. Add basic attack animation (ticker-based: wind-up → strike → return)
+4. Add hit reaction animation (shake + brightness flash)
+5. Add damage numbers (pixi.js Text with float-up animation)
+6. Implement move action (slide to new slot)
+7. Add turn indicator (arrow above current actor)
+
+**Deliverable**: Full combat functionality with basic animations
+
+**Files Created**:
+- `frontend/src/components/combat/pixi/animations/attackAnimation.ts`
+- `frontend/src/components/combat/pixi/animations/hitAnimation.ts`
+- `frontend/src/components/combat/pixi/DamageNumber.tsx`
+
+**Validation**:
+- [ ] All actions work: attack, defend, move, swap, overwatch, flee
+- [ ] Animations play smoothly (60fps)
+- [ ] Damage numbers are readable
+- [ ] Turn order respects initiative
+- [ ] Enemy AI works correctly
+
+---
+
+### Phase 3: Polish + Particle Effects (2-3 days)
+
+**Goal**: Add visual flair and juice
 
 **Tasks**:
 1. Create particle texture assets (spark, smoke, blood)
-2. Implement `ParticleEmitter` class (wraps Pixi.js ParticleContainer)
-3. Hook particle effects to combat events:
-   - `attack_resolved` → Hit sparks
-   - `character_defeated` → Blood splatter
-   - `combat_victory` → Confetti burst
-4. Add screen shake on critical hits
+2. Implement `ParticleEmitter` class (ticker-based particle system)
+3. Add hit sparks on successful attacks
+4. Add blood splatter on killing blows
+5. Add screen shake on critical hits (camera shake)
+6. Add status effect indicators (defending, overwatch icons)
+7. Add combat log integration
+8. Add combat end screen (victory/defeat)
 
-**Deliverable**: Combat feels more impactful with particle effects
+**Deliverable**: Polished combat that feels impactful
 
 **Files Created**:
 - `frontend/src/components/combat/pixi/ParticleEmitter.ts`
-- `frontend/src/components/combat/pixi/effects/HitSparks.ts`
+- `frontend/src/components/combat/pixi/effects/hitSparks.ts`
 - `frontend/public/assets/particles/*.png`
 
 **Validation**:
-- [ ] Hit sparks appear on successful attacks
-- [ ] Particles despawn after animation
-- [ ] No memory leaks (particles are cleaned up)
-- [ ] Frame rate stays above 60fps
+- [ ] Hit effects appear on attacks
+- [ ] Particles despawn cleanly (no memory leaks)
+- [ ] Screen shake is noticeable but not nauseating
+- [ ] Frame rate stays above 60fps with 10 combatants
+- [ ] Combat feels "juicy" and satisfying
 
 ---
 
-### Phase 3: Card Sprites (3-5 days)
+### Phase 4: Ranged Attacks + Cleanup (2-3 days)
 
-**Goal**: Replace React `<CombatCard>` with Pixi.js sprites
-
-**Tasks**:
-1. Migrate card rendering to `CombatantSprite.tsx`
-2. Implement HP bar, stat badges, status icons in Pixi.js
-3. Add GSAP animations for attack/defend/move
-4. Implement damage number pop-up (Pixi.js Text with float-up animation)
-5. Test with all existing combat actions
-
-**Deliverable**: CSS `CombatCard` component is no longer used
-
-**Files Modified**:
-- `frontend/src/components/combat/pixi/CombatantSprite.tsx` (expand)
-- `frontend/src/components/combat/pixi/DamageNumber.tsx` (new)
-- `frontend/src/components/combat/BattlefieldGrid.tsx` (remove, replaced by PixiBattlefield)
-
-**Validation**:
-- [ ] All card stats visible (HP, damage, defense, level)
-- [ ] Status effects display correctly (defending, overwatch)
-- [ ] Damage numbers float up and fade out
-- [ ] Knocked out cards show "KO" overlay
-- [ ] Current turn indicator works
-
----
-
-### Phase 4: Ranged Attacks (2-3 days)
-
-**Goal**: Implement projectile sprites for ranged weapons
+**Goal**: Add projectile sprites and delete old CSS combat
 
 **Tasks**:
-1. Create projectile sprite assets (arrow, fireball, etc.)
+1. Create projectile sprite assets (arrow, fireball)
 2. Implement `ProjectileSprite` component
-3. Add trajectory calculation (start position → target position)
-4. Animate projectile with GSAP (ease-in for acceleration, ease-out on impact)
+3. Add trajectory calculation (arc for arrows, straight for bolts)
+4. Animate projectiles with ticker (ease-out on launch, ease-in on impact)
 5. Trigger hit particles when projectile reaches target
-6. Update combat engine to support `weaponType: 'ranged'` in stats
+6. **Delete old CSS combat code**:
+   - Remove `CombatModal.tsx`, `CombatCard.tsx`, `BattlefieldGrid.tsx`
+   - Remove Tailwind combat animations from `tailwind.config.js`
+   - Remove feature flag, make pixi.js the only option
+7. Update documentation
 
-**Deliverable**: Ranged attacks show projectile sprites
+**Deliverable**: Ranged attacks work, old code deleted
 
-**Files Created**:
-- `frontend/src/components/combat/pixi/ProjectileSprite.tsx`
-- `frontend/src/components/combat/pixi/effects/ProjectileTrail.ts`
-- `frontend/public/assets/projectiles/*.png`
+**Files Deleted**:
+- `frontend/src/components/combat/CombatModal.tsx` (~300 lines)
+- `frontend/src/components/combat/CombatCard.tsx` (~200 lines)
+- `frontend/src/components/combat/BattlefieldGrid.tsx` (~100 lines)
+- Tailwind animations (~50 lines)
 
 **Validation**:
 - [ ] Projectile travels from attacker to target
-- [ ] Trajectory accounts for Y-axis difference (top row vs bottom row)
+- [ ] Trajectory looks natural (arc for arrows)
 - [ ] Hit effect triggers on impact
-- [ ] Multiple projectiles can be in-flight simultaneously
+- [ ] Old CSS combat removed from codebase
+- [ ] No references to old components remain
 
 ---
 
-### Phase 5: Drag-and-Drop (5-7 days) - FUTURE
+### Phase 5: Advanced Features (FUTURE)
 
-**Goal**: Replace click-to-move with drag-and-drop physics
+**Optional enhancements** - defer until after Phase 4:
 
-**Tasks**:
-1. Implement Pixi.js pointer events (`pointerdown`, `pointermove`, `pointerup`)
-2. Add card drag state (lift, follow cursor, snap to slot)
-3. Highlight valid drop targets during drag
-4. Add physics (spring-back if dropped on invalid target)
-5. Update combat reducer to accept drag-drop actions
+1. **Drag-and-Drop Movement** (5-7 days)
+   - Pointer events for card dragging
+   - Snap-to-slot physics
+   - Highlight valid drop targets
 
-**Deliverable**: Players can drag cards to move them
+2. **GSAP Integration** (1-2 days)
+   - Add `gsap` dependency if animation code becomes unwieldy
+   - Convert complex sequences to timelines
 
-**Note**: This phase is **optional** and can be deferred. Current click-based movement works fine.
+3. **Sound Effects** (2-3 days)
+   - Integrate Howler.js
+   - Attack sounds, hit sounds, victory fanfare
+
+4. **Advanced Particle Effects** (3-4 days)
+   - Sprite sheet explosions
+   - Trailing effects (motion blur)
+   - Area-of-effect visuals
 
 ---
 
@@ -664,18 +602,19 @@ frontend_datas = [
 ### High Risk
 
 1. **Performance on Low-End Devices**
-   - **Risk**: Pixi.js + React dual rendering may lag on old PCs
+   - **Risk**: Pixi.js may lag on old PCs
    - **Mitigation**:
      - Profile with Chrome DevTools Performance tab
-     - Add settings toggle to disable particle effects
-     - Use Pixi.js performance tips (sprite pools, texture atlases)
+     - Target 60fps minimum, test on low-end hardware
+     - Add settings toggle to reduce particle density
+     - Use object pooling for particles (reuse sprites)
 
-2. **Build System Complexity**
-   - **Risk**: PyInstaller may not bundle Pixi.js assets correctly
+2. **Learning Curve**
+   - **Risk**: Team unfamiliar with pixi.js patterns
    - **Mitigation**:
-     - Test bundled EXE after each phase
-     - Validate asset paths work in both dev and production
-     - Document asset loading pattern
+     - Start simple (static rendering first)
+     - Reference pixi.js examples and docs
+     - Iterate on feedback from testing
 
 ### Medium Risk
 
@@ -686,35 +625,21 @@ frontend_datas = [
      - Write unit tests for state sync logic
      - Add debug overlay showing current state
 
-4. **Animation Timing Issues**
-   - **Risk**: GSAP animations overlap or block user input
+4. **Asset Loading Failures**
+   - **Risk**: Missing textures or failed loads
    - **Mitigation**:
-     - Use event-driven architecture (combat events → animations)
-     - Add animation queue to prevent overlap
-     - Ensure actions are only processed after animations complete
+     - Add loading screen with progress bar
+     - Fallback to colored rectangles if textures fail
+     - Validate asset paths in build process
 
 ### Low Risk
 
-5. **Dependency Maintenance**
-   - **Risk**: `@pixi/react` or `gsap` breaking changes in future
+5. **Build System Issues**
+   - **Risk**: PyInstaller doesn't bundle assets correctly
    - **Mitigation**:
-     - Pin dependency versions in `package.json`
-     - Monitor changelogs before updating
-     - Test thoroughly after dependency updates
-
----
-
-## Implementation Phases - Summary
-
-| Phase | Duration | Goal | Risk | Priority |
-|-------|----------|------|------|----------|
-| Phase 1: Foundation | 1-2 days | Pixi.js setup, empty stage | Low | MUST HAVE |
-| Phase 2: Particle Effects | 2-3 days | Hit sparks, explosions | Medium | SHOULD HAVE |
-| Phase 3: Card Sprites | 3-5 days | Replace CSS cards | Medium | MUST HAVE |
-| Phase 4: Ranged Attacks | 2-3 days | Projectile sprites | Low | SHOULD HAVE |
-| Phase 5: Drag-and-Drop | 5-7 days | Physics-based movement | High | NICE TO HAVE |
-
-**Total Time Estimate**: 13-20 days for Phases 1-4
+     - Test bundled EXE after each phase
+     - Vite already handles static assets correctly
+     - No PyInstaller changes needed (frontend bundles everything)
 
 ---
 
@@ -722,227 +647,397 @@ frontend_datas = [
 
 ### Phase 1 (Foundation)
 - [ ] Pixi.js canvas renders without errors
-- [ ] Combat state syncs correctly to stage
-- [ ] No performance regression
-- [ ] Dev toggle switches between CSS and Pixi.js
+- [ ] All combatants appear in correct slots
+- [ ] HP bars update when combat state changes
+- [ ] Can toggle between CSS and Pixi versions
+- [ ] No performance regression (<16ms frame time)
 
-### Phase 2 (Particles)
-- [ ] Hit effects appear on attacks
-- [ ] Particles don't leak memory
-- [ ] Frame rate stays above 60fps with 10 combatants
+### Phase 2 (Core Actions)
+- [ ] All combat actions work identically to CSS version
+- [ ] Attack animations are smooth and impactful
+- [ ] Damage numbers are readable and satisfying
+- [ ] Turn order and initiative work correctly
+- [ ] Enemy AI functions properly
 
-### Phase 3 (Card Sprites)
-- [ ] All combat UI works identically to CSS version
-- [ ] Damage numbers are readable and impactful
-- [ ] Animations feel smooth and responsive
+### Phase 3 (Polish)
+- [ ] Particle effects add visual flair without lag
+- [ ] Combat feels "juicy" and responsive
+- [ ] Frame rate stays above 60fps with full effects
+- [ ] Memory usage is stable (no leaks)
 
-### Phase 4 (Ranged Attacks)
-- [ ] Projectiles travel smoothly from attacker to target
-- [ ] Hit detection is visually accurate
-- [ ] Multiple projectiles can be active simultaneously
-
----
-
-## Open Questions
-
-1. **Do we want sound effects?**
-   - If yes, need to integrate Howler.js or similar
-   - Asset loading becomes more complex
-   - PyInstaller bundling needs audio files
-
-2. **Mobile support?**
-   - Current combat is desktop-only
-   - Touch events for drag-and-drop?
-   - Performance on mobile browsers?
-
-3. **Accessibility?**
-   - Screen reader support for combat log
-   - Keyboard-only controls?
-   - High-contrast mode?
-
-4. **Multiplayer in future?**
-   - If yes, animations need to be deterministic
-   - Combat state must be serializable
-   - Need network sync strategy
+### Phase 4 (Ranged + Cleanup)
+- [ ] Ranged attacks show projectile sprites
+- [ ] Projectile trajectories look natural
+- [ ] Old CSS combat code successfully deleted
+- [ ] Codebase is simpler and easier to maintain
 
 ---
 
-## Conclusion
+## Timeline Estimate
 
-**Recommendation**: Proceed with **Hybrid Approach (Option A)** using incremental rollout strategy.
+| Phase | Duration | Description |
+|-------|----------|-------------|
+| Phase 1: Foundation | 2-3 days | Basic pixi.js rendering |
+| Phase 2: Core Actions | 3-4 days | All combat actions + animations |
+| Phase 3: Polish | 2-3 days | Particles, juice, effects |
+| Phase 4: Ranged + Cleanup | 2-3 days | Projectiles, delete old code |
 
-**Next Steps**:
-1. Get user approval on this plan
-2. Create task tickets for Phase 1
-3. Set up feature branch
-4. Begin implementation with Phase 1 (Foundation)
+**Total**: 9-13 days for full pixi.js combat with feature parity and cleanup
 
-**Estimated Timeline**: 2-3 weeks for Phases 1-4 (excludes drag-and-drop)
+**Future** (optional): Phase 5 adds 5-10 days for advanced features
 
 ---
 
 ## Appendix: Code Examples
 
-### Example 1: PixiBattlefield Component (Phase 1)
+### Example 1: PixiCombatModal (Phase 1)
 
 ```tsx
-// frontend/src/components/combat/pixi/PixiBattlefield.tsx
-import { useEffect, useRef } from 'react';
-import { Stage, Container } from '@pixi/react';
-import { CombatState } from '../../../types/combat';
-import { CombatantSprite } from './CombatantSprite';
+// frontend/src/components/combat/pixi/PixiCombatModal.tsx
+import { useState, useCallback } from 'react';
+import { Stage } from '@pixi/react';
+import { CombatState, CombatInitData } from '../../../types/combat';
+import { initializeCombat, combatReducer } from '../../../services/combat/combatEngine';
+import { PixiBattlefield } from './PixiBattlefield';
 
-interface PixiBattlefieldProps {
-  combatState: CombatState;
-  width: number;
-  height: number;
+interface PixiCombatModalProps {
+  initData: CombatInitData;
+  onCombatEnd: (result: CombatState['result']) => void;
 }
 
-export function PixiBattlefield({ combatState, width, height }: PixiBattlefieldProps) {
-  return (
-    <Stage width={width} height={height} options={{ backgroundColor: 0x1a1a1a }}>
-      <Container>
-        {/* Enemy Row */}
-        <Container y={50}>
-          {combatState.battlefield.enemySlots.map((id, slotIndex) => {
-            if (!id) return null;
-            const combatant = combatState.combatants[id];
-            return (
-              <CombatantSprite
-                key={id}
-                combatant={combatant}
-                slotIndex={slotIndex}
-                isEnemyRow={true}
-              />
-            );
-          })}
-        </Container>
+export function PixiCombatModal({ initData, onCombatEnd }: PixiCombatModalProps) {
+  const [combatState, setCombatState] = useState<CombatState>(() =>
+    initializeCombat(initData)
+  );
 
-        {/* Ally Row */}
-        <Container y={250}>
-          {combatState.battlefield.allySlots.map((id, slotIndex) => {
-            if (!id) return null;
-            const combatant = combatState.combatants[id];
-            return (
-              <CombatantSprite
-                key={id}
-                combatant={combatant}
-                slotIndex={slotIndex}
-                isEnemyRow={false}
-              />
-            );
-          })}
-        </Container>
-      </Container>
-    </Stage>
+  const handleAction = useCallback((action: CombatAction) => {
+    const { state: newState, events } = combatReducer(combatState, action);
+    setCombatState(newState);
+
+    // Check for combat end
+    if (newState.phase === 'victory' || newState.phase === 'defeat') {
+      setTimeout(() => onCombatEnd(newState.result), 2000);
+    }
+  }, [combatState, onCombatEnd]);
+
+  return (
+    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
+      <div className="relative">
+        {/* Pixi.js Canvas */}
+        <Stage width={800} height={600} options={{ backgroundColor: 0x1a1a1a }}>
+          <PixiBattlefield combatState={combatState} onAction={handleAction} />
+        </Stage>
+
+        {/* React UI Overlay (action buttons, log, etc.) */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+          {/* Action buttons go here */}
+        </div>
+      </div>
+    </div>
   );
 }
 ```
 
-### Example 2: Particle Emitter (Phase 2)
+### Example 2: CombatantSprite (Phase 1)
 
 ```tsx
-// frontend/src/components/combat/pixi/effects/HitSparks.ts
+// frontend/src/components/combat/pixi/CombatantSprite.tsx
+import { useCallback } from 'react';
+import { Container, Sprite, Graphics, Text } from '@pixi/react';
 import * as PIXI from 'pixi.js';
-import gsap from 'gsap';
+import { Combatant } from '../../../types/combat';
 
-export function createHitSparks(x: number, y: number, container: PIXI.Container) {
-  const sparkTexture = PIXI.Texture.from('/assets/particles/spark.png');
+interface CombatantSpriteProps {
+  combatant: Combatant;
+  x: number;
+  y: number;
+  isCurrentTurn: boolean;
+  onClick?: () => void;
+}
 
-  // Create 10-15 spark particles
-  const sparkCount = Math.floor(Math.random() * 6) + 10;
+export function CombatantSprite({
+  combatant,
+  x,
+  y,
+  isCurrentTurn,
+  onClick
+}: CombatantSpriteProps) {
+  const hpPercent = combatant.currentHp / combatant.maxHp;
 
-  for (let i = 0; i < sparkCount; i++) {
-    const spark = new PIXI.Sprite(sparkTexture);
-    spark.anchor.set(0.5);
-    spark.x = x;
-    spark.y = y;
-    spark.scale.set(Math.random() * 0.5 + 0.5);
-    spark.rotation = Math.random() * Math.PI * 2;
+  const drawCard = useCallback((g: PIXI.Graphics) => {
+    g.clear();
 
-    container.addChild(spark);
+    // Border (glow if current turn)
+    if (isCurrentTurn) {
+      g.lineStyle(4, 0x4A90E2, 1);
+    } else {
+      g.lineStyle(2, combatant.isPlayerControlled ? 0xFFA500 : 0xFF0000, 1);
+    }
+    g.drawRoundedRect(0, 0, 112, 160, 8);
+  }, [isCurrentTurn, combatant.isPlayerControlled]);
 
-    // Random velocity
-    const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 50 + 30;
-    const vx = Math.cos(angle) * speed;
-    const vy = Math.sin(angle) * speed;
+  const drawHP = useCallback((g: PIXI.Graphics) => {
+    g.clear();
 
-    // Animate spark
-    gsap.timeline()
-      .to(spark, {
-        x: x + vx,
-        y: y + vy,
-        alpha: 0,
-        duration: 0.5,
-        ease: 'power2.out',
-        onComplete: () => {
-          container.removeChild(spark);
-          spark.destroy();
-        }
-      });
-  }
+    // Background
+    g.beginFill(0x333333);
+    g.drawRoundedRect(8, 140, 96, 8, 4);
+
+    // HP Fill
+    const fillColor = hpPercent > 0.5 ? 0x00FF00 : hpPercent > 0.25 ? 0xFFAA00 : 0xFF0000;
+    g.beginFill(fillColor);
+    g.drawRoundedRect(8, 140, 96 * hpPercent, 8, 4);
+    g.endFill();
+  }, [hpPercent]);
+
+  return (
+    <Container x={x} y={y} interactive={!!onClick} pointerdown={onClick}>
+      {/* Card border */}
+      <Graphics draw={drawCard} />
+
+      {/* Portrait */}
+      {combatant.imagePath && (
+        <Sprite
+          image={combatant.imagePath}
+          x={4}
+          y={4}
+          width={104}
+          height={108}
+        />
+      )}
+
+      {/* Name */}
+      <Text
+        text={combatant.name}
+        x={56}
+        y={116}
+        anchor={0.5}
+        style={{
+          fontSize: 12,
+          fill: 0xFFFFFF,
+          fontWeight: 'bold',
+          dropShadow: true,
+          dropShadowDistance: 1
+        }}
+      />
+
+      {/* HP Bar */}
+      <Graphics draw={drawHP} />
+
+      {/* HP Text */}
+      <Text
+        text={`${combatant.currentHp}/${combatant.maxHp}`}
+        x={56}
+        y={144}
+        anchor={0.5}
+        style={{
+          fontSize: 10,
+          fill: 0xFFFFFF,
+          fontWeight: 'bold'
+        }}
+      />
+
+      {/* Level Badge */}
+      <Container x={4} y={4}>
+        <Graphics
+          draw={(g) => {
+            g.clear();
+            g.beginFill(0x000000, 0.8);
+            g.drawRoundedRect(0, 0, 20, 16, 4);
+            g.endFill();
+          }}
+        />
+        <Text
+          text={String(combatant.level)}
+          x={10}
+          y={8}
+          anchor={0.5}
+          style={{ fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }}
+        />
+      </Container>
+    </Container>
+  );
 }
 ```
 
-### Example 3: Attack Animation with GSAP (Phase 3)
+### Example 3: Attack Animation (Phase 2)
 
 ```tsx
 // frontend/src/components/combat/pixi/animations/attackAnimation.ts
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
 import * as PIXI from 'pixi.js';
 
-gsap.registerPlugin(PixiPlugin);
-PixiPlugin.registerPIXI(PIXI);
+/**
+ * Animate a melee attack using pixi.js ticker
+ */
+export function animateAttack(
+  sprite: PIXI.Container,
+  direction: 'up' | 'down',
+  onComplete: () => void
+): void {
+  const app = sprite.parent as any; // Get application instance
+  const startY = sprite.y;
+  const targetY = startY + (direction === 'up' ? -80 : 80);
 
-export function playMeleeAttack(
-  attackerSprite: PIXI.Container,
-  targetSprite: PIXI.Container,
-  direction: 'up' | 'down'
-) {
-  const originalY = attackerSprite.y;
-  const lunge = direction === 'up' ? -80 : 80;
+  let phase = 0; // 0 = wind-up, 1 = strike, 2 = return
+  let progress = 0;
 
-  return gsap.timeline()
-    // Wind-up
-    .to(attackerSprite, {
-      pixi: {
-        y: originalY + (direction === 'up' ? 12 : -12),
-        rotation: direction === 'up' ? 8 : -8,
-        scaleX: 1.08,
-        scaleY: 1.08
-      },
-      duration: 0.2,
-      ease: 'power2.in'
-    })
-    // Strike
-    .to(attackerSprite, {
-      pixi: {
-        y: originalY + lunge,
-        rotation: direction === 'up' ? -12 : 12,
-        scaleX: 1.15,
-        scaleY: 1.15
-      },
-      duration: 0.3,
-      ease: 'back.out(1.7)'
-    })
-    // Return
-    .to(attackerSprite, {
-      pixi: {
-        y: originalY,
-        rotation: 0,
-        scaleX: 1,
-        scaleY: 1
-      },
-      duration: 0.3,
-      ease: 'power2.in'
+  const animate = (delta: number) => {
+    const speed = delta / 60 * 3; // Speed multiplier
+
+    if (phase === 0) {
+      // Wind-up (0.2s)
+      progress += speed * 5;
+      if (progress >= 1) {
+        progress = 0;
+        phase = 1;
+      }
+      const t = easeInQuad(progress);
+      sprite.y = startY + (direction === 'up' ? 12 : -12) * t;
+      sprite.rotation = (direction === 'up' ? 0.14 : -0.14) * t; // ~8 degrees
+      sprite.scale.set(1 + 0.08 * t);
+
+    } else if (phase === 1) {
+      // Strike (0.3s)
+      progress += speed * 3.33;
+      if (progress >= 1) {
+        progress = 0;
+        phase = 2;
+      }
+      const t = easeOutBack(progress); // Bounce effect
+      sprite.y = startY + (targetY - startY) * t;
+      sprite.rotation = (direction === 'up' ? -0.21 : 0.21) * t; // ~-12 degrees
+      sprite.scale.set(1 + 0.15 * t);
+
+    } else {
+      // Return (0.3s)
+      progress += speed * 3.33;
+      if (progress >= 1) {
+        sprite.y = startY;
+        sprite.rotation = 0;
+        sprite.scale.set(1);
+        app.ticker.remove(animate);
+        onComplete();
+        return;
+      }
+      const t = easeInQuad(progress);
+      sprite.y = targetY + (startY - targetY) * t;
+      sprite.rotation = (direction === 'up' ? -0.21 : 0.21) * (1 - t);
+      sprite.scale.set(1.15 - 0.15 * t);
+    }
+  };
+
+  app.ticker.add(animate);
+}
+
+// Easing functions
+function easeInQuad(t: number): number {
+  return t * t;
+}
+
+function easeOutBack(t: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+```
+
+### Example 4: Particle Emitter (Phase 3)
+
+```tsx
+// frontend/src/components/combat/pixi/ParticleEmitter.ts
+import * as PIXI from 'pixi.js';
+
+interface Particle {
+  sprite: PIXI.Sprite;
+  vx: number;
+  vy: number;
+  life: number;
+}
+
+export class ParticleEmitter {
+  private app: PIXI.Application;
+  private container: PIXI.Container;
+  private particles: Particle[] = [];
+  private texture: PIXI.Texture;
+
+  constructor(app: PIXI.Application, container: PIXI.Container, texturePath: string) {
+    this.app = app;
+    this.container = container;
+    this.texture = PIXI.Texture.from(texturePath);
+
+    // Start update loop
+    this.app.ticker.add(this.update, this);
+  }
+
+  /**
+   * Emit particles at a position
+   */
+  emit(x: number, y: number, count: number = 10): void {
+    for (let i = 0; i < count; i++) {
+      const sprite = new PIXI.Sprite(this.texture);
+      sprite.anchor.set(0.5);
+      sprite.x = x;
+      sprite.y = y;
+      sprite.scale.set(Math.random() * 0.5 + 0.5);
+      sprite.rotation = Math.random() * Math.PI * 2;
+
+      this.container.addChild(sprite);
+
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 50 + 30;
+
+      this.particles.push({
+        sprite,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1.0
+      });
+    }
+  }
+
+  /**
+   * Update particles (called by ticker)
+   */
+  private update(delta: number): void {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+
+      // Update position
+      p.sprite.x += p.vx * delta / 60;
+      p.sprite.y += p.vy * delta / 60;
+
+      // Apply gravity
+      p.vy += 150 * delta / 60;
+
+      // Fade out
+      p.life -= delta / 60 * 2;
+      p.sprite.alpha = p.life;
+
+      // Remove dead particles
+      if (p.life <= 0) {
+        this.container.removeChild(p.sprite);
+        p.sprite.destroy();
+        this.particles.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * Cleanup
+   */
+  destroy(): void {
+    this.app.ticker.remove(this.update, this);
+    this.particles.forEach(p => {
+      this.container.removeChild(p.sprite);
+      p.sprite.destroy();
     });
+    this.particles = [];
+  }
 }
 ```
 
 ---
 
-**Document Version**: 1.0
+**Document Version**: 2.0 (Fresh Build Strategy)
 **Last Updated**: 2026-01-06
 **Author**: Claude (AI Assistant)
