@@ -131,11 +131,19 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     return content.replace(/^\n+/, ''); // Remove leading newlines
   }, [message.role]);
   // Function to sanitize chat content by removing "{{user}}:" and "{{char}}:" patterns
-  const sanitizeChatOutput = useCallback((text: string): string => {
+  const sanitizeChatOutput = useCallback((text: string, charName?: string): string => {
     // Remove "{{user}}:" and "{{char}}:" patterns at the beginning of output
-    return text
+    let sanitized = text
       .replace(/^\s*\{\{user\}\}:\s*/i, '')
       .replace(/^\s*\{\{char\}\}:\s*/i, '');
+
+    // Also remove the actual character name followed by ": " if provided
+    if (charName) {
+      const charPattern = new RegExp(`^\\s*${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*`, 'i');
+      sanitized = sanitized.replace(charPattern, '');
+    }
+
+    return sanitized;
   }, []);
 
   // Function to process content with variable replacements and highlighting
@@ -155,7 +163,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       // Return the content we have so far, even if it's empty
       // This ensures we start showing content as soon as it arrives
       // First sanitize the text, then trim leading newlines
-      const sanitizedText = sanitizeChatOutput(text || '');
+      const sanitizedText = sanitizeChatOutput(text || '', characterName);
       const trimmedContent = trimLeadingNewlines(sanitizedText);
 
       // Create a cache key based on content and variables
@@ -190,7 +198,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     }
     // Regular processing for non-generating messages
     // First sanitize the text, then trim leading newlines
-    const sanitizedText = sanitizeChatOutput(text || '');
+    const sanitizedText = sanitizeChatOutput(text || '', characterName);
     const trimmedContent = trimLeadingNewlines(sanitizedText);
     const cacheKey = `${trimmedContent}_${currentUser || ''}_${characterName || ''}`;
 
