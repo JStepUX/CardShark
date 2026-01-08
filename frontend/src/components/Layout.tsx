@@ -12,12 +12,11 @@ import { BottomBanner } from "./BottomBanner";
 import { ChatProvider } from "../contexts/ChatContext";
 
 const Layout: React.FC = () => {
-  // File handling refs
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State management
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const location = useLocation(); // Track route changes
 
   const { settings } = useSettings();
@@ -137,44 +136,6 @@ const Layout: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // File upload handler
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/characters/extract-metadata", { // Changed endpoint URL
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success && data.metadata) {
-        setCharacterData(data.metadata);
-        setImageUrl(URL.createObjectURL(file));
-        setNewImage(file); // Store the original file for saving later
-      } else {
-        throw new Error(data.message || "Failed to process character data");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load character");
-      setCharacterData(null);
-      setImageUrl(undefined);
-      setNewImage(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Handle image change from ImagePreview component
   const handleImageChange = async (newImageData: File | string) => {
@@ -349,18 +310,10 @@ const Layout: React.FC = () => {
     <div className="h-screen w-screen flex bg-stone-950 text-gray-100 overflow-hidden">
       {/* Add Bottom Banner at the top level */}
       <BottomBanner healthStatus={healthStatus} />
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".png"
-        onChange={handleFileUpload}
-        className="hidden"
-      />
 
       {/* Side Navigation */}
       {/* Props currentView and onViewChange are removed from SideNavProps */}
       <SideNav
-        onFileUpload={() => fileInputRef.current?.click()}
         onWorldImport={handleWorldImport}
         onSave={handleSave}
         onShowAbout={() => setShowAboutDialog(true)}
@@ -374,6 +327,9 @@ const Layout: React.FC = () => {
         <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} h-full overflow-hidden`}>
           {error && (
             <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
+          )}
+          {infoMessage && (
+            <div className="flex-none px-8 py-4 bg-blue-900/50 text-blue-200">{infoMessage}</div>
           )}
           {isLoading && (
             <div className="flex-none px-8 py-4 bg-blue-900/50 text-blue-200">

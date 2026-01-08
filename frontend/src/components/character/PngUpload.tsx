@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { useCharacter } from '../../contexts/CharacterContext';
 import CharacterPreview from './CharacterPreview';
 import { NewCharacterDialog } from './NewCharacterDialog';
 import { CharacterCard, createEmptyCharacterCard } from '../../types/schema';
@@ -13,9 +15,11 @@ export interface NewCharacterDialogProps {
 }
 
 const PngUpload: React.FC = () => {
+  const navigate = useNavigate();
+  const { setCharacterData, setImageUrl } = useCharacter();
   const [status, setStatus] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [characterData, setCharacterData] = useState<CharacterCard | null>(null);
+  const [localCharacterData, setLocalCharacterData] = useState<CharacterCard | null>(null);
   const [showNewCharacterDialog, setShowNewCharacterDialog] = useState<boolean>(false);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
 
@@ -51,8 +55,11 @@ const PngUpload: React.FC = () => {
           setShowNewCharacterDialog(true);
           toast.info('No character metadata found in this PNG. You can create a new character instead.');
         } else {
-          // Character metadata found - process normally
+          // Character metadata found - update global context and navigate
           setCharacterData(metadata);
+          setImageUrl(URL.createObjectURL(file));
+          setLocalCharacterData(metadata);
+
           if (data.is_new) {
             setStatus('Created new character from image');
             toast.success('Created new character from image!');
@@ -60,6 +67,9 @@ const PngUpload: React.FC = () => {
             setStatus('Loaded existing character data');
             toast.success('Loaded existing character data from image!');
           }
+
+          // Navigate to info page after a short delay to show the toast
+          setTimeout(() => navigate('/info'), 500);
         }
       } else {
         const errorMsg = data.message || 'Upload failed';
@@ -89,10 +99,19 @@ const PngUpload: React.FC = () => {
     // Add UUID for new character
     emptyCharacter.data.character_uuid = generateUUID();
 
+    // Update both local and global state
+    setLocalCharacterData(emptyCharacter);
     setCharacterData(emptyCharacter);
+    if (currentFile) {
+      setImageUrl(URL.createObjectURL(currentFile));
+    }
+
     setStatus('New character template created. Fill in details and save.');
     toast.success('New character template created. Please fill in the details.');
     setShowNewCharacterDialog(false);
+
+    // Navigate to info page after a short delay
+    setTimeout(() => navigate('/info'), 500);
   };
 
   return (
@@ -110,17 +129,17 @@ const PngUpload: React.FC = () => {
 
         {status && (
           <div className={`mt-4 p-3 rounded-lg text-sm border ${status.includes('Error')
-              ? 'bg-red-900/20 border-red-900/50 text-red-300'
-              : status.includes('success') || status.includes('found') || status.includes('Loaded') || status.includes('Created')
-                ? 'bg-green-900/20 border-green-900/50 text-green-300'
-                : 'bg-blue-900/20 border-blue-900/50 text-blue-300'
+            ? 'bg-red-900/20 border-red-900/50 text-red-300'
+            : status.includes('success') || status.includes('found') || status.includes('Loaded') || status.includes('Created')
+              ? 'bg-green-900/20 border-green-900/50 text-green-300'
+              : 'bg-blue-900/20 border-blue-900/50 text-blue-300'
             }`}>
             {status}
           </div>
         )}
       </div>
 
-      <CharacterPreview data={characterData} imageFile={currentFile} />
+      <CharacterPreview data={localCharacterData} imageFile={currentFile} />
 
       <NewCharacterDialog
         isOpen={showNewCharacterDialog}

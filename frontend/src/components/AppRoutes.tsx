@@ -18,6 +18,7 @@ import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
 // Lazily load route components
 // Character and Gallery views
 const CharacterGallery = lazy(() => import('./character/CharacterGallery'));
+const PngUpload = lazy(() => import('./character/PngUpload'));
 const InfoViewRouter = lazy(() => import('./InfoViewRouter'));
 const LoreView = lazy(() => import('./LoreView'));
 const MessagesView = lazy(() => import('./MessagesView'));
@@ -53,6 +54,12 @@ const AppRoutes: React.FC = () => (
                   <Route path="gallery" element={
                     <LazyRoute routeName="Character Gallery">
                       <CharacterGallery />
+                    </LazyRoute>
+                  } />
+
+                  <Route path="import" element={
+                    <LazyRoute routeName="Import Character">
+                      <PngUpload />
                     </LazyRoute>
                   } />
 

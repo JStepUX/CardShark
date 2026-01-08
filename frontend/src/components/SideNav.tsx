@@ -25,6 +25,7 @@ import logo from '../assets/cardshark_justfin.png';
 
 // Route component imports for prefetching
 const importCharacterGallery = () => import('./character/CharacterGallery');
+const importPngUpload = () => import('./character/PngUpload');
 const importCharacterInfoView = () => import('./character/CharacterInfoView');
 const importLoreView = () => import('./LoreView');
 const importMessagesView = () => import('./MessagesView');
@@ -43,6 +44,7 @@ const NAV_ICONS = {
 // Map route paths to their import functions for prefetching
 const ROUTE_IMPORTS: Record<string, () => Promise<any>> = {
   '/gallery': importCharacterGallery,
+  '/import': importPngUpload,
   '/info': importCharacterInfoView,
   '/lore': importLoreView,
   '/messages': importMessagesView,
@@ -66,7 +68,6 @@ interface SideNavProps {
   // Remove props related to internal view state management
   // currentView: View;
   // onViewChange: (view: View) => void;
-  onFileUpload: () => void;
   onWorldImport: () => void;
   onSave: () => void;
   onShowAbout: () => void;
@@ -78,7 +79,6 @@ const SideNav: React.FC<SideNavProps> = ({
   // Remove props from destructuring
   // currentView,
   // onViewChange,
-  onFileUpload,
   onWorldImport,
   onSave,
   onShowAbout,
@@ -134,7 +134,7 @@ const SideNav: React.FC<SideNavProps> = ({
             {/* Action Buttons */}
             <div className="flex flex-col items-center space-y-2">
               <button
-                onClick={onFileUpload}
+                onClick={() => navigate('/import')}
                 className="w-10 h-10 bg-orange-700 rounded-lg flex items-center justify-center hover:bg-orange-600 transition-colors"
                 title="Import Character PNG"
               >
@@ -185,7 +185,7 @@ const SideNav: React.FC<SideNavProps> = ({
                   icon={ImagePlus}
                   title="Import character or world"
                   items={[
-                    { icon: ImagePlus, label: "Import Character PNG", onClick: onFileUpload },
+                    { icon: ImagePlus, label: "Import Character PNG", onClick: () => navigate('/import') },
                     { icon: MapIcon, label: "Import World", onClick: onWorldImport }
                   ]}
                   buttonClassName="w-10 h-10 bg-orange-700 rounded-lg flex items-center justify-center hover:bg-orange-600 transition-colors"
