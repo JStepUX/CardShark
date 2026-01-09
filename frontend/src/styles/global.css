@@ -100,3 +100,180 @@
 *::-webkit-scrollbar-track:hover {
   background: rgb(139 92 246 / 0.1);
 }
+
+/* ============================================
+   Venetian Blind Animations for Panel Collapse/Expand
+   ============================================ */
+
+@keyframes venetian-collapse {
+  0% {
+    opacity: 1;
+    transform: scaleX(1) translateX(0);
+  }
+
+  15% {
+    opacity: 0.9;
+    transform: scaleX(0.95) translateX(5px);
+  }
+
+  30% {
+    opacity: 0.75;
+    transform: scaleX(0.85) translateX(15px);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scaleX(0.7) translateX(30px);
+  }
+
+  70% {
+    opacity: 0.3;
+    transform: scaleX(0.5) translateX(50px);
+  }
+
+  85% {
+    opacity: 0.1;
+    transform: scaleX(0.3) translateX(80px);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scaleX(0.1) translateX(100px);
+  }
+}
+
+@keyframes venetian-expand {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.1) translateX(100px);
+  }
+
+  15% {
+    opacity: 0.1;
+    transform: scaleX(0.3) translateX(80px);
+  }
+
+  30% {
+    opacity: 0.3;
+    transform: scaleX(0.5) translateX(50px);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scaleX(0.7) translateX(30px);
+  }
+
+  70% {
+    opacity: 0.75;
+    transform: scaleX(0.85) translateX(15px);
+  }
+
+  85% {
+    opacity: 0.9;
+    transform: scaleX(0.95) translateX(5px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scaleX(1) translateX(0);
+  }
+}
+
+/* Panel animation classes (Right Side) */
+.panel-venetian-collapse {
+  animation: venetian-collapse 0.35s ease-in-out forwards;
+  transform-origin: right center;
+}
+
+.panel-venetian-expand {
+  animation: venetian-expand 0.35s ease-in-out forwards;
+  transform-origin: right center;
+}
+
+/* ============================================
+   Left Side Animations (SideNav)
+   ============================================ */
+
+@keyframes venetian-collapse-left {
+  0% {
+    opacity: 1;
+    transform: scaleX(1) translateX(0);
+  }
+
+  15% {
+    opacity: 0.9;
+    transform: scaleX(0.95) translateX(-5px);
+  }
+
+  30% {
+    opacity: 0.75;
+    transform: scaleX(0.85) translateX(-15px);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scaleX(0.7) translateX(-30px);
+  }
+
+  70% {
+    opacity: 0.3;
+    transform: scaleX(0.5) translateX(-50px);
+  }
+
+  85% {
+    opacity: 0.1;
+    transform: scaleX(0.3) translateX(-80px);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scaleX(0.1) translateX(-100px);
+  }
+}
+
+@keyframes venetian-expand-left {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.1) translateX(-100px);
+  }
+
+  15% {
+    opacity: 0.1;
+    transform: scaleX(0.3) translateX(-80px);
+  }
+
+  30% {
+    opacity: 0.3;
+    transform: scaleX(0.5) translateX(-50px);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scaleX(0.7) translateX(-30px);
+  }
+
+  70% {
+    opacity: 0.75;
+    transform: scaleX(0.85) translateX(-15px);
+  }
+
+  85% {
+    opacity: 0.9;
+    transform: scaleX(0.95) translateX(-5px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scaleX(1) translateX(0);
+  }
+}
+
+.panel-venetian-collapse-left {
+  animation: venetian-collapse-left 0.35s ease-in-out forwards;
+  transform-origin: left center;
+}
+
+.panel-venetian-expand-left {
+  animation: venetian-expand-left 0.35s ease-in-out forwards;
+  transform-origin: left center;
+}

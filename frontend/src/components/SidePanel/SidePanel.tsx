@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll } from 'lucide-react';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { SidePanelProps } from './types';
@@ -24,12 +25,48 @@ export function SidePanel({
     onOpenJournal,
 }: SidePanelProps) {
     const { compressionEnabled, setCompressionEnabled, sessionName, setSessionName } = useChat();
+    const [animationClass, setAnimationClass] = useState('');
+    const [isAnimating, setIsAnimating] = useState(false);
+    const [showExpanded, setShowExpanded] = useState(!isCollapsed);
 
-    if (isCollapsed) {
+    // Sync showExpanded with isCollapsed prop when it changes externally
+    // But only when not animating (to avoid interrupting our animation)
+    if (!isAnimating && showExpanded === isCollapsed) {
+        setShowExpanded(!isCollapsed);
+    }
+
+    // Handle collapse/expand with animation
+    const handleToggle = () => {
+        if (isAnimating) return; // Prevent double-clicks during animation
+
+        setIsAnimating(true);
+
+        if (isCollapsed) {
+            // Expanding: first change state to show the panel, then animate it in
+            onToggleCollapse(); // This makes isCollapsed = false
+            setShowExpanded(true);
+            setAnimationClass('panel-venetian-expand');
+            setTimeout(() => {
+                setAnimationClass('');
+                setIsAnimating(false);
+            }, 350);
+        } else {
+            // Collapsing: first animate out, then change state
+            setAnimationClass('panel-venetian-collapse');
+            setTimeout(() => {
+                setAnimationClass('');
+                setShowExpanded(false);
+                onToggleCollapse(); // This makes isCollapsed = true
+                setIsAnimating(false);
+            }, 350);
+        }
+    };
+
+    if (!showExpanded) {
         return (
             <div className="w-12 bg-[#1a1a1a] border-l border-gray-800 flex flex-col items-center py-4">
                 <button
-                    onClick={onToggleCollapse}
+                    onClick={handleToggle}
                     className="text-gray-500 hover:text-white transition-colors"
                     title="Expand panel"
                 >
@@ -40,11 +77,11 @@ export function SidePanel({
     }
 
     return (
-        <div className="w-80 bg-[#1a1a1a] border-l border-gray-800 flex flex-col">
+        <div className={`w-80 bg-[#1a1a1a] border-l border-gray-800 flex flex-col ${animationClass}`}>
             {/* Header */}
             <div className="border-b border-gray-800 px-4 py-4 flex items-start justify-between">
                 <button
-                    onClick={onToggleCollapse}
+                    onClick={handleToggle}
                     className="text-gray-500 hover:text-white transition-colors mr-2 flex-shrink-0"
                     title="Collapse panel"
                 >

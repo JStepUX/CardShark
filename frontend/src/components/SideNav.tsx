@@ -78,15 +78,20 @@ const SideNav: React.FC<SideNavProps> = ({
   const cardType = characterData?.data?.extensions?.card_type;
   const infoLabel = cardType === 'world' ? 'World Builder' : 'Basic Info & Greetings';
 
+  // Handle collapse/expand - smooth transition relies on CSS w-80/w-20 updates
+  const handleToggle = () => {
+    setIsCollapsed(!isCollapsed);
+  };
+
   return (
     <div className={`relative bg-stone-950 shrink-0 flex flex-col border-r border-stone-800 transition-all duration-300 z-40
       ${isCollapsed ? 'w-20' : 'w-80'}`}
     >
       {/* Toggle Button */}
       <button
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={handleToggle}
         className="absolute -right-3 top-6 w-6 h-12 bg-stone-800 rounded-full flex items-center justify-center
-                   hover:bg-stone-700 transition-colors z-50"
+                   hover:bg-stone-700 transition-colors z-50 shadow-md border border-stone-700"
       >
         {isCollapsed ? (
           <ChevronRight className="w-4 h-4 text-gray-300" />
