@@ -448,6 +448,13 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         finalPrompt = `${characterName}:`;
       }
 
+      // Inject ghost suffix to prevent model from writing user's actions/dialogue
+      // This invisible turn marker nudges the model to continue as the character
+      if (characterCard) {
+        finalPrompt += `\n${characterName}:`;
+        if (DEBUG) console.log('Ghost suffix injected:', `\\n${characterName}:`);
+      }
+
       // Get stop sequences from template or use defaults
       const stopSequences = this.getStopSequences(template, characterName);
 
@@ -583,8 +590,10 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
   /**
    * Async generator for streaming content from a response.
    * Use this method to iterate over streaming content from an API response.
+   * @param response The response to stream from
+   * @param characterName Optional character name to strip from the first chunk (ghost suffix removal)
    */
-  public static async *streamResponse(response: Response): AsyncGenerator<string, void, unknown> {
+  public static async *streamResponse(response: Response, characterName?: string): AsyncGenerator<string, void, unknown> {
     if (!response.ok) {
       throw new Error(`API responded with status ${response.status}`);
     }
@@ -596,6 +605,32 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let isFirstChunk = true;
+
+    /**
+     * Helper function to strip character name from the first chunk
+     * This removes the echoed ghost suffix from the response
+     */
+    const stripCharacterMarker = (text: string): string => {
+      if (!isFirstChunk || !characterName || !text) {
+        return text;
+      }
+
+      isFirstChunk = false;
+
+      // Escape special regex characters in character name
+      const escapedName = characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // Strip leading character marker (case-insensitive, with optional whitespace)
+      const regex = new RegExp(`^\\s*${escapedName}\\s*:\\s*`, 'i');
+      const stripped = text.replace(regex, '');
+
+      if (stripped !== text && DEBUG) {
+        console.log(`Ghost suffix stripped from first chunk: "${text.substring(0, 50)}..." → "${stripped.substring(0, 50)}..."`);
+      }
+
+      return stripped;
+    };
 
     try {
       while (true) {
@@ -640,7 +675,7 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
               // Handle OpenRouter-specific token format from our improved adapter
               if (parsed.token !== undefined) {
                 if (DEBUG) console.log(`[PromptHandler.streamResponse] Yielding token: "${parsed.token}"`);
-                yield parsed.token;
+                yield stripCharacterMarker(parsed.token);
                 continue;
               }
 
@@ -654,22 +689,22 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
                   if (featherlessData.choices && featherlessData.choices[0]) {
                     if (featherlessData.choices[0].message && featherlessData.choices[0].message.content) {
                       // This is from /v1/chat/completions endpoint
-                      yield featherlessData.choices[0].message.content;
+                      yield stripCharacterMarker(featherlessData.choices[0].message.content);
                       continue;
                     } else if (featherlessData.choices[0].delta && featherlessData.choices[0].delta.content) {
                       // This is from streaming version like OpenAI API
-                      yield featherlessData.choices[0].delta.content;
+                      yield stripCharacterMarker(featherlessData.choices[0].delta.content);
                       continue;
                     } else if (featherlessData.choices[0].text) {
                       // This is from /v1/completions endpoint
-                      yield featherlessData.choices[0].text;
+                      yield stripCharacterMarker(featherlessData.choices[0].text);
                       continue;
                     }
                   }
 
                   // If no specific format matched but we have content field as fallback
                   if (featherlessData.content) {
-                    yield featherlessData.content;
+                    yield stripCharacterMarker(featherlessData.content);
                     continue;
                   }
 
@@ -677,21 +712,21 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
                 } catch (parseError) {
                   // If the raw payload isn't valid JSON, just use it directly
                   console.warn('Could not parse Featherless raw payload:', parseError);
-                  yield parsed.raw_featherless_payload;
+                  yield stripCharacterMarker(parsed.raw_featherless_payload);
                 }
                 continue;
               }
               // Handle different response formats
               // OpenAI and OpenRouter format: choices[0].delta.content
               if (parsed.choices && parsed.choices[0]?.delta?.content) {
-                yield parsed.choices[0].delta.content;
+                yield stripCharacterMarker(parsed.choices[0].delta.content);
                 continue;
               }
               // KoboldCPP and other formats - check for content field
               if (parsed.hasOwnProperty('content')) {
                 // Even if content is empty string, yield it (it's valid)
                 if (DEBUG) console.log(`[PromptHandler.streamResponse] Yielding content: "${parsed.content}"`);
-                yield parsed.content;
+                yield stripCharacterMarker(parsed.content);
                 continue;
               }
 
@@ -709,18 +744,18 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
             } catch (error) {
               console.warn('Failed to parse SSE data:', error);
               // Just yield the raw data if parsing fails
-              yield data;
+              yield stripCharacterMarker(data);
             }
           } else {
             // Non-SSE format, yield as is
-            yield line;
+            yield stripCharacterMarker(line);
           }
         }
       }
 
       // Don't forget any remaining content in the buffer
       if (buffer.trim()) {
-        yield buffer.trim();
+        yield stripCharacterMarker(buffer.trim());
       }
     } finally {
       reader.releaseLock();

@@ -413,7 +413,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       };
 
       try {
-        for await (const chunk of PromptHandler.streamResponse(greetingResponse)) {
+        // Pass NPC name for ghost suffix stripping
+        for await (const chunk of PromptHandler.streamResponse(greetingResponse, npc.name)) {
           updateIntroContent(chunk);
         }
 

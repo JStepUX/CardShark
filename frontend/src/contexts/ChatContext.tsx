@@ -938,7 +938,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         }, isFinal ? 0 : bufferInt); // Immediate update for final content
       };
 
-      for await (const chunk of PromptHandler.streamResponse(response)) {
+      // Get character name for ghost suffix stripping
+      const effectiveChar = characterDataOverride || characterData;
+      const charName = effectiveChar?.data?.name || '';
+
+      for await (const chunk of PromptHandler.streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
           console.log('Regen aborted.');
           if (bufTimer) clearTimeout(bufTimer);
@@ -954,9 +958,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       }
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateRegenMsgContent('', true);
 
-      // Strip character name prefix (e.g., "Bob:") that some models prepend
-      const effectiveChar = characterDataOverride || characterData;
-      const charName = effectiveChar?.data?.name || '';
+      // Strip character name prefix (e.g., "Bob:") that some models prepend (safety net)
+      // Note: Ghost suffix stripping should handle this during streaming
       const strippedContent = stripCharacterPrefix(fullContent, charName);
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
@@ -1112,7 +1115,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
             setMessages(finalMsgs => { debouncedSave(finalMsgs); return finalMsgs; });
           }
         }, isFinal ? 0 : bufferInterval); // Immediate update for final content
-      }; for await (const chunk of PromptHandler.streamResponse(response)) {
+      };
+
+      // Get character name for ghost suffix stripping
+      const charName = effectiveCharacterData?.data?.name || '';
+
+      for await (const chunk of PromptHandler.streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
           console.log('Gen aborted by user.');
           if (bufTimer) clearTimeout(bufTimer);
@@ -1129,8 +1137,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
 
       // Update the message status to complete and apply to React state
-      // Strip character name prefix (e.g., "Bob:") that some models prepend
-      const charName = effectiveCharacterData?.data?.name || '';
+      // Strip character name prefix (e.g., "Bob:") that some models prepend (safety net)
+      // Note: Ghost suffix stripping should handle this during streaming
       const strippedContent = stripCharacterPrefix(fullContent, charName);
       const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? {
         ...msg,
@@ -1362,7 +1370,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         }, isFinal ? 0 : bufferInt); // Immediate update for final content
       };
 
-      for await (const chunk of PromptHandler.streamResponse(response)) {
+      // Get character name for ghost suffix stripping
+      const effectiveChar = characterDataOverride || characterData;
+      const charName = effectiveChar?.data?.name || '';
+
+      for await (const chunk of PromptHandler.streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
           console.log('Continuation aborted.');
           if (bufTimer) clearTimeout(bufTimer);
@@ -1378,9 +1390,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       }
       if (!abortCtrl.signal.aborted && buffer.length > 0) updateContinueMsgContent('', true);
 
-      // Strip character name prefix from appended content (e.g., "Bob:") that some models prepend
-      const effectiveChar = characterDataOverride || characterData;
-      const charName = effectiveChar?.data?.name || '';
+      // Strip character name prefix from appended content (e.g., "Bob:") that some models prepend (safety net)
+      // Note: Ghost suffix stripping should handle this during streaming
       const strippedAppended = stripCharacterPrefix(appendedContent, charName);
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
