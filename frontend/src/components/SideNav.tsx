@@ -18,8 +18,7 @@ import { useCharacter } from '../contexts/CharacterContext';
 // Remove View import if no longer needed elsewhere
 // import { View } from '../types/navigation';
 import DropdownMenu from './DropDownMenu';
-import ImagePreview from './ImagePreview';
-import TokenCounter from './TokenCounter';
+import SelectedCharacterChip from './SelectedCharacterChip';
 import usePrefetchRoute from '../hooks/usePrefetchRoute';
 import logo from '../assets/cardshark_justfin.png';
 
@@ -52,48 +51,23 @@ const ROUTE_IMPORTS: Record<string, () => Promise<any>> = {
   '/settings': importAPISettingsView
 };
 
-// Enhanced health status type from Layout
-interface HealthStatus {
-  status: 'running' | 'disconnected';
-  version?: string;
-  latency_ms?: number;
-  llm?: {
-    configured: boolean;
-    provider: string | null;
-    model: string | null;
-  };
-}
-
 interface SideNavProps {
-  // Remove props related to internal view state management
-  // currentView: View;
-  // onViewChange: (view: View) => void;
   onWorldImport: () => void;
   onSave: () => void;
-  onShowAbout: () => void;
-  healthStatus: HealthStatus;
-  onImageChange?: (newImageData: string | File) => void;
 }
 
 const SideNav: React.FC<SideNavProps> = ({
-  // Remove props from destructuring
-  // currentView,
-  // onViewChange,
   onWorldImport,
-  onSave,
-  onShowAbout,
-  healthStatus,
-  onImageChange
+  onSave
 }) => {
-  const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter(); // Add setters
+  const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter();
   const chatContext = useOptionalChat();
-  const navigate = useNavigate(); // Add navigation hook
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Extract chat preview image data with fallbacks
-  const availablePreviewImages = chatContext?.availablePreviewImages || undefined;
+  // Get available preview images for the chip display
+  const availablePreviewImages = chatContext?.availablePreviewImages;
   const currentPreviewImageIndex = chatContext?.currentPreviewImageIndex || 0;
-  const navigateToPreviewImage = chatContext?.navigateToPreviewImage || (() => { });
 
   // Determine the image URL to display based on context, prioritizing lore images if available
   const displayImageUrl = availablePreviewImages && availablePreviewImages.length > 0
@@ -106,7 +80,7 @@ const SideNav: React.FC<SideNavProps> = ({
 
   return (
     <div className={`relative bg-stone-950 shrink-0 flex flex-col border-r border-stone-800 transition-all duration-300 z-40
-      ${isCollapsed ? 'w-20' : 'w-96'}`}
+      ${isCollapsed ? 'w-20' : 'w-80'}`}
     >
       {/* Toggle Button */}
       <button
@@ -122,7 +96,7 @@ const SideNav: React.FC<SideNavProps> = ({
       </button>
 
       {/* Main Content */}
-      <div className="p-6 flex flex-col h-full">
+      <div className="p-6 pb-14 flex flex-col h-full">
         {isCollapsed ? (
           // Collapsed Layout - Everything in a single centered column
           <div className="flex flex-col items-center space-y-6">
@@ -211,44 +185,18 @@ const SideNav: React.FC<SideNavProps> = ({
               <NavLinkHelper isCollapsed={isCollapsed} to="/settings" label="Settings" Icon={NAV_ICONS.settings} />
             </nav>
 
-            {/* Image Preview and Footer */}
+            {/* Selected Character Chip */}
             <div className="mt-auto">
-              <div className="flex flex-col h-[64vh]">
-                <div className="flex-1 min-h-0">
-                  <ImagePreview
-                    imageUrl={displayImageUrl} // Use the new displayImageUrl
-                    onImageChange={onImageChange}
-                    // Pass new props for navigation if ImagePreview is enhanced
-                    availableImages={availablePreviewImages}
-                    currentIndex={currentPreviewImageIndex}
-                    onNavigate={navigateToPreviewImage}
-                    onUnloadCharacter={() => {
-                      setCharacterData(null);
-                      setImageUrl(undefined); // Reset to undefined to trigger placeholder
-                      navigate('/gallery'); // Navigate to Character Gallery
-                    }}
-                    hasCharacterLoaded={!!characterData}
-                  />
-                </div>
-                <TokenCounter characterData={characterData} />
-              </div>
-              <div className="mt-4 text-xs text-gray-500 flex justify-between items-center">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`w-2 h-2 rounded-full ${healthStatus.status === 'running' ? 'bg-emerald-500' : 'bg-red-500'}`}
-                    title={healthStatus.status === 'running' ? 'Backend connected' : 'Backend disconnected'}
-                  />
-                  <span className="text-gray-600">
-                    {healthStatus.status === 'running' ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-                <button
-                  onClick={onShowAbout}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  About
-                </button>
-              </div>
+              <SelectedCharacterChip
+                imageUrl={displayImageUrl}
+                characterName={characterData?.data?.name}
+                characterData={characterData}
+                onDismiss={characterData ? () => {
+                  setCharacterData(null);
+                  setImageUrl(undefined);
+                  navigate('/gallery');
+                } : undefined}
+              />
             </div>
           </>
         )}

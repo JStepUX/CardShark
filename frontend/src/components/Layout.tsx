@@ -4,7 +4,6 @@ import { Outlet, useLocation } from "react-router-dom"; // Added useLocation for
 import { useCharacter } from "../contexts/CharacterContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
-import { AboutDialog } from "./AboutDialog";
 import ComparisonPanel from "./ComparisonPanel";
 import WorkshopPanel from "./WorkshopPanel";
 import SideNav from "./SideNav";
@@ -14,20 +13,17 @@ import { ChatProvider } from "../contexts/ChatContext";
 const Layout: React.FC = () => {
 
   // State management
-  const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [infoMessage, _setInfoMessage] = useState<string | null>(null);
   const location = useLocation(); // Track route changes
 
   const { settings } = useSettings();
-  const [newImage, setNewImage] = useState<File | string | null>(null);
 
-  // Character context
   const {
     characterData,
-    setCharacterData,
+    setCharacterData: _setCharacterData,
     imageUrl,
-    setImageUrl,
+    setImageUrl: _setImageUrl,
     isLoading,
     setIsLoading,
     error,
@@ -137,24 +133,6 @@ const Layout: React.FC = () => {
   }, [location.pathname]);
 
 
-  // Handle image change from ImagePreview component
-  const handleImageChange = async (newImageData: File | string) => {
-    // Default character image handling
-    if (newImageData) {
-      // Update the new image state
-      setNewImage(newImageData);
-
-      // If it's a File object, create an object URL for display
-      if (newImageData instanceof File) {
-        const objectUrl = URL.createObjectURL(newImageData);
-        setImageUrl(objectUrl);
-      } else {
-        // It's a string (data URL from cropping)
-        setImageUrl(newImageData);
-      }
-    }
-  };
-
   // Save handler
   const handleSave = async () => {
     if (!characterData) {
@@ -166,30 +144,17 @@ const Layout: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      // Prepare the file - simplified approach that preserves the original image
+      // Prepare the file - use imageUrl from context
       let fileToSave: File | null = null;
 
-      if (newImage instanceof File) {
-        // If we have a valid File object, use it directly
-        fileToSave = newImage;
-      } else if (newImage && typeof newImage === 'string' && newImage.startsWith('data:image/')) {
-        // Convert data URL to File if it's a valid image data URL
-        try {
-          const response = await fetch(newImage);
-          const blob = await response.blob();
-          fileToSave = new File([blob], "character.png", { type: "image/png" });
-        } catch (error) {
-          console.error("Error converting data URL to File:", error);
-          throw new Error("Failed to process the image data");
-        }
-      } else if (imageUrl) {
-        // Fall back to the current imageUrl if newImage is not available or valid
+      if (imageUrl) {
+        // Fetch the current image from context
         try {
           const response = await fetch(imageUrl);
           const blob = await response.blob();
           fileToSave = new File([blob], "character.png", { type: "image/png" });
-        } catch (error) {
-          console.error("Error fetching current image:", error);
+        } catch (fetchError) {
+          console.error("Error fetching current image:", fetchError);
           throw new Error("Failed to access the current image");
         }
       }
@@ -218,10 +183,7 @@ const Layout: React.FC = () => {
       // Handle successful save
       const saveResult = await saveResponse.json();
 
-      // Update the UI - preserve our reference to the image
       if (saveResult.success) {
-        // Don't reset newImage state - keep our reference to the original file
-        // setNewImage(null);
         console.log("Character saved successfully:", saveResult);
 
         // IMPORTANT: Invalidate character gallery cache to ensure immediate refresh
@@ -312,13 +274,9 @@ const Layout: React.FC = () => {
       <BottomBanner healthStatus={healthStatus} />
 
       {/* Side Navigation */}
-      {/* Props currentView and onViewChange are removed from SideNavProps */}
       <SideNav
         onWorldImport={handleWorldImport}
         onSave={handleSave}
-        onShowAbout={() => setShowAboutDialog(true)}
-        healthStatus={healthStatus}
-        onImageChange={handleImageChange}
       />
 
       {/* Main Content Area - single flex container for side-by-side layout */}
@@ -352,12 +310,6 @@ const Layout: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Dialogs */}
-      <AboutDialog
-        isOpen={showAboutDialog}
-        onClose={() => setShowAboutDialog(false)}
-      />
     </div>
   );
 };

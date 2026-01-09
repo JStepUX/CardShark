@@ -15,17 +15,17 @@ interface ImagePreviewProps {
 }
 
 const ImagePreview: React.FC<ImagePreviewProps> = ({
-    imageUrl, // Keep for fallback
-    placeholderUrl = './pngPlaceholder.png',
-    onImageChange,
-    availableImages,
-    currentIndex,
-    onNavigate,
-    onUnloadCharacter,
-    hasCharacterLoaded = false
+  imageUrl, // Keep for fallback
+  placeholderUrl = './pngPlaceholder.png',
+  onImageChange,
+  availableImages,
+  currentIndex,
+  onNavigate,
+  onUnloadCharacter,
+  hasCharacterLoaded = false
 }) => {
   const [imageError, setImageError] = useState(false);
-  
+
   // Initialize currentImage with a stable value to prevent infinite loops
   const [currentImage, setCurrentImage] = useState(() => {
     return availableImages && typeof currentIndex === 'number' && availableImages[currentIndex]
@@ -41,8 +41,8 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
   useEffect(() => {
     const newSrc =
       availableImages && typeof currentIndex === 'number' && availableImages[currentIndex]
-      ? availableImages[currentIndex].src
-      : imageUrl || placeholderUrl;
+        ? availableImages[currentIndex].src
+        : imageUrl || placeholderUrl;
     setCurrentImage(newSrc);
     setImageError(false); // Reset error when image source changes
   }, [imageUrl, placeholderUrl, availableImages, currentIndex]);
@@ -52,10 +52,10 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
       // Prevent navigation if a modal (like cropper) is active
       // or if an input/textarea/contentEditable element has focus, to avoid interfering with typing.
       if (showCropper ||
-          (document.activeElement &&
-            (document.activeElement.tagName === 'INPUT' ||
-             document.activeElement.tagName === 'TEXTAREA' ||
-             (document.activeElement as HTMLElement).isContentEditable))) {
+        (document.activeElement &&
+          (document.activeElement.tagName === 'INPUT' ||
+            document.activeElement.tagName === 'TEXTAREA' ||
+            (document.activeElement as HTMLElement).isContentEditable))) {
         return;
       }
 
@@ -83,12 +83,12 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     setCurrentImage(placeholderUrl);
   };
 
-const handleMouseEnter = () => {
-  // Show overlay if image is user-modifiable OR if character can be dismissed
-  if (onImageChange || (hasCharacterLoaded && onUnloadCharacter)) {
-    setIsHovering(true);
-  }
-};
+  const handleMouseEnter = () => {
+    // Show overlay if image is user-modifiable OR if character can be dismissed
+    if (onImageChange || (hasCharacterLoaded && onUnloadCharacter)) {
+      setIsHovering(true);
+    }
+  };
 
   const handleMouseLeave = () => {
     setIsHovering(false);
@@ -125,7 +125,7 @@ const handleMouseEnter = () => {
   const handleCropSave = async (croppedImageData: string) => {
     // Update the current image preview
     setCurrentImage(croppedImageData);
-    
+
     // If an original file was selected, we need to convert the cropped image data
     // back to a File object to maintain the original file type
     if (selectedFile) {
@@ -144,13 +144,13 @@ const handleMouseEnter = () => {
         setSelectedFile(null); // Also reset selected file
         return; // Exit if blob creation failed
       }
-      
+
       // Create a new File object
-      const newFile = new File([blob], selectedFile.name, { 
+      const newFile = new File([blob], selectedFile.name, {
         type: selectedFile.type,
         lastModified: new Date().getTime()
       });
-      
+
       // Pass the new file to the parent component
       if (onImageChange) {
         onImageChange(newFile);
@@ -161,76 +161,75 @@ const handleMouseEnter = () => {
         onImageChange(croppedImageData);
       }
     }
-    
+
     // Clean up the temporary image URL
     if (tempImageUrl) {
       URL.revokeObjectURL(tempImageUrl);
       setTempImageUrl(null);
     }
-    
+
     // Reset selected file
     setSelectedFile(null);
   };
 
   return (
     <>
-      <div 
-        className="w-full h-full flex items-center justify-center bg-stone-950 rounded-lg overflow-hidden relative"
+      <div
+        className="relative w-full h-full"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        <div className="relative w-full h-full flex items-center justify-center">
-          <img
-            id="image-preview-content"
-            src={currentImage}
-            alt={imageError ? "Placeholder" : "Character"}
-            onError={handleImageError}
-            className="max-w-full max-h-full object-contain"
-          />
+        <img
+          id="image-preview-content"
+          src={currentImage}
+          alt={imageError ? "Placeholder" : "Character"}
+          onError={handleImageError}
+          className="w-full h-full object-cover"
+        />
 
-          {/* Navigation Controls */}
-          {availableImages && availableImages.length > 1 && onNavigate && typeof currentIndex === 'number' && (
-            <>
-              <button
-                onClick={() => onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length)}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowLeft') {
-                    onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length);
-                  }
-                }}
-                className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
-                aria-label="Previous Image"
-                role="button"
-                aria-controls="image-preview-content"
-              >
-                <ChevronLeft size={24} />
-              </button>
-              <button
-                onClick={() => onNavigate((currentIndex + 1) % availableImages.length)}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowRight') {
-                    onNavigate((currentIndex + 1) % availableImages.length);
-                  }
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
-                aria-label="Next Image"
-                role="button"
-                aria-controls="image-preview-content"
-              >
-                <ChevronRight size={24} />
-              </button>
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
-                {currentIndex + 1} / {availableImages.length}
-              </div>
-            </>          )}          {/* Hover overlay with controls */}
-          {isHovering && (
-            // Show overlay if we have image editing capabilities OR character dismissal
-            (onImageChange && (
-              !availableImages ||
-              (typeof currentIndex === 'number' && availableImages[currentIndex]?.type === 'character')
-            )) ||
-            (hasCharacterLoaded && onUnloadCharacter)
-          ) && (
+        {/* Navigation Controls */}
+        {availableImages && availableImages.length > 1 && onNavigate && typeof currentIndex === 'number' && (
+          <>
+            <button
+              onClick={() => onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft') {
+                  onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length);
+                }
+              }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
+              aria-label="Previous Image"
+              role="button"
+              aria-controls="image-preview-content"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <button
+              onClick={() => onNavigate((currentIndex + 1) % availableImages.length)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight') {
+                  onNavigate((currentIndex + 1) % availableImages.length);
+                }
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
+              aria-label="Next Image"
+              role="button"
+              aria-controls="image-preview-content"
+            >
+              <ChevronRight size={24} />
+            </button>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
+              {currentIndex + 1} / {availableImages.length}
+            </div>
+          </>)}          {/* Hover overlay with controls */}
+        {isHovering && (
+          // Show overlay if we have image editing capabilities OR character dismissal
+          (onImageChange && (
+            !availableImages ||
+            (typeof currentIndex === 'number' && availableImages[currentIndex]?.type === 'character')
+          )) ||
+          (hasCharacterLoaded && onUnloadCharacter)
+        ) && (
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 transition-opacity">
               <div className="flex flex-col gap-3">                {/* Image editing buttons - only show if onImageChange is available */}
                 {onImageChange && (
@@ -242,7 +241,7 @@ const handleMouseEnter = () => {
                       <Upload size={16} />
                       <span>Replace Image</span>
                     </button>
-                    
+
                     {currentImage !== placeholderUrl && ( // Only show adjust if not placeholder
                       <button
                         onClick={() => {
@@ -276,34 +275,36 @@ const handleMouseEnter = () => {
               </div>
             </div>
           )}
-        </div>
       </div>
-      
+
+
       {/* Hidden file input */}
-      <input
+      < input
         ref={fileInputRef}
         type="file"
         accept="image/*"
         onChange={handleFileSelect}
         className="hidden"
       />
-      
+
       {/* Image Cropper Modal */}
-      {showCropper && tempImageUrl && (
-        <ImageCropperModal
-          isOpen={showCropper}
-          onClose={() => {
-            setShowCropper(false);
-            if (tempImageUrl) {
-              URL.revokeObjectURL(tempImageUrl);
-              setTempImageUrl(null);
-            }
-          }}
-          imageUrl={tempImageUrl}
-          onSaveCropped={handleCropSave}
-          aspectRatio={2/3} // Character images have 2:3 aspect ratio
-        />
-      )}
+      {
+        showCropper && tempImageUrl && (
+          <ImageCropperModal
+            isOpen={showCropper}
+            onClose={() => {
+              setShowCropper(false);
+              if (tempImageUrl) {
+                URL.revokeObjectURL(tempImageUrl);
+                setTempImageUrl(null);
+              }
+            }}
+            imageUrl={tempImageUrl}
+            onSaveCropped={handleCropSave}
+            aspectRatio={2 / 3} // Character images have 2:3 aspect ratio
+          />
+        )
+      }
     </>
   );
 };

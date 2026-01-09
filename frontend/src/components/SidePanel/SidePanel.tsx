@@ -224,8 +224,8 @@ function CharacterModeContent({
     return (
         <>
             {/* Character Portrait */}
-            <div className="border-b border-gray-800 overflow-hidden">
-                <div className="relative w-full aspect-[4/5] bg-[#0a0a0a] overflow-hidden">
+            <div className="p-4">
+                <div className="relative w-full aspect-[4/5] rounded-xl overflow-hidden border-2 border-white/20 shadow-lg shadow-black/50">
                     <ImagePreview
                         imageUrl={imageUrl}
                         placeholderUrl="/pngPlaceholder.png"
