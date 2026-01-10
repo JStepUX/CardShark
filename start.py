@@ -222,7 +222,16 @@ def clean_mei_folders(max_age_hours=1):
         print(f"Error while cleaning _MEI folders: {e}")
 
 def main():
-    print("=== CardShark Development Server ===")
+    # Display ASCII art banner
+    print("\n")
+    print(" ______     ______     ______     _____     ______     __  __     ______     ______     __  __    ")
+    print("/\\  ___\\   /\\  __ \\   /\\  == \\   /\\  __-.  /\\  ___\\   /\\ \\_\\ \\   /\\  __ \\   /\\  == \\   /\\ \\/ /    ")
+    print("\\ \\ \\____  \\ \\  __ \\  \\ \\  __<   \\ \\ \\/\\ \\ \\ \\___  \\  \\ \\  __ \\  \\ \\  __ \\  \\ \\  __<   \\ \\  _\"-.  ")
+    print(" \\ \\_____\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\____-  \\/\\_____\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\ ")
+    print("  \\/_____/   \\/_/\\/_/   \\/_/ /_/   \\/____/   \\/_____/   \\/_/\\/_/   \\/_/\\/_/   \\/_/ /_/   \\/_/\\/_/ ")
+    print("                                                                                                  ")
+    print("\nDevelopment Server")
+    print("========================")
     
     # Try to get local IP for LAN access notification
     local_ip = "127.0.0.1"

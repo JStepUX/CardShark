@@ -14,34 +14,34 @@ class PngMetadataHandler:
     def _decode_metadata(self, encoded_data: Union[str, bytes]) -> Dict:
         """Helper to decode base64 metadata with improved padding handling."""
         try:
-            self.logger.log_step(f"Decoding metadata of type: {type(encoded_data)}")
+            self.logger.log_step(f"Decoding metadata of type: {type(encoded_data)}", level=0)
             
             if isinstance(encoded_data, bytes):
                 encoded_data = encoded_data.decode('utf-8', errors='ignore')
-                self.logger.log_step("Decoded bytes to string")
+                self.logger.log_step("Decoded bytes to string", level=0)
             
             # Remove ASCII prefix if present
             if encoded_data.startswith('ASCII\x00\x00\x00'):
                 encoded_data = encoded_data[8:]
-                self.logger.log_step("Removed ASCII\\x00\\x00\\x00 prefix")
+                self.logger.log_step("Removed ASCII\\x00\\x00\\x00 prefix", level=0)
             elif encoded_data.startswith('ASCII'):
                 encoded_data = encoded_data[5:]
-                self.logger.log_step("Removed ASCII prefix")
+                self.logger.log_step("Removed ASCII prefix", level=0)
             
             # Remove null bytes and whitespace
             encoded_data = encoded_data.strip('\x00').strip()
-            self.logger.log_step(f"Cleaned data length: {len(encoded_data)}")
+            self.logger.log_step(f"Cleaned data length: {len(encoded_data)}", level=0)
 
             # Check if it's already JSON (some cards use raw JSON instead of base64)
             if (encoded_data.startswith('{') and encoded_data.endswith('}')) or \
                (encoded_data.startswith('[') and encoded_data.endswith(']')):
                 try:
-                    self.logger.log_step("Data looks like raw JSON, attempting to parse directly")
+                    self.logger.log_step("Data looks like raw JSON, attempting to parse directly", level=0)
                     result = json.loads(encoded_data)
-                    self.logger.log_step("Successfully parsed raw JSON")
+                    self.logger.log_step("Successfully parsed raw JSON", level=0)
                     return result
                 except json.JSONDecodeError:
-                    self.logger.log_step("Raw JSON parse failed, proceeding to base64 decode")
+                    self.logger.log_step("Raw JSON parse failed, proceeding to base64 decode", level=0)
             
             # Fix padding - this is the key improvement
             # Base64 data should have length that is a multiple of 4
@@ -50,25 +50,25 @@ class PngMetadataHandler:
             if padding_needed:
                 padding = '=' * (4 - padding_needed)
                 encoded_data += padding
-                self.logger.log_step(f"Added {4 - padding_needed} padding characters")
+                self.logger.log_step(f"Added {4 - padding_needed} padding characters", level=0)
                 
             # Log a small sample of the encoded data for debugging
             sample_length = min(30, len(encoded_data))
-            self.logger.log_step(f"Encoded data sample: {encoded_data[:sample_length]}...")
+            self.logger.log_step(f"Encoded data sample: {encoded_data[:sample_length]}...", level=0)
             
             # Try base64 decode and parse JSON
             try:
                 # Try standard base64 decoding first
                 decoded = base64.b64decode(encoded_data)
-                self.logger.log_step("Successfully decoded with standard base64")
+                self.logger.log_step("Successfully decoded with standard base64", level=0)
             except Exception as e1:
-                self.logger.log_warning(f"Standard base64 decode failed: {str(e1)}")
+                self.logger.log_step(f"Standard base64 decode failed: {str(e1)}", level=0)
                 try:
                     # Try URL-safe base64 as fallback
                     decoded = base64.urlsafe_b64decode(encoded_data)
-                    self.logger.log_step("Successfully decoded with URL-safe base64")
+                    self.logger.log_step("Successfully decoded with URL-safe base64", level=0)
                 except Exception as e2:
-                    self.logger.log_error(f"URL-safe base64 decode also failed: {str(e2)}")
+                    self.logger.log_step(f"URL-safe base64 decode also failed: {str(e2)}", level=0)
                     # Last resort: try to clean up the string more aggressively
                     clean_data = ''.join(c for c in encoded_data if c in 
                                         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
@@ -76,33 +76,33 @@ class PngMetadataHandler:
                     if padding_needed:
                         clean_data += '=' * (4 - padding_needed)
                     
-                    self.logger.log_step(f"Using aggressively cleaned data: {clean_data[:30]}...")
+                    self.logger.log_step(f"Using aggressively cleaned data: {clean_data[:30]}...", level=0)
                     decoded = base64.b64decode(clean_data)
-                    self.logger.log_step("Successfully decoded with aggressive cleaning")
+                    self.logger.log_step("Successfully decoded with aggressive cleaning", level=0)
             
             # Try to decode as UTF-8
             try:
                 json_str = decoded.decode('utf-8')
-                self.logger.log_step("Decoded base64 to UTF-8 string")
+                self.logger.log_step("Decoded base64 to UTF-8 string", level=0)
             except UnicodeDecodeError:
                 # Try latin-1 as fallback (covers all byte values 0-255)
                 json_str = decoded.decode('latin-1')
-                self.logger.log_step("Decoded base64 to latin-1 string (UTF-8 failed)")
+                self.logger.log_step("Decoded base64 to latin-1 string (UTF-8 failed)", level=0)
             
             # Log a small sample of the decoded JSON for debugging
             sample_length = min(100, len(json_str))
-            self.logger.log_step(f"JSON sample: {json_str[:sample_length]}...")
+            self.logger.log_step(f"JSON sample: {json_str[:sample_length]}...", level=0)
             
             # Parse the JSON
             result = json.loads(json_str)
-            self.logger.log_step("Successfully parsed JSON structure")
+            self.logger.log_step("Successfully parsed JSON structure", level=0)
             
             # Log the structure
             if isinstance(result, dict):
-                self.logger.log_step(f"Top level keys: {list(result.keys())}")
+                self.logger.log_step(f"Top level keys: {list(result.keys())}", level=0)
                 for key in result.keys():
                     if isinstance(result[key], dict):
-                        self.logger.log_step(f"Nested keys under '{key}': {list(result[key].keys())}")
+                        self.logger.log_step(f"Nested keys under '{key}': {list(result[key].keys())}", level=0)
             
             return result
             
@@ -131,42 +131,43 @@ class PngMetadataHandler:
 
             # Open image and read metadata
             with Image.open(bio) as image:
-                self.logger.log_step("Successfully opened PNG image")                # Log all available keys in image.info for initial debugging
-                self.logger.log_step("Image Info Keys (initial):")
+                self.logger.log_step("Successfully opened PNG image", level=0)
+                # Log all available keys in image.info for initial debugging
+                self.logger.log_step("Image Info Keys (initial):", level=0)
                 for key in image.info:
-                    self.logger.log_step(f"Info Key: {key}")
+                    self.logger.log_step(f"Info Key: {key}", level=0)
                     value_preview = str(image.info[key])[:100] if isinstance(image.info[key], (str, bytes)) else type(image.info[key]).__name__
-                    self.logger.log_step(f"Value preview: {value_preview}")
+                    self.logger.log_step(f"Value preview: {value_preview}", level=0)
 
                 # **Prioritize EXIF extraction**
                 try:
                     if hasattr(image, '_getexif'):
-                        self.logger.log_step("Attempting to get EXIF data using _getexif")
+                        self.logger.log_step("Attempting to get EXIF data using _getexif", level=0)
                         exif = image._getexif()
                         if exif:
-                            self.logger.log_step("Getting EXIF data using _getexif")
+                            self.logger.log_step("Getting EXIF data using _getexif", level=0)
                         else:
-                            self.logger.log_step("No EXIF data found via _getexif")
+                            self.logger.log_step("No EXIF data found via _getexif", level=0)
                     else:
-                        self.logger.log_step("Image does not support _getexif method")
+                        self.logger.log_step("Image does not support _getexif method", level=0)
                         exif = None
                 except (OSError, AttributeError, ValueError) as e:
-                    self.logger.log_step(f"Error reading EXIF data: {e}")
+                    self.logger.log_step(f"Error reading EXIF data: {e}", level=0)
                     exif = None
                 
                 if exif:
-                    self.logger.log_step("EXIF data found, inspecting EXIF tags...")
+                    self.logger.log_step("EXIF data found, inspecting EXIF tags...", level=0)
 
                     # 1. Look for UserComment first (common practice)
                     usercomment_tag = None
                     for tag_id, tag_name in ExifTags.TAGS.items():
                         if tag_name == 'UserComment':
                             usercomment_tag = tag_id
-                            self.logger.log_step(f"Found UserComment tag ID: {tag_id}")
+                            self.logger.log_step(f"Found UserComment tag ID: {tag_id}", level=0)
                             break
 
                     if usercomment_tag and usercomment_tag in exif:
-                        self.logger.log_step("Found UserComment in EXIF data, attempting to decode.")
+                        self.logger.log_step("Found UserComment in EXIF data, attempting to decode.", level=0)
                         try:
                             return self._decode_metadata(exif[usercomment_tag])
                         except Exception as e:
@@ -174,33 +175,33 @@ class PngMetadataHandler:
 
                     # 2. Check for 'chara' directly in EXIF (less standard, but possible)
                     if 'chara' in exif:
-                        self.logger.log_step("Found 'chara' tag directly in EXIF data, attempting to decode.")
+                        self.logger.log_step("Found 'chara' tag directly in EXIF data, attempting to decode.", level=0)
                         try:
                             return self._decode_metadata(exif['chara'])
                         except Exception as e:
                             self.logger.log_error(f"Error decoding 'chara' tag from EXIF: {str(e)}")
 
                     # 3. Log ALL EXIF data for debugging if decoding failed
-                    self.logger.log_step("Could not decode EXIF metadata, logging all EXIF tags:")
+                    self.logger.log_step("Could not decode EXIF metadata, logging all EXIF tags:", level=0)
                     for tag_id, value in exif.items():
                         tag_name = ExifTags.TAGS.get(tag_id, f"Unknown ({tag_id})")
                         try:
                             value_preview = str(value)[:50] if value else "None"
                         except Exception:
                             value_preview = f"<unrepresentable value of type {type(value).__name__}>"
-                        self.logger.log_step(f"  EXIF Tag ID: {tag_id}, Name: {tag_name}, Value: {value_preview}")
+                        self.logger.log_step(f"  EXIF Tag ID: {tag_id}, Name: {tag_name}, Value: {value_preview}", level=0)
 
 
                 # **Fallback checks (after EXIF)** - for other potential locations, keep these for broader compatibility
                 if 'chara' in image.info:
-                    self.logger.log_step("Found 'chara' metadata in image.info (non-EXIF), attempting to decode.")
+                    self.logger.log_step("Found 'chara' metadata in image.info (non-EXIF), attempting to decode.", level=0)
                     try:
                         return self._decode_metadata(image.info['chara'])
                     except Exception as e:
                         self.logger.log_error(f"Error decoding 'chara' field from image.info: {str(e)}")
 
                 if 'ccv3' in image.info:
-                    self.logger.log_step("Found 'ccv3' metadata in image.info, attempting to decode.")
+                    self.logger.log_step("Found 'ccv3' metadata in image.info, attempting to decode.", level=0)
                     try:
                         return self._decode_metadata(image.info['ccv3'])
                     except Exception as e:

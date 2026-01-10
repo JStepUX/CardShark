@@ -177,7 +177,7 @@ from sqlalchemy.orm import Session # For type hinting in dependency
 from fastapi import Depends # For dependency injection
 
 # Initialize core handlers first (needed for lifespan)
-logger = LogManager()
+logger = LogManager(console_verbosity=1)  # INFO level - reduces terminal spam
 settings_manager = SettingsManager(logger)
 settings_manager._load_settings()
 content_filter_manager = ContentFilterManager(logger)

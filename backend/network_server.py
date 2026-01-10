@@ -88,7 +88,15 @@ def run_server(app, port: int = 9696, local_only: bool = False, on_start=None):
     if not local_only:
         local_ip = get_local_ip()
         if local_ip:
-            print(f"\nCardShark {context} Server")
+            # Display ASCII art banner
+            print("\n")
+            print(" ______     ______     ______     _____     ______     __  __     ______     ______     __  __    ")
+            print("/\\  ___\\   /\\  __ \\   /\\  == \\   /\\  __-.  /\\  ___\\   /\\ \\_\\ \\   /\\  __ \\   /\\  == \\   /\\ \\/ /    ")
+            print("\\ \\ \\____  \\ \\  __ \\  \\ \\  __<   \\ \\ \\/\\ \\ \\ \\___  \\  \\ \\  __ \\  \\ \\  __ \\  \\ \\  __<   \\ \\  _\"-.  ")
+            print(" \\ \\_____\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\____-  \\/\\_____\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\  \\ \\_\\ \\_\\ ")
+            print("  \\/_____/   \\/_/\\/_/   \\/_/ /_/   \\/____/   \\/_____/   \\/_/\\/_/   \\/_/\\/_/   \\/_/ /_/   \\/_/\\/_/ ")
+            print("                                                                                                  ")
+            print(f"\n{context} Server")
             print(f"========================")
             print(f"Server accessible at:")
             print(f"- Local:   http://localhost:{selected_port}")

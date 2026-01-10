@@ -77,9 +77,20 @@ class CharacterSyncService:
         
         try:
             with self._get_session_context() as db:
-                self._sync_files_to_db(db)
+                stats = self._sync_files_to_db(db)
                 self._sync_db_to_files(db)
                 
+            # Print clean summary to console
+            print("\n" + "="*50)
+            print(f"({stats['processed']}/{stats['total']}) Cards Loaded Successfully")
+            if stats['new'] > 0:
+                print(f"{stats['new']} new cards imported.")
+            if stats['updated'] > 0:
+                print(f"{stats['updated']} cards updated.")
+            if stats['errors'] > 0:
+                print(f"{stats['errors']} cards failed to load (see log for details).")
+            print("="*50 + "\n")
+            
             self.logger.log_step("Character synchronization complete.")
         except Exception as e:
             self.logger.log_error(f"Error during character synchronization: {e}")
@@ -89,23 +100,35 @@ class CharacterSyncService:
         """
         Scan files and update/insert into DB.
         """
+        stats = {'total': 0, 'processed': 0, 'new': 0, 'updated': 0, 'errors': 0}
+        
         if not self.characters_dir.exists():
             self.logger.log_warning(f"Characters directory not found: {self.characters_dir}")
-            return
+            return stats
 
         # Get all PNG files
         png_files = list(self.characters_dir.glob("*.png"))
-        self.logger.debug(f"Found {len(png_files)} character files.")
+        stats['total'] = len(png_files)
+        self.logger.log_step(f"Found {len(png_files)} character files.", level=0)
 
         for file_path in png_files:
             try:
-                self._process_character_file(db, file_path)
+                action = self._process_character_file(db, file_path)
+                stats['processed'] += 1
+                if action == 'new':
+                    stats['new'] += 1
+                elif action == 'updated':
+                    stats['updated'] += 1
             except Exception as e:
+                stats['errors'] += 1
                 self.logger.log_error(f"Failed to process file {file_path}: {e}")
+        
+        return stats
 
     def _process_character_file(self, db: Session, file_path: Path):
         """
         Process a single character file: Insert or Update.
+        Returns 'new', 'updated', or 'unchanged'
         """
         # Get absolute path for DB storage to ensure compatibility with API endpoints
         from backend.utils.path_utils import normalize_path
@@ -122,12 +145,14 @@ class CharacterSyncService:
         if not db_char:
             self.logger.log_info(f"New character detected: {relative_path}")
             self._import_character_from_png(db, file_path, relative_path, file_mtime)
+            return 'new'
         elif db_char.file_last_modified is None or file_mtime > db_char.file_last_modified:
             self.logger.log_info(f"Character modified: {relative_path}")
             self._update_character_from_png(db, db_char, file_path, file_mtime)
+            return 'updated'
         else:
             # File is unchanged, do nothing
-            pass
+            return 'unchanged'
 
     def _import_character_from_png(self, db: Session, file_path: Path, relative_path: str, mtime: int):
         """Read PNG metadata and insert into DB."""

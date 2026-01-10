@@ -33,7 +33,7 @@ from backend.png_metadata_handler import PngMetadataHandler
 from backend.character_validator import CharacterValidator
 
 # Initialize components
-logger = LogManager()
+logger = LogManager(console_verbosity=1)  # INFO level for cleaner console output
 png_handler = PngMetadataHandler(logger)
 validator = CharacterValidator(logger)
 

@@ -6,11 +6,20 @@ from datetime import datetime
 from pathlib import Path
 
 class LogManager:
-    def __init__(self):
+    # Verbosity levels
+    DEBUG = 0
+    INFO = 1
+    WARNING = 2
+    ERROR = 3
+    
+    def __init__(self, console_verbosity=1):  # Default to INFO level
         """Initialize logging system."""
         # Get base directory for logs based on environment
         self.base_dir = self._get_base_dir()
         self.logs_dir = self.base_dir / 'logs'
+        
+        # Set console verbosity level (0=DEBUG, 1=INFO, 2=WARNING, 3=ERROR)
+        self.console_verbosity = console_verbosity
         
         # Create logs directory if needed
         self.logs_dir.mkdir(parents=True, exist_ok=True)
@@ -54,7 +63,7 @@ class LogManager:
         """Log an info message."""
         self.log_step(f"INFO: {message}")
         
-    def log_step(self, message, data=None):
+    def log_step(self, message, data=None, level=1):
         """Log a step with optional data."""
         try:
             # Create timestamp
@@ -71,13 +80,14 @@ class LogManager:
                 else:
                     log_message += f"Data: {str(data)}\n"
             
-            # Write to file
+            # Write to file (always, regardless of verbosity)
             with open(self.log_filename, 'a', encoding='utf-8') as f:
                 f.write(log_message)
                 f.write("\n")  # Extra newline for readability
                 
-            # Also print to console for immediate feedback
-            print(log_message.strip())
+            # Only print to console if level meets threshold
+            if level >= self.console_verbosity:
+                print(log_message.strip())
             
         except Exception as e:
             print(f"Error writing to log: {e}")

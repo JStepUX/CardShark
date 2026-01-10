@@ -102,14 +102,16 @@ class UserProfileService:
             self.logger.log_warning(f"Users directory does not exist: {users_dir}")
             return
         
-        # Track all PNG files found on disk
+        # Track all PNG files found on disk and stats
         all_png_files_on_disk = set()
+        stats = {'total': 0, 'new': 0, 'updated': 0, 'skipped': 0, 'errors': 0}
         
-        self.logger.log_info(f"Processing PNG files in {users_dir}...")
+        self.logger.log_step(f"Processing PNG files in {users_dir}...", level=0)
         
         for png_file in users_dir.glob('*.png'):
             abs_png_path = normalize_path(str(png_file.resolve()))
             all_png_files_on_disk.add(abs_png_path)
+            stats['total'] += 1
             
             try:
                 file_mod_time = datetime.datetime.fromtimestamp(png_file.stat().st_mtime)
@@ -122,10 +124,11 @@ class UserProfileService:
                     
                     if existing_user and existing_user.db_metadata_last_synced_at:
                         if existing_user.db_metadata_last_synced_at >= file_mod_time:
-                            self.logger.log_info(f"Skipping {abs_png_path}, DB record is up-to-date.")
+                            self.logger.log_step(f"Skipping {abs_png_path}, DB record is up-to-date.", level=0)
+                            stats['skipped'] += 1
                             continue
                 
-                self.logger.log_info(f"Syncing user profile PNG: {abs_png_path}")
+                self.logger.log_step(f"Syncing user profile PNG: {abs_png_path}", level=0)
                 
                 # Read metadata from PNG
                 metadata = self._read_metadata_from_png(png_file)
@@ -140,13 +143,13 @@ class UserProfileService:
                 user_uuid = data_section.get("user_uuid") or data_section.get("character_uuid")
                 if not user_uuid:
                     user_uuid = str(uuid.uuid4())
-                    self.logger.log_info(f"Generated new UUID {user_uuid} for user: {user_name}")
+                    self.logger.log_step(f"Generated new UUID {user_uuid} for user: {user_name}", level=0)
                 
                 # Prepare database record
                 with self._get_session_context() as db:
                     if existing_user:
                         # Update existing record
-                        self.logger.log_info(f"Updating user profile {user_uuid} in DB.")
+                        self.logger.log_step(f"Updating user profile {user_uuid} in DB.", level=0)
                         existing_user.user_uuid = user_uuid
                         existing_user.name = user_name
                         existing_user.description = data_section.get("description")
@@ -155,9 +158,10 @@ class UserProfileService:
                         existing_user.db_metadata_last_synced_at = datetime.datetime.utcnow()
                         existing_user.updated_at = datetime.datetime.utcnow()
                         db.add(existing_user)
+                        stats['updated'] += 1
                     else:
                         # Create new record
-                        self.logger.log_info(f"Adding new user profile {user_uuid} to DB.")
+                        self.logger.log_step(f"Adding new user profile {user_uuid} to DB.", level=0)
                         new_user = UserProfileCard(
                             user_uuid=user_uuid,
                             name=user_name,
@@ -168,26 +172,40 @@ class UserProfileService:
                             db_metadata_last_synced_at=datetime.datetime.utcnow()
                         )
                         db.add(new_user)
+                        stats['new'] += 1
                     
                     db.commit()
                     
             except Exception as e:
+                stats['errors'] += 1
                 self.logger.log_error(f"Failed to process/sync user profile PNG {abs_png_path}: {e}")
                 import traceback
                 self.logger.log_error(traceback.format_exc())
         
         # Prune users from DB that no longer exist on disk
+        deleted_count = 0
         with self._get_session_context() as db:
             all_db_users = db.query(UserProfileCard.png_file_path, UserProfileCard.user_uuid).all()
             for db_path, db_uuid in all_db_users:
                 if db_path not in all_png_files_on_disk:
-                    self.logger.log_info(f"User profile PNG {db_path} (UUID: {db_uuid}) no longer exists. Removing from DB.")
+                    self.logger.log_step(f"User profile PNG {db_path} (UUID: {db_uuid}) no longer exists. Removing from DB.", level=0)
                     user_to_delete = db.query(UserProfileCard).filter(
                         UserProfileCard.user_uuid == db_uuid
                     ).first()
                     if user_to_delete:
                         db.delete(user_to_delete)
+                        deleted_count += 1
             db.commit()
+        
+        # Print summary
+        print("\n" + "="*50)
+        print(f"User Profiles Sync Complete")
+        print(f"Total: {stats['total']} | New: {stats['new']} | Updated: {stats['updated']} | Skipped: {stats['skipped']}")
+        if deleted_count > 0:
+            print(f"Deleted: {deleted_count} (no longer on disk)")
+        if stats['errors'] > 0:
+            print(f"Errors: {stats['errors']} (see log for details)")
+        print("="*50 + "\n")
         
         self.logger.log_info("User profiles directory synchronization finished.")
     

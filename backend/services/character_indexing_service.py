@@ -394,7 +394,16 @@ class CharacterIndexingService:
             self.logger.log_info(f"Successfully added existing character to database with UUID: {char_uuid}")
             
         except Exception as e:
-            self.logger.log_error(f"Failed to create database record for {file_path}: {e}")
+            # Check if this is a UUID duplicate (not a real error)
+            error_str = str(e).lower()
+            if 'unique constraint' in error_str and 'character_uuid' in error_str:
+                self.logger.log_step(
+                    f"Skipping duplicate character file (UUID already exists): {file_path}",
+                    level=0  # DEBUG level
+                )
+            else:
+                # This is a real error
+                self.logger.log_error(f"Failed to create database record for {file_path}: {e}")
 
     def _add_character_to_db(self, db_char):
         """Helper method to add character to database in sync context"""
@@ -405,8 +414,19 @@ class CharacterIndexingService:
                 db.commit()
                 db.refresh(db_char)
         except Exception as e:
-            self.logger.log_error(f"Failed to add character to database: {e}")
-            raise
+            # Check if this is a UUID duplicate (not a real error, just means we already have this character)
+            error_str = str(e).lower()
+            if 'unique constraint' in error_str and 'character_uuid' in error_str:
+                self.logger.log_step(
+                    f"Skipping duplicate character (UUID {db_char.character_uuid} already exists): {db_char.png_file_path}",
+                    level=0  # DEBUG level - not shown in console
+                )
+                # Don't raise - this is expected when we have duplicate characters
+                return
+            else:
+                # This is a real error
+                self.logger.log_error(f"Failed to add character to database: {e}")
+                raise
     
     def _check_uuid_duplicate(self, character_uuid: str, file_path: str):
         """Check if UUID already exists for a different file"""
