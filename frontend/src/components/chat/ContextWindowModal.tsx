@@ -190,6 +190,53 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           </div>
         </div>
 
+        {/* Character Card Field Breakdown (if available) */}
+        {contextData.fieldBreakdown && Array.isArray(contextData.fieldBreakdown) && contextData.fieldBreakdown.length > 0 && (
+          <div className="bg-stone-800 p-4 rounded-lg">
+            <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+              <FileText size={16} />
+              <span>Character Card Fields</span>
+            </h3>
+
+            <div className="space-y-2">
+              {contextData.fieldBreakdown.map((field: any) => (
+                <div
+                  key={field.fieldKey}
+                  className={`flex justify-between items-center ${field.status === 'expired' ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={field.status === 'expired' ? 'line-through' : ''}>
+                      {field.fieldLabel}
+                    </span>
+                    {field.status === 'permanent' && (
+                      <span className="text-xs text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded">
+                        permanent
+                      </span>
+                    )}
+                    {field.status === 'expired' && field.expiredAtMessage && (
+                      <span className="text-xs text-gray-500">
+                        (expired @ msg {field.expiredAtMessage})
+                      </span>
+                    )}
+                  </div>
+                  <div className={`text-sm ${field.status === 'expired' ? 'text-gray-600' : 'text-gray-300'}`}>
+                    {field.tokens.toLocaleString()} tokens
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {contextData.savedTokens > 0 && (
+              <div className="mt-3 pt-3 border-t border-stone-700 flex justify-between items-center">
+                <span className="text-sm text-green-400">Tokens Saved by Field Expiration</span>
+                <span className="text-sm font-medium text-green-400">
+                  {contextData.savedTokens.toLocaleString()} tokens
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Token breakdown */}
         <div className="bg-stone-800 p-4 rounded-lg">
           <h3 className="text-sm font-medium mb-3">Token Usage Breakdown</h3>

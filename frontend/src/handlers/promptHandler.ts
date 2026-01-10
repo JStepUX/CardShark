@@ -2,6 +2,13 @@
 import { CharacterCard } from '../types/schema';
 import { templateService } from '../services/templateService';
 import { Template } from '../types/templateTypes';
+import {
+  CompressionLevel,
+  FieldExpirationConfig,
+  FieldTokenInfo,
+  MemoryContextResult,
+  CompressedContextCache
+} from '../services/chat/chatTypes';
 
 // Debug flag - set to false to disable console.log statements
 const DEBUG = false;
@@ -9,6 +16,54 @@ const DEBUG = false;
 // Compression constants
 const COMPRESSION_THRESHOLD = 20;  // don't compress below this
 const RECENT_WINDOW = 10;          // always keep this many verbatim
+const COMPRESSION_REFRESH_THRESHOLD = 20; // re-compress after this many new messages
+
+/**
+ * Compression level hierarchy - order matters (higher index = more aggressive)
+ */
+const COMPRESSION_LEVEL_HIERARCHY: CompressionLevel[] = [
+  'none',
+  'chat_only',
+  'chat_dialogue',
+  'aggressive'
+];
+
+/**
+ * Field expiration configuration for each V2 spec field
+ * Defines when each character card field should be excluded from context
+ */
+const FIELD_EXPIRATION_CONFIG: Record<string, FieldExpirationConfig> = {
+  system_prompt: {
+    permanent: true,
+    expiresAtMessage: null,
+    minimumCompressionLevel: 'none'
+  },
+  description: {
+    permanent: true,
+    expiresAtMessage: null,
+    minimumCompressionLevel: 'none'
+  },
+  personality: {
+    permanent: true,
+    expiresAtMessage: null,
+    minimumCompressionLevel: 'none'
+  },
+  scenario: {
+    permanent: false,
+    expiresAtMessage: 3,
+    minimumCompressionLevel: 'aggressive'
+  },
+  mes_example: {
+    permanent: false,
+    expiresAtMessage: 5,
+    minimumCompressionLevel: 'chat_dialogue'
+  },
+  first_mes: {
+    permanent: false,
+    expiresAtMessage: 3,
+    minimumCompressionLevel: 'aggressive'
+  }
+};
 
 export class PromptHandler {
   // Removed unused DEFAULT_PARAMS
@@ -26,6 +81,49 @@ export class PromptHandler {
     });
 
     return result;
+  }
+
+  /**
+   * Check if current compression level is >= required level in hierarchy
+   */
+  private static compressionLevelIncludes(
+    current: CompressionLevel,
+    required: CompressionLevel
+  ): boolean {
+    const hierarchy = COMPRESSION_LEVEL_HIERARCHY;
+    return hierarchy.indexOf(current) >= hierarchy.indexOf(required);
+  }
+
+  /**
+   * Rough token count estimation for a string
+   * Uses ~4 characters per token approximation for English text
+   */
+  private static estimateTokens(text: string): number {
+    if (!text) return 0;
+    // ~4 characters per token is a reasonable English approximation
+    // For accuracy, could integrate tiktoken but adds dependency
+    return Math.ceil(text.length / 4);
+  }
+
+  /**
+   * Determine if a specific field should be excluded from context
+   */
+  private static shouldExpireField(
+    fieldKey: string,
+    compressionLevel: CompressionLevel,
+    messageCount: number
+  ): boolean {
+    const config = FIELD_EXPIRATION_CONFIG[fieldKey];
+    if (!config || config.permanent) return false;
+    if (compressionLevel === 'none') return false;
+
+    const meetsCompressionLevel = this.compressionLevelIncludes(
+      compressionLevel,
+      config.minimumCompressionLevel
+    );
+    const meetsMessageThreshold = messageCount >= (config.expiresAtMessage || Infinity);
+
+    return meetsCompressionLevel && meetsMessageThreshold;
   }
 
   /**
@@ -81,51 +179,149 @@ export class PromptHandler {
     return defaultTemplate;
   }
 
-  // Create memory context from character data using template
-  public static createMemoryContext(character: CharacterCard, template: Template | null, userName?: string): string {
-    if (DEBUG) console.log('Creating memory context with template:', template?.name || 'No template', 'User:', userName);
+  /**
+   * Create memory context from character data using template with intelligent field expiration
+   * @param character The character card data
+   * @param template The prompt template to use
+   * @param userName The user's name for template variables
+   * @param compressionLevel The current compression level (determines field expiration)
+   * @param messageCount Current message count (determines if expiration threshold reached)
+   * @returns Enhanced result with memory string and field breakdown
+   */
+  public static createMemoryContext(
+    character: CharacterCard,
+    template: Template | null,
+    userName?: string,
+    compressionLevel: CompressionLevel = 'none',
+    messageCount: number = 0
+  ): MemoryContextResult {
+    if (DEBUG) console.log('Creating memory context with template:', template?.name || 'No template', 'User:', userName, 'Compression:', compressionLevel, 'Messages:', messageCount);
     const currentUser = userName || 'User'; // Fallback for user name
 
+    // Define field mappings for all V2 spec fields
+    const fieldMappings: Array<{
+      key: string;
+      label: string;
+      templateVar: string;
+      getValue: () => string;
+    }> = [
+      {
+        key: 'system_prompt',
+        label: 'System Prompt',
+        templateVar: 'system',
+        getValue: () => character.data.system_prompt || ''
+      },
+      {
+        key: 'description',
+        label: 'Description',
+        templateVar: 'description',
+        getValue: () => character.data.description || ''
+      },
+      {
+        key: 'personality',
+        label: 'Personality',
+        templateVar: 'personality',
+        getValue: () => character.data.personality || ''
+      },
+      {
+        key: 'scenario',
+        label: 'Scenario',
+        templateVar: 'scenario',
+        getValue: () => character.data.scenario || ''
+      },
+      {
+        key: 'mes_example',
+        label: 'Example Dialogue',
+        templateVar: 'examples',
+        getValue: () => character.data.mes_example || ''
+      }
+    ];
+
+    // Process each field for inclusion/exclusion based on compression settings
+    const fieldBreakdown: FieldTokenInfo[] = [];
+    const includedVariables: Record<string, string> = { user: currentUser };
+    let totalTokens = 0;
+    let savedTokens = 0;
+
+    for (const field of fieldMappings) {
+      const value = field.getValue();
+      const tokens = this.estimateTokens(value);
+      const config = FIELD_EXPIRATION_CONFIG[field.key];
+
+      const isExpired = this.shouldExpireField(
+        field.key,
+        compressionLevel,
+        messageCount
+      );
+
+      if (isExpired) {
+        fieldBreakdown.push({
+          fieldKey: field.key,
+          fieldLabel: field.label,
+          tokens,
+          status: 'expired',
+          expiredAtMessage: config?.expiresAtMessage ?? undefined
+        });
+        savedTokens += tokens;
+        includedVariables[field.templateVar] = ''; // Empty string for expired fields
+      } else {
+        fieldBreakdown.push({
+          fieldKey: field.key,
+          fieldLabel: field.label,
+          tokens,
+          status: config?.permanent ? 'permanent' : 'active'
+        });
+        totalTokens += tokens;
+        includedVariables[field.templateVar] = value;
+      }
+    }
+
+    // Build memory string using template or default format
+    let memory: string;
+
     if (!template || !template.memoryFormat) {
-      // Default memory format if no template or template has no memoryFormat
-      let scenario = character.data.scenario || '';
-      // Manually replace {{user}} in default scenario for robustness
+      // Default memory format - manually build with included variables only
+      let scenario = includedVariables.scenario || '';
       scenario = scenario.replace(/\{\{user\}\}/g, currentUser);
 
-      const defaultMemory = `${character.data.system_prompt || ''}
-Persona: ${character.data.description || ''}
-Personality: ${character.data.personality || ''}
+      memory = `${includedVariables.system || ''}
+Persona: ${includedVariables.description || ''}
+Personality: ${includedVariables.personality || ''}
 [Scenario: ${scenario}]
-${character.data.mes_example || ''}
+${includedVariables.examples || ''}
 ***`;
-      if (DEBUG) console.log('Using default memory format:', defaultMemory);
-      return defaultMemory;
+      if (DEBUG) console.log('Using default memory format with field expiration applied');
+    } else {
+      try {
+        // Use template format with included variables (expired fields have empty strings)
+        memory = this.replaceVariables(template.memoryFormat, includedVariables);
+        if (DEBUG) console.log('Formatted memory using template with field expiration applied');
+      } catch (error) {
+        console.error('Error formatting memory context:', error);
+        // Fallback to default format
+        let scenario = includedVariables.scenario || '';
+        scenario = scenario.replace(/\{\{user\}\}/g, currentUser);
+        memory = `${includedVariables.system || ''}
+Persona: ${includedVariables.description || ''}
+Personality: ${includedVariables.personality || ''}
+[Scenario: ${scenario}]
+${includedVariables.examples || ''}
+***`;
+      }
     }
 
-    try {
-      // Replace variables in the memory format template
-      const variables = {
-        system: character.data.system_prompt || '',
-        description: character.data.description || '',
-        personality: character.data.personality || '',
-        scenario: character.data.scenario || '',
-        examples: character.data.mes_example || '',
-        user: currentUser // Add user to variables
-      };
+    const result: MemoryContextResult = {
+      memory: memory.trim(),
+      fieldBreakdown,
+      totalTokens,
+      savedTokens
+    };
 
-      const formattedMemory = this.replaceVariables(template.memoryFormat, variables);
-      if (DEBUG) console.log('Formatted memory using template:', formattedMemory);
-      return formattedMemory.trim(); // Ensure clean formatting
-    } catch (error) {
-      console.error('Error formatting memory context:', error);
-      // Fallback to default format
-      return `${character.data.system_prompt || ''}
-Persona: ${character.data.description || ''}
-Personality: ${character.data.personality || ''}
-[Scenario: ${character.data.scenario || ''}]
-${character.data.mes_example || ''}
-***`;
+    if (DEBUG && savedTokens > 0) {
+      console.log(`Field expiration saved ${savedTokens} tokens (${fieldBreakdown.filter(f => f.status === 'expired').length} fields expired)`);
     }
+
+    return result;
   }
 
   // Format prompt using the specified template
@@ -332,7 +528,8 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
     signal?: AbortSignal,
     characterCard?: CharacterCard, // Optional: for stop sequences and prompt formatting
     sessionNotes?: string, // Optional: user notes to inject into context
-    compressionEnabled?: boolean, // Optional: enable message compression
+    compressionLevel?: CompressionLevel, // Optional: compression level for intelligent context management
+    compressedContextCache?: CompressedContextCache | null, // Optional: cached compression result for performance
     onCompressionStart?: () => void, // Optional: callback when compression starts
     onCompressionEnd?: () => void, // Optional: callback when compression ends
     onPayloadReady?: (payload: any) => void // Optional: callback with the payload before sending
@@ -357,56 +554,90 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
       const templateId = apiConfig?.templateId;
       const template = this.getTemplate(templateId);
       const characterName = characterCard?.data?.name || 'Character';
+      const effectiveCompressionLevel = compressionLevel || 'none';
 
-      // Create memory context using the template system
+      // Create memory context using the template system with field expiration
+      let memoryResult: MemoryContextResult | null = null;
       let memory = '';
       if (characterCard?.data) {
-        memory = this.createMemoryContext(characterCard, template, 'User');
+        memoryResult = this.createMemoryContext(
+          characterCard,
+          template,
+          'User',
+          effectiveCompressionLevel,
+          contextMessages.length
+        );
+        memory = memoryResult.memory;
       }
 
-      // Compression logic
+      // Smart compression caching logic
       let compressedContext = '';
       let messagesToFormat = contextMessages;
+      let updatedCache: CompressedContextCache | null = compressedContextCache || null;
 
-      if (compressionEnabled && contextMessages.length > COMPRESSION_THRESHOLD) {
-        if (DEBUG) console.log(`Compression enabled: ${contextMessages.length} messages (threshold: ${COMPRESSION_THRESHOLD})`);
+      // Determine if we need to compress/re-compress
+      const shouldCompress = effectiveCompressionLevel !== 'none' && contextMessages.length > COMPRESSION_THRESHOLD;
+      const cacheIsValid = compressedContextCache &&
+        compressedContextCache.compressionLevel === effectiveCompressionLevel &&
+        compressedContextCache.compressedAtMessageCount > 0 &&
+        (contextMessages.length - compressedContextCache.compressedAtMessageCount) < COMPRESSION_REFRESH_THRESHOLD;
+
+      if (shouldCompress) {
+        if (DEBUG) console.log(`Smart compression check: ${contextMessages.length} messages (threshold: ${COMPRESSION_THRESHOLD})`);
 
         const splitPoint = contextMessages.length - RECENT_WINDOW;
-        const oldMessages = contextMessages.slice(0, splitPoint);
         const recentMessages = contextMessages.slice(splitPoint);
 
-        if (DEBUG) console.log(`Splitting: ${oldMessages.length} old messages, ${recentMessages.length} recent messages`);
-
-        try {
-          // Notify that compression is starting
-          if (onCompressionStart) {
-            onCompressionStart();
-          }
-
-          // Compress old messages
-          const compressed = await this.compressMessages(
-            oldMessages,
-            characterName,
-            apiConfig,
-            signal
-          );
-
-          compressedContext = `[Previous Events Summary]\n${compressed}\n[End Summary - Recent conversation follows]`;
+        if (cacheIsValid) {
+          // Use cached compression result
+          if (DEBUG) console.log(`Using cached compression from message ${compressedContextCache!.compressedAtMessageCount}`);
+          compressedContext = `[Previous Events Summary]\n${compressedContextCache!.compressedText}\n[End Summary - Recent conversation follows]`;
           messagesToFormat = recentMessages;
+        } else {
+          // Need to compress (or re-compress)
+          const oldMessages = contextMessages.slice(0, splitPoint);
+          if (DEBUG) console.log(`${cacheIsValid ? 'Re-compressing' : 'Compressing'}: ${oldMessages.length} old messages, ${recentMessages.length} recent messages`);
 
-          if (DEBUG) console.log('Compression successful, using compressed context');
-        } catch (error) {
-          console.error('Compression failed, using full context:', error);
-          // Fallback: use uncompressed messages (current behavior)
-          messagesToFormat = contextMessages;
-          compressedContext = '';
-        } finally {
-          // Notify that compression is done
-          if (onCompressionEnd) {
-            onCompressionEnd();
+          try {
+            // Notify that compression is starting
+            if (onCompressionStart) {
+              onCompressionStart();
+            }
+
+            // Compress old messages
+            const compressed = await this.compressMessages(
+              oldMessages,
+              characterName,
+              apiConfig,
+              signal
+            );
+
+            compressedContext = `[Previous Events Summary]\n${compressed}\n[End Summary - Recent conversation follows]`;
+            messagesToFormat = recentMessages;
+
+            // Update cache with new compression result
+            updatedCache = {
+              compressedText: compressed,
+              compressedAtMessageCount: oldMessages.length,
+              compressionLevel: effectiveCompressionLevel,
+              timestamp: Date.now()
+            };
+
+            if (DEBUG) console.log('Compression successful, cache updated');
+          } catch (error) {
+            console.error('Compression failed, using full context:', error);
+            // Fallback: use uncompressed messages (current behavior)
+            messagesToFormat = contextMessages;
+            compressedContext = '';
+            updatedCache = null; // Invalidate cache on compression failure
+          } finally {
+            // Notify that compression is done
+            if (onCompressionEnd) {
+              onCompressionEnd();
+            }
           }
         }
-      } else if (compressionEnabled) {
+      } else if (effectiveCompressionLevel !== 'none') {
         if (DEBUG) console.log(`Compression enabled but below threshold (${contextMessages.length} < ${COMPRESSION_THRESHOLD})`);
       }
 
@@ -501,9 +732,16 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         console.log('Payload with notes:', JSON.stringify(payload, null, 2));
       }
 
-      // Call the payload callback if provided (for debugging/inspection)
+      // Call the payload callback if provided (for debugging/inspection and context window display)
       if (onPayloadReady) {
-        onPayloadReady(payload);
+        onPayloadReady({
+          ...payload,
+          // Add field breakdown for token analysis modal
+          fieldBreakdown: memoryResult?.fieldBreakdown || [],
+          savedTokens: memoryResult?.savedTokens || 0,
+          // Include updated compression cache for ChatContext to store
+          compressedContextCache: updatedCache
+        });
       }
 
       // Make the actual API request to the working streaming endpoint
@@ -538,8 +776,9 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
     const characterName = character.data.name || 'Character';
     const currentUser = userName || 'User'; // Fallback if userName is empty
 
-    // Create the memory context - this might also need {{user}}
-    const memoryContext = this.createMemoryContext(character, template, currentUser); // Pass currentUser here
+    // Create the memory context - use defaults for compression
+    const memoryResult = this.createMemoryContext(character, template, currentUser, 'none', 0);
+    const memoryContext = memoryResult.memory;
 
     // Format the history from context messages
     let history = '';

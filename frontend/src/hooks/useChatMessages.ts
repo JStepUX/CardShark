@@ -602,7 +602,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         signal,
         effectiveCharacterData,
         undefined, // sessionNotes - not implemented yet
-        undefined, // compressionEnabled - not implemented yet
+        'none', // compressionLevel - default to no compression
+        null, // compressedContextCache - not used in this hook
         undefined, // onCompressionStart
         undefined, // onCompressionEnd
         (payload) => {
@@ -711,7 +712,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         signal,
         effectiveCharacterData,
         undefined, // sessionNotes
-        undefined, // compressionEnabled
+        'none', // compressionLevel - default to no compression
+        null, // compressedContextCache - not used in this hook
         undefined, // onCompressionStart
         undefined, // onCompressionEnd
         (payload) => {
@@ -861,7 +863,8 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         signal,
         effectiveCharacterData,
         undefined, // sessionNotes
-        undefined, // compressionEnabled
+        'none', // compressionLevel - default to no compression
+        null, // compressedContextCache - not used in this hook
         undefined, // onCompressionStart
         undefined, // onCompressionEnd
         (payload) => {

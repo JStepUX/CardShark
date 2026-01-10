@@ -15,7 +15,7 @@
  * - This module extracts the shared mechanics while allowing intent-specific customization
  */
 
-import { Message, PromptContextMessage } from '../services/chat/chatTypes';
+import { Message, PromptContextMessage, CompressionLevel, CompressedContextCache } from '../services/chat/chatTypes';
 import { buildContextMessages } from './contextBuilder';
 import { PromptHandler } from '../handlers/promptHandler';
 import { CharacterCard } from '../types/schema';
@@ -51,8 +51,11 @@ export interface GenerationConfig {
     /** Session notes to inject into context */
     sessionNotes?: string;
 
-    /** Whether compression is enabled */
-    compressionEnabled?: boolean;
+    /** Compression level for intelligent context management */
+    compressionLevel?: CompressionLevel;
+
+    /** Cached compression result for performance */
+    compressedContextCache?: CompressedContextCache | null;
 
     /** Callback when compression starts */
     onCompressionStart?: () => void;
@@ -218,7 +221,7 @@ export async function executeGeneration(
     config: GenerationConfig,
     context: GenerationContextResult
 ): Promise<Response> {
-    const { chatSessionUuid, characterData, apiConfig, signal, sessionNotes, compressionEnabled, onCompressionStart, onCompressionEnd, onPayloadReady } = config;
+    const { chatSessionUuid, characterData, apiConfig, signal, sessionNotes, compressionLevel, compressedContextCache, onCompressionStart, onCompressionEnd, onPayloadReady } = config;
 
     // Combine session notes with continuation instructions if present
     let effectiveSessionNotes = sessionNotes || '';
@@ -236,7 +239,8 @@ export async function executeGeneration(
         signal,
         characterData,
         effectiveSessionNotes,
-        compressionEnabled,
+        compressionLevel, // Changed from compressionEnabled
+        compressedContextCache, // Added cache parameter
         onCompressionStart,
         onCompressionEnd,
         onPayloadReady

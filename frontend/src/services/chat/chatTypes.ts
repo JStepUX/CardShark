@@ -95,6 +95,71 @@ export interface SaveChatResult {
   chatSessionUuid?: string;
 }
 
+// === CONTEXT MANAGEMENT TYPES ===
+
+/**
+ * Compression level for intelligent context management
+ * Determines which character card fields expire and when
+ */
+export type CompressionLevel = 'none' | 'chat_only' | 'chat_dialogue' | 'aggressive';
+
+/**
+ * Configuration for when a specific character card field should expire
+ */
+export interface FieldExpirationConfig {
+  /** If true, field never expires regardless of settings */
+  permanent: boolean;
+  /** Message count at which field expires. Null = never */
+  expiresAtMessage: number | null;
+  /** Lowest compression level that will expire this field */
+  minimumCompressionLevel: CompressionLevel;
+}
+
+/**
+ * Token information for a single character card field
+ * Used for detailed breakdown in token analysis modal
+ */
+export interface FieldTokenInfo {
+  /** V2 spec field name (system_prompt, description, etc) */
+  fieldKey: string;
+  /** Human-readable label for UI display */
+  fieldLabel: string;
+  /** Estimated token count for this field */
+  tokens: number;
+  /** Current inclusion state */
+  status: 'permanent' | 'active' | 'expired';
+  /** If expired, at what message count */
+  expiredAtMessage?: number;
+}
+
+/**
+ * Enhanced result from createMemoryContext with token breakdown
+ */
+export interface MemoryContextResult {
+  /** Assembled prompt string (existing return value) */
+  memory: string;
+  /** Per-field token accounting for modal display */
+  fieldBreakdown: FieldTokenInfo[];
+  /** Sum of included field tokens */
+  totalTokens: number;
+  /** Sum of expired field tokens (for UI feedback) */
+  savedTokens: number;
+}
+
+/**
+ * Cached compression result to avoid re-compressing on every message
+ */
+export interface CompressedContextCache {
+  /** The compressed summary text */
+  compressedText: string;
+  /** Message count when this compression was performed */
+  compressedAtMessageCount: number;
+  /** Compression level used for this compression */
+  compressionLevel: CompressionLevel;
+  /** Timestamp when compressed (for invalidation) */
+  timestamp: number;
+}
+
 // === TYPE GUARDS ===
 
 /**

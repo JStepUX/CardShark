@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll } from 'lucide-react';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { SidePanelProps } from './types';
-import { CompressionToggle } from './CompressionToggle';
+import { ContextManagementDropdown } from './ContextManagementDropdown';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
 import ImagePreview from '../ImagePreview';
@@ -24,7 +24,7 @@ export function SidePanel({
     onUnloadCharacter,
     onOpenJournal,
 }: SidePanelProps) {
-    const { compressionEnabled, setCompressionEnabled, sessionName, setSessionName } = useChat();
+    const { compressionLevel, setCompressionLevel, sessionName, setSessionName } = useChat();
     const [animationClass, setAnimationClass] = useState('');
     const [isAnimating, setIsAnimating] = useState(false);
     const [showExpanded, setShowExpanded] = useState(!isCollapsed);
@@ -106,32 +106,52 @@ export function SidePanel({
             </div>
 
             {/* Mode-specific content */}
-            {mode === 'world' && <WorldModeContent
-                currentRoom={currentRoom}
-                npcs={npcs}
-                activeNpcId={activeNpcId}
-                onSelectNpc={onSelectNpc}
-                onDismissNpc={onDismissNpc}
-                onOpenMap={onOpenMap}
-                worldId={worldId}
-                compressionEnabled={compressionEnabled}
-                setCompressionEnabled={setCompressionEnabled}
-                onOpenJournal={onOpenJournal}
-            />}
+            <div className="flex-1 overflow-y-auto">
+                {mode === 'world' && <WorldModeContent
+                    currentRoom={currentRoom}
+                    npcs={npcs}
+                    activeNpcId={activeNpcId}
+                    onSelectNpc={onSelectNpc}
+                    onDismissNpc={onDismissNpc}
+                    onOpenMap={onOpenMap}
+                    worldId={worldId}
+                />}
 
-            {mode === 'character' && <CharacterModeContent
-                compressionEnabled={compressionEnabled}
-                setCompressionEnabled={setCompressionEnabled}
-                onImageChange={onImageChange}
-                onUnloadCharacter={onUnloadCharacter}
-                onOpenJournal={onOpenJournal}
-            />}
+                {mode === 'character' && <CharacterModeContent
+                    onImageChange={onImageChange}
+                    onUnloadCharacter={onUnloadCharacter}
+                />}
 
-            {mode === 'assistant' && <AssistantModeContent
-                compressionEnabled={compressionEnabled}
-                setCompressionEnabled={setCompressionEnabled}
-                onOpenJournal={onOpenJournal}
-            />}
+                {mode === 'assistant' && <AssistantModeContent />}
+            </div>
+
+            {/* Bottom Section - Journal & Context Management (aligned with chat input) */}
+            <div className="border-t border-gray-800">
+                {/* Journal Button */}
+                {onOpenJournal && (
+                    <div className="px-4 pt-4 pb-6">
+                        <button
+                            onClick={onOpenJournal}
+                            className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
+                            title="Journal - Session notes and memories"
+                        >
+                            <BookOpen className="w-5 h-5 text-blue-400" />
+                            <div className="text-left flex-1">
+                                <div className="text-sm text-white">Journal</div>
+                                <div className="text-xs text-gray-500">Session notes and memories</div>
+                            </div>
+                        </button>
+                    </div>
+                )}
+
+                {/* Context Management */}
+                <div className="px-4 pb-5 pt-0">
+                    <ContextManagementDropdown
+                        compressionLevel={compressionLevel}
+                        onLevelChange={setCompressionLevel}
+                    />
+                </div>
+            </div>
         </div>
     );
 }
@@ -144,10 +164,7 @@ function WorldModeContent({
     onSelectNpc,
     onDismissNpc,
     onOpenMap,
-    worldId,
-    compressionEnabled,
-    setCompressionEnabled,
-    onOpenJournal
+    worldId
 }: {
     currentRoom?: any;
     npcs: any[];
@@ -156,9 +173,6 @@ function WorldModeContent({
     onDismissNpc?: (id: string) => void;
     onOpenMap?: () => void;
     worldId?: string;
-    compressionEnabled: boolean;
-    setCompressionEnabled: (enabled: boolean) => void;
-    onOpenJournal?: () => void;
 }) {
     return (
         <>
@@ -197,36 +211,19 @@ function WorldModeContent({
                 onDismissNpc={onDismissNpc}
             />
 
-            {/* Map & Journal Buttons */}
+            {/* Map Button */}
             <div className="px-4 py-4 border-b border-gray-800">
-                <div className="grid grid-cols-2 gap-2">
-                    <button
-                        onClick={onOpenMap}
-                        className="bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-3 py-3 flex flex-col items-center gap-2 transition-colors"
-                        title="World Map - Navigate between rooms"
-                    >
-                        <Map className="w-5 h-5 text-blue-400" />
-                        <span className="text-xs text-white">Map</span>
-                    </button>
-                    {onOpenJournal && (
-                        <button
-                            onClick={onOpenJournal}
-                            className="bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-3 py-3 flex flex-col items-center gap-2 transition-colors"
-                            title="Journal - Session notes and memories"
-                        >
-                            <BookOpen className="w-5 h-5 text-blue-400" />
-                            <span className="text-xs text-white">Journal</span>
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {/* Compression Toggle */}
-            <div className="px-4 py-4 border-b border-gray-800">
-                <CompressionToggle
-                    enabled={compressionEnabled}
-                    onToggle={setCompressionEnabled}
-                />
+                <button
+                    onClick={onOpenMap}
+                    className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
+                    title="World Map - Navigate between rooms"
+                >
+                    <Map className="w-5 h-5 text-blue-400" />
+                    <div className="text-left flex-1">
+                        <div className="text-sm text-white">Map</div>
+                        <div className="text-xs text-gray-500">Navigate between rooms</div>
+                    </div>
+                </button>
             </div>
 
             {/* Future Features - Placeholder */}
@@ -243,17 +240,11 @@ function WorldModeContent({
 
 // Character Mode Content
 function CharacterModeContent({
-    compressionEnabled,
-    setCompressionEnabled,
     onImageChange,
-    onUnloadCharacter,
-    onOpenJournal
+    onUnloadCharacter
 }: {
-    compressionEnabled: boolean;
-    setCompressionEnabled: (enabled: boolean) => void;
     onImageChange?: (newImageData: string | File) => void;
     onUnloadCharacter?: () => void;
-    onOpenJournal?: () => void;
 }) {
     // Get the actual image URL from CharacterContext (same as gallery uses)
     const { imageUrl } = useCharacter();
@@ -273,68 +264,16 @@ function CharacterModeContent({
                 </div>
             </div>
 
-            {/* Journal Button */}
-            {onOpenJournal && (
-                <div className="px-4 py-4 border-b border-gray-800">
-                    <button
-                        onClick={onOpenJournal}
-                        className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
-                    >
-                        <BookOpen className="w-5 h-5 text-blue-400" />
-                        <div className="text-left flex-1">
-                            <div className="text-sm text-white">Journal</div>
-                            <div className="text-xs text-gray-500">Session notes and memories</div>
-                        </div>
-                    </button>
-                </div>
-            )}
 
-            {/* Compression Toggle */}
-            <div className="px-4 py-4">
-                <CompressionToggle
-                    enabled={compressionEnabled}
-                    onToggle={setCompressionEnabled}
-                />
-            </div>
         </>
     );
 }
 
 // Assistant Mode Content
-function AssistantModeContent({
-    compressionEnabled,
-    setCompressionEnabled,
-    onOpenJournal
-}: {
-    compressionEnabled: boolean;
-    setCompressionEnabled: (enabled: boolean) => void;
-    onOpenJournal?: () => void;
-}) {
+function AssistantModeContent() {
     return (
         <>
-            {/* Journal Button */}
-            {onOpenJournal && (
-                <div className="px-4 py-4 border-b border-gray-800">
-                    <button
-                        onClick={onOpenJournal}
-                        className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
-                    >
-                        <BookOpen className="w-5 h-5 text-blue-400" />
-                        <div className="text-left flex-1">
-                            <div className="text-sm text-white">Journal</div>
-                            <div className="text-xs text-gray-500">Session notes and memories</div>
-                        </div>
-                    </button>
-                </div>
-            )}
 
-            {/* Compression Toggle */}
-            <div className="px-4 py-4">
-                <CompressionToggle
-                    enabled={compressionEnabled}
-                    onToggle={setCompressionEnabled}
-                />
-            </div>
         </>
     );
 }

@@ -25,6 +25,7 @@ import { LoreEntry, CharacterCard } from '../types/schema';
 import { buildContextMessages } from '../utils/contextBuilder';
 import { chatService, SessionSettings } from '../services/chat/chatService';
 import { stripCharacterPrefix } from '../utils/contentProcessing';
+import { CompressionLevel, CompressedContextCache } from '../services/chat/chatTypes';
 
 interface ReasoningSettings {
   enabled: boolean;
@@ -53,8 +54,9 @@ interface ChatContextType {
   currentChatId: string | null;
   sessionNotes: string;
   sessionName: string;
-  compressionEnabled: boolean;
+  compressionLevel: CompressionLevel;
   isCompressing: boolean;
+  compressedContextCache: CompressedContextCache | null;
   setCharacterDataOverride: (characterData: CharacterCard | null) => void;
   updateMessage: (messageId: string, content: string) => void;
   deleteMessage: (messageId: string) => void;
@@ -76,7 +78,8 @@ interface ChatContextType {
   clearError: () => void;
   setSessionNotes: (notes: string) => void;
   setSessionName: (name: string) => void;
-  setCompressionEnabled: (enabled: boolean) => void;
+  setCompressionLevel: (level: CompressionLevel) => void;
+  invalidateCompressionCache: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -115,8 +118,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [sessionNotes, setSessionNotesState] = useState<string>('');
   const [sessionName, setSessionNameState] = useState<string>('');
-  const [compressionEnabled, setCompressionEnabledState] = useState<boolean>(false);
+  const [compressionLevel, setCompressionLevelState] = useState<CompressionLevel>('none');
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
+  const [compressedContextCache, setCompressedContextCache] = useState<CompressedContextCache | null>(null);
   const [characterDataOverride, setCharacterDataOverride] = useState<CharacterCard | null>(null);
   const currentGenerationRef = useRef<AbortController | null>(null);
   const lastCharacterId = useRef<string | null>(null); // Stores character_id for file system comparison
@@ -231,24 +235,52 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
   }, [currentChatId, saveSessionSettings]);
 
   /**
-   * Set compression enabled with debounced save
+   * Invalidate compression cache (called when compression level changes or messages are modified)
    */
-  const setCompressionEnabled = useCallback((enabled: boolean) => {
+  const invalidateCompressionCache = useCallback(() => {
+    setCompressedContextCache(null);
+  }, []);
+
+  /**
+   * Set compression level with debounced save to global settings
+   * Invalidates compression cache when level changes
+   */
+  const setCompressionLevel = useCallback((level: CompressionLevel) => {
     // Optimistic update - immediate local state
-    setCompressionEnabledState(enabled);
+    setCompressionLevelState(level);
+
+    // Invalidate compression cache since level changed
+    invalidateCompressionCache();
 
     // Cancel pending save
     if (settingsSaveTimerRef.current) {
       clearTimeout(settingsSaveTimerRef.current);
     }
 
-    // Debounce save by 1500ms
-    if (currentChatId) {
-      settingsSaveTimerRef.current = setTimeout(() => {
-        saveSessionSettings(currentChatId, { compression_enabled: enabled });
-      }, 1500);
+    // Debounce save by 1500ms to global settings
+    // Note: This is now a GLOBAL setting, not per-chat
+    settingsSaveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem('cardshark_compression_level', level);
+      } catch (error) {
+        console.error('Failed to save compression level:', error);
+      }
+    }, 1500);
+  }, [invalidateCompressionCache]);
+
+  /**
+   * Load global compression level on mount
+   */
+  useEffect(() => {
+    try {
+      const savedLevel = localStorage.getItem('cardshark_compression_level') as CompressionLevel | null;
+      if (savedLevel && ['none', 'chat_only', 'chat_dialogue', 'aggressive'].includes(savedLevel)) {
+        setCompressionLevelState(savedLevel);
+      }
+    } catch (error) {
+      console.error('Failed to load compression level:', error);
     }
-  }, [currentChatId, saveSessionSettings]);
+  }, []);
 
   /**
    * Load session settings when chat session changes
@@ -259,7 +291,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         // Reset to defaults when no session
         setSessionNotesState('');
         setSessionNameState('');
-        setCompressionEnabledState(false);
         return;
       }
 
@@ -267,13 +298,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         const settings = await chatService.getSessionSettings(currentChatId);
         setSessionNotesState(settings.session_notes || '');
         setSessionNameState(settings.title || '');
-        setCompressionEnabledState(settings.compression_enabled);
+        // Note: compression_level is now GLOBAL, not per-chat
       } catch (error) {
         console.error('Failed to load session settings:', error);
         // Fallback to defaults on error
         setSessionNotesState('');
         setSessionNameState('');
-        setCompressionEnabledState(false);
       }
     };
 
@@ -868,10 +898,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,
           sessionNotes,
-          compressionEnabled,
+          compressionLevel, // Changed from compressionEnabled
+          compressedContextCache, // Pass cache for smart compression
           onCompressionStart: () => setIsCompressing(true),
           onCompressionEnd: () => setIsCompressing(false),
           onPayloadReady: (payload) => {
+            // Update compression cache if returned
+            if (payload.compressedContextCache) {
+              setCompressedContextCache(payload.compressedContextCache);
+            }
+
             setLastContextWindow({
               type: 'regeneration',
               timestamp: new Date().toISOString(),
@@ -896,10 +932,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,
           sessionNotes,
-          compressionEnabled,
+          compressionLevel, // Changed from compressionEnabled
+          compressedContextCache, // Pass cache for smart compression
           onCompressionStart: () => setIsCompressing(true),
           onCompressionEnd: () => setIsCompressing(false),
           onPayloadReady: (payload) => {
+            // Update compression cache if returned
+            if (payload.compressedContextCache) {
+              setCompressedContextCache(payload.compressedContextCache);
+            }
+
             setLastContextWindow({
               type: 'regeneration',
               timestamp: new Date().toISOString(),
@@ -1008,7 +1050,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
       currentGenerationRef.current = null;
     }
-  }, [characterData, characterDataOverride, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes, compressionEnabled, debouncedSave]);
+  }, [characterData, characterDataOverride, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes, compressionLevel, compressedContextCache, debouncedSave]);
 
   const generateResponse = useCallback(async (prompt: string, retryCount: number = 0) => {
     if (!characterData) { setError('No character data for response.'); return; }
@@ -1069,10 +1111,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         abortCtrl.signal,
         effectiveCharacterData,
         sessionNotes,
-        compressionEnabled,
+        compressionLevel, // Changed from compressionEnabled
+        compressedContextCache, // Pass cache for smart compression
         () => setIsCompressing(true),
         () => setIsCompressing(false),
         (payload) => {
+          // Update compression cache if returned from handler
+          if (payload.compressedContextCache) {
+            setCompressedContextCache(payload.compressedContextCache);
+          }
+
           setLastContextWindow({
             type: 'generation',
             timestamp: new Date().toISOString(),
@@ -1304,10 +1352,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,
           sessionNotes,
-          compressionEnabled,
+          compressionLevel, // Changed from compressionEnabled
+          compressedContextCache, // Pass cache for smart compression
           onCompressionStart: () => setIsCompressing(true),
           onCompressionEnd: () => setIsCompressing(false),
           onPayloadReady: (payload) => {
+            // Update compression cache if returned
+            if (payload.compressedContextCache) {
+              setCompressedContextCache(payload.compressedContextCache);
+            }
+
             setLastContextWindow({
               type: 'continuation',
               timestamp: new Date().toISOString(),
@@ -1333,10 +1387,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           apiConfig: prepareAPIConfig(apiConfig),
           signal: abortCtrl.signal,
           sessionNotes,
-          compressionEnabled,
+          compressionLevel, // Changed from compressionEnabled
+          compressedContextCache, // Pass cache for smart compression
           onCompressionStart: () => setIsCompressing(true),
           onCompressionEnd: () => setIsCompressing(false),
           onPayloadReady: (payload) => {
+            // Update compression cache if returned
+            if (payload.compressedContextCache) {
+              setCompressedContextCache(payload.compressedContextCache);
+            }
+
             setLastContextWindow({
               type: 'continuation',
               timestamp: new Date().toISOString(),
@@ -1426,7 +1486,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
       currentGenerationRef.current = null;
     }
-  }, [characterData, characterDataOverride, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes, compressionEnabled, debouncedSave]);
+  }, [characterData, characterDataOverride, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, currentChatId, saveChat, sessionNotes, compressionLevel, compressedContextCache, debouncedSave]);
 
   const stopGeneration = useCallback(() => {
     if (currentGenerationRef.current) {
@@ -1611,14 +1671,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     messages, isLoading, isGenerating, error, currentUser, lastContextWindow,
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
     currentPreviewImageIndex, currentChatId: currentChatId,
-    sessionNotes, sessionName, compressionEnabled, isCompressing,
+    sessionNotes, sessionName, compressionLevel, isCompressing, compressedContextCache,
     setCharacterDataOverride,
     updateMessage, deleteMessage, addMessage, setMessages, cycleVariation,
     generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,
     resetTriggeredLoreImagesState, clearError,
-    setSessionNotes, setSessionName, setCompressionEnabled,
+    setSessionNotes, setSessionName, setCompressionLevel, invalidateCompressionCache,
   };
 
   return <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>;
