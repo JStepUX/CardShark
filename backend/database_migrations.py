@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Current schema version - increment when making schema changes
 # When this changes, the old database will be deleted and rebuilt fresh
-CURRENT_SCHEMA_VERSION = "2.3.0"  # Added chat_type column for Workshop session separation
+CURRENT_SCHEMA_VERSION = "2.4.0"  # Added lore_activations table for SillyTavern-compatible lore temporal effects (sticky/cooldown/delay)
 
 
 

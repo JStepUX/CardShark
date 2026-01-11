@@ -62,6 +62,9 @@ export interface LoreEntryInterface {
 export interface CharacterBook {
     entries: any[];
     name: string;
+    scan_depth?: number;        // How many recent messages to scan for keywords (default: 3)
+    token_budget?: number;      // Max tokens for all lore entries (0 = unlimited, default: 0)
+    recursive_scanning?: boolean; // Not implemented yet
 }
 
 // Main Character Data Interface
@@ -160,15 +163,15 @@ export function createEmptyLoreEntry(index: number): LoreEntryInterface {
             prevent_recursion: false,
             delay_until_recursion: false,
             scan_depth: null,
-            match_whole_words: null,
+            match_whole_words: true,  // Default: match whole words (prevents "cat" matching "category")
             use_group_scoring: false,
-            case_sensitive: null,
+            case_sensitive: false,    // Default: case insensitive
             automation_id: "",
             role: 0, // Ensure role is initialized correctly
             vectorized: false,
-            sticky: 0,
-            cooldown: 0,
-            delay: 0
+            sticky: 2,                // Default: stays active for 2 messages
+            cooldown: 0,              // Default: no cooldown
+            delay: 0                  // Default: no delay
         }
     };
 }
@@ -217,7 +220,10 @@ export function createEmptyCharacterCard(): CharacterCard {
             group_only_greetings: [],
             character_book: {
                 entries: [],
-                name: "Fresh"
+                name: "Fresh",
+                scan_depth: 3,          // Default: scan last 3 messages
+                token_budget: 0,        // Default: unlimited tokens
+                recursive_scanning: false
             }
             // character_uuid is optional and will be undefined by default
         },

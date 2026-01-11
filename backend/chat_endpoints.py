@@ -353,6 +353,16 @@ def append_chat_message_endpoint(
             metadata_json=metadata_json
         )
 
+        # 3.5. Decrement lore activation timers (sticky/cooldown) after each message
+        try:
+            from backend.services.lore_activation_tracker import LoreActivationTracker
+            activation_tracker = LoreActivationTracker(db, payload.chat_session_uuid)
+            decrement_result = activation_tracker.decrement_all()
+            logger.log_step(f"Decremented lore activations: {decrement_result}")
+        except Exception as tracker_error:
+            logger.log_warning(f"Error decrementing lore activations: {tracker_error}")
+            # Continue even if lore tracking fails
+
         # 4. Update ChatSession DB record (message_count, last_message_time)
         # The create_chat_message function already updates the session metadata
         # But let's refresh to get the latest data

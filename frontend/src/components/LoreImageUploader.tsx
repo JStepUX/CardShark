@@ -87,11 +87,17 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
         throw new Error('No image source selected.');
       }
 
-      if (response && response.success && response.image_uuid) {
-        onImageUploaded(loreEntryId, response.image_uuid, response.image_path);
-        onClose();
+      // Backend returns DataResponse structure: { success: bool, data: {...} }
+      if (response && response.success && response.data) {
+        const { image_uuid, image_path } = response.data;
+        if (image_uuid) {
+          onImageUploaded(loreEntryId, image_uuid, image_path);
+          onClose();
+        } else {
+          throw new Error(response.data.message || 'Failed to upload image: missing image_uuid in response.');
+        }
       } else {
-        throw new Error(response?.message || 'Failed to upload image.');
+        throw new Error(response?.data?.message || response?.message || 'Failed to upload image.');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';

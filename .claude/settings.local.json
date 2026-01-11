@@ -9,7 +9,10 @@
       "Bash(npm run dev:*)",
       "Bash(npx tsc:*)",
       "Bash(dir:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.sillytavern.app)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

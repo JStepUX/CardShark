@@ -442,59 +442,126 @@ class ApiHandler:
                                 if character_db and character_db.lore_books:
                                     lore_book = character_db.lore_books[0]  # Assuming one lore book per character
                                     lore_entries = []
-                                    
+
                                     for db_entry in lore_book.entries:
                                         if db_entry.enabled:  # Only include enabled entries
+                                            # Parse extensions from JSON
+                                            extensions = {}
+                                            if db_entry.extensions_json:
+                                                try:
+                                                    extensions = json.loads(db_entry.extensions_json) if isinstance(db_entry.extensions_json, str) else db_entry.extensions_json
+                                                except:
+                                                    extensions = {}
+
                                             entry_dict = {
+                                                'id': db_entry.id,  # Include ID for tracking
                                                 'content': db_entry.content,
                                                 'keys': json.loads(db_entry.keys_json) if db_entry.keys_json else [],
+                                                'secondary_keys': json.loads(db_entry.secondary_keys_json) if db_entry.secondary_keys_json else [],
                                                 'enabled': db_entry.enabled,
                                                 'position': db_entry.position,
                                                 'insertion_order': db_entry.insertion_order,
-                                                'case_sensitive': False,  # Default value
-                                                'name': db_entry.comment or '',  # Use comment as name fallback
+                                                'case_sensitive': extensions.get('case_sensitive', False),
+                                                'use_regex': False,  # Default, can be in extensions
+                                                'name': db_entry.comment or '',
                                                 'has_image': bool(db_entry.image_uuid),
-                                                'image_uuid': db_entry.image_uuid or ''
+                                                'image_uuid': db_entry.image_uuid or '',
+                                                'priority': extensions.get('priority', 100),
+                                                'constant': extensions.get('constant', False),
+                                                'selective': db_entry.selective,
+                                                'extensions': {
+                                                    'match_whole_words': extensions.get('match_whole_words', True),
+                                                    'sticky': extensions.get('sticky', 2),
+                                                    'cooldown': extensions.get('cooldown', 0),
+                                                    'delay': extensions.get('delay', 0),
+                                                    'scan_depth': extensions.get('scan_depth', None),
+                                                }
                                             }
                                             lore_entries.append(entry_dict)
                                     
                                     if lore_entries:
                                         self.logger.log_step(f"Loaded {len(lore_entries)} lore entries from database")
-                                        
-                                        # Create text for matching
-                                        history_text = ''
-                                        for msg in chat_history:
-                                            role = msg.get('role', '')
-                                            content = msg.get('content', '')
-                                            if role == 'user':
-                                                history_text += f"User: {content}\n"
-                                            else:
-                                                char_name = character_data.get('data', {}).get('name', 'Character')
-                                                history_text += f"{char_name}: {content}\n"
-                                        
-                                        # Add current message
-                                        if current_message:
-                                            history_text += f"User: {current_message}"
-                                            
-                                        # Match lore entries against chat history
-                                        matched_entries = lore_handler.match_lore_entries(lore_entries, history_text)
-                                        
-                                        # Only modify memory if we matched entries
-                                        if matched_entries:
-                                            self.logger.log_step(f"Matched {len(matched_entries)} lore entries")
+
+                                        # Get chat_session_uuid for temporal tracking
+                                        chat_session_uuid = generation_params.get('chat_session_uuid')
+
+                                        # Initialize activation tracker if we have a session UUID
+                                        activation_tracker = None
+                                        active_sticky_entries = []
+
+                                        if chat_session_uuid:
+                                            try:
+                                                from backend.services.lore_activation_tracker import LoreActivationTracker
+
+                                                activation_tracker = LoreActivationTracker(db, chat_session_uuid)
+
+                                                # Get currently active sticky lore entries
+                                                active_lore_ids = activation_tracker.get_active_lore_entry_ids()
+                                                if active_lore_ids:
+                                                    active_sticky_entries = [e for e in lore_entries if e.get('id') in active_lore_ids]
+                                                    self.logger.log_step(f"Found {len(active_sticky_entries)} active sticky lore entries")
+
+                                            except Exception as tracker_error:
+                                                self.logger.log_warning(f"Could not initialize lore activation tracker: {tracker_error}")
+
+                                        # Get scan_depth from character_book or use default
+                                        character_book_data = character_data.get('data', {}).get('character_book', {})
+                                        scan_depth = character_book_data.get('scan_depth', 3)
+
+                                        # Match lore entries against chat history (using new chat_messages API)
+                                        matched_entries = lore_handler.match_lore_entries(
+                                            lore_entries=lore_entries,
+                                            chat_messages=chat_history,
+                                            scan_depth=scan_depth
+                                        )
+
+                                        # Activate newly matched entries with temporal tracking
+                                        if matched_entries and activation_tracker:
+                                            message_number = len(chat_history)
+                                            for entry in matched_entries:
+                                                entry_id = entry.get('id')
+                                                if entry_id and not activation_tracker.is_in_cooldown(entry_id):
+                                                    # Get temporal settings from entry
+                                                    sticky = entry.get('extensions', {}).get('sticky', 2)
+                                                    cooldown = entry.get('extensions', {}).get('cooldown', 0)
+                                                    delay = entry.get('extensions', {}).get('delay', 0)
+
+                                                    activation_tracker.activate(
+                                                        lore_entry_id=entry_id,
+                                                        character_uuid=character_uuid,
+                                                        message_number=message_number,
+                                                        sticky=sticky,
+                                                        cooldown=cooldown,
+                                                        delay=delay
+                                                    )
+
+                                        # Integrate lore (matched + active sticky) into prompt
+                                        if matched_entries or active_sticky_entries:
+                                            total_active = len(set([e.get('id') for e in matched_entries + active_sticky_entries if e.get('id')]))
+                                            self.logger.log_step(f"Integrating {total_active} total lore entries (matched + sticky)")
+
+                                            # Get token budget from character_book
+                                            token_budget = character_book_data.get('token_budget', 0)  # 0 = unlimited
+
                                             # Create new memory with lore
                                             memory = lore_handler.integrate_lore_into_prompt(
-                                                character_data, 
-                                                matched_entries
-                                            )                                            # Note this in the context window
+                                                character_data,
+                                                matched_entries,
+                                                active_sticky_entries,
+                                                token_budget
+                                            )
+
+                                            # Note this in the context window
                                             if context_window is not None and isinstance(context_window, dict):
                                                 context_window['lore_info'] = {
                                                     'matched_count': len(matched_entries),
-                                                    'entry_keys': [entry.get('keys', [''])[0] for entry in matched_entries 
+                                                    'sticky_count': len(active_sticky_entries),
+                                                    'total_count': total_active,
+                                                    'entry_keys': [entry.get('keys', [''])[0] for entry in matched_entries
                                                                 if entry.get('keys')]
                                                 }
                                         else:
-                                            self.logger.log_step("No lore entries matched the chat history")
+                                            self.logger.log_step("No lore entries matched or active")
                                     else:
                                         self.logger.log_step("No enabled lore entries found for character")
                                 else:

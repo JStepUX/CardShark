@@ -31,6 +31,7 @@ interface ChatBubbleProps {
   onRegenerateGreeting?: () => void; // New prop for greeting regeneration
   currentUser?: string | UserProfile; // Updated to accept both string and UserProfile
   characterName?: string;
+  triggeredLoreImages?: string[]; // Lore images to display inline
 }
 
 const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
@@ -47,7 +48,8 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   onPrevVariation,
   onRegenerateGreeting,
   currentUser,
-  characterName
+  characterName,
+  triggeredLoreImages = []
 }) => {
   const isMounted = useRef(true);
   const previousContent = useRef<string>(message.content);
@@ -440,6 +442,21 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
             className="chat-bubble-editor"
             preserveWhitespace={true}
           />
+        )}
+
+        {/* Triggered lore images - display inline below message */}
+        {triggeredLoreImages && triggeredLoreImages.length > 0 && message.role === 'assistant' && (
+          <div className="lore-images-container mt-3 flex gap-2 flex-wrap">
+            {triggeredLoreImages.map((imagePath, idx) => (
+              <img
+                key={`${imagePath}-${idx}`}
+                src={imagePath}
+                className="lore-image rounded max-h-32 object-cover border border-stone-700 hover:border-stone-500 transition-colors"
+                alt="Triggered lore"
+                title="Lore entry triggered"
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>

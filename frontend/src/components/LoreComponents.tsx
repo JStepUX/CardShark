@@ -17,6 +17,7 @@ import { useCharacter } from '../contexts/CharacterContext'; // To get character
 // import { useChat } from '../contexts/ChatContext'; // Import useChat when needed
 import { useCharacterUuid } from '../hooks/useCharacterUuid'; // Import UUID hook
 import { htmlToPlainText } from '../utils/contentUtils'; // Import HTML to plain text converter
+import { getApiBaseUrl } from '../utils/apiConfig'; // Import API base URL helper
 
 interface LoreCardProps {
   item: LoreEntry;
@@ -125,15 +126,21 @@ export const LoreCard: React.FC<LoreCardProps> = ({
   const getFullImagePath = (imageUuid?: string): string | undefined => {
     if (!imageUuid) return undefined;
 
+    const apiBaseUrl = getApiBaseUrl();
+    let relativePath: string;
+
     // If we have a UUID (either built-in or from our mapping), use it
     if (charUuidString) {
-      return `/uploads/lore_images/${charUuidString}/${imageUuid}`;
+      relativePath = `/uploads/lore_images/${charUuidString}/${imageUuid}`;
+    } else {
+      // Fallback for characters without UUID - use a deterministic path based on character name or ID
+      const characterIdentifier = characterData?.data?.name || 'unknown';
+      const safeIdentifier = encodeURIComponent(characterIdentifier);
+      relativePath = `/uploads/lore_images/by-name/${safeIdentifier}/${imageUuid}`;
     }
 
-    // Fallback for characters without UUID - use a deterministic path based on character name or ID
-    const characterIdentifier = characterData?.data?.name || 'unknown';
-    const safeIdentifier = encodeURIComponent(characterIdentifier);
-    return `/uploads/lore_images/by-name/${safeIdentifier}/${imageUuid}`;
+    // Prepend API base URL in development (returns empty string in production)
+    return `${apiBaseUrl}${relativePath}`;
   };
 
   let loreImageUploaderElement = null;
@@ -182,6 +189,17 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             >
               {!item.enabled ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}
             </button>
+
+            {/* Image indicator badge */}
+            {item.has_image && item.image_uuid && (
+              <div
+                className="flex items-center gap-1 px-2 py-1 bg-green-900/30 border border-green-700/50 rounded text-xs text-green-400"
+                title="This lore entry has an image attached"
+              >
+                <FileImage size={14} />
+                <span>Image</span>
+              </div>
+            )}
 
             <select
               value={item.position}
@@ -440,39 +458,45 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                 <label className="block text-sm text-gray-400 mb-1">Sticky</label>
                 <input
                   type="number"
-                  value={item.extensions?.sticky || ''}
+                  value={item.extensions?.sticky ?? ''}
                   onChange={(e) => onUpdate(item.id, {
                     extensions: { ...(item.extensions || {}), sticky: e.target.value ? parseInt(e.target.value) : null }
                   })}
                   className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
-                  placeholder="# Messages"
+                  placeholder="2 (default)"
+                  min="0"
                 />
+                <p className="text-xs text-gray-500 mt-1">Stay active for N messages</p>
               </div>
 
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Cooldown</label>
                 <input
                   type="number"
-                  value={item.extensions?.cooldown || ''}
+                  value={item.extensions?.cooldown ?? ''}
                   onChange={(e) => onUpdate(item.id, {
                     extensions: { ...(item.extensions || {}), cooldown: e.target.value ? parseInt(e.target.value) : null }
                   })}
                   className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
-                  placeholder="# Messages"
+                  placeholder="0 (default)"
+                  min="0"
                 />
+                <p className="text-xs text-gray-500 mt-1">Block for N messages after sticky</p>
               </div>
 
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Delay</label>
                 <input
                   type="number"
-                  value={item.extensions?.delay || ''}
+                  value={item.extensions?.delay ?? ''}
                   onChange={(e) => onUpdate(item.id, {
                     extensions: { ...(item.extensions || {}), delay: e.target.value ? parseInt(e.target.value) : null }
                   })}
                   className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
-                  placeholder="# Messages"
+                  placeholder="0 (default)"
+                  min="0"
                 />
+                <p className="text-xs text-gray-500 mt-1">Delay activation by N messages</p>
               </div>
             </div>
 

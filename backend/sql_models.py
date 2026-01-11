@@ -117,6 +117,34 @@ class LoreImage(Base):
     uploader_character = relationship("Character", back_populates="uploaded_lore_images", foreign_keys=[uploader_character_uuid])
     lore_entries = relationship("LoreEntry", back_populates="image")
 
+class LoreActivation(Base):
+    """
+    Tracks active lore entries in chat sessions with temporal effects (sticky/cooldown/delay).
+    Enables SillyTavern-compatible lore expiration mechanics.
+    """
+    __tablename__ = "lore_activations"
+    __table_args__ = {'extend_existing': True}
+
+    activation_id = Column(String, primary_key=True, index=True)  # UUID
+    chat_session_uuid = Column(String, ForeignKey("chat_sessions.chat_session_uuid"), nullable=False, index=True)
+    lore_entry_id = Column(Integer, ForeignKey("lore_entries.id"), nullable=False, index=True)
+    character_uuid = Column(String, ForeignKey("characters.character_uuid"), nullable=False)
+
+    # Temporal state tracking
+    activated_at_message_number = Column(Integer, nullable=False)  # Message # when activated
+    sticky_remaining = Column(Integer, default=0)  # Messages remaining in sticky state
+    cooldown_remaining = Column(Integer, default=0)  # Messages remaining in cooldown state
+    delay_remaining = Column(Integer, default=0)  # Messages remaining in delay state
+
+    # Metadata
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    chat_session = relationship("ChatSession")
+    lore_entry = relationship("LoreEntry")
+    character = relationship("Character")
+
 class World(Base):
     __tablename__ = "worlds"
     __table_args__ = {'extend_existing': True}

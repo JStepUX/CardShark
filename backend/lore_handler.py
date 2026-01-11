@@ -5,7 +5,7 @@ from typing import Dict, List, Any
 
 class LoreHandler:
     """Handles lore entry matching and integration into prompts"""
-    
+
     # Position constants for clarity
     POSITION_BEFORE_CHAR = 0
     POSITION_AFTER_CHAR = 1
@@ -14,10 +14,27 @@ class LoreHandler:
     POSITION_AT_DEPTH = 4
     POSITION_BEFORE_EXAMPLE = 5
     POSITION_AFTER_EXAMPLE = 6
-    
+
     def __init__(self, logger, default_position=0):  # Default to before_char (0)
         self.logger = logger
         self.default_position = default_position
+
+    @staticmethod
+    def estimate_tokens(text: str) -> int:
+        """
+        Estimate token count for text using simple heuristic.
+        Roughly 1 token per 4 characters (conservative estimate).
+
+        Args:
+            text: Text to estimate tokens for
+
+        Returns:
+            Estimated token count
+        """
+        if not text:
+            return 0
+        # Conservative estimate: ~4 chars per token
+        return max(1, len(text) // 4)
 
     def extract_lore_from_metadata(self, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -63,16 +80,34 @@ class LoreHandler:
                     if not isinstance(entry, dict):
                         continue
                         
+                    # Extract extensions for advanced features
+                    extensions = entry.get('extensions', {})
+                    if not isinstance(extensions, dict):
+                        extensions = {}
+
                     normalized_entry = {
                         'content': entry.get('content', ''),
                         'keys': entry.get('keys', []),
+                        'secondary_keys': entry.get('secondary_keys', []),
                         'enabled': entry.get('enabled', True),
                         'position': self._convert_position(entry.get('position', self.default_position)),
                         'insertion_order': entry.get('insertion_order', 0),
                         'case_sensitive': entry.get('case_sensitive', False),
+                        'use_regex': entry.get('use_regex', False),
                         'name': entry.get('name', ''),
-                        'has_image': entry.get('has_image', False), # Add has_image
-                        'image_uuid': entry.get('image_uuid', '') # Add image_uuid
+                        'has_image': entry.get('has_image', False),
+                        'image_uuid': entry.get('image_uuid', ''),
+                        'priority': entry.get('priority', 100),  # For token budget prioritization
+                        'constant': entry.get('constant', False),  # Always included if true
+                        'selective': entry.get('selective', False),  # Requires both keys and secondary_keys
+                        # Extensions (advanced features)
+                        'extensions': {
+                            'match_whole_words': extensions.get('match_whole_words', True),  # Default True for quality
+                            'sticky': extensions.get('sticky', 2),  # Default 2 messages
+                            'cooldown': extensions.get('cooldown', 0),
+                            'delay': extensions.get('delay', 0),
+                            'scan_depth': extensions.get('scan_depth', None),  # Per-entry override
+                        }
                     }
                     
                     # Only add entries with content and at least one key
@@ -114,75 +149,169 @@ class LoreHandler:
         else:
             return self.default_position
     
-    def match_lore_entries(self, 
-                           lore_entries: List[Dict], 
-                           text: str) -> List[Dict]:
+    def match_lore_entries(self,
+                           lore_entries: List[Dict],
+                           text: str = None,
+                           chat_messages: List[Any] = None,
+                           scan_depth: int = 3) -> List[Dict]:
         """
-        Match lore entries against the given text
-        
+        Match lore entries against chat history with advanced keyword matching.
+        Supports scan depth, regex, word boundaries, and case sensitivity.
+
         Args:
             lore_entries: List of lore entry dictionaries
-            text: Text to match against
-            
+            text: (Deprecated) Text to match against - use chat_messages instead
+            chat_messages: List of chat message objects with 'content' field
+            scan_depth: Number of recent messages to scan (0 = all, default: 3)
+
         Returns:
             List of matched lore entries
         """
-        if not lore_entries or not text:
+        # Build scan text from chat messages
+        if chat_messages is not None:
+            # Use only last N messages based on scan_depth
+            if scan_depth > 0 and len(chat_messages) > scan_depth:
+                messages_to_scan = chat_messages[-scan_depth:]
+            else:
+                messages_to_scan = chat_messages
+
+            # Concatenate message content
+            scan_text_parts = []
+            for msg in messages_to_scan:
+                content = msg.get('content', '') if isinstance(msg, dict) else getattr(msg, 'content', '')
+                if content:
+                    scan_text_parts.append(content)
+
+            scan_text = "\n".join(scan_text_parts)
+            self.logger.log_step(f"Scanning last {len(messages_to_scan)} messages (scan_depth={scan_depth})")
+        elif text is not None:
+            # Fallback to old text-based API for backwards compatibility
+            scan_text = text
+            self.logger.log_step("Using deprecated text parameter (consider using chat_messages)")
+        else:
+            self.logger.log_warning("No text or chat_messages provided for lore matching")
             return []
-            
+
+        if not lore_entries or not scan_text:
+            return []
+
         self.logger.log_step(f"Matching {len(lore_entries)} lore entries against text")
-        
+
         # Sort entries by insertion order to maintain priority
         sorted_entries = sorted(lore_entries, key=lambda e: e.get('insertion_order', 0))
         matched_entries = []
-        
+
         for entry in sorted_entries:
             # Skip disabled entries
             if entry.get('enabled') is False:
                 continue
-                
+
             # Skip entries with no keys
             keys = entry.get('keys', [])
             if not keys:
                 continue
-                
-            # Basic search text (case-insensitive)
-            search_text = text.lower()
-            
+
+            # Get matching options from entry
+            case_sensitive = entry.get('case_sensitive', False)
+            match_whole_words = entry.get('extensions', {}).get('match_whole_words', True)  # Default to True for quality
+            use_regex = entry.get('use_regex', False)
+
+            # Prepare search text based on case sensitivity
+            search_text = scan_text if case_sensitive else scan_text.lower()
+
             # Try to find a match for any key
             matched = False
             for key in keys:
                 if not key or not isinstance(key, str):
                     continue
-                    
-                search_key = key.strip().lower()
-                if search_key and search_key in search_text:
-                    matched = True
-                    self.logger.log_step(f"Matched key: {key}")
-                    break
-                    
+
+                key = key.strip()
+                if not key:
+                    continue
+
+                # Check if key is a regex pattern (starts and ends with /)
+                is_regex = use_regex or (key.startswith('/') and key.endswith('/') and len(key) > 2)
+
+                if is_regex:
+                    # Regex matching
+                    pattern_str = key[1:-1] if key.startswith('/') else key  # Strip / delimiters
+                    try:
+                        flags = 0 if case_sensitive else re.IGNORECASE
+                        if re.search(pattern_str, scan_text, flags):
+                            matched = True
+                            self.logger.log_step(f"Matched regex key: {key}")
+                            break
+                    except re.error as e:
+                        self.logger.log_warning(f"Invalid regex pattern '{key}': {e}")
+                        continue
+
+                elif match_whole_words:
+                    # Word boundary matching (prevents "cat" from matching "category")
+                    pattern = r'\b' + re.escape(key) + r'\b'
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    if re.search(pattern, scan_text, flags):
+                        matched = True
+                        self.logger.log_step(f"Matched whole word key: {key}")
+                        break
+
+                else:
+                    # Simple substring matching (original behavior)
+                    search_key = key if case_sensitive else key.lower()
+                    if search_key in search_text:
+                        matched = True
+                        self.logger.log_step(f"Matched substring key: {key}")
+                        break
+
             if matched:
                 matched_entries.append(entry)
-            
+
         self.logger.log_step(f"Matched {len(matched_entries)} lore entries")
         return matched_entries
         
-    def integrate_lore_into_prompt(self, 
-                                  character_data: Dict, 
-                                  matched_entries: List[Dict]) -> str:
+    def integrate_lore_into_prompt(self,
+                                  character_data: Dict,
+                                  matched_entries: List[Dict],
+                                  active_sticky_entries: List[Dict] = None,
+                                  token_budget: int = 0) -> str:
         """
-        Integrate lore entries into the prompt
-        
+        Integrate lore entries into the prompt with token budget enforcement.
+        Combines newly matched entries with still-active sticky entries.
+
         Args:
             character_data: Character card data
-            matched_entries: List of matched lore entries
-            
+            matched_entries: List of newly matched lore entries
+            active_sticky_entries: List of lore entries that are still active from sticky state
+            token_budget: Maximum tokens for all lore entries (0 = unlimited)
+
         Returns:
             Formatted prompt with lore entries
         """
-        if not matched_entries:
+        # Merge newly matched entries with sticky entries (avoid duplicates)
+        all_entries = list(matched_entries)  # Copy list
+
+        if active_sticky_entries:
+            # Get IDs of already-matched entries to avoid duplicates
+            matched_ids = set()
+            for entry in matched_entries:
+                entry_id = entry.get('id') or entry.get('name', '')
+                if entry_id:
+                    matched_ids.add(entry_id)
+
+            # Add sticky entries that aren't already matched
+            for sticky_entry in active_sticky_entries:
+                entry_id = sticky_entry.get('id') or sticky_entry.get('name', '')
+                if entry_id not in matched_ids:
+                    all_entries.append(sticky_entry)
+
+        if not all_entries:
             return self._create_basic_prompt(character_data)
-            
+
+        self.logger.log_step(f"Integrating {len(all_entries)} lore entries ({len(matched_entries)} newly matched, {len(active_sticky_entries or [])} sticky)")
+
+        # Apply token budget if specified
+        if token_budget > 0:
+            all_entries = self._apply_token_budget(all_entries, token_budget)
+
         # Group entries by position
         before_char = []  # Position 0 = before_char
         after_char = []   # Position 1 = after_char
@@ -190,7 +319,7 @@ class LoreHandler:
         author_note_bottom = []  # Position 3 = an_bottom
         before_example = []  # Position 5 = before_example
         after_example = []   # Position 6 = after_example
-        
+
         # Position mapping from integers or strings
         position_mapping = {
             # Integer positions
@@ -210,8 +339,8 @@ class LoreHandler:
             'before_example': before_example,
             'after_example': after_example
         }
-        
-        for entry in matched_entries:
+
+        for entry in all_entries:
             content = entry.get('content', '')
             if not content:
                 continue
@@ -294,6 +423,63 @@ class LoreHandler:
             
         return memory
         
+    def _apply_token_budget(self, entries: List[Dict], token_budget: int) -> List[Dict]:
+        """
+        Apply token budget to lore entries with priority-based discarding.
+
+        SillyTavern activation order:
+        1. Constant entries (always included)
+        2. Entries sorted by priority (lower number = higher priority = kept longer)
+        3. Discard lowest priority entries first when budget exceeded
+
+        Args:
+            entries: List of lore entries to filter
+            token_budget: Maximum tokens allowed
+
+        Returns:
+            Filtered list of entries within budget
+        """
+        # Separate constant and non-constant entries
+        constant_entries = [e for e in entries if e.get('constant', False)]
+        non_constant_entries = [e for e in entries if not e.get('constant', False)]
+
+        # Sort non-constant by priority (lower = higher priority = discarded last)
+        # Then by insertion_order as tiebreaker
+        non_constant_entries.sort(
+            key=lambda e: (e.get('priority', 100), e.get('insertion_order', 0))
+        )
+
+        # Calculate tokens and accumulate until budget exceeded
+        included_entries = []
+        total_tokens = 0
+
+        # Always include constant entries first
+        for entry in constant_entries:
+            content = entry.get('content', '')
+            tokens = self.estimate_tokens(content)
+            total_tokens += tokens
+            included_entries.append(entry)
+
+        self.logger.log_step(f"Constant entries: {len(constant_entries)} entries, {total_tokens} tokens")
+
+        # Add non-constant entries in priority order until budget exhausted
+        for entry in non_constant_entries:
+            content = entry.get('content', '')
+            tokens = self.estimate_tokens(content)
+
+            if total_tokens + tokens <= token_budget:
+                total_tokens += tokens
+                included_entries.append(entry)
+            else:
+                # Budget exceeded, stop adding entries
+                discarded_count = len(non_constant_entries) - len([e for e in included_entries if not e.get('constant')])
+                self.logger.log_step(f"Token budget ({token_budget}) exceeded. Discarded {discarded_count} low-priority entries")
+                break
+
+        self.logger.log_step(f"Token budget: {total_tokens}/{token_budget} tokens used, {len(included_entries)}/{len(entries)} entries included")
+
+        return included_entries
+
     def _create_basic_prompt(self, character_data: Dict) -> str:
         """Create a basic prompt without lore"""
         # Extract the data we need based on possible data structures

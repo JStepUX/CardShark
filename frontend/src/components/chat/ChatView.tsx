@@ -145,10 +145,16 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     regenerateGreeting,
     isCompressing,
     sessionNotes,
-    setSessionNotes
+    setSessionNotes,
+    triggeredLoreImages
   } = useChat();
 
   const { getPrompt, getDefaultPrompt, isLoading: isPromptsLoading } = usePrompts();
+
+  // Extract lore image paths for display in chat bubbles
+  const loreImagePaths = useMemo(() => {
+    return triggeredLoreImages?.map(img => img.imagePath) || [];
+  }, [triggeredLoreImages]);
 
   // Initialize generic assistant if no character selected
   useEffect(() => {
@@ -509,6 +515,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
                       isRegeneratingGreeting={isGenerating && isFirstAssistantMessage(message.id)}
                       onNextVariation={() => cycleVariation(message.id, 'next')}
                       onPrevVariation={() => cycleVariation(message.id, 'prev')}
+                      triggeredLoreImages={loreImagePaths}
                     />
                   )}
                 </React.Fragment>

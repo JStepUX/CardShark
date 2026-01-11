@@ -1,6 +1,7 @@
 // frontend/src/handlers/loreHandler.ts
 
 import { LoreEntry } from '../types/schema'; // Assuming LoreEntry is defined here
+import { getApiBaseUrl } from '../utils/apiConfig'; // Import API base URL helper
 // If CharacterCard is needed for characterImagePath, import it too.
 // import { CharacterCard } from '../types/schema';
 
@@ -39,10 +40,14 @@ export const processLoreEntriesForImageTracking = (
     return;
   }
 
+  const apiBaseUrl = getApiBaseUrl();
+
   matchedEntries.forEach(entry => {
     if (entry.has_image && entry.image_uuid) {
       const entryIdStr = entry.id.toString();
-      const imagePath = `/uploads/lore_images/${characterUuid}/${entry.image_uuid}`;
+      // Construct full image path with API base URL
+      const relativePath = `/uploads/lore_images/${characterUuid}/${entry.image_uuid}`;
+      const imagePath = `${apiBaseUrl}${relativePath}`;
 
       const existingImage = triggeredLoreImages.get(entryIdStr);
 

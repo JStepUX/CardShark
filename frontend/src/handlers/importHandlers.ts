@@ -210,12 +210,12 @@ function mapRawEntryToLoreEntry(rawEntry: any, index: number, isOriginalDataForm
     const ext = rawEntry.extensions;
 
     if (typeof ext.depth === 'number') loreEntry.extensions.depth = ext.depth;
-    
+
     if (typeof ext.probability === 'number') loreEntry.extensions.probability = ext.probability;
     else if (typeof ext.weight === 'number') loreEntry.extensions.probability = ext.weight; // Map 'weight' to 'probability'
 
     if (typeof ext.useProbability === 'boolean') loreEntry.extensions.useProbability = ext.useProbability;
-    
+
     if (typeof ext.selectiveLogic === 'string') {
         const logicMap: { [key: string]: number } = { "AND": 0, "OR": 1, "NOT": 2 };
         loreEntry.extensions.selectiveLogic = logicMap[ext.selectiveLogic.toUpperCase()] ?? loreEntry.extensions.selectiveLogic ?? 0;
@@ -227,7 +227,7 @@ function mapRawEntryToLoreEntry(rawEntry: any, index: number, isOriginalDataForm
     else if (typeof ext.excludeRecursion === 'boolean') loreEntry.extensions.exclude_recursion = ext.excludeRecursion;
 
     // addMemo and embedded are not in LoreEntryExtensions, so remove them.
-    
+
     // From existing logic, if relevant and present in LoreEntry.extensions type
     if (typeof ext.position === 'number') loreEntry.extensions.position = ext.position;
     if (typeof ext.display_index === 'number') loreEntry.extensions.display_index = ext.display_index;
@@ -236,13 +236,29 @@ function mapRawEntryToLoreEntry(rawEntry: any, index: number, isOriginalDataForm
     if (typeof ext.group_weight === 'number') loreEntry.extensions.group_weight = ext.group_weight;
     if (typeof ext.prevent_recursion === 'boolean') loreEntry.extensions.prevent_recursion = ext.prevent_recursion;
     if (typeof ext.delay_until_recursion === 'boolean') loreEntry.extensions.delay_until_recursion = ext.delay_until_recursion;
+
+    // Temporal effects - apply imported values or keep createEmptyLoreEntry defaults
+    if (typeof ext.sticky === 'number') loreEntry.extensions.sticky = ext.sticky;
+    if (typeof ext.cooldown === 'number') loreEntry.extensions.cooldown = ext.cooldown;
+    if (typeof ext.delay === 'number') loreEntry.extensions.delay = ext.delay;
+
+    // Matching options - apply imported values or keep createEmptyLoreEntry defaults
+    if (typeof ext.match_whole_words === 'boolean') loreEntry.extensions.match_whole_words = ext.match_whole_words;
+    if (typeof ext.case_sensitive === 'boolean') loreEntry.extensions.case_sensitive = ext.case_sensitive;
+    if (typeof ext.scan_depth === 'number') loreEntry.extensions.scan_depth = ext.scan_depth;
   }
-  
+
   // Ensure required extension fields have defaults if not set by import (createEmptyLoreEntry sets most)
   loreEntry.extensions.automation_id = loreEntry.extensions.automation_id ?? "";
   loreEntry.extensions.role = loreEntry.extensions.role ?? 0;
   loreEntry.extensions.vectorized = loreEntry.extensions.vectorized ?? false;
-  // case_sensitive is defaulted above or by createEmptyLoreEntry
+
+  // Ensure temporal defaults are always set (in case they weren't in createEmptyLoreEntry or import)
+  loreEntry.extensions.sticky = loreEntry.extensions.sticky ?? 2;
+  loreEntry.extensions.cooldown = loreEntry.extensions.cooldown ?? 0;
+  loreEntry.extensions.delay = loreEntry.extensions.delay ?? 0;
+  loreEntry.extensions.match_whole_words = loreEntry.extensions.match_whole_words ?? true;
+  loreEntry.extensions.case_sensitive = loreEntry.extensions.case_sensitive ?? false;
 
   // Basic validation: keys and content are essential for a usable lore entry
   if (loreEntry.keys.length === 0 && !loreEntry.content) {

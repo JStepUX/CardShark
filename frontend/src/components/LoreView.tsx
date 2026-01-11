@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, BookOpen, FileJson, FileText, Image } from 'lucide-react';
+import { Plus, BookOpen, FileJson, FileText, Image, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { LoreCard } from './LoreComponents';
 import DropdownMenu from './DropDownMenu';
@@ -24,6 +24,7 @@ const LoreView: React.FC = () => {
   const { characterData, setCharacterData } = characterContext;
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showBookSettings, setShowBookSettings] = useState(false);
 
   // Existing entries and filtering logic (unchanged)
   const entries = useMemo(() => {
@@ -215,6 +216,45 @@ const LoreView: React.FC = () => {
     updateCharacterData(reorderedEntries);
   };
 
+  // Book-level settings handlers
+  const handleScanDepthChange = (value: number) => {
+    if (!characterData) return;
+
+    const updatedCharacterData: CharacterCard = {
+      ...characterData,
+      data: {
+        ...characterData.data,
+        character_book: {
+          ...characterData.data.character_book,
+          scan_depth: value,
+        },
+      },
+    };
+
+    setCharacterData(updatedCharacterData);
+  };
+
+  const handleTokenBudgetChange = (value: number) => {
+    if (!characterData) return;
+
+    const updatedCharacterData: CharacterCard = {
+      ...characterData,
+      data: {
+        ...characterData.data,
+        character_book: {
+          ...characterData.data.character_book,
+          token_budget: value,
+        },
+      },
+    };
+
+    setCharacterData(updatedCharacterData);
+  };
+
+  // Get current book-level settings with defaults
+  const scanDepth = characterData?.data?.character_book?.scan_depth ?? 3;
+  const tokenBudget = characterData?.data?.character_book?.token_budget ?? 0;
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-8 pb-4 flex flex-col gap-4">
@@ -241,6 +281,67 @@ const LoreView: React.FC = () => {
               New
             </button>
           </div>
+        </div>
+
+        {/* Book-Level Settings */}
+        <div className="bg-stone-950 rounded-lg border border-stone-800">
+          <button
+            onClick={() => setShowBookSettings(!showBookSettings)}
+            className="w-full flex items-center justify-between p-3 hover:bg-stone-900 rounded-lg transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Settings size={18} className="text-gray-400" />
+              <span className="text-sm font-medium text-gray-300">Book Settings</span>
+            </div>
+            {showBookSettings ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+          </button>
+
+          {showBookSettings && (
+            <div className="p-4 border-t border-stone-800 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Scan Depth */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">
+                    Scan Depth
+                  </label>
+                  <input
+                    type="number"
+                    value={scanDepth}
+                    onChange={(e) => handleScanDepthChange(parseInt(e.target.value) || 0)}
+                    className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                    min="0"
+                    placeholder="3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    How many recent messages to scan for keywords. 0 = scan all messages.
+                  </p>
+                </div>
+
+                {/* Token Budget */}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">
+                    Token Budget
+                  </label>
+                  <input
+                    type="number"
+                    value={tokenBudget}
+                    onChange={(e) => handleTokenBudgetChange(parseInt(e.target.value) || 0)}
+                    className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                    min="0"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Max tokens for all lore entries. 0 = unlimited. Low-priority entries discarded first.
+                  </p>
+                </div>
+              </div>
+
+              {/* Info Box */}
+              <div className="p-3 bg-blue-900/20 border border-blue-800/30 rounded text-xs text-gray-300">
+                <strong>Defaults:</strong> Scan Depth = 3 messages, Token Budget = 0 (unlimited)
+              </div>
+            </div>
+          )}
         </div>
 
         <input

@@ -7,7 +7,13 @@ import { LoreEntry } from '../types/schema'; // Added import for LoreEntry
 interface LoreImageResponse {
   success: boolean;
   message?: string;
-  data?: any;
+  data?: {
+    success?: boolean;
+    message?: string;
+    image_uuid?: string;
+    image_path?: string;
+    lore_entry_id?: string;
+  };
 }
 
 /**
