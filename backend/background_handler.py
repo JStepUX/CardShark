@@ -7,6 +7,8 @@ import uuid
 import shutil
 import json
 
+from backend.utils.path_utils import get_application_base_path
+
 class BackgroundHandler:
     def __init__(self, logger):
         self.logger = logger
@@ -16,13 +18,8 @@ class BackgroundHandler:
         
     def _get_backgrounds_dir(self) -> Path:
         """Get the backgrounds directory path"""
-        # Determine base directory based on environment
-        if getattr(sys, 'frozen', False):
-            # Running as PyInstaller bundle
-            base_dir = Path(sys.executable).parent
-        else:
-            # Running from source
-            base_dir = Path(__file__).parent.parent
+        # Use centralized path utility for consistent path resolution
+        base_dir = get_application_base_path()
             
         # Create backgrounds directory if it doesn't exist
         backgrounds_dir = base_dir / 'backgrounds'

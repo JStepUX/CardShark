@@ -130,47 +130,6 @@ class CharacterService:
         
         return normalized_dirs
 
-    def _ensure_lore_image_directory(self, character_uuid: str) -> Path:
-        """Ensures the lore image directory for a character exists and returns its path."""
-        # project_root is no longer defined here. Assuming 'uploads' is relative to the script's parent's parent.
-        # This might need adjustment based on actual deployment structure.
-        base_lore_images_dir = Path(__file__).resolve().parent.parent.parent / "uploads" / "lore_images"
-        character_lore_dir = base_lore_images_dir / str(character_uuid)
-        try:
-            character_lore_dir.mkdir(parents=True, exist_ok=True)
-            self.logger.log_info(f"Lore image directory ensured: {character_lore_dir}")
-        except Exception as e:
-            self.logger.log_error(f"Failed to create lore image directory {character_lore_dir}: {e}")
-            # Depending on desired behavior, could raise an exception here
-            # For now, it will try to proceed, and file operations might fail later.
-        return character_lore_dir
-
-    def get_lore_image_paths(self, character_uuid: str, image_filename: str) -> Dict[str, str]:
-        """
-        Returns a dictionary with base_path (absolute) and relative_path (URL-friendly)
-        for a given lore image filename and character.
-        Ensures the character's lore image directory exists.
-        """
-        if not character_uuid:
-            self.logger.log_error("get_lore_image_paths called with no character_uuid")
-            raise ValueError("character_uuid cannot be empty for get_lore_image_paths")
-        if not image_filename: # Ensure filename is not empty to prevent issues
-            self.logger.log_warning("get_lore_image_paths called with empty image_filename, using placeholder.")
-            image_filename = "placeholder.png"
-
-
-        # Ensure the character-specific lore image directory exists
-        character_lore_dir_abs = self._ensure_lore_image_directory(character_uuid)
-        
-        # Construct the relative path for URL generation (e.g., /uploads/lore_images/uuid/file.png)
-        # This path should be relative to the web server's static files root for "uploads"
-        relative_image_path = f"uploads/lore_images/{character_uuid}/{Path(image_filename).name}"
-
-        return {
-            "base_path": str(character_lore_dir_abs.resolve()), # Absolute path to the character's lore image directory
-            "relative_path": relative_image_path, # Relative path for client access
-            "absolute_image_path": str((character_lore_dir_abs / Path(image_filename).name).resolve()) # Full absolute path to the image file
-        }
 
     def sync_character_file(self, file_path: str, legacy_uuid_mappings: Dict[str, str] = None) -> bool:
         """
@@ -236,8 +195,7 @@ class CharacterService:
             elif not final_char_uuid:
                 final_char_uuid = str(uuid.uuid4())
                 self.logger.log_info(f"Generated new UUID {final_char_uuid} for {abs_png_path}")
-                # Ensure lore image directory exists for new UUID
-                self._ensure_lore_image_directory(final_char_uuid)
+                # ImageStorageService will create lore image directory when needed
                 # TODO: Consider a mechanism to write this new UUID back to the PNG.
 
             with self._get_session_context() as db:
@@ -307,7 +265,7 @@ class CharacterService:
 
                     db.add(new_db_char)
                     db.flush() # Necessary to get ID for new entries
-                    self._ensure_lore_image_directory(final_char_uuid)
+                    # ImageStorageService will create lore image directory when needed
                 # Sync Lore for this character (only if we have lore data)
                 if not is_incomplete_char:
                     self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)

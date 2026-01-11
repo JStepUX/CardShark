@@ -25,6 +25,7 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentImageUrl || null);
+  const [previewSource, setPreviewSource] = useState<'file' | 'url' | 'existing'>(currentImageUrl ? 'existing' : 'file');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +37,7 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
+        setPreviewSource('file');
       };
       reader.readAsDataURL(file);
       setError(null);
@@ -48,16 +50,19 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
     setSelectedFile(null); // Clear file input if URL is typed
     if (newUrl) {
       setPreviewUrl(newUrl); // Optimistically set preview for URL
+      setPreviewSource('url');
     } else {
       setPreviewUrl(null);
     }
     setError(null);
-  };  const handleSubmit = async () => {
+  };
+
+  const handleSubmit = async () => {
     if (!selectedFile && !imageUrl) {
       setError('Please select a file or enter an image URL.');
-            return;
+      return;
     }
-    
+
     // Character UUID is now strictly required by the service
     if (!characterUuid) {
       setError('Character UUID is not available. Cannot upload image. Please ensure the character is saved to obtain a UUID.');
@@ -112,13 +117,13 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
       setError('No image to remove.');
       return;
     }
-    
+
     // Character UUID is now strictly required by the service
     if (!characterUuid) {
       setError('Character UUID is not available. Cannot remove image. Please ensure the character is saved to obtain a UUID.');
       return;
     }
-    
+
     // Assuming currentImageUrl contains the image_uuid or filename needed for deletion
     // Example: /uploads/lore_images/char_uuid/image_uuid_timestamp.png
     // We need to extract the `image_uuid_timestamp.png` part
@@ -138,7 +143,7 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
         characterUuid, // Now guaranteed to be a string
         filename
       );
-      
+
       // Call parent's callback
       onImageRemoved(loreEntryId);
       setPreviewUrl(null); // Clear preview
@@ -237,41 +242,49 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
                 alt="Preview"
                 className="rounded-md max-h-48 w-auto mx-auto border border-gray-600"
                 onError={(e) => {
-                  e.currentTarget.style.display = 'none'; // Hide if broken
-                  setError('Could not load preview from URL. Please check the link.');
+                  e.currentTarget.style.display = 'none';
+                  // Show appropriate error based on source
+                  if (previewSource === 'url') {
+                    setError('Could not load preview from URL. Please check the link.');
+                  } else if (previewSource === 'existing') {
+                    setError('Could not load existing image. It may have been moved or deleted.');
+                  }
+                  // For 'file' source, FileReader already created a valid data URL, so errors are rare
                 }}
               />
             </div>
           )}
         </div>
 
-        <div className="mt-6 flex flex-col sm:flex-row-reverse gap-3">          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isLoading || (!selectedFile && !imageUrl) || !characterUuid}
-            className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-stone-800 focus:ring-indigo-500 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title={!characterUuid ? "Character UUID not available. Please save the character." : ""}
-          >
-            {isLoading ? 'Processing...' : 'Confirm & Save Image'}
-          </button>
-          {currentImageUrl && (
-             <button
-                type="button"
-                onClick={handleRemoveImage}
-                disabled={isLoading || !characterUuid}
-                className="w-full inline-flex justify-center rounded-md border border-red-500 shadow-sm px-4 py-2 bg-red-700 text-base font-medium text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-stone-800 focus:ring-red-500 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50"
-                title={!characterUuid ? "Character UUID not available. Please save the character." : ""}
-            >
-                {isLoading ? 'Removing...' : 'Remove Current Image'}
-            </button>
-          )}
+        {/* Action buttons - clean horizontal layout */}
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-600 shadow-sm px-4 py-2 bg-stone-700 text-base font-medium text-gray-300 hover:bg-stone-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-stone-800 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+            className="px-4 py-2 rounded-md border border-gray-600 bg-stone-700 text-sm font-medium text-gray-300 hover:bg-stone-600 transition-colors disabled:opacity-50"
           >
             Cancel
+          </button>
+          {currentImageUrl && (
+            <button
+              type="button"
+              onClick={handleRemoveImage}
+              disabled={isLoading || !characterUuid}
+              className="px-4 py-2 rounded-md border border-red-500 bg-red-700 text-sm font-medium text-white hover:bg-red-800 transition-colors disabled:opacity-50"
+              title={!characterUuid ? "Character UUID not available" : ""}
+            >
+              {isLoading ? 'Removing...' : 'Remove'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isLoading || (!selectedFile && !imageUrl) || !characterUuid}
+            className="px-4 py-2 rounded-md bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={!characterUuid ? "Character UUID not available" : ""}
+          >
+            {isLoading ? 'Saving...' : 'Confirm'}
           </button>
         </div>
       </div>

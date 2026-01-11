@@ -173,6 +173,7 @@ from contextlib import asynccontextmanager
 from backend.services.character_service import CharacterService # Import CharacterService
 from backend.services.character_sync_service import CharacterSyncService # Import CharacterSyncService
 from backend.services.user_profile_service import UserProfileService # Import UserProfileService
+from backend.services.image_storage_service import ImageStorageService # Import ImageStorageService
 from sqlalchemy.orm import Session # For type hinting in dependency
 from fastapi import Depends # For dependency injection
 
@@ -200,6 +201,9 @@ async def lifespan(app: FastAPI):
             logger=logger,
             # character_indexing_service=character_indexing_service # Add this if CharacterService needs it
         )
+        
+        # Initialize ImageStorageService
+        app.state.image_storage_service = ImageStorageService(logger)
         
         # Initialize World Handlers
         app.state.world_asset_handler = WorldAssetHandler(logger)
@@ -737,7 +741,9 @@ else:
         logger.log_warning(f"Frontend build directory not found at {static_dir}, API endpoints only")
 
 # Also mount the uploads directory to serve uploaded files
-uploads_dir = Path("uploads")
+# Use get_application_base_path() for correct handling in both dev and PyInstaller
+from backend.utils.path_utils import get_application_base_path
+uploads_dir = get_application_base_path() / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", CrossDriveStaticFiles(directory=uploads_dir), name="uploads")
 
@@ -746,7 +752,7 @@ app.mount("/uploads", CrossDriveStaticFiles(directory=uploads_dir), name="upload
 # ---------- Utility Endpoints (Migrated from old main.py) ----------
 
 @app.post("/api/upload-image")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(request: Request, file: UploadFile = File(...)):
     """Handle image upload for rich text editor."""
     try:
         # Check if file is an image
@@ -765,31 +771,23 @@ async def upload_image(file: UploadFile = File(...)):
                 content={"success": False, "message": f"Unsupported image format. Allowed: {', '.join(t.split('/')[1] for t in allowed_types)}"}
             )
 
-        # Generate a unique filename
-        filename = f"{uuid.uuid4()}.{file.filename.split('.')[-1] if '.' in file.filename else 'png'}"
-
-        # Create uploads directory if it doesn't exist (relative to main.py location)
-        uploads_dir = Path("uploads")
-        uploads_dir.mkdir(parents=True, exist_ok=True)
-
-        file_path = uploads_dir / filename
-
-        # Read file content
+        # Use ImageStorageService for consistent path handling
+        service = request.app.state.image_storage_service
         content = await file.read()
+        result = service.save_image(
+            category="general",
+            file_data=content,
+            original_filename=file.filename
+        )
 
-        # Write file to disk
-        with open(file_path, "wb") as f:
-            f.write(content)
-
-        logger.log_step(f"Uploaded image for editor: {file_path}")
+        logger.log_step(f"Uploaded image for editor: {result['absolute_path']}")
 
         # Return success with URL for TipTap to use
-        # IMPORTANT: The URL path must match the GET endpoint below
         return JSONResponse(
             status_code=200,
             content={
                 "success": True,
-                "url": f"/api/uploads/{filename}" # Use the correct serving path
+                "url": result["relative_url"]
             }
         )
     except Exception as e:

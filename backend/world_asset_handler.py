@@ -6,6 +6,7 @@ import uuid
 import logging
 
 from backend.log_manager import LogManager
+from backend.utils.path_utils import get_application_base_path
 
 class WorldAssetHandler:
     """
@@ -13,9 +14,13 @@ class WorldAssetHandler:
     stored in `world_assets/{world_uuid}/`.
     """
 
-    def __init__(self, logger: LogManager, base_path: str = "world_assets"):
+    def __init__(self, logger: LogManager, base_path: Optional[str] = None):
         self.logger = logger
-        self.base_path = Path(base_path)
+        # Use get_application_base_path() for consistent path resolution
+        if base_path:
+            self.base_path = Path(base_path)
+        else:
+            self.base_path = get_application_base_path() / "world_assets"
         self._ensure_base_directory()
 
     def _ensure_base_directory(self):

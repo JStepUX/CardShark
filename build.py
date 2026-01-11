@@ -414,6 +414,7 @@ hidden_imports = [    # Core FastAPI and dependencies
     # Services subdirectory
     'backend.services.character_indexing_service', # Added based on file listing, was missing
     'backend.services.character_service', # Added based on file listing, was missing
+    'backend.services.image_storage_service', # Added for unified image storage
     'backend.services.chat_service', # Added
     'backend.services.lore_activation_tracker', # Added for lore temporal effects (sticky/cooldown/delay)
     'backend.services.npc_room_assignment_service', # Added
