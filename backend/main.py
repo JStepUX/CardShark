@@ -350,40 +350,14 @@ health_router = APIRouter(prefix="/api", tags=["health"])
 
 @health_router.get("/health", response_model=HealthCheckResponse, responses=STANDARD_RESPONSES)
 async def health_check(request: Request):
-    """Health check endpoint with standardized response including LLM provider status.
+    """Health check endpoint with standardized response.
     
-    Note: This endpoint only returns configuration info from settings, not live status.
+    Note: This endpoint does NOT return LLM status to avoid interfering with
+    the separate /api/llm-status endpoint which fetches live model information.
     It does not make external API calls to ensure fast, reliable responses.
     """
     import time
     start_time = time.time()
-    
-    # Get LLM provider info from settings (configuration only, no external calls)
-    llm_status = {
-        "configured": False,
-        "provider": None,
-        "model": None
-    }
-    
-    try:
-        # Get the active API from the new settings structure (apis + activeApiId)
-        all_settings = settings_manager.settings
-        active_api_id = all_settings.get("activeApiId")
-        apis = all_settings.get("apis", {})
-        
-        if active_api_id and active_api_id in apis:
-            active_api = apis[active_api_id]
-            provider = active_api.get("provider", "")
-            
-            if provider and active_api.get("enabled", False):
-                llm_status["configured"] = True
-                llm_status["provider"] = provider
-                
-                # Get model name from settings (no external API calls)
-                model_name = active_api.get("model") or active_api.get("model_info", {}).get("name")
-                llm_status["model"] = model_name or "unknown"
-    except Exception as e:
-        logger.log_warning(f"Could not get LLM settings for health check: {e}")
     
     # Calculate response latency
     latency_ms = round((time.time() - start_time) * 1000, 2)
@@ -392,7 +366,7 @@ async def health_check(request: Request):
         status="healthy",
         version=VERSION,
         latency_ms=latency_ms,
-        llm=llm_status
+        llm=None  # Don't return LLM status here - use /api/llm-status instead
     )
 
 @health_router.get("/llm-status")

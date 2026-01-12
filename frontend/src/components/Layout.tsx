@@ -68,20 +68,22 @@ const Layout: React.FC = () => {
           const data = await response.json();
           // Parse response - handle both new format (top level) and old format (nested in data)
           const responseData = data.data || data;
-          const newStatus: HealthStatus = {
-            status: 'running',
-            version: responseData.version,
-            latency_ms: roundTripMs, // Use client-measured round-trip for accuracy
-            llm: responseData.llm
-          };
 
           // Only log on state transition
           if (previousStatusRef.current !== 'running') {
-            console.log(`[health] Backend connected (v${newStatus.version || 'unknown'}, ${roundTripMs}ms)`);
+            console.log(`[health] Backend connected (v${responseData.version || 'unknown'}, ${roundTripMs}ms)`);
             previousStatusRef.current = 'running';
           }
 
-          setHealthStatus(newStatus);
+          // Update health status while preserving existing LLM data
+          // This prevents the health check from clearing LLM info set by the separate LLM status check
+          setHealthStatus(prev => ({
+            status: 'running',
+            version: responseData.version,
+            latency_ms: roundTripMs,
+            // Preserve existing LLM data if health endpoint doesn't provide it
+            llm: responseData.llm || prev.llm
+          }));
         } else {
           if (previousStatusRef.current !== 'disconnected') {
             console.warn(`[health] Backend disconnected - HTTP ${response.status}`);
@@ -124,24 +126,41 @@ const Layout: React.FC = () => {
     };
   }, []); // Empty deps - uses refs to avoid stale closures
 
-  // Separate LLM status check - fetches live model info every 30 seconds
+  // Separate LLM status check - fetches live model info every 60 seconds
+  // Only updates state if the model actually changes to prevent jitter
   useEffect(() => {
-    const LLM_CHECK_INTERVAL = 30000; // 30 seconds
+    const LLM_CHECK_INTERVAL = 60000; // 60 seconds (reduced frequency to minimize jitter)
 
     const checkLLMStatus = async () => {
       try {
         const response = await fetch("/api/llm-status");
         if (response.ok) {
           const llmData = await response.json();
-          // Update health status with live LLM info
-          setHealthStatus(prev => ({
-            ...prev,
-            llm: {
-              configured: llmData.configured,
-              provider: llmData.provider,
-              model: llmData.model
+
+          // Only update if the LLM data has actually changed
+          setHealthStatus(prev => {
+            const prevLLM = prev.llm;
+            const hasChanged = !prevLLM ||
+              prevLLM.configured !== llmData.configured ||
+              prevLLM.provider !== llmData.provider ||
+              prevLLM.model !== llmData.model;
+
+            // Only update state if something changed
+            if (hasChanged) {
+              console.debug('[llm-status] Model changed:', llmData.model);
+              return {
+                ...prev,
+                llm: {
+                  configured: llmData.configured,
+                  provider: llmData.provider,
+                  model: llmData.model
+                }
+              };
             }
-          }));
+
+            // Return previous state unchanged to prevent re-render
+            return prev;
+          });
         }
       } catch (error) {
         // Silently fail - health check will handle connection issues
@@ -150,7 +169,7 @@ const Layout: React.FC = () => {
     };
 
     // Check immediately after a short delay (let health check go first)
-    const initialTimeout = setTimeout(checkLLMStatus, 2000);
+    const initialTimeout = setTimeout(checkLLMStatus, 3000);
 
     // Set up interval for periodic checks
     const interval = setInterval(checkLLMStatus, LLM_CHECK_INTERVAL);
