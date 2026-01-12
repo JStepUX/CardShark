@@ -153,11 +153,11 @@ export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '', heal
         {currentApiConfig?.model_info?.name || currentApiConfig?.model || ''}
       </div>
 
-      {/* Right section - model info + backend status */}
+      {/* Right section - live model info + backend status */}
       <div className="flex items-center gap-3 text-gray-500 text-xs">
-        {/* Model info from health check (when configured) */}
+        {/* Live model info from health check (when available) */}
         {healthStatus?.llm?.configured && healthStatus.llm.model && (
-          <span className="text-gray-400" title={`Model: ${healthStatus.llm.model}`}>
+          <span className="text-gray-400" title={`Loaded Model: ${healthStatus.llm.model}`}>
             {healthStatus.llm.model}
           </span>
         )}

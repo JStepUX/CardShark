@@ -124,6 +124,42 @@ const Layout: React.FC = () => {
     };
   }, []); // Empty deps - uses refs to avoid stale closures
 
+  // Separate LLM status check - fetches live model info every 30 seconds
+  useEffect(() => {
+    const LLM_CHECK_INTERVAL = 30000; // 30 seconds
+
+    const checkLLMStatus = async () => {
+      try {
+        const response = await fetch("/api/llm-status");
+        if (response.ok) {
+          const llmData = await response.json();
+          // Update health status with live LLM info
+          setHealthStatus(prev => ({
+            ...prev,
+            llm: {
+              configured: llmData.configured,
+              provider: llmData.provider,
+              model: llmData.model
+            }
+          }));
+        }
+      } catch (error) {
+        // Silently fail - health check will handle connection issues
+        console.debug('[llm-status] Failed to fetch LLM status:', error);
+      }
+    };
+
+    // Check immediately after a short delay (let health check go first)
+    const initialTimeout = setTimeout(checkLLMStatus, 2000);
+
+    // Set up interval for periodic checks
+    const interval = setInterval(checkLLMStatus, LLM_CHECK_INTERVAL);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
 
 
   // Auto-close workshop mode on route change as it should only be active in Info/Greetings

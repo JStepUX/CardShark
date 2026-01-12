@@ -67,9 +67,12 @@ def kill_process_on_port(port):
 def check_service_health(port, path="/"):
     """Check if a service is responding on the given port."""
     try:
-        response = requests.get(f"http://localhost:{port}{path}", timeout=2)
+        url = f"http://localhost:{port}{path}"
+        response = requests.get(url, timeout=3)
+        print(f"Health check: {url} -> status={response.status_code}")
         return response.status_code == 200
-    except:
+    except Exception as e:
+        print(f"Health check failed: {e}")
         return False
 
 def ensure_ports_available():
