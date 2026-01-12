@@ -11,13 +11,35 @@ interface SelectedCharacterChipProps {
 }
 
 // Simple GPT-3 style token counting (approximate)
-const countTokens = (text: string | undefined): number => {
+// Uses word-splitting with a 1.3x multiplier to approximate real tokenization
+const countTokens = (text: any): number => {
+    // Handle null, undefined, or empty values
     if (!text) return 0;
+
+    // If it's not a string, try to convert it
+    if (typeof text !== 'string') {
+        // For arrays, join them with spaces
+        if (Array.isArray(text)) {
+            text = text.join(' ');
+        }
+        // For objects, stringify them
+        else if (typeof text === 'object') {
+            text = JSON.stringify(text);
+        }
+        // For other types, convert to string
+        else {
+            text = String(text);
+        }
+    }
+
     const tokens = text.toLowerCase()
         .replace(/[^\w\s']|'(?!\w)|'(?=$)/g, ' ')
         .split(/\s+/)
         .filter(Boolean);
-    return tokens.length;
+
+    // Apply 1.3x multiplier to approximate real GPT tokenization
+    // (Real tokenizers produce more tokens due to subword tokenization and punctuation)
+    return Math.round(tokens.length * 1.3);
 };
 
 /**

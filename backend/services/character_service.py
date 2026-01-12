@@ -909,10 +909,12 @@ class CharacterService:
 
             # 4. Embed metadata into PNG
             try:
+                self.logger.log_info(f"Service: Attempting to embed metadata for character: {char_name_from_meta}")
+                self.logger.log_info(f"Service: Metadata keys: {list(raw_character_card_data.keys())}")
                 final_image_bytes_with_meta = self.png_handler.write_metadata(image_bytes, raw_character_card_data)
                 self.logger.log_info("Service: Successfully embedded metadata into PNG bytes for saving.")
             except Exception as e:
-                self.logger.log_error(f"Service: Failed to embed metadata into PNG: {e}", exc_info=True)
+                self.logger.log_error(f"Service: Failed to embed metadata into PNG: {type(e).__name__}: {str(e)}", exc_info=True)
                 raise # Re-raise to be caught by endpoint
 
             # 5. Save PNG to disk

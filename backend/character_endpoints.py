@@ -489,6 +489,10 @@ async def save_character_card_endpoint(
 
         try:
             raw_metadata = json.loads(metadata_json)
+            logger.info(f"Parsed metadata structure - has 'data': {'data' in raw_metadata}, has 'spec': {'spec' in raw_metadata}")
+            if 'data' in raw_metadata:
+                logger.info(f"Data section keys: {list(raw_metadata['data'].keys())}")
+                logger.info(f"Character name: {raw_metadata.get('data', {}).get('name', 'MISSING')}")
         except json.JSONDecodeError as e:
             raise ValidationException(f"Invalid metadata JSON: {e}")
 
