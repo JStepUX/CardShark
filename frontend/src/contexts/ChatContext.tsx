@@ -80,6 +80,7 @@ interface ChatContextType {
   setSessionName: (name: string) => void;
   setCompressionLevel: (level: CompressionLevel) => void;
   invalidateCompressionCache: () => void;
+  forkChat: (atMessageIndex: number) => Promise<string | null>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -849,6 +850,73 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       isCreatingChatRef.current = false; // Reset the creation flag
     }
   }, [characterData, characterDataOverride, currentUser, saveChat]);
+
+  /**
+   * Fork the current chat at a specific message index.
+   * Creates a new chat with messages 0..atMessageIndex copied from the current chat.
+   * The original chat is preserved unchanged.
+   * After forking, automatically loads the new forked chat.
+   */
+  const forkChat = useCallback(async (atMessageIndex: number): Promise<string | null> => {
+    const effectiveCharacter = characterDataOverride || characterData;
+    if (!effectiveCharacter?.data?.character_uuid) {
+      setError('No character selected');
+      return null;
+    }
+
+    if (!currentChatId) {
+      setError('No active chat to fork');
+      return null;
+    }
+
+    if (atMessageIndex < 0 || atMessageIndex >= messages.length) {
+      setError('Invalid message index for fork');
+      return null;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Call the fork API
+      const newChatId = await chatService.forkChat(
+        currentChatId,
+        atMessageIndex,
+        effectiveCharacter.data.character_uuid,
+        currentUser?.id
+      );
+
+      console.log(`Chat forked: ${currentChatId} -> ${newChatId} at message index ${atMessageIndex}`);
+
+      // Load the new forked chat
+      const loadResponse = await ChatStorage.loadChat(newChatId, effectiveCharacter);
+
+      if (loadResponse.success) {
+        const sessionData = loadResponse.data || loadResponse;
+        const loadedMessages = sessionData.messages || [];
+
+        setMessages(loadedMessages);
+        setCurrentChatId(newChatId);
+
+        setLastContextWindow({
+          type: 'forked_chat',
+          timestamp: new Date().toISOString(),
+          characterName: effectiveCharacter.data?.name,
+          sourceChatId: currentChatId,
+          newChatId: newChatId,
+          messageCount: loadedMessages.length
+        });
+      }
+
+      return newChatId;
+    } catch (err) {
+      console.error('Error forking chat:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fork chat');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [characterData, characterDataOverride, currentChatId, currentUser, messages.length]);
 
   useEffect(() => { createNewChatRef.current = createNewChat; }, [createNewChat]);
 
@@ -1679,6 +1747,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,
     resetTriggeredLoreImagesState, clearError,
     setSessionNotes, setSessionName, setCompressionLevel, invalidateCompressionCache,
+    forkChat,
   };
 
   return <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>;

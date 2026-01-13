@@ -146,7 +146,8 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     isCompressing,
     sessionNotes,
     setSessionNotes,
-    triggeredLoreImages
+    triggeredLoreImages,
+    forkChat
   } = useChat();
 
   const { getPrompt, getDefaultPrompt, isLoading: isPromptsLoading } = usePrompts();
@@ -507,6 +508,12 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
                       isRegeneratingGreeting={isGenerating && isFirstAssistantMessage(message.id)}
                       onNextVariation={() => cycleVariation(message.id, 'next')}
                       onPrevVariation={() => cycleVariation(message.id, 'prev')}
+                      onFork={() => {
+                        const messageIndex = messages.findIndex(m => m.id === message.id);
+                        if (messageIndex >= 0) {
+                          forkChat(messageIndex);
+                        }
+                      }}
                       triggeredLoreImages={loreImagePaths}
                     />
                   )}

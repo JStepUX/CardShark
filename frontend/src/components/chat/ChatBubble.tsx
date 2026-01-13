@@ -8,6 +8,7 @@ import {
   StepForward,
   Sparkles,
   Copy,
+  GitFork,
 } from 'lucide-react';
 import { Message, UserProfile } from '../../types/messages';
 import RichTextEditor from '../RichTextEditor';
@@ -29,6 +30,7 @@ interface ChatBubbleProps {
   onNextVariation: () => void;
   onPrevVariation: () => void;
   onRegenerateGreeting?: () => void; // New prop for greeting regeneration
+  onFork?: () => void; // New prop for forking chat from this message
   currentUser?: string | UserProfile; // Updated to accept both string and UserProfile
   characterName?: string;
   triggeredLoreImages?: string[]; // Lore images to display inline
@@ -47,6 +49,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   onNextVariation,
   onPrevVariation,
   onRegenerateGreeting,
+  onFork,
   currentUser,
   characterName,
   triggeredLoreImages = []
@@ -398,13 +401,25 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
 
           {/* Show delete button for all message types when not generating */}
           {!isGenerating && (
-            <button
-              onClick={onDelete}
-              className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
-              title="Delete message"
-            >
-              <Trash2 size={16} />
-            </button>
+            <>
+              {/* Fork from here button */}
+              {onFork && (
+                <button
+                  onClick={onFork}
+                  className="p-1.5 text-stone-400 hover:text-purple-400 hover:bg-stone-700 rounded-lg transition-colors"
+                  title="Fork chat from here"
+                >
+                  <GitFork size={16} />
+                </button>
+              )}
+              <button
+                onClick={onDelete}
+                className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                title="Delete message"
+              >
+                <Trash2 size={16} />
+              </button>
+            </>
           )}
         </div>
       </div>      {/* Message content */}

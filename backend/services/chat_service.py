@@ -374,3 +374,82 @@ def update_session_settings(db: Session, chat_session_uuid: str,
     db.commit()
     db.refresh(chat_session)
     return True
+
+
+def fork_chat_session(db: Session, source_chat_uuid: str, fork_at_message_index: int, 
+                      character_uuid: str, user_uuid: Optional[str] = None) -> Optional[sql_models.ChatSession]:
+    """
+    Fork a chat session at a specific message index.
+    
+    Creates a new chat session with messages copied from the source chat,
+    from index 0 to fork_at_message_index (inclusive).
+    
+    Args:
+        db: Database session
+        source_chat_uuid: UUID of the source chat to fork from
+        fork_at_message_index: Index of the last message to include (0-based, inclusive)
+        character_uuid: UUID of the character for the new chat
+        user_uuid: Optional UUID of the user
+    
+    Returns:
+        The newly created ChatSession, or None if source chat not found
+    """
+    try:
+        # 1. Get source chat session
+        source_chat = get_chat_session(db, source_chat_uuid)
+        if not source_chat:
+            return None
+        
+        # 2. Get messages from source chat (ordered by sequence)
+        source_messages = get_chat_messages(db, source_chat_uuid)
+        
+        # 3. Validate fork index
+        if fork_at_message_index < 0 or fork_at_message_index >= len(source_messages):
+            # Clamp to valid range
+            fork_at_message_index = max(0, min(fork_at_message_index, len(source_messages) - 1))
+        
+        # 4. Slice messages to copy (0 to fork_at_message_index inclusive)
+        messages_to_copy = source_messages[:fork_at_message_index + 1]
+        
+        # 5. Create new chat session
+        original_title = source_chat.title or "Untitled Chat"
+        new_session_uuid = str(uuid.uuid4())
+        
+        db_new_session = sql_models.ChatSession(
+            chat_session_uuid=new_session_uuid,
+            character_uuid=character_uuid,
+            user_uuid=user_uuid,
+            title=f"Fork of {original_title}",
+            start_time=datetime.utcnow(),
+            message_count=0  # Will be updated when messages are added
+        )
+        db.add(db_new_session)
+        db.flush()  # Flush to ensure session exists before adding messages
+        
+        # 6. Copy messages with new IDs
+        for idx, msg in enumerate(messages_to_copy):
+            new_message = sql_models.ChatMessage(
+                message_id=str(uuid.uuid4()),  # New ID for forked message
+                chat_session_uuid=new_session_uuid,
+                role=msg.role,
+                content=msg.content,
+                status=msg.status,
+                reasoning_content=msg.reasoning_content,
+                metadata_json=msg.metadata_json,
+                timestamp=datetime.utcnow(),
+                sequence_number=idx
+            )
+            db.add(new_message)
+        
+        # 7. Update session metadata
+        db_new_session.message_count = len(messages_to_copy)
+        db_new_session.last_message_time = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(db_new_session)
+        
+        return db_new_session
+        
+    except Exception as e:
+        db.rollback()
+        raise e

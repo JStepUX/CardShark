@@ -20,9 +20,9 @@ const Layout: React.FC = () => {
   const { settings } = useSettings();
 
   const {
-    characterData,
+    characterData: _characterData,
     setCharacterData: _setCharacterData,
-    imageUrl,
+    imageUrl: _imageUrl,
     setImageUrl: _setImageUrl,
     isLoading,
     setIsLoading,

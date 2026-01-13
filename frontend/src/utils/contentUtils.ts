@@ -26,7 +26,7 @@ export function htmlToPlainText(html: string): string {
 
   // CRITICAL FIX: Convert <img> tags back to markdown syntax BEFORE other HTML processing
   // This preserves images in greetings and other text fields
-  html = html.replace(/<img\s+([^>]*?)\s*\/?>/gi, (match, attrs) => {
+  html = html.replace(/<img\s+([^>]*?)\s*\/?>/gi, (_match, attrs) => {
     // Extract src and alt attributes
     const srcMatch = attrs.match(/src=["']([^"']*)["']/i);
     const altMatch = attrs.match(/alt=["']([^"']*)["']/i);

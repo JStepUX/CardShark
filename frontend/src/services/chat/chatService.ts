@@ -521,6 +521,72 @@ export class ChatService {
       throw error;
     }
   }
+
+  /**
+   * Fork a chat session at a specific message index
+   * 
+   * Creates a new chat session with messages copied from the source chat,
+   * from index 0 to forkAtMessageIndex (inclusive). The original chat
+   * is preserved unchanged.
+   * 
+   * @param sourceChatUuid - UUID of the source chat to fork from
+   * @param forkAtMessageIndex - Index of the last message to include (0-based, inclusive)
+   * @param characterUuid - UUID of the character for the new chat
+   * @param userUuid - Optional UUID of the user
+   * @returns The new chat session UUID
+   */
+  async forkChat(
+    sourceChatUuid: string,
+    forkAtMessageIndex: number,
+    characterUuid: string,
+    userUuid?: string
+  ): Promise<string> {
+    if (!sourceChatUuid || typeof sourceChatUuid !== 'string') {
+      throw new Error('sourceChatUuid must be a non-empty string');
+    }
+
+    if (typeof forkAtMessageIndex !== 'number' || forkAtMessageIndex < 0) {
+      throw new Error('forkAtMessageIndex must be a non-negative number');
+    }
+
+    if (!characterUuid || typeof characterUuid !== 'string') {
+      throw new Error('characterUuid must be a non-empty string');
+    }
+
+    try {
+      const response = await this.client.post<{
+        success: boolean;
+        data: {
+          chat_session_uuid: string;
+          messages: any[];
+          title: string;
+        };
+      }>('/fork-chat', {
+        source_chat_session_uuid: sourceChatUuid,
+        fork_at_message_index: forkAtMessageIndex,
+        character_uuid: characterUuid,
+        user_uuid: userUuid,
+      });
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to fork chat');
+      }
+
+      // Handle wrapped DataResponse format
+      const data = response.data as any;
+      const chatSessionUuid = data.data?.chat_session_uuid || data.chat_session_uuid;
+
+      if (!chatSessionUuid) {
+        throw new Error('No chat_session_uuid returned from fork operation');
+      }
+
+      console.log(`Chat forked successfully: ${sourceChatUuid} -> ${chatSessionUuid}`);
+      return chatSessionUuid;
+    } catch (error) {
+      console.error('Failed to fork chat:', error);
+      throw error;
+    }
+  }
 }
 
 // Create singleton instance

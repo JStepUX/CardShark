@@ -633,10 +633,104 @@ def delete_chat_endpoint(
 
 
 # =============================================================================
+# CHAT FORK ENDPOINT
+# Creates a new chat session with messages copied from a source chat up to a
+# specified message index.
+# =============================================================================
+
+@router.post("/fork-chat", response_model=DataResponse[pydantic_models.ChatSessionReadV2], status_code=201)
+def fork_chat_endpoint(
+    payload: pydantic_models.ChatForkPayload,
+    db: Session = Depends(get_db),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Fork a chat session at a specific message index.
+    
+    Creates a new chat session with messages copied from the source chat,
+    from index 0 to fork_at_message_index (inclusive). The original chat
+    is preserved unchanged.
+    """
+    try:
+        # 1. Validate character exists
+        character = character_service.get_character_by_uuid(payload.character_uuid, db)
+        if not character:
+            raise NotFoundException(f"Character not found: {payload.character_uuid}")
+        
+        # 2. Validate source chat exists
+        source_chat = chat_service.get_chat_session(db, payload.source_chat_session_uuid)
+        if not source_chat:
+            raise NotFoundException(f"Source chat session not found: {payload.source_chat_session_uuid}")
+        
+        # 3. Validate source chat belongs to the specified character
+        if source_chat.character_uuid != payload.character_uuid:
+            raise ValidationException("Source chat session does not belong to the specified character")
+        
+        # 4. Fork the chat session
+        new_session = chat_service.fork_chat_session(
+            db=db,
+            source_chat_uuid=payload.source_chat_session_uuid,
+            fork_at_message_index=payload.fork_at_message_index,
+            character_uuid=payload.character_uuid,
+            user_uuid=payload.user_uuid
+        )
+        
+        if not new_session:
+            raise ValidationException("Failed to fork chat session")
+        
+        # 5. Load the messages for the new session
+        db_messages = chat_service.get_chat_messages(db=db, chat_session_uuid=new_session.chat_session_uuid)
+        
+        # 6. Convert database messages to Pydantic models
+        message_responses = [
+            pydantic_models.ChatMessageRead(
+                id=msg.message_id,
+                message_id=msg.message_id,
+                chat_session_uuid=msg.chat_session_uuid,
+                role=msg.role,
+                content=msg.content,
+                status=msg.status,
+                reasoning_content=msg.reasoning_content,
+                metadata_json=msg.metadata_json,
+                timestamp=msg.timestamp,
+                created_at=msg.created_at,
+                updated_at=msg.updated_at
+            )
+            for msg in db_messages
+        ]
+        
+        # 7. Create the session response with messages
+        session_response = pydantic_models.ChatSessionReadV2(
+            chat_session_uuid=new_session.chat_session_uuid,
+            character_uuid=new_session.character_uuid,
+            user_uuid=new_session.user_uuid,
+            start_time=new_session.start_time,
+            last_message_time=new_session.last_message_time,
+            message_count=new_session.message_count,
+            title=new_session.title,
+            export_format_version=new_session.export_format_version,
+            is_archived=new_session.is_archived,
+            chat_type=new_session.chat_type,
+            messages=message_responses
+        )
+        
+        logger.info(f"Forked chat {payload.source_chat_session_uuid} at index {payload.fork_at_message_index} -> {new_session.chat_session_uuid}")
+        
+        return create_data_response(session_response)
+    
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        raise handle_generic_error(e, "forking chat session")
+
+
+# =============================================================================
 # RELIABLE ENDPOINT ALIASES
 # These are aliases that map the frontend's expected endpoint names to the
 # actual database-backed implementations above.
 # =============================================================================
+
 
 @router.post("/reliable-load-chat", response_model=DataResponse[Optional[pydantic_models.ChatSessionReadV2]])
 def reliable_load_chat_endpoint(

@@ -203,3 +203,11 @@ class ChatSessionReadV2(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class ChatForkPayload(BaseModel):
+    """Payload for forking a chat session at a specific message index."""
+    source_chat_session_uuid: str
+    fork_at_message_index: int  # Messages 0..n (inclusive) are copied to the new chat
+    character_uuid: str
+    user_uuid: Optional[str] = None

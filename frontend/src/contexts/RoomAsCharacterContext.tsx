@@ -151,6 +151,16 @@ export function RoomAsCharacterProvider({ children }: RoomAsCharacterProviderPro
         setCharacterCache(null);
     };
 
+    // No-op stubs for room context - rooms don't use these CharacterContext features
+    const saveCharacter = async () => {
+        console.warn('saveCharacter called in RoomAsCharacterContext - this is a no-op');
+        return;
+    };
+
+    const handleImageChange = async (_newImageData: string | File): Promise<void> => {
+        console.warn('handleImageChange called in RoomAsCharacterContext - this is a no-op');
+    };
+
     const contextValue = {
         characterData,
         setCharacterData,
@@ -166,6 +176,8 @@ export function RoomAsCharacterProvider({ children }: RoomAsCharacterProviderPro
         characterCache,
         setCharacterCache,
         invalidateCharacterCache,
+        saveCharacter,
+        handleImageChange,
     };
 
     return (
