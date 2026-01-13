@@ -96,7 +96,7 @@ interface ChatViewProps {
 // Main ChatView component
 const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
   const navigate = useNavigate();
-  const { characterData, setCharacterData, setImageUrl } = useCharacter();
+  const { characterData, setCharacterData, setImageUrl, handleImageChange } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
   const [showChatSelector, setShowChatSelector] = useState(false);
   const [showContextWindow, setShowContextWindow] = useState(false);
@@ -423,14 +423,6 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     if (characterData?.data?.character_uuid === 'cardshark-general-assistant-v1') return 'assistant';
     return 'character';
   }, [isWorldCard, characterData]);
-
-  // Handler for image changes in the side panel
-  const handleImageChange = useCallback((newImageData: string | File) => {
-    // This would typically save the image to the character
-    // For now, we'll just log it as this functionality may need backend support
-    console.log('Image change requested in side panel:', newImageData);
-    // TODO: Implement image save functionality
-  }, []);
 
   // Handler for unloading character (dismiss)
   const handleUnloadCharacter = useCallback(() => {

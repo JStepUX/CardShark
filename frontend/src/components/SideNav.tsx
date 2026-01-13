@@ -60,7 +60,7 @@ const SideNav: React.FC<SideNavProps> = ({
   onWorldImport,
   onSave
 }) => {
-  const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl } = useCharacter();
+  const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl, handleImageChange } = useCharacter();
   const chatContext = useOptionalChat();
   const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -190,12 +190,12 @@ const SideNav: React.FC<SideNavProps> = ({
               <NavLinkHelper isCollapsed={isCollapsed} to="/settings" label="Settings" Icon={NAV_ICONS.settings} />
             </nav>
 
-            {/* Selected Character Chip */}
             <div className="mt-auto">
               <SelectedCharacterChip
                 imageUrl={displayImageUrl}
                 characterName={characterData?.data?.name}
                 characterData={characterData}
+                onImageChange={handleImageChange}
                 onDismiss={characterData ? () => {
                   setCharacterData(null);
                   setImageUrl(undefined);

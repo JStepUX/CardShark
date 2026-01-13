@@ -28,6 +28,7 @@ const Layout: React.FC = () => {
     setIsLoading,
     error,
     setError,
+    saveCharacter,
     invalidateCharacterCache
   } = useCharacter();
 
@@ -188,73 +189,6 @@ const Layout: React.FC = () => {
   }, [location.pathname]);
 
 
-  // Save handler
-  const handleSave = async () => {
-    if (!characterData) {
-      setError("No character data available to save");
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Prepare the file - use imageUrl from context
-      let fileToSave: File | null = null;
-
-      if (imageUrl) {
-        // Fetch the current image from context
-        try {
-          const response = await fetch(imageUrl);
-          const blob = await response.blob();
-          fileToSave = new File([blob], "character.png", { type: "image/png" });
-        } catch (fetchError) {
-          console.error("Error fetching current image:", fetchError);
-          throw new Error("Failed to access the current image");
-        }
-      }
-
-      // Final check - if we still don't have a valid image, throw an error
-      if (!fileToSave) {
-        throw new Error("No valid image available to save");
-      }
-
-      // Create form data
-      const formData = new FormData();
-      formData.append("file", fileToSave);
-      formData.append("metadata_json", JSON.stringify(characterData));
-
-      // Save the file
-      const saveResponse = await fetch("/api/characters/save-card", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!saveResponse.ok) {
-        const errorText = await saveResponse.text();
-        throw new Error(`Save failed: ${errorText}`);
-      }
-
-      // Handle successful save
-      const saveResult = await saveResponse.json();
-
-      if (saveResult.success) {
-        console.log("Character saved successfully:", saveResult);
-
-        // IMPORTANT: Invalidate character gallery cache to ensure immediate refresh
-        invalidateCharacterCache();
-      } else {
-        throw new Error(saveResult.message || "Unknown error during save");
-      }
-
-    } catch (error) {
-      console.error("Save error:", error);
-      setError(error instanceof Error ? error.message : "Failed to save character");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // World import handler
   const handleWorldImport = () => {
     const input = document.createElement('input');
@@ -331,7 +265,7 @@ const Layout: React.FC = () => {
       {/* Side Navigation */}
       <SideNav
         onWorldImport={handleWorldImport}
-        onSave={handleSave}
+        onSave={saveCharacter}
       />
 
       {/* Main Content Area - single flex container for side-by-side layout */}
