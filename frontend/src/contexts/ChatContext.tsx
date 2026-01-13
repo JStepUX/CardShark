@@ -66,6 +66,7 @@ interface ChatContextType {
   generateResponse: (prompt: string, retryCount?: number) => Promise<void>;
   regenerateMessage: (message: Message, retryCount?: number) => Promise<void>;
   regenerateGreeting: () => Promise<void>;
+  impersonateUser: (partialMessage?: string, onChunk?: (chunk: string) => void) => Promise<{ success: boolean; response?: string; error?: string }>;
   continueResponse: (message: Message) => Promise<void>;
   stopGeneration: () => void;
   setCurrentUser: (user: UserProfile | null) => void;
@@ -1379,6 +1380,56 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     }
   }, [characterData, isGenerating, apiConfig, debouncedSave]);
 
+  /**
+   * Impersonate the user - generate a response on behalf of {{user}}
+   * @param partialMessage Optional partial message to continue from
+   * @param onChunk Callback for streaming updates
+   * @returns The generated response
+   */
+  const impersonateUser = useCallback(async (
+    partialMessage: string = '',
+    onChunk?: (chunk: string) => void
+  ): Promise<{ success: boolean; response?: string; error?: string }> => {
+    if (!characterData || isGenerating) {
+      return { success: false, error: 'Cannot impersonate: no character or generation in progress' };
+    }
+
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      const userName = currentUser?.name || 'User';
+
+      // Get messages for context (exclude system messages)
+      const contextMessages = messagesRef.current.filter(m => m.role !== 'system' && m.role !== 'thinking');
+
+      const result = await ChatStorage.generateImpersonateStream(
+        characterData,
+        apiConfig,
+        contextMessages,
+        partialMessage,
+        userName,
+        onChunk
+      );
+
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to generate impersonate response');
+      }
+
+      return {
+        success: true,
+        response: result.response
+      };
+    } catch (err) {
+      console.error('Error in impersonateUser:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to generate response';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [characterData, isGenerating, apiConfig, currentUser]);
+
   const continueResponse = useCallback(async (message: Message) => {
     if (!characterData || message.role !== 'assistant' || !message.content) return;
 
@@ -1742,7 +1793,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     sessionNotes, sessionName, compressionLevel, isCompressing, compressedContextCache,
     setCharacterDataOverride,
     updateMessage, deleteMessage, addMessage, setMessages, cycleVariation,
-    generateResponse, regenerateMessage, regenerateGreeting, continueResponse, stopGeneration,
+    generateResponse, regenerateMessage, regenerateGreeting, impersonateUser, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,
     resetTriggeredLoreImagesState, clearError,

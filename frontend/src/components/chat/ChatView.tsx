@@ -143,6 +143,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     currentChatId,
     continueResponse,
     regenerateGreeting,
+    impersonateUser,
     isCompressing,
     sessionNotes,
     setSessionNotes,
@@ -542,6 +543,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
           <div className="relative z-10">
             <ChatInputArea
               onSend={handleSendMessage}
+              onImpersonate={impersonateUser}
               isGenerating={isGenerating}
               isCompressing={isCompressing}
               currentUser={currentUser}

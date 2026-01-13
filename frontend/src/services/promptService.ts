@@ -23,7 +23,10 @@ class PromptService {
     systemInstruction: "You are {{char}}. Here are your characteristics:\nDescription: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\nYou must stay in character at all times and never break the fourth wall or acknowledge you are an AI. Always respond as {{char}} would, based on the information provided.",
 
     // Context refresher prompt template
-    contextRefresher: "Let's summarize the key elements of the conversation so far, focusing on important plot points, character development, and any promises or commitments made. This will help maintain context and continuity for {{char}}.\n\nCharacter: {{char}}\nKey points from the conversation:\n{{key_points}}"
+    contextRefresher: "Let's summarize the key elements of the conversation so far, focusing on important plot points, character development, and any promises or commitments made. This will help maintain context and continuity for {{char}}.\n\nCharacter: {{char}}\nKey points from the conversation:\n{{key_points}}",
+
+    // Impersonate prompt template - for generating responses as {{user}}
+    impersonate: "You are now speaking as {{user}}, responding to {{char}}. Based on the conversation so far, write a natural response that {{user}} might give. Stay true to any established personality or traits for {{user}}. Write in first person as {{user}}. If provided with a starting message, continue naturally from where it left off."
   };
 
   /**

@@ -629,6 +629,117 @@ async def generate_greeting(request: Request):
             content={"success": False, "message": f"Failed to generate greeting: {str(e)}"}
         )
 
+@app.post("/api/generate-impersonate")
+async def generate_impersonate(request: Request):
+    """Generate a response as the user ({{user}}) using the LLM API with streaming.
+    
+    This endpoint allows the AI to 'impersonate' the user, generating a response
+    on their behalf based on the conversation context. If the user has provided
+    a partial message, the AI will continue from where they left off.
+    """
+    try:
+        logger.log_step("Received impersonate generation request")
+        # Parse the request JSON
+        request_data = await request.json()
+        
+        # Extract required fields
+        character_data = request_data.get('character_data')
+        api_config = request_data.get('api_config')
+        messages = request_data.get('messages', [])  # Chat history
+        partial_message = request_data.get('partial_message', '')  # User's partial input
+        user_name = request_data.get('user_name', 'User')
+        prompt_template = request_data.get('prompt_template')
+        
+        if not character_data:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "Character data is required"}
+            )
+            
+        if not api_config:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "API configuration is required"}
+            )
+            
+        # Extract character fields for context
+        data = character_data.get('data', {})
+        char_name = data.get('name', 'Character')
+        personality = data.get('personality', '')
+        description = data.get('description', '')
+        scenario = data.get('scenario', '')
+        
+        # Construct character context
+        context_parts = []
+        if description:
+            context_parts.append(f"Description: {description}")
+        if personality:
+            context_parts.append(f"Personality: {personality}")
+        if scenario:
+            context_parts.append(f"Scenario: {scenario}")
+            
+        character_context = "\n\n".join(context_parts)
+        
+        # Get existing system prompt if any
+        system_prompt = data.get('system_prompt', '')
+        
+        # Build memory context
+        full_memory = ""
+        if system_prompt:
+             full_memory += system_prompt + "\n\n"
+        if character_context:
+             full_memory += "Character Data:\n" + character_context
+        
+        # Build conversation history for context
+        chat_history = ""
+        for msg in messages[-10:]:  # Use last 10 messages for context
+            role = msg.get('role', 'user')
+            content = msg.get('content', '')
+            if role == 'assistant':
+                chat_history += f"{char_name}: {content}\n\n"
+            elif role == 'user':
+                chat_history += f"{user_name}: {content}\n\n"
+        
+        # Construct the impersonation prompt
+        if prompt_template:
+            # Use provided template
+            prompt = prompt_template.replace('{{char}}', char_name).replace('{{user}}', user_name)
+        else:
+            # Default prompt
+            prompt = f"You are now speaking as {user_name}, responding to {char_name}. Based on the conversation so far, write a natural response that {user_name} might give. Stay true to any established personality or traits for {user_name}. Write in first person as {user_name}."
+        
+        # Add the conversation context and partial message
+        prompt += f"\n\n## Recent Conversation:\n{chat_history}"
+        
+        if partial_message and partial_message.strip():
+            prompt += f"\n## Continue this message from {user_name} (write ONLY the continuation, do not repeat what's already written):\n{user_name}: {partial_message}"
+        else:
+            prompt += f"\n## Write a response as {user_name}:\n{user_name}:"
+        
+        # Stream the response using ApiHandler
+        stream_request_data = {
+            "api_config": api_config,
+            "generation_params": {
+                "prompt": prompt,
+                "memory": full_memory,
+                "stop_sequence": [f"{char_name}:", "</s>", "\n\n"],
+                "character_data": character_data,
+                "quiet": True
+            }
+        }
+        
+        return StreamingResponse(
+            api_handler.stream_generate(stream_request_data),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.log_error(f"Error generating impersonate response: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Failed to generate impersonate response: {str(e)}"}
+        )
+
 @app.post("/api/debug-png")
 async def debug_png(file: UploadFile = File(...)):
     """Debug a PNG file to extract all chunks and metadata."""

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, User, Loader2 } from 'lucide-react';
+import { Send, User, Loader2, Sparkles } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import MoodIndicator from '../MoodIndicator';
 import { UserProfile } from '../../types/messages';
@@ -8,6 +8,7 @@ import { htmlToPlainText } from '../../utils/contentUtils';
 
 interface ChatInputAreaProps {
   onSend: (text: string) => void;
+  onImpersonate?: (partialMessage: string, onChunk: (chunk: string) => void) => Promise<{ success: boolean; response?: string; error?: string }>;
   isGenerating: boolean;
   isCompressing?: boolean;
   currentUser: UserProfile | null;
@@ -21,6 +22,7 @@ const MAX_INPUT_HEIGHT = 400; // Maximum height before scrolling
 
 const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onSend,
+  onImpersonate,
   isGenerating,
   isCompressing = false,
   currentUser,
@@ -31,6 +33,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [imageError, setImageError] = useState(false);
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
+  const [isImpersonating, setIsImpersonating] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -98,7 +101,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           <span>Preparing context...</span>
         </div>
       )}
-      <div className="flex items-start gap-4">
+      <div className="flex items-end gap-4">
         {/* User Image - conditionally rendered */}
         {!hideUserAvatar && (
           <div
@@ -139,22 +142,65 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           />
         </div>
 
-        {/* Send Button & Mood Indicator */}
-        <div className="flex flex-col items-center gap-2 flex-shrink-0">
-          <MoodIndicator emotion={emotion} size={24} showLabel={false} />
+        {/* Send Button, Impersonate Button & Mood Indicator */}
+        <div className="flex flex-col items-center justify-end gap-2 flex-shrink-0">
+          <MoodIndicator emotion={emotion} size={20} showLabel={false} />
           <button
             onClick={() => {
-              if (inputValue.trim() && !isGenerating && !isCompressing) {
+              if (inputValue.trim() && !isGenerating && !isCompressing && !isImpersonating) {
                 onSend(inputValue.trim());
                 setInputValue('');
               }
             }}
-            disabled={!inputValue.trim() || isGenerating || isCompressing}
-            className="px-4 py-4 bg-transparent text-white rounded-lg hover:bg-orange-700
+            disabled={!inputValue.trim() || isGenerating || isCompressing || isImpersonating}
+            className="p-2 bg-transparent text-white rounded-lg hover:bg-orange-700
                      transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Send message"
           >
-            <Send size={20} />
+            <Send size={18} />
           </button>
+
+          {/* Impersonate Button (Sparkles) */}
+          {onImpersonate && (
+            <button
+              onClick={async () => {
+                if (isGenerating || isCompressing || isImpersonating) return;
+
+                setIsImpersonating(true);
+                const startingText = inputValue.trim();
+
+                // For autocomplete, we want to append to existing text
+                // For fresh generation, we start empty
+                const result = await onImpersonate(startingText, (chunk) => {
+                  // Append each chunk to the input
+                  setInputValue(prev => {
+                    // If we started with text, keep it and append
+                    // Otherwise just use the streamed content
+                    if (startingText && !prev.startsWith(startingText)) {
+                      return startingText + chunk;
+                    }
+                    return prev + chunk;
+                  });
+                });
+
+                if (!result.success) {
+                  console.error('Impersonate failed:', result.error);
+                }
+
+                setIsImpersonating(false);
+              }}
+              disabled={isGenerating || isCompressing || isImpersonating}
+              className="p-2 bg-transparent text-white rounded-lg hover:bg-purple-700
+                       transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={inputValue.trim() ? "Continue your message with AI" : "Generate a response as you"}
+            >
+              {isImpersonating ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <Sparkles size={18} />
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>
