@@ -59,6 +59,17 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     loadAvailableChats();
   }, [characterData]);
 
+  // Listen for session name updates and refresh chat list
+  useEffect(() => {
+    const handleSessionNameUpdate = () => {
+      console.log('Session name updated, refreshing chat list');
+      loadAvailableChats();
+    };
+
+    window.addEventListener('sessionNameUpdated', handleSessionNameUpdate);
+    return () => window.removeEventListener('sessionNameUpdated', handleSessionNameUpdate);
+  }, [characterData]);
+
   // Close export dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -657,11 +668,10 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       <div className="flex border-b border-stone-700 mb-4">
         <button
           onClick={() => setActiveTab('chats')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'chats'
+          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'chats'
               ? 'text-orange-400 border-b-2 border-orange-400'
               : 'text-stone-400 hover:text-stone-200'
-          }`}
+            }`}
         >
           Chats
           <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-stone-700">
@@ -670,11 +680,10 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
         </button>
         <button
           onClick={() => setActiveTab('workshop')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'workshop'
+          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'workshop'
               ? 'text-purple-400 border-b-2 border-purple-400'
               : 'text-stone-400 hover:text-stone-200'
-          }`}
+            }`}
         >
           Workshop
           <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-stone-700">

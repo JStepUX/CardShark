@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll, Save, Check } from 'lucide-react';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { SidePanelProps } from './types';
 import { ContextManagementDropdown } from './ContextManagementDropdown';
@@ -24,10 +24,20 @@ export function SidePanel({
     onUnloadCharacter,
     onOpenJournal,
 }: SidePanelProps) {
-    const { compressionLevel, setCompressionLevel, sessionName, setSessionName } = useChat();
+    const { compressionLevel, setCompressionLevel, sessionName, setSessionName, saveSessionNameNow } = useChat();
     const [animationClass, setAnimationClass] = useState('');
     const [isAnimating, setIsAnimating] = useState(false);
     const [showExpanded, setShowExpanded] = useState(!isCollapsed);
+    const [localSessionName, setLocalSessionName] = useState(sessionName);
+    const [justSaved, setJustSaved] = useState(false);
+
+    // Simple change detection
+    const hasChanges = localSessionName !== sessionName;
+
+    // Sync local state when sessionName changes from context (e.g., loading a new chat)
+    useEffect(() => {
+        setLocalSessionName(sessionName);
+    }, [sessionName]);
 
     // Sync showExpanded with isCollapsed prop when it changes externally
     // But only when not animating (to avoid interrupting our animation)
@@ -62,6 +72,29 @@ export function SidePanel({
         }
     };
 
+    // Handle save - update context and save to database
+    const handleSave = async () => {
+        if (!hasChanges) return;
+
+        // Update context state
+        setSessionName(localSessionName);
+
+        // Save to database - pass the value directly to avoid stale state closure
+        try {
+            await saveSessionNameNow(localSessionName);
+            console.log('Session name saved:', localSessionName);
+
+            // Show checkmark feedback
+            setJustSaved(true);
+            setTimeout(() => setJustSaved(false), 2000);
+
+            // Dispatch event to notify ChatSelector to refresh
+            window.dispatchEvent(new Event('sessionNameUpdated'));
+        } catch (error) {
+            console.error('Failed to save session name:', error);
+        }
+    };
+
     if (!showExpanded) {
         return (
             <div className="w-12 bg-[#1a1a1a] border-l border-gray-800 flex flex-col items-center py-4">
@@ -88,20 +121,39 @@ export function SidePanel({
                     <ChevronRight className="w-5 h-5" />
                 </button>
                 <div className="flex-1 min-w-0">
-                    {/* Editable Session Name */}
-                    <input
-                        type="text"
-                        value={sessionName || ''}
-                        onChange={(e) => setSessionName(e.target.value)}
-                        placeholder={
-                            mode === 'world' && currentRoom ? currentRoom.name :
-                                mode === 'character' && characterName ? `Chat with ${characterName}` :
-                                    mode === 'assistant' ? 'Session' :
-                                        'Untitled Chat'
-                        }
-                        className="w-full bg-transparent text-white border-none outline-none focus:ring-1 focus:ring-gray-600 rounded px-2 py-1 -mx-2 -my-1 truncate"
-                        title="Click to edit session name"
-                    />
+                    {/* Editable Session Name with Save Button */}
+                    <div className="relative flex items-center gap-2">
+                        <input
+                            type="text"
+                            value={localSessionName || ''}
+                            onChange={(e) => setLocalSessionName(e.target.value)}
+                            placeholder={
+                                mode === 'world' && currentRoom ? currentRoom.name :
+                                    mode === 'character' && characterName ? `Chat with ${characterName}` :
+                                        mode === 'assistant' ? 'Session' :
+                                            'Untitled Chat'
+                            }
+                            className="flex-1 bg-transparent text-white border border-gray-700 outline-none focus:ring-1 focus:ring-gray-600 rounded px-2 py-1 truncate"
+                            title="Click to edit session name"
+                        />
+                        {(hasChanges || justSaved) && (
+                            <button
+                                onClick={handleSave}
+                                className={`flex-shrink-0 transition-colors ${justSaved
+                                    ? 'text-green-400'
+                                    : 'text-blue-400 hover:text-blue-300'
+                                    }`}
+                                title={justSaved ? "Saved!" : "Save session name"}
+                                disabled={justSaved}
+                            >
+                                {justSaved ? (
+                                    <Check className="w-4 h-4" />
+                                ) : (
+                                    <Save className="w-4 h-4" />
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 

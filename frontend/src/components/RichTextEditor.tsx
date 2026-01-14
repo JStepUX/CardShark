@@ -43,9 +43,24 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   }, [onKeyDown]);
 
   // Pre-process content for initial rendering
-  const initialContent = content?.includes('![')
-    ? markdownToHtml(content)
-    : content;
+  const initialContent = (() => {
+    if (!content) return '';
+
+    let processed = content;
+
+    // Convert plain text with newlines to proper HTML paragraphs
+    if (!processed.includes('<p>') && !processed.includes('<br>') && processed.includes('\n')) {
+      processed = textToHtmlParagraphs(processed);
+    }
+
+    // Process markdown images
+    if (processed.includes('![')) {
+      processed = markdownToHtml(processed);
+    }
+
+    return processed;
+  })();
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -102,10 +117,14 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         return text;
       },
       handleKeyDown: (_view, event) => {
+        // First, call the user's onKeyDown handler if provided
         if (onKeyDownRef.current) {
           onKeyDownRef.current(event as unknown as React.KeyboardEvent<HTMLDivElement>);
-          return event.defaultPrevented;
+          if (event.defaultPrevented) {
+            return true;
+          }
         }
+
         return false;
       },
     },
@@ -113,13 +132,22 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   // Compare using htmlToPlainText on both sides to ensure consistent normalization
   // This prevents the editor from resetting on every keystroke due to HTML vs plain text mismatch
   useEffect(() => {
-    const editorPlainText = htmlToPlainText(editor?.getHTML() || '');
+    if (!editor) return;
+
+    // Don't reset content while the editor is focused and being actively edited
+    // EXCEPT when clearing the content (empty string) - allow that even when focused
+    if (editor.isFocused && content !== '') {
+      return;
+    }
+
+    const editorPlainText = htmlToPlainText(editor.getHTML() || '');
     const contentPlainText = htmlToPlainText(content || '');
-    if (editor && editorPlainText !== contentPlainText) {
+
+    if (editorPlainText !== contentPlainText) {
       // Save current cursor position before updating
-      if (editor.isFocused) {
-        cursorPosRef.current = editor.state.selection;
-      }
+      // This block will only be reached if editor is NOT focused,
+      // so no need to check editor.isFocused here.
+      cursorPosRef.current = editor.state.selection;
 
       // Process content for update
       let contentToSet = content;
@@ -138,7 +166,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       editor.commands.setContent(contentToSet);
 
       // Restore cursor position after content update
-      if (cursorPosRef.current && editor.isFocused) {
+      // This block will only be reached if editor is NOT focused,
+      // so no need to check editor.isFocused here.
+      if (cursorPosRef.current) {
         const { from, to } = cursorPosRef.current;
         if (from <= editor.state.doc.content.size && to <= editor.state.doc.content.size) {
           editor.commands.setTextSelection({ from, to });

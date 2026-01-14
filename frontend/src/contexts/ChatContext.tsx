@@ -79,6 +79,7 @@ interface ChatContextType {
   clearError: () => void;
   setSessionNotes: (notes: string) => void;
   setSessionName: (name: string) => void;
+  saveSessionNameNow: (nameOverride?: string) => Promise<void>;
   setCompressionLevel: (level: CompressionLevel) => void;
   invalidateCompressionCache: () => void;
   forkChat: (atMessageIndex: number) => Promise<string | null>;
@@ -217,24 +218,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
   }, [currentChatId, saveSessionSettings]);
 
   /**
-   * Set session name (title) with debounced save
+   * Set session name (title) - local state only, no auto-save
    */
   const setSessionName = useCallback((name: string) => {
-    // Optimistic update - immediate local state
+    // Update local state only
     setSessionNameState(name);
+  }, []);
 
-    // Cancel pending save
-    if (settingsSaveTimerRef.current) {
-      clearTimeout(settingsSaveTimerRef.current);
+  /**
+   * Manually save session name immediately
+   * @param nameOverride - Optional name to save (bypasses state to avoid stale closure)
+   */
+  const saveSessionNameNow = useCallback(async (nameOverride?: string) => {
+    const nameToSave = nameOverride !== undefined ? nameOverride : sessionName;
+    if (currentChatId && nameToSave !== undefined) {
+      await saveSessionSettings(currentChatId, { title: nameToSave || null });
     }
-
-    // Debounce save by 1500ms
-    if (currentChatId) {
-      settingsSaveTimerRef.current = setTimeout(() => {
-        saveSessionSettings(currentChatId, { title: name || null });
-      }, 1500);
-    }
-  }, [currentChatId, saveSessionSettings]);
+  }, [currentChatId, sessionName, saveSessionSettings]);
 
   /**
    * Invalidate compression cache (called when compression level changes or messages are modified)
@@ -1797,7 +1797,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,
     updateReasoningSettings, navigateToPreviewImage, trackLoreImages,
     resetTriggeredLoreImagesState, clearError,
-    setSessionNotes, setSessionName, setCompressionLevel, invalidateCompressionCache,
+    setSessionNotes, setSessionName, saveSessionNameNow, setCompressionLevel, invalidateCompressionCache,
     forkChat,
   };
 

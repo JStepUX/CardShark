@@ -47,11 +47,11 @@ export function htmlToPlainText(html: string): string {
   // Replace <p> tags with double newlines (paragraph breaks)
   // Replace <br> tags with single newlines
   let text = html
-    .replace(/<\/p><p[^>]*>/gi, '\n\n')  // Paragraph breaks
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')  // Paragraph breaks (with optional whitespace)
     .replace(/<p[^>]*>/gi, '')            // Opening <p> tags
     .replace(/<\/p>/gi, '')                // Closing </p> tags
     .replace(/<br\s*\/?>/gi, '\n')        // <br> tags
-    .replace(/<\/div><div[^>]*>/gi, '\n') // <div> breaks
+    .replace(/<\/div>\s*<div[^>]*>/gi, '\n') // <div> breaks (with optional whitespace)
     .replace(/<div[^>]*>/gi, '')          // Opening <div> tags
     .replace(/<\/div>/gi, '');            // Closing </div> tags
 
@@ -59,11 +59,8 @@ export function htmlToPlainText(html: string): string {
   temp.innerHTML = text;
   text = temp.textContent || temp.innerText || '';
 
-  // Clean up excessive newlines (more than 2 consecutive)
-  text = text.replace(/\n{3,}/g, '\n\n');
-
-  // Trim leading/trailing whitespace
-  return text.trim();
+  // Don't trim or collapse newlines - preserve exact structure for proper round-trip conversion
+  return text;
 }
 
 /**
