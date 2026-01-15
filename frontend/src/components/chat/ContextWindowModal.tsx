@@ -70,12 +70,47 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
   title = "API Context Window"
 }) => {
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'analysis' | 'raw'>('analysis');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'payload'>('analysis');
 
-  // Copy to clipboard functionality - Copy the active context
+  // Extract raw payload - only what's actually sent to the LLM
+  const rawPayload = useMemo(() => {
+    if (!contextData) return null;
+
+    const payload = contextData.generation_params || contextData;
+    const apiConfig = contextData.api_config || payload.api_config || contextData.config;
+    const genSettings = apiConfig?.generation_settings || {};
+
+    return {
+      memory: payload.memory || '',
+      prompt: payload.prompt || '',
+      stop_sequence: payload.stop_sequence || apiConfig?.stopSequences || [],
+      generation_settings: {
+        max_length: genSettings.max_length || payload.max_length,
+        max_context_length: genSettings.max_context_length || payload.max_context_length,
+        temperature: genSettings.temperature || payload.temperature,
+        top_p: genSettings.top_p || payload.top_p,
+        top_k: genSettings.top_k || payload.top_k,
+        top_a: genSettings.top_a || payload.top_a,
+        typical: genSettings.typical || payload.typical,
+        tfs: genSettings.tfs || payload.tfs,
+        rep_pen: genSettings.rep_pen || payload.rep_pen,
+        rep_pen_range: genSettings.rep_pen_range || payload.rep_pen_range,
+        rep_pen_slope: genSettings.rep_pen_slope || payload.rep_pen_slope,
+        min_p: genSettings.min_p || payload.min_p,
+        dynatemp_range: genSettings.dynatemp_range || payload.dynatemp_range,
+        dynatemp_exponent: genSettings.dynatemp_exponent || payload.dynatemp_exponent,
+        smoothing_factor: genSettings.smoothing_factor || payload.smoothing_factor,
+        presence_penalty: genSettings.presence_penalty || payload.presence_penalty,
+        sampler_order: genSettings.sampler_order || payload.sampler_order,
+        banned_tokens: genSettings.banned_tokens || apiConfig?.banned_tokens || []
+      }
+    };
+  }, [contextData]);
+
+  // Copy to clipboard functionality - Copy the raw payload (what's sent to LLM)
   const handleCopy = async () => {
     try {
-      const dataToCopy = JSON.stringify(contextData, null, 2);
+      const dataToCopy = JSON.stringify(rawPayload, null, 2);
 
       await navigator.clipboard.writeText(dataToCopy);
       setCopySuccess(true);
@@ -353,13 +388,13 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             Analysis
           </button>
           <button
-            onClick={() => setActiveTab('raw')}
-            className={`px-4 py-2 performance-transform ${activeTab === 'raw'
+            onClick={() => setActiveTab('payload')}
+            className={`px-4 py-2 performance-transform ${activeTab === 'payload'
               ? 'border-b-2 border-blue-500 text-blue-400'
               : 'text-gray-400 hover:text-gray-300'
               }`}
           >
-            Raw Data
+            Raw Payload
           </button>
 
           {/* Copy button aligned to the right */}
@@ -386,7 +421,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             <div className="performance-contain performance-transform">
               <pre className="bg-stone-900 text-gray-300 font-mono text-sm
                            rounded-lg p-4 overflow-auto whitespace-pre-wrap">
-                {JSON.stringify(contextData, null, 2)}
+                {JSON.stringify(rawPayload, null, 2)}
               </pre>
             </div>
           </div>
