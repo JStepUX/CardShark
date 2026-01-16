@@ -13,12 +13,36 @@ Feedback, issues, or gripes? Just want to hang out? Hit us up on the [CardShark 
 
 ## Key Features
 
-- **Character Management**: Create and manage AI characters with metadata embedded in PNG files
-- **Dynamic Chat System**: Real-time streaming conversations with multiple AI providers
-- **World Cards System**: Navigate dynamic maps and interact with AI-driven characters
+### Core Chat Experience
+- **Dynamic Chat System**: Real-time streaming conversations with multiple AI providers (OpenAI, Claude, KoboldCPP, etc.)
+- **Impersonation Mode**: Let the AI generate responses on your behalf with a single click
+- **Chat Forking**: Branch conversations from any message to explore alternative storylines
+- **Message Regeneration**: Regenerate AI responses to explore different narrative directions
+
+### Advanced Context Management
+CardShark offers **4 powerful options** for managing conversation context:
+1. **Session Notes**: Persistent notes that stay active across the entire chat session
+2. **Author's Note (Journaling)**: Inject dynamic guidance into the conversation context
+3. **Automatic Compression**: Intelligent message summarization to maintain coherent long conversations
+4. **Context Window Monitoring**: Real-time visibility into what's being sent to the AI
+
+### World Building & Exploration
+- **World Cards System**: Create immersive worlds with dynamic maps and locations
+- **World Builder**: Design rich environments with interconnected locations and characters
+- **World Play Mode**: Navigate maps, interact with AI-driven characters, and experience dynamic events
+- **Combat Cards** *(in development)*: Structured combat encounters and game mechanics
+
+### Character & Content Management
+- **Character Management**: Create and manage AI characters with rich metadata embedded in PNG files
+- **Persistent Identity**: UUID-based character tracking ensures consistency across sessions
 - **Template Management**: Customizable prompt templates for different conversation styles
-- **Persistent Identity**: UUID-based character tracking embedded in PNG metadata
+- **Lore System**: Build deep character backgrounds with searchable, context-aware lore injection
+- **Content Filtering**: Advanced moderation and safety controls with built-in and custom filters
+
+### Technical Excellence
 - **Comprehensive Persistence**: Robust data storage with atomic operations and error recovery
+- **Rich Media Support**: Background images, character portraits, and visual elements
+- **Room Management**: Create and manage different conversation spaces and contexts
 
 For complete feature details, see [Product Overview](../.kiro/steering/product.md).
 
