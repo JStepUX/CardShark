@@ -5,7 +5,11 @@ Feedback, issues, or gripes? Just want to hang out? Hit us up on the [CardShark 
 **CardShark** is a PNG metadata editor and AI chatbot frontend built exclusively by AI assistants. It's designed for interactive storytelling and character-driven chat experiences.
 
 ![cs_gallery](https://github.com/user-attachments/assets/4ab24c52-3a9c-4c96-9c30-77ed822f677b)
-![cs_chat](https://github.com/user-attachments/assets/c1f9999d-89c5-420a-9f7d-bb7f9e74dac0)
+<img width="1653" height="917" alt="chatview" src="https://github.com/user-attachments/assets/25b49fc7-fb3a-44cd-8e30-15ea2da68819" />
+<img width="1653" height="920" alt="lore" src="https://github.com/user-attachments/assets/d7d118b7-8323-4db2-a1cf-bbad460218d6" />
+<img width="1657" height="916" alt="worldview" src="https://github.com/user-attachments/assets/f701b42e-1f0b-46c8-aa69-2743c7c4aed0" />
+<img width="1658" height="921" alt="worldedit" src="https://github.com/user-attachments/assets/3ccc5ca6-b0c8-4001-b838-21c731426d7b" />
+
 
 ## Key Features
 
