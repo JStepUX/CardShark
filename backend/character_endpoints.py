@@ -722,6 +722,38 @@ async def trigger_scan_character_directory_endpoint(
         logger.error(f"Error during manual character directory scan: {e}", error=e)
         raise handle_generic_error(e, "character directory scan")
 
+@router.post("/characters/migrate-paths", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Migrate character paths from old to new directory")
+async def migrate_character_paths_endpoint(
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """One-time migration to update old SillyTavern paths to current directory."""
+    try:
+        logger.info("POST /api/characters/migrate-paths - Migrating old paths to current directory")
+        
+        # Get current character directory from settings
+        current_directory = settings_manager.get_setting("character_directory")
+        old_directory = "C:\\Users\\virtu\\SillyTavern-Launcher\\SillyTavern\\data\\default-user\\characters"
+        
+        # Run migration
+        migration_result = char_service.migrate_character_paths(old_directory, current_directory)
+        
+        logger.info(
+            f"Migration complete: {migration_result['characters_updated']} updated, "
+            f"{migration_result['characters_skipped']} skipped"
+        )
+        
+        return create_data_response({
+            "success": True,
+            "message": f"Migrated {migration_result['characters_updated']} characters",
+            "details": migration_result
+        })
+    except Exception as e:
+        logger.error(f"Error during path migration: {e}")
+        raise handle_generic_error(e, "path migration")
+
+
 # --- Utility Endpoints (Primarily for uploaded files, not interacting with DB characters directly) ---
 
 @router.get("/character-metadata/{path:path}", response_model=DataResponse[dict], responses=STANDARD_RESPONSES, summary="Get character metadata by file path")

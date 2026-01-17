@@ -1059,6 +1059,149 @@ class CharacterService:
             self.logger.log_error(f"Error duplicating character {character_uuid}: {e}")
             return None
 
+    def migrate_character_paths(
+        self, 
+        old_directory: str, 
+        new_directory: str
+    ) -> Dict[str, Any]:
+        """
+        Migrates character paths from old directory to new directory.
+        Updates png_file_path for all characters under the old directory.
+        
+        Args:
+            old_directory: Old character directory path
+            new_directory: New character directory path
+            
+        Returns:
+            Dict with migration statistics: {
+                'characters_updated': int,
+                'characters_skipped': int,
+                'missing_files': List[str]
+            }
+        """
+        from pathlib import Path
+        
+        old_path = Path(old_directory).resolve()
+        new_path = Path(new_directory).resolve()
+        
+        self.logger.log_info(f"Migrating character paths from '{old_path}' to '{new_path}'")
+        
+        # Verify new directory exists
+        if not new_path.exists():
+            self.logger.log_error(f"New directory does not exist: {new_path}")
+            return {
+                'characters_updated': 0,
+                'characters_skipped': 0,
+                'missing_files': []
+            }
+        
+        if not new_path.is_dir():
+            self.logger.log_error(f"New path is not a directory: {new_path}")
+            return {
+                'characters_updated': 0,
+                'characters_skipped': 0,
+                'missing_files': []
+            }
+        
+        characters_updated = 0
+        characters_skipped = 0
+        missing_files = []
+        
+        try:
+            with self._get_session_context() as db:
+                # Get all characters
+                all_characters = db.query(CharacterModel).all()
+                
+                for char in all_characters:
+                    old_file_path = Path(char.png_file_path)
+                    
+                    # Check if this path is under the old directory
+                    try:
+                        if old_file_path.is_absolute():
+                            try:
+                                # Get relative path from old directory
+                                relative_path = old_file_path.relative_to(old_path)
+                            except ValueError:
+                                # Path is not relative to old_dir, skip it
+                                self.logger.log_info(
+                                    f"Skipping {char.name}: Path not under old directory "
+                                    f"(current: {old_file_path})"
+                                )
+                                characters_skipped += 1
+                                continue
+                        else:
+                            # Path is already relative, use it as-is
+                            relative_path = old_file_path
+                        
+                        # Construct new absolute path
+                        new_file_path = new_path / relative_path
+                        
+                        # Skip if the path is already correct
+                        if str(new_file_path) == str(old_file_path):
+                            self.logger.log_info(f"Skipping '{char.name}': Path already correct")
+                            characters_skipped += 1
+                            continue
+                        
+                        # Check if new path already exists in database (another character)
+                        existing_char = db.query(CharacterModel).filter(
+                            CharacterModel.png_file_path == str(new_file_path)
+                        ).first()
+                        
+                        if existing_char and existing_char.character_uuid != char.character_uuid:
+                            self.logger.log_warning(
+                                f"Skipping '{char.name}': New path already used by '{existing_char.name}' "
+                                f"(UUID: {existing_char.character_uuid})"
+                            )
+                            characters_skipped += 1
+                            continue
+                        
+                        # Check if file exists at new location
+                        file_exists = new_file_path.exists()
+                        
+                        if not file_exists:
+                            missing_files.append(str(new_file_path))
+                            self.logger.log_warning(
+                                f"Character '{char.name}': File not found at new location: {new_file_path}"
+                            )
+                        
+                        # Update the path in database
+                        char.png_file_path = str(new_file_path)
+                        char.updated_at = datetime.datetime.utcnow()
+                        db.add(char)
+                        characters_updated += 1
+                        
+                        self.logger.log_info(
+                            f"Migrated '{char.name}': {old_file_path.name} -> {new_file_path}"
+                        )
+                        
+                    except Exception as e:
+                        self.logger.log_error(f"Error processing character {char.name}: {str(e)}")
+                        characters_skipped += 1
+                        continue
+                
+                # Commit all changes
+                db.commit()
+                
+                self.logger.log_info(
+                    f"Migration complete: {characters_updated} updated, "
+                    f"{characters_skipped} skipped, {len(missing_files)} missing files"
+                )
+                
+        except Exception as e:
+            self.logger.log_error(f"Migration failed: {str(e)}")
+            return {
+                'characters_updated': 0,
+                'characters_skipped': 0,
+                'missing_files': []
+            }
+        
+        return {
+            'characters_updated': characters_updated,
+            'characters_skipped': characters_skipped,
+            'missing_files': missing_files
+        }
+
+
     def clear_all_characters(self) -> bool:
         """
         Clears all characters from the database.

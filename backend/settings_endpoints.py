@@ -112,8 +112,22 @@ async def update_settings(
         )
         
         if character_directory_changed:
-            logger.log_step(f"Character directory changing from '{old_character_directory}' to '{new_character_directory}' - clearing database")
-            character_service.clear_all_characters()
+            logger.log_step(
+                f"Character directory changing from '{old_character_directory}' "
+                f"to '{new_character_directory}' - migrating paths"
+            )
+            migration_result = character_service.migrate_character_paths(
+                old_character_directory,
+                new_character_directory
+            )
+            logger.log_step(
+                f"Migration complete: {migration_result['characters_updated']} "
+                f"characters updated, {migration_result['characters_skipped']} skipped"
+            )
+            if migration_result['missing_files']:
+                logger.log_warning(
+                    f"{len(migration_result['missing_files'])} files not found at new location"
+                )
 
         # Apply new settings
         logger.log_step("Updating settings")
@@ -162,8 +176,22 @@ async def update_settings_put(
         )
         
         if character_directory_changed:
-            logger.log_step(f"Character directory changing from '{old_character_directory}' to '{new_character_directory}' - clearing database")
-            character_service.clear_all_characters()
+            logger.log_step(
+                f"Character directory changing from '{old_character_directory}' "
+                f"to '{new_character_directory}' - migrating paths"
+            )
+            migration_result = character_service.migrate_character_paths(
+                old_character_directory,
+                new_character_directory
+            )
+            logger.log_step(
+                f"Migration complete: {migration_result['characters_updated']} "
+                f"characters updated, {migration_result['characters_skipped']} skipped"
+            )
+            if migration_result['missing_files']:
+                logger.log_warning(
+                    f"{len(migration_result['missing_files'])} files not found at new location"
+                )
 
         logger.log_step("Updating settings")
         settings_manager.update_settings(new_settings)
