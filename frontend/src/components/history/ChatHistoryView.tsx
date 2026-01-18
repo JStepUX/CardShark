@@ -99,38 +99,52 @@ const ChatHistoryView: React.FC = () => {
     // Handle clicking on a chat row to load it
     const handleLoadChat = async (item: ChatHistoryItem) => {
         try {
-            // Load the character metadata and image
             const baseUrl = getApiBaseUrl();
-            const metadataResponse = await fetch(`${baseUrl}/api/character/${item.character_uuid}/metadata`);
 
-            if (!metadataResponse.ok) {
-                // Try alternative endpoint
-                const altResponse = await fetch(`${baseUrl}/api/characters/${item.character_uuid}`);
-                if (!altResponse.ok) {
-                    throw new Error('Failed to load character metadata');
+            // First, check if the character exists
+            try {
+                const metadataResponse = await fetch(`${baseUrl}/api/character/${item.character_uuid}/metadata`);
+
+                if (!metadataResponse.ok) {
+                    // Try alternative endpoint
+                    const altResponse = await fetch(`${baseUrl}/api/characters/${item.character_uuid}`);
+                    if (!altResponse.ok) {
+                        // Character not found - this is an orphaned chat
+                        // Open the assignment dialog instead of loading
+                        console.warn('Character not found for chat, opening assignment dialog');
+                        toast.warning(`Character "${item.character_name || 'Unknown'}" not found. Please assign this chat to a character.`);
+                        setAssignTarget(item);
+                        return; // Don't navigate, let user assign first
+                    }
+                    const altData = await altResponse.json();
+                    const metadata = altData.data || altData;
+                    setCharacterData(metadata);
+                } else {
+                    const data = await metadataResponse.json();
+                    const metadata = data.data || data;
+                    setCharacterData(metadata);
                 }
-                const altData = await altResponse.json();
-                const metadata = altData.data || altData;
-                setCharacterData(metadata);
-            } else {
-                const data = await metadataResponse.json();
-                const metadata = data.data || data;
-                setCharacterData(metadata);
-            }
 
-            // Load character image
-            const imageResponse = await fetch(`${baseUrl}/api/character-image/${item.character_uuid}`);
-            if (imageResponse.ok) {
-                const blob = await imageResponse.blob();
-                const imageUrl = URL.createObjectURL(blob);
-                setImageUrl(imageUrl);
-            }
+                // Load character image
+                const imageResponse = await fetch(`${baseUrl}/api/character-image/${item.character_uuid}`);
+                if (imageResponse.ok) {
+                    const blob = await imageResponse.blob();
+                    const imageUrl = URL.createObjectURL(blob);
+                    setImageUrl(imageUrl);
+                }
 
-            // Navigate to chat view with the session ID as query param
-            navigate(`/chat?session=${item.chat_session_uuid}`);
+                // Navigate to chat view with the session ID as query param
+                navigate(`/chat?session=${item.chat_session_uuid}`);
+            } catch (charErr) {
+                // Character loading failed - this is an orphaned chat
+                console.warn('Character not found for chat, opening assignment dialog:', charErr);
+                toast.warning(`Character "${item.character_name || 'Unknown'}" not found. Please assign this chat to a character.`);
+                setAssignTarget(item);
+                return; // Don't navigate, let user assign first
+            }
         } catch (err) {
-            console.error('Failed to load character:', err);
-            toast.error('Failed to load character for this chat');
+            console.error('Failed to load chat:', err);
+            toast.error('Failed to load this chat');
         }
     };
 
