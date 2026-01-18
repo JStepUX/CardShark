@@ -20,8 +20,6 @@ import { substituteVariables } from '../../utils/variableUtils';
 import ErrorMessage from '../common/ErrorMessage';
 import { useScrollToBottom } from '../../hooks/useScrollToBottom';
 import { useChat } from '../../contexts/ChatContext';
-import { usePrompts } from '../../hooks/usePrompts';
-import { StandardPromptKey } from '../../types/promptTypes';
 
 import { ArrowDown } from 'lucide-react';
 
@@ -151,72 +149,64 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     forkChat
   } = useChat();
 
-  const { getPrompt, getDefaultPrompt, isLoading: isPromptsLoading } = usePrompts();
+
 
   // Extract lore image paths for display in chat bubbles
   const loreImagePaths = useMemo(() => {
     return triggeredLoreImages?.map(img => img.imagePath) || [];
   }, [triggeredLoreImages]);
 
-  // Initialize generic assistant if no character selected
+  // Fetch generic assistant from backend when no character selected
   useEffect(() => {
-    if (!characterData && !isPromptsLoading) {
-      const assistantPrompt = getPrompt(StandardPromptKey.ASSISTANT_PROMPT) || getDefaultPrompt(StandardPromptKey.ASSISTANT_PROMPT);
+    if (!characterData) {
+      const fetchAssistant = async () => {
+        try {
+          // Try to fetch the assistant character by UUID
+          const response = await fetch('/api/character/cardshark-general-assistant-v1');
 
-      const genericAssistant = {
-        name: "CardShark",
-        description: "Your helpful AI assistant.",
-        personality: "Helpful, collaborative, insightful.",
-        scenario: "Helping the user with their tasks.",
-        first_mes: "How can I help you?",
-        mes_example: "",
-        creatorcomment: "",
-        avatar: "none",
-        chat: "CardShark - Generic Assistant",
-        talkativeness: "0.5",
-        fav: true,
-        tags: ["Assistant"],
-        spec: "chara_card_v2",
-        spec_version: "2.0",
-        data: {
-          name: "CardShark",
-          description: "Your helpful AI assistant.",
-          personality: "Helpful, collaborative, insightful.",
-          scenario: "Helping the user with their tasks.",
-          first_mes: "How can I help you?",
-          mes_example: "",
-          creator_notes: "",
-          system_prompt: assistantPrompt,
-          post_history_instructions: "",
-          tags: ["Assistant"],
-          creator: "System",
-          character_version: "1.0",
-          alternate_greetings: [],
-          character_uuid: "cardshark-general-assistant-v1",
-          extensions: {
-            talkativeness: "0.5",
-            fav: true,
-            world: "CardShark",
-            depth_prompt: {
-              prompt: "",
-              depth: 4,
-              role: "system"
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+              console.log('Loaded generic assistant from backend');
+              setCharacterData(result.data);
             }
-          },
-          group_only_greetings: [],
-          character_book: {
-            entries: [],
-            name: ""
-          },
-          spec: ''
-        },
-        create_date: new Date().toISOString()
+          } else {
+            // Assistant doesn't exist yet - create a minimal character object
+            // This allows chat creation to proceed, which will trigger backend auto-creation
+            console.log('Generic assistant not found, creating minimal character object');
+            const minimalAssistant = {
+              spec: 'chara_card_v2',
+              spec_version: '2.0',
+              data: {
+                name: 'CardShark',
+                description: 'Your collaborator and co-conspirator.',
+                personality: 'Helpful, collaborative, insightful.',
+                scenario: 'Helping the user with their tasks.',
+                first_mes: 'How can I help you?',
+                mes_example: '',
+                creator_notes: '',
+                system_prompt: 'You are CardShark, a collaborator and co-conspirator with {{user}} who would like very much for you to help them with their most burning issues.',
+                post_history_instructions: '',
+                alternate_greetings: [],
+                character_book: undefined,
+                tags: [],
+                creator: 'CardShark',
+                character_version: '1.0',
+                extensions: {},
+                character_uuid: 'cardshark-general-assistant-v1'
+              }
+            };
+            setCharacterData(minimalAssistant as any);
+          }
+        } catch (error) {
+          console.error('Error fetching generic assistant:', error);
+          // Non-fatal - assistant will be created on first chat creation
+        }
       };
 
-      // We cast to any to avoid strict type matching issues with nested optional fields if any
-      setCharacterData(genericAssistant as any);
+      fetchAssistant();
     }
-  }, [characterData, isPromptsLoading, getPrompt, getDefaultPrompt, setCharacterData]);
+  }, [characterData, setCharacterData]);
 
   const scrollToBottomUnified = useCallback(() => {
     scrollToBottom();
@@ -433,9 +423,10 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     navigate('/gallery');
   }, [setCharacterData, setImageUrl, navigate]);
 
-  if (!characterData) {
-    return <div className="flex items-center justify-center h-full text-gray-400">{isPromptsLoading ? "Loading Assistant..." : "Initializing Assistant..."}</div>;
-  }
+  // Allow rendering without character - backend will create assistant on first message
+  // if (!characterData) {
+  //   return <div className="flex items-center justify-center h-full text-gray-400">No character selected</div>;
+  // }
 
   return (
     <div className="h-full relative flex flex-col overflow-hidden">
@@ -443,12 +434,12 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
       <ChatBackgroundLayer
         backgroundSettings={backgroundSettings}
         messages={messages}
-        characterName={characterData.data.name || 'Character'}
+        characterName={characterData?.data?.name || 'Character'}
       />
 
       {/* Header */}
       <ChatHeader
-        characterName={characterData?.data.name || 'Character'}
+        characterName={characterData?.data?.name || 'Character'}
         onShowContextWindow={() => setShowContextWindow(true)}
         onShowBackgroundSettings={() => setShowBackgroundSettings(true)}
         onShowChatSelector={() => setShowChatSelector(true)}
@@ -490,13 +481,13 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
                       isGenerating={message.status === 'streaming'}
                       onContentChange={(newContent) => console.log('Thought changed (not implemented):', newContent)}
                       onDelete={() => console.log('Delete thought (not implemented)')}
-                      characterName={characterData.data.name}
+                      characterName={characterData?.data?.name || 'Character'}
                     />
                   ) : null}
                   {message.role !== 'thinking' && (
                     <ChatBubble
                       message={message}
-                      characterName={characterData.data.name || 'Character'}
+                      characterName={characterData?.data?.name || 'Character'}
                       currentUser={currentUser || undefined}
                       isGenerating={isGenerating && generatingId === message.id}
                       onTryAgain={() => regenerateMessage(message)}
@@ -559,7 +550,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
             mode={sidePanelMode}
             isCollapsed={sidePanelCollapsed}
             onToggleCollapse={() => setSidePanelCollapsed(!sidePanelCollapsed)}
-            characterName={characterData.data.name}
+            characterName={characterData?.data?.name || 'Character'}
             onImageChange={handleImageChange}
             onUnloadCharacter={handleUnloadCharacter}
             onOpenJournal={() => setShowJournal(true)}
