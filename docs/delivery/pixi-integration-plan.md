@@ -339,6 +339,70 @@ Slide from current slot X to target slot X.
 
 ---
 
+## Post-Combat Narrative Handoff
+
+When combat ends, the bound companion (or world card narrator) should automatically react to what happened, bridging the mechanical combat system back into narrative roleplay.
+
+### Design Goals
+
+- LLM receives full combat context (outcome, damage, loot) so reactions are coherent
+- Companion initiates post-combat dialogue (user doesn't need to prompt)
+- Latency hidden by triggering inference during loot phase
+
+### Combat Summary Context
+
+Inject a system message before companion generation:
+
+```typescript
+interface CombatSummary {
+  outcome: 'victory' | 'defeat' | 'fled';
+  roundsElapsed: number;
+  enemiesDefeated: string[];      // ["Gnoll Scout", "Gnoll Warrior x2"]
+  alliesDamaged: string[];        // ["Kira took 12 damage", "You were knocked prone"]
+  notableMoments: string[];       // ["Kira landed the killing blow"]
+  lootFound: string[];            // ["Obsidian Dagger", "12 copper"]
+}
+```
+
+### Inference Timing
+
+```
+├── Last enemy dies
+│   └── [Victory state reached - don't trigger yet]
+├── Death animation (500ms)
+├── Loot popup appears
+│   └── [START inference with full context including loot]
+├── Player reviews/closes loot
+│   └── [Inference completes - response cached]
+└── Combat modal closes
+    └── [Companion reaction appears instantly]
+```
+
+**Predictive trigger condition** (optional optimization):
+```typescript
+const shouldPregenerate = 
+  enemies.every(e => e.hp < e.maxHp * 0.3) || 
+  enemies.filter(e => e.hp > 0).length === 1;
+```
+
+### Example Flow
+
+**Combat Summary:**
+> Victory against 3 gnolls. Party took 20 damage. Looted: Obsidian Dagger, 12 copper.
+
+**Companion Reaction (auto-generated):**
+> *wipes blood from her blade* "Gnolls. This far from the Wastes..." *notices your find* "Is that obsidian? Gnolls don't forge—where did they get that?"
+
+The loot becomes a narrative hook; the companion's reaction is contextually aware.
+
+### Implementation Notes
+
+- Add `generateCombatSummary(finalState, loot)` to combat engine
+- Inject summary as system message before companion generation
+- Handle edge cases: TPK (different tone), fled combat, no companions bound
+
+---
+
 ## Implementation Phases
 
 ### Phase 1: Static Rendering (3-4 days)

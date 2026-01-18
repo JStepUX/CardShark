@@ -32,6 +32,10 @@ interface CharacterContextType {
   isNewlyCreated: boolean;
   setIsNewlyCreated: React.Dispatch<React.SetStateAction<boolean>>;
 
+  // Unsaved changes tracking
+  hasUnsavedChanges: boolean;
+  setHasUnsavedChanges: React.Dispatch<React.SetStateAction<boolean>>;
+
   // New gallery cache properties
   characterCache: CharacterGalleryCache | null;
   setCharacterCache: React.Dispatch<React.SetStateAction<CharacterGalleryCache | null>>;
@@ -46,6 +50,7 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isNewlyCreated, setIsNewlyCreated] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [characterCache, setCharacterCache] = useState<CharacterGalleryCache | null>(null);
   const createNewCharacter = (name: string) => {
     const newCharacter: CharacterCard = {
@@ -154,6 +159,9 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (saveResult.success) {
         console.log("Character saved successfully:", saveResult);
 
+        // Reset unsaved changes flag
+        setHasUnsavedChanges(false);
+
         // IMPORTANT: Invalidate character gallery cache to ensure immediate refresh
         invalidateCharacterCache();
       } else {
@@ -247,6 +255,8 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     handleImageChange,
     isNewlyCreated,
     setIsNewlyCreated,
+    hasUnsavedChanges,
+    setHasUnsavedChanges,
     characterCache,
     setCharacterCache,
     invalidateCharacterCache

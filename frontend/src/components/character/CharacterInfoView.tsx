@@ -90,12 +90,11 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
     ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
     : primaryContext;
 
-  // Always get imageUrl from primary context (not used in secondary/compare mode)
-  const { imageUrl } = primaryContext;
+  // Always get imageUrl and hasUnsavedChanges from primary context (not used in secondary/compare mode)
+  const { imageUrl, hasUnsavedChanges, setHasUnsavedChanges } = primaryContext;
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
-  // Smart change tracking state
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // Smart change tracking state - removed local hasUnsavedChanges, now using context
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
   const [isConvertingToWorld, setIsConvertingToWorld] = useState(false);
@@ -120,7 +119,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
   // Debounced change detection - only detect real changes after user stops typing
   useEffect(() => {
-    if (!originalCharacterData || !characterData) return;
+    if (!originalCharacterData || !characterData || isSecondary) return; // Don't track changes for secondary view
 
     // Clear existing timeout
     if (changeTimeoutRef.current) {
@@ -130,7 +129,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
     // Set a debounced check for changes
     changeTimeoutRef.current = setTimeout(() => {
       const hasChanges = JSON.stringify(characterData) !== JSON.stringify(originalCharacterData);
-      setHasUnsavedChanges(hasChanges);
+      setHasUnsavedChanges(hasChanges); // Update context state
     }, 1000); // 1 second delay to avoid flagging temporary typing
 
     // Cleanup timeout on unmount
@@ -139,7 +138,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
         clearTimeout(changeTimeoutRef.current);
       }
     };
-  }, [characterData, originalCharacterData]);
+  }, [characterData, originalCharacterData, setHasUnsavedChanges, isSecondary]);
   // Navigation blocking using beforeunload and improved popstate handling
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -426,8 +425,20 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           {isSecondary ? "Comparison View" : "Primary Character Info"}
         </h2>
 
-        {/* Toolbar - all icon buttons */}
-        <div className="flex items-center gap-1 min-w-0">
+        {/* Toolbar - Save Changes button and icon buttons */}
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Save Changes button - only show when there are unsaved changes and not in secondary view */}
+          {!isSecondary && hasUnsavedChanges && (
+            <button
+              onClick={primaryContext.saveCharacter}
+              className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+              title="Save character changes to PNG"
+            >
+              <Save className="w-4 h-4" />
+              Save Changes
+            </button>
+          )}
+
           {/* Tools group */}
           <div className="flex items-center gap-1">
             <button
@@ -480,8 +491,8 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 <button
                   onClick={() => setWorkshopMode(!isWorkshopMode)}
                   className={`p-2 rounded-lg transition-colors ${isWorkshopMode
-                      ? 'text-white bg-stone-600'
-                      : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                    ? 'text-white bg-stone-600'
+                    : 'text-stone-400 hover:text-white hover:bg-stone-700'
                     }`}
                   title={isWorkshopMode ? "Close Workshop" : "Open Workshop"}
                 >
@@ -492,8 +503,8 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               <button
                 onClick={toggleCompareMode}
                 className={`p-2 rounded-lg transition-colors ${isCompareMode
-                    ? 'text-white bg-stone-600'
-                    : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                  ? 'text-white bg-stone-600'
+                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
                   }`}
                 title={isCompareMode ? "Close Comparison" : "Compare Characters"}
               >
@@ -557,27 +568,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="px-8 pb-8">
-          {/* Show unsaved changes notification */}
-          {hasUnsavedChanges && (
-            <div className="mb-6 p-4 bg-yellow-900/50 border border-yellow-600 rounded-lg">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-yellow-300" />
-                  <div>
-                    <h3 className="text-md font-medium text-yellow-200">You have unsaved changes</h3>
-                    <p className="text-sm text-yellow-300">Remember to save your character to a PNG file</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleSave}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Now
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Removed inline 'Save Now' button - now handled by ChatHeader */}
 
           <div className="space-y-6">
             {/* Name Field */}            <div>
