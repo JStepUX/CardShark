@@ -521,8 +521,93 @@ def list_character_chats_endpoint(
     except Exception as e:
         raise handle_generic_error(e, "listing character chats")
 
+
+# =============================================================================
+# CHAT HISTORY ENDPOINTS
+# For the global chat history view showing recent chats across all characters
+# =============================================================================
+
+@router.get("/chat-history", response_model=DataResponse[List[pydantic_models.ChatHistoryItem]])
+def get_chat_history_endpoint(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Get recent chat sessions with character info for the History view.
+    Returns chats ordered by most recent first, with character name and thumbnail.
+    """
+    try:
+        history_items = chat_service.get_recent_chat_sessions(db, limit=limit)
+        
+        # Convert to Pydantic models
+        result = [
+            pydantic_models.ChatHistoryItem(
+                chat_session_uuid=item['chat_session_uuid'],
+                title=item['title'],
+                message_count=item['message_count'],
+                last_message_time=item['last_message_time'],
+                start_time=item['start_time'],
+                character_uuid=item['character_uuid'],
+                character_name=item['character_name'],
+                character_thumbnail=item['character_thumbnail']
+            )
+            for item in history_items
+        ]
+        
+        return create_data_response(result)
+        
+    except Exception as e:
+        raise handle_generic_error(e, "getting chat history")
+
+
+@router.put("/chat-history/{session_id}/assign", response_model=DataResponse[pydantic_models.ChatHistoryItem])
+def reassign_chat_endpoint(
+    session_id: str,
+    payload: pydantic_models.ChatHistoryReassign,
+    db: Session = Depends(get_db),
+    character_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger)
+):
+    """
+    Reassign a chat session to a different character.
+    This transfers ownership of the chat to the new character.
+    """
+    try:
+        # Validate target character exists
+        target_character = character_service.get_character_by_uuid(payload.character_uuid, db)
+        if not target_character:
+            raise NotFoundException(f"Target character not found: {payload.character_uuid}")
+        
+        # Reassign the chat
+        updated_session = chat_service.reassign_chat_session(db, session_id, payload.character_uuid)
+        
+        if not updated_session:
+            raise NotFoundException(f"Chat session not found: {session_id}")
+        
+        # Return updated item with new character info
+        result = pydantic_models.ChatHistoryItem(
+            chat_session_uuid=updated_session.chat_session_uuid,
+            title=updated_session.title,
+            message_count=updated_session.message_count,
+            last_message_time=updated_session.last_message_time,
+            start_time=updated_session.start_time,
+            character_uuid=updated_session.character_uuid,
+            character_name=target_character.name,
+            character_thumbnail=target_character.png_file_path
+        )
+        
+        return create_data_response(result)
+        
+    except NotFoundException:
+        raise
+    except Exception as e:
+        raise handle_generic_error(e, "reassigning chat")
+
+
 # --- Existing ChatSession CRUD ---
 # These routes use /chat_sessions/ prefix and are kept as is.
+
 
 @router.post("/chat_sessions/", response_model=DataResponse[pydantic_models.ChatSessionRead], status_code=201)
 def create_chat_session_endpoint(

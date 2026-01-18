@@ -29,6 +29,9 @@ const ChatView = lazy(() => import('./chat/ChatView'));
 // Settings view
 const APISettingsView = lazy(() => import('./settings/APISettingsView'));
 
+// History view
+const ChatHistoryView = lazy(() => import('./history/ChatHistoryView'));
+
 // World views (V2 - UUID-based)
 const WorldLauncher = lazy(() => import('../views/WorldLauncher'));
 const WorldEditor = lazy(() => import('../views/WorldEditor'));
@@ -121,6 +124,13 @@ const AppRoutes: React.FC = () => (
                         <ChatView />
                       </LazyRoute>
                     </ChatProvider>
+                  } />
+
+                  {/* Chat History view */}
+                  <Route path="history" element={
+                    <LazyRoute routeName="Chat History">
+                      <ChatHistoryView />
+                    </LazyRoute>
                   } />
 
                   {/* Settings view with API configuration */}

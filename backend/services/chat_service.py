@@ -453,3 +453,79 @@ def fork_chat_session(db: Session, source_chat_uuid: str, fork_at_message_index:
     except Exception as e:
         db.rollback()
         raise e
+
+
+def get_recent_chat_sessions(db: Session, limit: int = 50) -> List[dict]:
+    """
+    Get recent chat sessions with character information for the History view.
+    Returns chat sessions ordered by last_message_time descending, with character name and thumbnail.
+    
+    Also prunes single-message sessions (just the greeting) to keep the database clean.
+    """
+    # PRUNE: Delete chat sessions with only 1 message (just first_mes greeting)
+    # These are not meaningful conversations and waste database space over time
+    try:
+        single_message_sessions = db.query(sql_models.ChatSession).filter(
+            sql_models.ChatSession.message_count <= 1
+        ).all()
+        
+        if single_message_sessions:
+            for session in single_message_sessions:
+                db.delete(session)
+            db.commit()
+    except Exception as prune_error:
+        # Don't fail the whole request if pruning fails - just log and continue
+        db.rollback()
+        print(f"Warning: Failed to prune single-message sessions: {prune_error}")
+    
+    # Query chat sessions with a join to get character info
+    results = db.query(
+        sql_models.ChatSession.chat_session_uuid,
+        sql_models.ChatSession.title,
+        sql_models.ChatSession.message_count,
+        sql_models.ChatSession.last_message_time,
+        sql_models.ChatSession.start_time,
+        sql_models.ChatSession.character_uuid,
+        sql_models.Character.name.label('character_name'),
+        sql_models.Character.png_file_path.label('character_thumbnail')
+    ).outerjoin(
+        sql_models.Character,
+        sql_models.ChatSession.character_uuid == sql_models.Character.character_uuid
+    ).order_by(
+        sql_models.ChatSession.last_message_time.desc().nulls_last(),
+        sql_models.ChatSession.start_time.desc()
+    ).limit(limit).all()
+    
+    # Convert to list of dicts
+    history_items = []
+    for row in results:
+        history_items.append({
+            'chat_session_uuid': row.chat_session_uuid,
+            'title': row.title,
+            'message_count': row.message_count,
+            'last_message_time': row.last_message_time,
+            'start_time': row.start_time,
+            'character_uuid': row.character_uuid,
+            'character_name': row.character_name,
+            'character_thumbnail': row.character_thumbnail
+        })
+    
+    return history_items
+
+
+def reassign_chat_session(db: Session, chat_session_uuid: str, new_character_uuid: str) -> Optional[sql_models.ChatSession]:
+    """
+    Reassign a chat session to a different character.
+    Returns the updated chat session, or None if not found.
+    """
+    chat_session = get_chat_session(db, chat_session_uuid)
+    if not chat_session:
+        return None
+    
+    # Update the character_uuid
+    chat_session.character_uuid = new_character_uuid
+    
+    db.commit()
+    db.refresh(chat_session)
+    return chat_session
+

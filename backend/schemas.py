@@ -211,3 +211,23 @@ class ChatForkPayload(BaseModel):
     fork_at_message_index: int  # Messages 0..n (inclusive) are copied to the new chat
     character_uuid: str
     user_uuid: Optional[str] = None
+
+
+class ChatHistoryItem(BaseModel):
+    """Response model for chat history list items."""
+    chat_session_uuid: str
+    title: Optional[str] = None
+    message_count: int
+    last_message_time: Optional[dt.datetime] = None
+    start_time: dt.datetime
+    character_uuid: str
+    character_name: Optional[str] = None
+    character_thumbnail: Optional[str] = None  # Path to PNG file
+
+    class Config:
+        orm_mode = True
+
+
+class ChatHistoryReassign(BaseModel):
+    """Payload for reassigning a chat to a different character."""
+    character_uuid: str

@@ -11,7 +11,8 @@ import {
   MessageSquare,
   Book,
   MessageCircle,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  History
 } from 'lucide-react';
 import { useOptionalChat } from '../hooks/useOptionalProviders';
 import { useCharacter } from '../contexts/CharacterContext';
@@ -30,6 +31,7 @@ const importLoreView = () => import('./LoreView');
 const importMessagesView = () => import('./MessagesView');
 const importChatView = () => import('./chat/ChatView');
 const importAPISettingsView = () => import('./settings/APISettingsView');
+const importChatHistoryView = () => import('./history/ChatHistoryView');
 
 const NAV_ICONS = {
   gallery: FolderOpen,
@@ -37,6 +39,7 @@ const NAV_ICONS = {
   messages: MessageSquare,
   lore: Book,
   chat: MessageCircle,
+  history: History,
   settings: SettingsIcon
 } as const;
 
@@ -48,6 +51,7 @@ const ROUTE_IMPORTS: Record<string, () => Promise<any>> = {
   '/lore': importLoreView,
   '/messages': importMessagesView,
   '/chat': importChatView,
+  '/history': importChatHistoryView,
   '/settings': importAPISettingsView
 };
 
@@ -135,6 +139,7 @@ const SideNav: React.FC<SideNavProps> = ({
               <NavLinkHelper isCollapsed={isCollapsed} to="/info" label={infoLabel} Icon={NAV_ICONS.info} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore Manager" Icon={NAV_ICONS.lore} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/chat" label="Chat" Icon={NAV_ICONS.chat} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/history" label="History" Icon={NAV_ICONS.history} />
               {/* <NavLinkHelper isCollapsed={isCollapsed} to="/worldcards" label="Worlds" Icon={NAV_ICONS.worldcards} /> */}
               <NavLinkHelper isCollapsed={isCollapsed} to="/settings" label="Settings" Icon={NAV_ICONS.settings} />
 
@@ -186,6 +191,7 @@ const SideNav: React.FC<SideNavProps> = ({
               <NavLinkHelper isCollapsed={isCollapsed} to="/info" label={infoLabel} Icon={NAV_ICONS.info} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/lore" label="Lore" Icon={NAV_ICONS.lore} />
               <NavLinkHelper isCollapsed={isCollapsed} to="/chat" label="Chat" Icon={NAV_ICONS.chat} />
+              <NavLinkHelper isCollapsed={isCollapsed} to="/history" label="History" Icon={NAV_ICONS.history} />
               {/* <NavLinkHelper isCollapsed={isCollapsed} to="/worldcards" label="Worlds" Icon={NAV_ICONS.worldcards} /> */}
               <NavLinkHelper isCollapsed={isCollapsed} to="/settings" label="Settings" Icon={NAV_ICONS.settings} />
             </nav>

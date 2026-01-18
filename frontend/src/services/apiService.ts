@@ -73,9 +73,9 @@ class ApiService {
       throw error;
     }
   }
-/**
-   * Performs a PUT request to the specified endpoint with the given data
-   */
+  /**
+     * Performs a PUT request to the specified endpoint with the given data
+     */
   async put(endpoint: string, data: any) {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -133,7 +133,7 @@ class ApiService {
   }
 
   // Context Window Specific Methods
-  
+
   /**
    * Loads the context window
    */
@@ -175,13 +175,13 @@ class ApiService {
    */
   async saveChat(sessionId: string, chatSessionData: any) { // Assuming chatSessionData contains messages, metadata etc.
     console.debug(`apiService.saveChat called for session ${sessionId}`);
-    
+
     try {
       // Log the full payload for debugging
       console.debug('Saving chat session with data:', chatSessionData);
-      
+
       const response = await this.put(`/api/chat_sessions/${sessionId}`, chatSessionData);
-      
+
       console.debug('API response from save-chat:', response);
       return response;
     } catch (error) {
@@ -204,7 +204,7 @@ class ApiService {
     // Assuming session.log is the array of messages
     if (!session.log) session.log = [];
     session.log.push(message);
-    
+
     // 3. PUT the entire updated session
     // The body of the PUT request should match the ChatSessionUpdate schema
     // This might mean just sending session.log or the entire session object
@@ -230,24 +230,24 @@ class ApiService {
   /**
    * Lists all available chats for a character
    */
-/**
-   * Deletes a specific chat session
-   */
+  /**
+     * Deletes a specific chat session
+     */
   async deleteChat(sessionId: string) {
     return this.delete(`/api/chat_sessions/${sessionId}`);
   }
   async listCharacterChats(characterUuid: string) {
     return this.get(`/api/chat_sessions/?character_uuid=${characterUuid}`);
   }
-/**
-   * Fetches available models from the Featherless API via the backend
-   */
+  /**
+     * Fetches available models from the Featherless API via the backend
+     */
   async fetchFeatherlessModels(url: string, apiKey?: string) {
     console.log(`ApiService: Fetching Featherless models from URL: ${url}`);
     return this.post('/api/featherless/models', { url, apiKey });
   }
 
-    // --- Lore Image Endpoints ---
+  // --- Lore Image Endpoints ---
   async uploadLoreImage(characterUuid: string, loreEntryId: string, imageFile: File, characterFallbackId?: string): Promise<LoreImageResponse> {
     const formData = new FormData();
     formData.append('character_uuid', characterUuid);
@@ -303,6 +303,30 @@ class ApiService {
     return this.post(`/api/lore/character/${characterUuid}/batch`, {
       lore_entries: loreEntries,
     });
+  }
+
+  // --- Chat History ---
+  /**
+   * Fetches recent chat history with character info
+   */
+  async getChatHistory(limit: number = 50): Promise<any> {
+    return this.get(`/api/chat-history?limit=${limit}`);
+  }
+
+  /**
+   * Reassigns a chat to a different character
+   */
+  async reassignChat(sessionId: string, newCharacterUuid: string): Promise<any> {
+    return this.put(`/api/chat-history/${sessionId}/assign`, {
+      character_uuid: newCharacterUuid
+    });
+  }
+
+  /**
+   * Deletes a chat session by ID using the delete-chat endpoint
+   */
+  async deleteChatById(chatId: string): Promise<any> {
+    return this.post('/api/delete-chat', { chat_id: chatId });
   }
 }
 
