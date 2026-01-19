@@ -33,12 +33,18 @@ export function injectRoomContext(
         return worldCard;
     }
 
+    // Defensive check: ensure worldCard.data exists
+    if (!worldCard.data) {
+        console.error('injectRoomContext: worldCard.data is undefined');
+        return worldCard;
+    }
+
     // Clone the character card to avoid mutating the original
     const modifiedCard: CharacterCard = JSON.parse(JSON.stringify(worldCard));
 
     // Build the current location context
     const locationContext = `
-You are at the ${currentRoom.name} associated with ${worldCard.data.name}. ${currentRoom.description || ''}
+You are at the ${currentRoom.name} associated with ${worldCard.data.name || 'this world'}. ${currentRoom.description || ''}
 
 ${currentRoom.introduction_text || ''}
 `.trim();
@@ -84,6 +90,12 @@ export function injectNPCContext(
     worldCard: CharacterCard | null,
     currentRoom: GridRoom | null
 ): CharacterCard {
+    // Defensive check: ensure npcCard.data exists
+    if (!npcCard.data) {
+        console.error('injectNPCContext: npcCard.data is undefined');
+        return npcCard;
+    }
+
     // Clone the NPC card to avoid mutating the original
     const modifiedCard: CharacterCard = JSON.parse(JSON.stringify(npcCard));
 
@@ -99,9 +111,9 @@ export function injectNPCContext(
     const contextParts: string[] = [];
 
     // World context (system prompt and scenario)
-    if (worldCard) {
+    if (worldCard && worldCard.data) {
         if (worldCard.data.system_prompt) {
-            contextParts.push(`[World Context: ${worldCard.data.name}]`);
+            contextParts.push(`[World Context: ${worldCard.data.name || 'Unknown World'}]`);
             contextParts.push(worldCard.data.system_prompt);
         }
     }

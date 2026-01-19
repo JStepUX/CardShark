@@ -1,11 +1,48 @@
 // frontend/src/components/combat/InitiativeTracker.tsx
 // Shows turn order with mini portraits
 
-import { CombatState } from '../../types/combat';
-import { CombatCard } from './CombatCard';
+import { CombatState, Combatant } from '../../types/combat';
 
 interface InitiativeTrackerProps {
   state: CombatState;
+}
+
+/**
+ * Mini card component for initiative tracker
+ */
+function MiniCard({ combatant, isCurrent }: { combatant: Combatant; isCurrent: boolean }) {
+  const borderColor = combatant.isPlayerControlled ? 'border-amber-500' : 'border-red-500';
+  const glowColor = isCurrent ? (combatant.isPlayerControlled ? 'shadow-amber-500/50' : 'shadow-red-500/50') : '';
+
+  return (
+    <div className={`relative w-12 h-16 rounded border-2 ${borderColor} ${glowColor} ${isCurrent ? 'shadow-lg' : ''} overflow-hidden bg-black`}>
+      {/* Portrait */}
+      {combatant.imagePath ? (
+        <img
+          src={combatant.imagePath}
+          alt={combatant.name}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-600 text-xs">
+          ?
+        </div>
+      )}
+
+      {/* HP indicator */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-900">
+        <div
+          className="h-full bg-green-500"
+          style={{ width: `${(combatant.currentHp / combatant.maxHp) * 100}%` }}
+        />
+      </div>
+
+      {/* Current turn indicator */}
+      {isCurrent && (
+        <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
+      )}
+    </div>
+  );
 }
 
 export function InitiativeTracker({ state }: InitiativeTrackerProps) {
@@ -32,10 +69,8 @@ export function InitiativeTracker({ state }: InitiativeTrackerProps) {
   const displayOrder = getDisplayOrder();
 
   return (
-    <div className="flex flex-col items-center gap-2 py-4 px-2">
-      <h4 className="text-xs text-gray-500 uppercase tracking-wider">Turn Order</h4>
-
-      <div className="flex flex-col items-center gap-1">
+    <div className="flex items-center justify-center h-full px-4">
+      <div className="flex items-center gap-2">
         {displayOrder.map(({ combatant, isCurrent, position }) => {
           if (!combatant) return null;
 
@@ -47,20 +82,11 @@ export function InitiativeTracker({ state }: InitiativeTrackerProps) {
               key={`${position}-${combatant.id}`}
               className={`transition-all duration-300 ${scale} ${opacity}`}
             >
-              <CombatCard
-                combatant={combatant}
-                isCurrentTurn={isCurrent}
-                isValidTarget={false}
-                isSelected={false}
-                size="mini"
-              />
+              <MiniCard combatant={combatant} isCurrent={isCurrent} />
             </div>
           );
         })}
       </div>
-
-      {/* Fade edges indicator */}
-      <div className="w-12 h-4 bg-gradient-to-b from-transparent to-gray-900/50" />
     </div>
   );
 }

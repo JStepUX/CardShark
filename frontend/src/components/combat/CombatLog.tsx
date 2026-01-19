@@ -32,7 +32,7 @@ export function CombatLog({ log, currentTurn, currentActor, state }: CombatLogPr
     <div className="flex flex-col h-full">
       {/* Turn counter header */}
       <div className="px-4 py-2 border-b border-gray-700 flex-shrink-0">
-        <h3 className={`text-lg font-bold ${turnColor}`}>
+        <h3 className={`text-sm font-bold ${turnColor}`}>
           Combat Turn #{currentTurn}
         </h3>
       </div>
@@ -40,10 +40,10 @@ export function CombatLog({ log, currentTurn, currentActor, state }: CombatLogPr
       {/* Log entries */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-2 space-y-3 min-h-0"
+        className="flex-1 overflow-y-auto px-4 py-2 space-y-2 min-h-0"
       >
         {recentEntries.length === 0 ? (
-          <p className="text-gray-500 text-sm italic">Combat begins...</p>
+          <p className="text-gray-500 text-xs italic">Combat begins...</p>
         ) : (
           recentEntries.map(entry => (
             <LogEntry key={entry.id} entry={entry} state={state} />
@@ -81,15 +81,15 @@ function LogEntry({ entry, state }: { entry: CombatLogEntry; state?: CombatState
   }
 
   return (
-    <div className="border-l-2 border-gray-700 pl-3">
+    <div className="border-l-2 border-gray-700 pl-2">
       {/* Mechanical result */}
-      <p className={`text-sm ${mechanicalColor}`}>
+      <p className={`text-xs ${mechanicalColor}`}>
         {entry.mechanicalText}
       </p>
 
       {/* Narrator flavor text (if available) */}
       {entry.narratorText && (
-        <p className="text-sm text-gray-400 italic mt-1">
+        <p className="text-xs text-gray-400 italic mt-0.5">
           Narrator: {entry.narratorText}
         </p>
       )}

@@ -141,6 +141,7 @@ export function RoomAsCharacterProvider({ children }: RoomAsCharacterProviderPro
     const [error, setError] = React.useState<string | null>(null);
     const [isNewlyCreated, setIsNewlyCreated] = React.useState(false);
     const [characterCache, setCharacterCache] = React.useState<CharacterGalleryCache | null>(null);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
 
     // No-op for room context - rooms don't use this
     const createNewCharacter = (_name: string) => {
@@ -178,6 +179,8 @@ export function RoomAsCharacterProvider({ children }: RoomAsCharacterProviderPro
         invalidateCharacterCache,
         saveCharacter,
         handleImageChange,
+        hasUnsavedChanges,
+        setHasUnsavedChanges,
     };
 
     return (
