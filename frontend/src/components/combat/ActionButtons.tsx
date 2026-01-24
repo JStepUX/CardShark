@@ -37,7 +37,23 @@ const ACTION_CONFIGS: ActionConfig[] = [
     icon: <OverwatchIcon />,
     apCost: 2,
     hotkey: 'O',
-    description: 'Ready a reaction shot (2 AP)',
+    description: 'Ready a reaction shot (2 AP, melee only)',
+  },
+  {
+    type: 'aimed_shot',
+    label: 'Aim',
+    icon: <AimedShotIcon />,
+    apCost: 2,
+    hotkey: 'I',
+    description: '+3 hit, +2 damage next attack (2 AP, ranged only)',
+  },
+  {
+    type: 'mark_target',
+    label: 'Mark',
+    icon: <MarkTargetIcon />,
+    apCost: 2,
+    hotkey: 'K',
+    description: 'All allies +2 hit on target (2 AP, ranged only)',
   },
   {
     type: 'defend',
@@ -225,6 +241,29 @@ function CancelIcon() {
       <circle cx="12" cy="12" r="10" />
       <path d="M15 9l-6 6" />
       <path d="M9 9l6 6" />
+    </svg>
+  );
+}
+
+function AimedShotIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v4" />
+      <path d="M12 18v4" />
+      <path d="M2 12h4" />
+      <path d="M18 12h4" />
+    </svg>
+  );
+}
+
+function MarkTargetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
     </svg>
   );
 }

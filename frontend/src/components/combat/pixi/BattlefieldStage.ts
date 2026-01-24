@@ -59,6 +59,7 @@ export class BattlefieldStage extends PIXI.Container {
     // Visual layers (rendered in order)
     private gridLayer: PIXI.Container;
     private moveIndicatorLayer: PIXI.Container;
+    private shieldLinkLayer: PIXI.Container;
     private combatantLayer: PIXI.Container;
 
     // Projectile support
@@ -79,11 +80,15 @@ export class BattlefieldStage extends PIXI.Container {
         this.moveIndicatorLayer = new PIXI.Container();
         this.addChild(this.moveIndicatorLayer);
 
-        // 3. Combatant layer - card sprites
+        // 3. Shield link layer - visual connections between defenders and protected allies
+        this.shieldLinkLayer = new PIXI.Container();
+        this.addChild(this.shieldLinkLayer);
+
+        // 4. Combatant layer - card sprites
         this.combatantLayer = new PIXI.Container();
         this.addChild(this.combatantLayer);
 
-        // 3. Projectile layer (renders above combatants)
+        // 5. Projectile layer (renders above combatants)
         this.projectileLayer = new PIXI.Container();
         this.addChild(this.projectileLayer);
 
@@ -366,6 +371,9 @@ export class BattlefieldStage extends PIXI.Container {
                 this.combatantSprites.delete(id);
             }
         });
+
+        // Update shield links
+        this.updateShieldLinks(state);
     }
 
     /**
@@ -454,6 +462,81 @@ export class BattlefieldStage extends PIXI.Container {
     }
 
     /**
+     * Update shield links to show defend relationships
+     */
+    private updateShieldLinks(state: CombatState): void {
+        // Clear existing shield links
+        this.shieldLinkLayer.removeChildren();
+
+        // Draw links for all active defend relationships
+        Object.values(state.combatants).forEach(combatant => {
+            if (combatant.defendingAllyId && combatant.isDefending) {
+                const defender = this.combatantSprites.get(combatant.id);
+                const protectedAlly = this.combatantSprites.get(combatant.defendingAllyId);
+
+                if (defender && protectedAlly) {
+                    this.drawShieldLink(defender, protectedAlly);
+                }
+            }
+        });
+    }
+
+    /**
+     * Draw a shield link between defender and protected ally
+     */
+    private drawShieldLink(defenderSprite: CombatantSprite, protectedSprite: CombatantSprite): void {
+        const graphics = new PIXI.Graphics();
+
+        // Calculate positions (center of cards)
+        const startX = defenderSprite.x + CARD_WIDTH / 2;
+        const startY = defenderSprite.y + CARD_HEIGHT / 2;
+        const endX = protectedSprite.x + CARD_WIDTH / 2;
+        const endY = protectedSprite.y + CARD_HEIGHT / 2;
+
+        // Draw curved line (quadratic bezier)
+        const midX = (startX + endX) / 2;
+        const midY = (startY + endY) / 2;
+        const controlY = midY - 30; // Curve upward
+
+        // Draw the curve with blue color
+        graphics.moveTo(startX, startY);
+        graphics.bezierCurveTo(
+            startX, startY - 20,
+            endX, endY - 20,
+            endX, endY
+        );
+        graphics.stroke({ color: 0x3B82F6, width: 3, alpha: 0.7 }); // blue-500
+
+        // Draw shield icon at midpoint
+        const shieldGraphics = new PIXI.Graphics();
+        const shieldX = midX;
+        const shieldY = controlY;
+
+        // Shield shape (simplified)
+        shieldGraphics.moveTo(shieldX, shieldY - 8);
+        shieldGraphics.lineTo(shieldX - 6, shieldY - 4);
+        shieldGraphics.lineTo(shieldX - 6, shieldY + 2);
+        shieldGraphics.lineTo(shieldX, shieldY + 8);
+        shieldGraphics.lineTo(shieldX + 6, shieldY + 2);
+        shieldGraphics.lineTo(shieldX + 6, shieldY - 4);
+        shieldGraphics.lineTo(shieldX, shieldY - 8);
+        shieldGraphics.fill({ color: 0x3B82F6, alpha: 0.9 }); // blue-500
+
+        // Add white border to shield
+        shieldGraphics.moveTo(shieldX, shieldY - 8);
+        shieldGraphics.lineTo(shieldX - 6, shieldY - 4);
+        shieldGraphics.lineTo(shieldX - 6, shieldY + 2);
+        shieldGraphics.lineTo(shieldX, shieldY + 8);
+        shieldGraphics.lineTo(shieldX + 6, shieldY + 2);
+        shieldGraphics.lineTo(shieldX + 6, shieldY - 4);
+        shieldGraphics.lineTo(shieldX, shieldY - 8);
+        shieldGraphics.stroke({ color: 0xFFFFFF, width: 1.5, alpha: 0.9 });
+
+        this.shieldLinkLayer.addChild(graphics);
+        this.shieldLinkLayer.addChild(shieldGraphics);
+    }
+
+    /**
      * Create turn indicator (bouncing arrow)
      */
     private createTurnIndicator(): void {
@@ -539,21 +622,21 @@ export class BattlefieldStage extends PIXI.Container {
             const glowRing = new PIXI.Graphics();
             glowRing.circle(0, 0, 24);
             glowRing.stroke({ color: MOVE_INDICATOR_GLOW, alpha: 0.2, width: 3 });
-            glowRing.name = 'glow';
+            glowRing.label = 'glow';
             container.addChild(glowRing);
 
             // Inner ring (subtle dashed appearance via segments)
             const innerRing = new PIXI.Graphics();
             innerRing.circle(0, 0, 16);
             innerRing.stroke({ color: MOVE_INDICATOR_COLOR, alpha: 0.35, width: 2 });
-            innerRing.name = 'inner';
+            innerRing.label = 'inner';
             container.addChild(innerRing);
 
             // Center dot (small, subtle)
             const centerDot = new PIXI.Graphics();
             centerDot.circle(0, 0, 4);
             centerDot.fill({ color: 0xFFFFFF, alpha: 0.5 });
-            centerDot.name = 'center';
+            centerDot.label = 'center';
             container.addChild(centerDot);
 
             // Make interactive
@@ -615,9 +698,9 @@ export class BattlefieldStage extends PIXI.Container {
             // Gentle breathing pulse (1.0 to 1.05)
             const pulseScale = 1.0 + Math.sin(this.moveIndicatorPulseTime) * 0.05;
 
-            // Get children by name
-            const glow = container.getChildByName('glow') as PIXI.Graphics;
-            const inner = container.getChildByName('inner') as PIXI.Graphics;
+            // Get children by label
+            const glow = container.getChildByLabel('glow') as PIXI.Graphics;
+            const inner = container.getChildByLabel('inner') as PIXI.Graphics;
 
             if (glow) {
                 // Glow expands slightly and fades gently
@@ -674,6 +757,7 @@ export class BattlefieldStage extends PIXI.Container {
         // Destroy layers
         this.gridLayer.destroy({ children: true });
         this.moveIndicatorLayer.destroy({ children: true });
+        this.shieldLinkLayer.destroy({ children: true });
         this.combatantLayer.destroy({ children: true });
         this.projectileLayer.destroy({ children: true });
 

@@ -449,11 +449,15 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   }, [roomNpcs, currentRoom, addMessage, characterData, worldId, apiConfig, currentUser]);
 
   // Handle combat end - process results and update state
-  const handleCombatEnd = useCallback((result: CombatState['result']) => {
+  const handleCombatEnd = useCallback(async (result: CombatState['result'], finalState: CombatState) => {
     setIsInCombat(false);
     setCombatInitData(null);
 
     if (!result || !currentRoom) return;
+
+    // Build combat result context for AI narrative generation
+    const { buildCombatResultContext } = await import('../services/combat/combatResultContext');
+    const combatContext = buildCombatResultContext(finalState);
 
     if (result.outcome === 'victory') {
       // Remove defeated enemies from the room
@@ -462,54 +466,325 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       // Update room NPCs to remove defeated hostile NPCs
       setRoomNpcs((prev: CombatDisplayNPC[]) => prev.filter((npc: CombatDisplayNPC) => !defeatedIds.has(npc.id)));
 
-      // Add victory message
-      addMessage({
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: `*Victory! You earned ${result.rewards?.xp || 0} XP and ${result.rewards?.gold || 0} gold.*`,
-        timestamp: Date.now(),
-        metadata: {
-          type: 'combat_victory',
-          roomId: currentRoom.id,
-          rewards: result.rewards,
+      // Generate AI narrative for victory
+      if (apiConfig && characterData) {
+        const narrativeMessageId = crypto.randomUUID();
+        const placeholderMessage = {
+          id: narrativeMessageId,
+          role: 'assistant' as const,
+          content: '...',
+          timestamp: Date.now(),
+          metadata: {
+            type: 'combat_victory',
+            roomId: currentRoom.id,
+            rewards: result.rewards,
+          }
+        };
+
+        addMessage(placeholderMessage);
+
+        try {
+          // Build prompt for AI narrative generation
+          const narrativePrompt = `Combat has just ended in victory. Generate a vivid, dramatic return-to-RP narrative describing the aftermath of the battle. Reference specific events from the combat context below. Keep it concise (2-3 paragraphs max).
+
+Combat Context:
+${JSON.stringify(combatContext, null, 2)}
+
+Style: Write in second person, present tense. Acknowledge the player's victory, mention notable moments, and transition back to the room setting.`;
+
+          const response = await fetch('/api/generate-greeting', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              character_data: characterData,
+              api_config: apiConfig,
+              custom_prompt: narrativePrompt
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to generate combat narrative');
+          }
+
+          // Stream the AI response
+          const { PromptHandler } = await import('../handlers/promptHandler');
+
+          let generatedNarrative = '';
+          const bufferInterval = 50;
+          let buffer = '';
+          let bufTimer: NodeJS.Timeout | null = null;
+
+          const updateNarrativeContent = (chunk: string, isFinal = false) => {
+            buffer += chunk;
+
+            if (bufTimer) clearTimeout(bufTimer);
+            bufTimer = setTimeout(() => {
+              const curBuf = buffer;
+              buffer = '';
+              generatedNarrative += curBuf;
+
+              (setMessages as any)((prev: any) => prev.map((msg: any) =>
+                msg.id === narrativeMessageId
+                  ? { ...msg, content: generatedNarrative }
+                  : msg
+              ));
+            }, isFinal ? 0 : bufferInterval);
+          };
+
+          for await (const chunk of PromptHandler.streamResponse(response)) {
+            updateNarrativeContent(chunk);
+          }
+
+          // Flush any remaining buffer
+          if (buffer.length > 0) {
+            updateNarrativeContent('', true);
+          }
+
+          // Final update with complete content
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === narrativeMessageId
+              ? {
+                ...msg,
+                content: generatedNarrative.trim() || `*Victory! You earned ${result.rewards?.xp || 0} XP and ${result.rewards?.gold || 0} gold.*`
+              }
+              : msg
+          ));
+
+        } catch (err) {
+          console.error('Error generating combat narrative:', err);
+          // Fallback to simple message
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === narrativeMessageId
+              ? { ...msg, content: `*Victory! You earned ${result.rewards?.xp || 0} XP and ${result.rewards?.gold || 0} gold.*` }
+              : msg
+          ));
         }
-      });
+      } else {
+        // No API config, use simple message
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant' as const,
+          content: `*Victory! You earned ${result.rewards?.xp || 0} XP and ${result.rewards?.gold || 0} gold.*`,
+          timestamp: Date.now(),
+          metadata: {
+            type: 'combat_victory',
+            roomId: currentRoom.id,
+            rewards: result.rewards,
+          }
+        });
+      }
 
       // TODO: Update currentRoom.npcs in worldState to persist defeated enemies
       // This would require updating the world card backend
 
     } else if (result.outcome === 'fled') {
-      // Player escaped - no penalties, stay in current room
-      addMessage({
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: '*You managed to escape from combat. The enemies remain in the area...*',
-        timestamp: Date.now(),
-        metadata: {
-          type: 'combat_fled',
-          roomId: currentRoom.id,
+      // Generate AI narrative for fleeing
+      if (apiConfig && characterData) {
+        const narrativeMessageId = crypto.randomUUID();
+        const placeholderMessage = {
+          id: narrativeMessageId,
+          role: 'assistant' as const,
+          content: '...',
+          timestamp: Date.now(),
+          metadata: {
+            type: 'combat_fled',
+            roomId: currentRoom.id,
+          }
+        };
+
+        addMessage(placeholderMessage);
+
+        try {
+          const narrativePrompt = `Combat has just ended with the player fleeing. Generate a tense, dramatic narrative describing their escape. Reference the combat context below. Keep it concise (1-2 paragraphs).
+
+Combat Context:
+${JSON.stringify(combatContext, null, 2)}
+
+Style: Write in second person, present tense. Convey the tension of escape, mention the player's condition, and note that the enemies remain.`;
+
+          const response = await fetch('/api/generate-greeting', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              character_data: characterData,
+              api_config: apiConfig,
+              custom_prompt: narrativePrompt
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to generate flee narrative');
+          }
+
+          const { PromptHandler } = await import('../handlers/promptHandler');
+
+          let generatedNarrative = '';
+          const bufferInterval = 50;
+          let buffer = '';
+          let bufTimer: NodeJS.Timeout | null = null;
+
+          const updateNarrativeContent = (chunk: string, isFinal = false) => {
+            buffer += chunk;
+
+            if (bufTimer) clearTimeout(bufTimer);
+            bufTimer = setTimeout(() => {
+              const curBuf = buffer;
+              buffer = '';
+              generatedNarrative += curBuf;
+
+              (setMessages as any)((prev: any) => prev.map((msg: any) =>
+                msg.id === narrativeMessageId
+                  ? { ...msg, content: generatedNarrative }
+                  : msg
+              ));
+            }, isFinal ? 0 : bufferInterval);
+          };
+
+          for await (const chunk of PromptHandler.streamResponse(response)) {
+            updateNarrativeContent(chunk);
+          }
+
+          if (buffer.length > 0) {
+            updateNarrativeContent('', true);
+          }
+
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === narrativeMessageId
+              ? {
+                ...msg,
+                content: generatedNarrative.trim() || '*You managed to escape from combat. The enemies remain in the area...*'
+              }
+              : msg
+          ));
+
+        } catch (err) {
+          console.error('Error generating flee narrative:', err);
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === narrativeMessageId
+              ? { ...msg, content: '*You managed to escape from combat. The enemies remain in the area...*' }
+              : msg
+          ));
         }
-      });
+      } else {
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant' as const,
+          content: '*You managed to escape from combat. The enemies remain in the area...*',
+          timestamp: Date.now(),
+          metadata: {
+            type: 'combat_fled',
+            roomId: currentRoom.id,
+          }
+        });
+      }
 
       // Note: NPCs are NOT removed - they're still there if player returns
 
     } else if (result.outcome === 'defeat') {
-      // Add defeat message
-      addMessage({
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: '*You have been defeated. You awaken at the starting area...*',
-        timestamp: Date.now(),
-        metadata: {
-          type: 'combat_defeat',
-          roomId: currentRoom.id,
+      // Generate AI narrative for defeat
+      if (apiConfig && characterData) {
+        const narrativeMessageId = crypto.randomUUID();
+        const placeholderMessage = {
+          id: narrativeMessageId,
+          role: 'assistant' as const,
+          content: '...',
+          timestamp: Date.now(),
+          metadata: {
+            type: 'combat_defeat',
+            roomId: currentRoom.id,
+          }
+        };
+
+        addMessage(placeholderMessage);
+
+        try {
+          const narrativePrompt = `Combat has just ended in defeat. Generate a grim, dramatic narrative describing the player's defeat and awakening. Reference the combat context below. Keep it concise (1-2 paragraphs).
+
+Combat Context:
+${JSON.stringify(combatContext, null, 2)}
+
+Style: Write in second person, present tense. Convey the weight of defeat, mention how the player fell, and describe awakening at the starting area.`;
+
+          const response = await fetch('/api/generate-greeting', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              character_data: characterData,
+              api_config: apiConfig,
+              custom_prompt: narrativePrompt
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to generate defeat narrative');
+          }
+
+          const { PromptHandler } = await import('../handlers/promptHandler');
+
+          let generatedNarrative = '';
+          const bufferInterval = 50;
+          let buffer = '';
+          let bufTimer: NodeJS.Timeout | null = null;
+
+          const updateNarrativeContent = (chunk: string, isFinal = false) => {
+            buffer += chunk;
+
+            if (bufTimer) clearTimeout(bufTimer);
+            bufTimer = setTimeout(() => {
+              const curBuf = buffer;
+              buffer = '';
+              generatedNarrative += curBuf;
+
+              (setMessages as any)((prev: any) => prev.map((msg: any) =>
+                msg.id === narrativeMessageId
+                  ? { ...msg, content: generatedNarrative }
+                  : msg
+              ));
+            }, isFinal ? 0 : bufferInterval);
+          };
+
+          for await (const chunk of PromptHandler.streamResponse(response)) {
+            updateNarrativeContent(chunk);
+          }
+
+          if (buffer.length > 0) {
+            updateNarrativeContent('', true);
+          }
+
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === narrativeMessageId
+              ? {
+                ...msg,
+                content: generatedNarrative.trim() || '*You have been defeated. You awaken at the starting area...*'
+              }
+              : msg
+          ));
+
+        } catch (err) {
+          console.error('Error generating defeat narrative:', err);
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === narrativeMessageId
+              ? { ...msg, content: '*You have been defeated. You awaken at the starting area...*' }
+              : msg
+          ));
         }
-      });
+      } else {
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant' as const,
+          content: '*You have been defeated. You awaken at the starting area...*',
+          timestamp: Date.now(),
+          metadata: {
+            type: 'combat_defeat',
+            roomId: currentRoom.id,
+          }
+        });
+      }
 
       // TODO: Reset player to starting position
       // TODO: Apply defeat penalties
     }
-  }, [currentRoom, addMessage]);
+  }, [currentRoom, addMessage, apiConfig, characterData, setMessages]);
 
   // Handle dismissing a bound NPC
   const handleDismissNpc = useCallback((npcId: string) => {

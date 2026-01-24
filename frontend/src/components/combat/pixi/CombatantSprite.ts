@@ -205,11 +205,14 @@ export class CombatantSprite extends PIXI.Container {
         container.addChild(bg);
 
         // Level text
-        this.levelText = new PIXI.Text(level.toString(), {
-            fontFamily: FONT_FAMILY,
-            fontSize: 12,
-            fontWeight: 'bold',
-            fill: 0xFFFFFF,
+        this.levelText = new PIXI.Text({
+            text: level.toString(),
+            style: {
+                fontFamily: FONT_FAMILY,
+                fontSize: 12,
+                fontWeight: 'bold',
+                fill: 0xFFFFFF,
+            }
         });
         this.levelText.anchor.set(0.5);
         container.addChild(this.levelText);
@@ -230,11 +233,14 @@ export class CombatantSprite extends PIXI.Container {
         container.y = plateY;
 
         // Name text (no background - black gradient overlay provides contrast)
-        this.nameText = new PIXI.Text(name, {
-            fontFamily: FONT_FAMILY,
-            fontSize: 13,
-            fontWeight: 'bold',
-            fill: 0xFFFFFF,
+        this.nameText = new PIXI.Text({
+            text: name,
+            style: {
+                fontFamily: FONT_FAMILY,
+                fontSize: 13,
+                fontWeight: 'bold',
+                fill: 0xFFFFFF,
+            }
         });
 
         // Center horizontally
@@ -276,11 +282,14 @@ export class CombatantSprite extends PIXI.Container {
         const fill = new PIXI.Graphics();
 
         // HP text (centered in bar)
-        const text = new PIXI.Text('', {
-            fontFamily: FONT_FAMILY,
-            fontSize: 9,
-            fontWeight: 'bold',
-            fill: 0xFFFFFF,
+        const text = new PIXI.Text({
+            text: '',
+            style: {
+                fontFamily: FONT_FAMILY,
+                fontSize: 9,
+                fontWeight: 'bold',
+                fill: 0xFFFFFF,
+            }
         });
         text.x = barX + barWidth / 2;
         text.y = barY + barHeight / 2;
@@ -328,30 +337,53 @@ export class CombatantSprite extends PIXI.Container {
     /**
      * Update sprite from combat state
      */
-    updateFromState(combatant: Combatant): void {
+    updateFromState(combatant: Combatant, isMarked: boolean = false): void {
         this.currentHp = combatant.currentHp;
         this.maxHp = combatant.maxHp;
         this.updateHPBar();
 
         // Update status icons
-        this.updateStatusIcons(combatant.isDefending, combatant.isOverwatching);
+        this.updateStatusIcons(
+            combatant.isDefending,
+            combatant.isOverwatching,
+            combatant.hasAimedShot,
+            isMarked,
+            combatant.defendingAllyId,
+            combatant.protectedByDefenderId
+        );
 
         // Update level if changed
         this.levelText.text = combatant.level.toString();
     }
 
     /**
-     * Update status icons (DEF, OW badges)
+     * Update status icons (GUARD, shield, OW, AIM, MARK badges)
      */
-    private updateStatusIcons(isDefending: boolean, isOverwatching: boolean): void {
+    private updateStatusIcons(
+        isDefending: boolean,
+        isOverwatching: boolean,
+        hasAimedShot: boolean,
+        isMarked: boolean,
+        defendingAllyId?: string,
+        protectedByDefenderId?: string
+    ): void {
         this.statusContainer.removeChildren();
 
         let yOffset = 0;
 
-        if (isDefending) {
-            const defBadge = this.createStatusBadge('DEF', 0x3B82F6); // Blue
-            defBadge.y = yOffset;
-            this.statusContainer.addChild(defBadge);
+        // Show GUARD badge if actively defending an ally
+        if (isDefending && defendingAllyId) {
+            const guardBadge = this.createStatusBadge('GUARD', 0x3B82F6); // Blue
+            guardBadge.y = yOffset;
+            this.statusContainer.addChild(guardBadge);
+            yOffset += 22;
+        }
+
+        // Show shield badge if protected by a defender
+        if (protectedByDefenderId) {
+            const shieldBadge = this.createStatusBadge('🛡', 0x10B981); // Green
+            shieldBadge.y = yOffset;
+            this.statusContainer.addChild(shieldBadge);
             yOffset += 22;
         }
 
@@ -359,6 +391,20 @@ export class CombatantSprite extends PIXI.Container {
             const owBadge = this.createStatusBadge('OW', 0xF59E0B); // Amber
             owBadge.y = yOffset;
             this.statusContainer.addChild(owBadge);
+            yOffset += 22;
+        }
+
+        if (hasAimedShot) {
+            const aimBadge = this.createStatusBadge('AIM', 0xEAB308); // Yellow
+            aimBadge.y = yOffset;
+            this.statusContainer.addChild(aimBadge);
+            yOffset += 22;
+        }
+
+        if (isMarked) {
+            const markBadge = this.createStatusBadge('MARK', 0xDC2626); // Red
+            markBadge.y = yOffset;
+            this.statusContainer.addChild(markBadge);
         }
     }
 
@@ -368,20 +414,26 @@ export class CombatantSprite extends PIXI.Container {
     private createStatusBadge(label: string, color: number): PIXI.Container {
         const container = new PIXI.Container();
 
+        // Adjust width for longer labels like "GUARD"
+        const width = label.length > 2 ? 36 : 24;
+
         // Background (pill-shaped)
         const bg = new PIXI.Graphics();
-        bg.roundRect(0, 0, 24, 18, 9);
+        bg.roundRect(0, 0, width, 18, 9);
         bg.fill({ color, alpha: 0.9 });
         container.addChild(bg);
 
         // Text
-        const text = new PIXI.Text(label, {
-            fontFamily: FONT_FAMILY,
-            fontSize: 9,
-            fontWeight: 'bold',
-            fill: 0xFFFFFF,
+        const text = new PIXI.Text({
+            text: label,
+            style: {
+                fontFamily: FONT_FAMILY,
+                fontSize: label.length > 2 ? 8 : 9,
+                fontWeight: 'bold',
+                fill: 0xFFFFFF,
+            }
         });
-        text.x = 12;
+        text.x = width / 2;
         text.y = 9;
         text.anchor.set(0.5);
         container.addChild(text);
@@ -454,17 +506,20 @@ export class CombatantSprite extends PIXI.Container {
             scale = 1.5;
         }
 
-        const damageText = new PIXI.Text(`${prefix}${Math.floor(amount)}`, {
-            fontFamily: FONT_FAMILY,
-            fontSize: 24,
-            fontWeight: 'bold',
-            fill: color,
-            dropShadow: {
-                alpha: 0.8,
-                angle: Math.PI / 6,
-                blur: 4,
-                color: 0x000000,
-                distance: 2,
+        const damageText = new PIXI.Text({
+            text: `${prefix}${Math.floor(amount)}`,
+            style: {
+                fontFamily: FONT_FAMILY,
+                fontSize: 24,
+                fontWeight: 'bold',
+                fill: color,
+                dropShadow: {
+                    alpha: 0.8,
+                    angle: Math.PI / 6,
+                    blur: 4,
+                    color: 0x000000,
+                    distance: 2,
+                }
             }
         });
 

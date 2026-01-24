@@ -22,6 +22,7 @@ import {
     getCurrentActor,
     getAvailableActions,
     getValidAttackTargets,
+    getValidDefendTargets,
     getValidMoveSlots,
     getValidSwapTargets,
 } from '../../../services/combat/combatEngine';
@@ -190,7 +191,7 @@ async function playEventAnimations(
 
 interface PixiCombatModalProps {
     initData: CombatInitData;
-    onCombatEnd: (result: CombatState['result']) => void;
+    onCombatEnd: (result: CombatState['result'], finalState: CombatState) => void;
     onNarratorRequest?: (events: CombatEvent[]) => void;
 }
 
@@ -209,7 +210,7 @@ export function PixiCombatModal({
 
     // UI state
     const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
-    const [targetingMode, setTargetingMode] = useState<'none' | 'attack' | 'move' | 'swap'>('none');
+    const [targetingMode, setTargetingMode] = useState<'none' | 'attack' | 'defend' | 'move' | 'swap'>('none');
     const [isAnimating, setIsAnimating] = useState(false);
 
     // PixiJS refs
@@ -220,7 +221,7 @@ export function PixiCombatModal({
     const particleSystemRef = useRef<ParticleSystem | null>(null);
 
     // Refs to access current state values in PIXI callbacks (avoids stale closure)
-    const targetingModeRef = useRef<'none' | 'attack' | 'move' | 'swap'>('none');
+    const targetingModeRef = useRef<'none' | 'attack' | 'defend' | 'move' | 'swap'>('none');
     const handleSelectTargetRef = useRef<((targetId: string) => void) | null>(null);
     const handleSelectMoveSlotRef = useRef<((slot: number) => void) | null>(null);
 
@@ -234,6 +235,9 @@ export function PixiCombatModal({
         if (!currentActor || !selectedAction) return [];
         if (selectedAction === 'attack') {
             return getValidAttackTargets(combatState, currentActor.id).map(c => c.id);
+        }
+        if (selectedAction === 'defend') {
+            return getValidDefendTargets(combatState, currentActor.id).map(c => c.id);
         }
         if (selectedAction === 'swap') {
             return getValidSwapTargets(combatState, currentActor.id).map(c => c.id);
@@ -265,7 +269,6 @@ export function PixiCombatModal({
                     width: 800,
                     height: 600,
                     backgroundAlpha: 0,
-                    background: 'transparent',
                     antialias: true,
                 });
 
@@ -306,7 +309,7 @@ export function PixiCombatModal({
                 battlefield.on('combatantClicked', (combatantId: string) => {
                     const mode = targetingModeRef.current;
                     const handler = handleSelectTargetRef.current;
-                    if ((mode === 'attack' || mode === 'swap') && handler) {
+                    if ((mode === 'attack' || mode === 'defend' || mode === 'swap') && handler) {
                         handler(combatantId);
                     }
                 });
@@ -401,7 +404,7 @@ export function PixiCombatModal({
     // Update highlights when targeting mode changes
     useEffect(() => {
         if (battlefieldRef.current) {
-            if (targetingMode === 'attack' || targetingMode === 'swap') {
+            if (targetingMode === 'attack' || targetingMode === 'defend' || targetingMode === 'swap') {
                 battlefieldRef.current.highlightTargets(validTargetIds);
                 battlefieldRef.current.clearMoveIndicators();
             } else if (targetingMode === 'move' && currentActor) {
@@ -430,7 +433,7 @@ export function PixiCombatModal({
             }
 
             if (newState.phase === 'victory' || newState.phase === 'defeat') {
-                setTimeout(() => onCombatEnd(newState.result), 1500);
+                setTimeout(() => onCombatEnd(newState.result, newState), 1500);
             }
             return;
         }
@@ -457,7 +460,7 @@ export function PixiCombatModal({
 
             // Check for combat end
             if (newState.phase === 'victory' || newState.phase === 'defeat') {
-                setTimeout(() => onCombatEnd(newState.result), 1500);
+                setTimeout(() => onCombatEnd(newState.result, newState), 1500);
             }
         } finally {
             setIsAnimating(false);
@@ -494,12 +497,14 @@ export function PixiCombatModal({
         // Set targeting mode based on action
         if (action === 'attack') {
             setTargetingMode('attack');
+        } else if (action === 'defend') {
+            setTargetingMode('defend');
         } else if (action === 'move') {
             setTargetingMode('move');
         } else if (action === 'swap') {
             setTargetingMode('swap');
         } else {
-            // Actions that don't need targeting (defend, overwatch, flee)
+            // Actions that don't need targeting (overwatch, flee)
             setTargetingMode('none');
 
             // Execute immediately
@@ -516,7 +521,7 @@ export function PixiCombatModal({
     const handleSelectTarget = useCallback((targetId: string) => {
         if (!currentActor || !selectedAction) return;
 
-        if (selectedAction === 'attack' || selectedAction === 'swap') {
+        if (selectedAction === 'attack' || selectedAction === 'defend' || selectedAction === 'swap') {
             executeAction({
                 type: selectedAction,
                 actorId: currentActor.id,
@@ -697,6 +702,7 @@ export function PixiCombatModal({
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full">
                         <div className="bg-amber-700 border border-amber-600 rounded-t px-4 py-1 text-sm text-white">
                             {targetingMode === 'attack' && 'Click an enemy card to attack'}
+                            {targetingMode === 'defend' && 'Click an adjacent ally to guard'}
                             {targetingMode === 'move' && 'Click a pulsing indicator to move there'}
                             {targetingMode === 'swap' && 'Click an adjacent ally to swap with'}
                         </div>

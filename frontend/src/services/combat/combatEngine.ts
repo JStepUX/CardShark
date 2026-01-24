@@ -195,6 +195,7 @@ export function initializeCombat(data: CombatInitData): CombatState {
     battlefield,
     initiativeOrder,
     currentTurnIndex: 0,
+    markedTargets: [],
     log: [],
     pendingEvents: [],
     roomImagePath: data.roomImagePath,
@@ -233,23 +234,53 @@ function startTurn(state: CombatState): CombatState {
     return advanceTurn(state);
   }
 
+  // Clear defend relationships when defender's turn starts
+  let updatedCombatants = { ...state.combatants };
+  if (combatant.defendingAllyId) {
+    const protectedAlly = updatedCombatants[combatant.defendingAllyId];
+    if (protectedAlly) {
+      updatedCombatants[combatant.defendingAllyId] = {
+        ...protectedAlly,
+        protectedByDefenderId: undefined,
+      };
+    }
+  }
+
   // Reset AP and clear defending status
   const updatedCombatant: Combatant = {
     ...combatant,
     apRemaining: 2,
     isDefending: false,
     isOverwatching: false, // Clear overwatch at start of your turn
+    defendingAllyId: undefined,
     recentDamage: null,
     recentHeal: null,
   };
 
+  updatedCombatants[currentId] = updatedCombatant;
+
+  // Clear expired marks (marks expire when the marker's turn starts)
+  const activeMarks = state.markedTargets.filter(mark => mark.expiresOnTurn > state.turn);
+  const expiredMarks = state.markedTargets.filter(mark => mark.expiresOnTurn <= state.turn);
+
+  // Emit mark expiration events
+  const markExpirationEvents: CombatEvent[] = expiredMarks.map(mark => ({
+    type: 'mark_expired' as const,
+    turn: state.turn,
+    actorId: mark.markerId,
+    targetId: mark.targetId,
+    data: {
+      markerName: state.combatants[mark.markerId]?.name,
+      targetName: state.combatants[mark.targetId]?.name,
+    },
+  }));
+
   const newState: CombatState = {
     ...state,
     phase: combatant.isPlayerControlled ? 'awaiting_input' : 'resolving',
-    combatants: {
-      ...state.combatants,
-      [currentId]: updatedCombatant,
-    },
+    combatants: updatedCombatants,
+    markedTargets: activeMarks,
+    pendingEvents: [...state.pendingEvents, ...markExpirationEvents],
   };
 
   // Emit turn_start event (sparse - every 3rd turn or significant moments)
@@ -424,6 +455,12 @@ export function combatReducer(
     case 'overwatch':
       newState = executeOverwatch(state, action);
       break;
+    case 'aimed_shot':
+      newState = executeAimedShot(state, action);
+      break;
+    case 'mark_target':
+      newState = executeMarkTarget(state, action);
+      break;
     case 'move':
       newState = executeMove(state, action);
       break;
@@ -474,21 +511,65 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
   });
   const adjacencyBonus = hasAdjacentAlly ? 1 : 0;
 
-  // Target defense (with variable defend bonus if applicable)
-  const targetDefense = target.defense + (target.isDefending ? (target.defendBonus || 2) : 0);
+  // Aimed shot bonus: +3 to hit if actor has aimed shot active
+  const aimedShotHitBonus = actor.hasAimedShot ? 3 : 0;
 
-  const finalAttack = totalAttack + adjacencyBonus;
+  // Mark target bonus: +2 to hit if target is marked
+  const isTargetMarked = state.markedTargets.some(mark => mark.targetId === target.id);
+  const markBonus = isTargetMarked ? 2 : 0;
+
+  // Target defense (no more defend bonus)
+  const targetDefense = target.defense;
+
+  const finalAttack = totalAttack + adjacencyBonus + aimedShotHitBonus + markBonus;
   const hit = finalAttack >= targetDefense;
 
   // Calculate damage
   let rawDamage = 0;
   let finalDamage = 0;
   let hitQuality: HitQuality = 'miss';
+  let interceptedDamage = 0;
+  let defender: Combatant | null = null;
+  let defenderDamage = 0;
 
   if (hit) {
     const damageVariance = rollDamageVariance();
-    rawDamage = Math.max(1, actor.damage + damageVariance); // Base damage ± variance, min 1
-    finalDamage = Math.max(1, rawDamage - target.armor); // After armor, min 1 damage
+    const aimedShotDamageBonus = actor.hasAimedShot ? 2 : 0;
+    rawDamage = Math.max(1, actor.damage + damageVariance + aimedShotDamageBonus); // Base damage ± variance + aimed shot, min 1
+
+    // Check for defend interception
+    if (target.protectedByDefenderId) {
+      defender = state.combatants[target.protectedByDefenderId];
+
+      // Validate defender is alive and adjacent
+      if (defender && !defender.isKnockedOut) {
+        const targetSlot = target.slotPosition;
+        const defenderSlot = defender.slotPosition;
+        const isAdjacent = Math.abs(targetSlot - defenderSlot) === 1;
+
+        if (isAdjacent) {
+          // Split damage: defender intercepts 50%
+          interceptedDamage = Math.floor(rawDamage * 0.5);
+          const damageToTarget = rawDamage - interceptedDamage;
+
+          // Apply armor separately
+          finalDamage = Math.max(1, damageToTarget - target.armor);
+          defenderDamage = Math.max(1, interceptedDamage - defender.armor);
+        } else {
+          // Not adjacent, no interception
+          finalDamage = Math.max(1, rawDamage - target.armor);
+          defender = null;
+        }
+      } else {
+        // Defender knocked out or missing, no interception
+        finalDamage = Math.max(1, rawDamage - target.armor);
+        defender = null;
+      }
+    } else {
+      // No defender, normal damage
+      finalDamage = Math.max(1, rawDamage - target.armor);
+    }
+
     hitQuality = calculateHitQuality(finalAttack, targetDefense, rawDamage, finalDamage);
   }
 
@@ -498,23 +579,48 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
   const overkillAmount = isKillingBlow ? finalDamage - target.currentHp : 0;
 
   // Update target
-  const updatedTarget: Combatant = {
+  let updatedTarget: Combatant = {
     ...target,
     currentHp: newTargetHp,
     isKnockedOut: newTargetHp === 0,
     recentDamage: hit ? finalDamage : null,
   };
 
-  // Update actor (spend AP)
+  // Update defender if damage was intercepted
+  let updatedDefender: Combatant | null = null;
+  let defenderKnockedOut = false;
+  if (defender && interceptedDamage > 0) {
+    const newDefenderHp = Math.max(0, defender.currentHp - defenderDamage);
+    defenderKnockedOut = newDefenderHp === 0;
+    updatedDefender = {
+      ...defender,
+      currentHp: newDefenderHp,
+      isKnockedOut: defenderKnockedOut,
+      recentDamage: defenderDamage,
+    };
+
+    // Clear defend relationships if defender knocked out
+    if (defenderKnockedOut) {
+      updatedDefender.defendingAllyId = undefined;
+      updatedTarget.protectedByDefenderId = undefined;
+    }
+  }
+
+  // Update actor (spend AP and clear aimed shot)
   const updatedActor: Combatant = {
     ...actor,
     apRemaining: 0, // Attack costs 2 AP and ends turn
+    hasAimedShot: false, // Clear aimed shot after attack
   };
 
   // Create log entry
-  const mechanicalText = hit
+  let mechanicalText = hit
     ? `${actor.name} strikes ${target.name} for ${finalDamage} damage!`
     : `${actor.name}'s attack misses ${target.name}!`;
+
+  if (updatedDefender && interceptedDamage > 0) {
+    mechanicalText += ` ${updatedDefender.name} intercepts ${interceptedDamage} damage (${defenderDamage} after armor)!`;
+  }
 
   const logEntry: CombatLogEntry = {
     id: generateUUID(),
@@ -529,6 +635,8 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
       damage: finalDamage,
       hitQuality,
       special: isKillingBlow ? 'killing_blow' : undefined,
+      interceptedDamage: interceptedDamage > 0 ? interceptedDamage : undefined,
+      interceptedByDefender: updatedDefender ? updatedDefender.name : undefined,
     },
     mechanicalText,
   };
@@ -554,6 +662,22 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
     },
   ];
 
+  if (updatedDefender && interceptedDamage > 0) {
+    events.push({
+      type: 'damage_intercepted',
+      turn: state.turn,
+      actorId: updatedDefender.id,
+      targetId: target.id,
+      data: {
+        defenderName: updatedDefender.name,
+        protectedName: target.name,
+        interceptedDamage,
+        defenderDamage,
+        defenderKnockedOut,
+      },
+    });
+  }
+
   if (isKillingBlow) {
     events.push({
       type: 'character_defeated',
@@ -568,13 +692,33 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
     });
   }
 
+  if (defenderKnockedOut && updatedDefender) {
+    events.push({
+      type: 'character_defeated',
+      turn: state.turn,
+      actorId: actor.id,
+      targetId: updatedDefender.id,
+      data: {
+        defeatedName: updatedDefender.name,
+        defeatedIsEnemy: !updatedDefender.isPlayerControlled,
+        killerName: actor.name,
+      },
+    });
+  }
+
+  const updatedCombatants: Record<string, Combatant> = {
+    ...state.combatants,
+    [actor.id]: updatedActor,
+    [target.id]: updatedTarget,
+  };
+
+  if (updatedDefender) {
+    updatedCombatants[updatedDefender.id] = updatedDefender;
+  }
+
   const newState: CombatState = {
     ...state,
-    combatants: {
-      ...state.combatants,
-      [actor.id]: updatedActor,
-      [target.id]: updatedTarget,
-    },
+    combatants: updatedCombatants,
     log: [...state.log, logEntry],
     pendingEvents: [...state.pendingEvents, ...events],
   };
@@ -585,23 +729,42 @@ function executeAttack(state: CombatState, action: CombatAction): CombatState {
 
 /**
  * Execute a defend action.
- * Cost: 1 AP, ends turn, +2 Defense until next turn.
+ * Cost: 1 AP, ends turn. Protects adjacent ally by intercepting 50% of damage.
  */
 function executeDefend(state: CombatState, action: CombatAction): CombatState {
   const actor = state.combatants[action.actorId];
+  const targetAlly = action.targetId ? state.combatants[action.targetId] : null;
 
-  if (!actor || actor.apRemaining < 1) {
+  if (!actor || !targetAlly || actor.apRemaining < 1) {
     return state;
   }
 
-  // Roll variable defend bonus (2-4 instead of flat +2)
-  const defendBonus = rollDefendBonus();
+  // Validate same team
+  if (actor.isPlayerControlled !== targetAlly.isPlayerControlled) {
+    return state;
+  }
 
+  // Validate adjacent (slot ±1)
+  if (Math.abs(actor.slotPosition - targetAlly.slotPosition) !== 1) {
+    return state;
+  }
+
+  // Validate target not already protected
+  if (targetAlly.protectedByDefenderId) {
+    return state;
+  }
+
+  // Set defend relationships
   const updatedActor: Combatant = {
     ...actor,
     apRemaining: 0, // Ends turn
     isDefending: true,
-    defendBonus, // Store the rolled bonus
+    defendingAllyId: targetAlly.id,
+  };
+
+  const updatedTarget: Combatant = {
+    ...targetAlly,
+    protectedByDefenderId: actor.id,
   };
 
   const logEntry: CombatLogEntry = {
@@ -610,8 +773,10 @@ function executeDefend(state: CombatState, action: CombatAction): CombatState {
     actorId: actor.id,
     actorName: actor.name,
     actionType: 'defend',
-    result: { defendBonus },
-    mechanicalText: `${actor.name} takes a defensive stance (+${defendBonus} Defense).`,
+    targetId: targetAlly.id,
+    targetName: targetAlly.name,
+    result: {},
+    mechanicalText: `${actor.name} guards ${targetAlly.name}, ready to intercept attacks!`,
   };
 
   const newState: CombatState = {
@@ -619,6 +784,7 @@ function executeDefend(state: CombatState, action: CombatAction): CombatState {
     combatants: {
       ...state.combatants,
       [actor.id]: updatedActor,
+      [targetAlly.id]: updatedTarget,
     },
     log: [...state.log, logEntry],
     pendingEvents: [
@@ -627,7 +793,8 @@ function executeDefend(state: CombatState, action: CombatAction): CombatState {
         type: 'defend_activated',
         turn: state.turn,
         actorId: actor.id,
-        data: { actorName: actor.name, defendBonus },
+        targetId: targetAlly.id,
+        data: { actorName: actor.name, targetName: targetAlly.name },
       },
     ],
   };
@@ -680,6 +847,147 @@ function executeOverwatch(state: CombatState, action: CombatAction): CombatState
         turn: state.turn,
         actorId: actor.id,
         data: { actorName: actor.name },
+      },
+    ],
+  };
+
+  return advanceTurn(newState);
+}
+
+/**
+ * Execute an aimed shot action.
+ * Cost: 2 AP, ends turn. Ranged weapon only.
+ * Stores +3 to hit and +2 damage for next attack.
+ */
+function executeAimedShot(state: CombatState, action: CombatAction): CombatState {
+  const actor = state.combatants[action.actorId];
+
+  if (!actor || actor.apRemaining < 2) {
+    return state;
+  }
+
+  // Weapon type restriction: ranged only
+  if (actor.weaponType !== 'ranged') {
+    return state;
+  }
+
+  const updatedActor: Combatant = {
+    ...actor,
+    apRemaining: 0,
+    hasAimedShot: true, // Store bonus for next attack
+  };
+
+  const logEntry: CombatLogEntry = {
+    id: generateUUID(),
+    turn: state.turn,
+    actorId: actor.id,
+    actorName: actor.name,
+    actionType: 'aimed_shot',
+    result: {},
+    mechanicalText: `${actor.name} takes careful aim (+3 to hit, +2 damage on next attack).`,
+  };
+
+  const newState: CombatState = {
+    ...state,
+    combatants: {
+      ...state.combatants,
+      [actor.id]: updatedActor,
+    },
+    log: [...state.log, logEntry],
+    pendingEvents: [
+      ...state.pendingEvents,
+      {
+        type: 'aimed_shot_activated',
+        turn: state.turn,
+        actorId: actor.id,
+        data: { actorName: actor.name },
+      },
+    ],
+  };
+
+  return advanceTurn(newState);
+}
+
+/**
+ * Execute a mark target action.
+ * Cost: 2 AP, ends turn. Ranged weapon only.
+ * All allies get +2 to hit the marked target until marker's next turn.
+ */
+function executeMarkTarget(state: CombatState, action: CombatAction): CombatState {
+  const actor = state.combatants[action.actorId];
+  const target = action.targetId ? state.combatants[action.targetId] : null;
+
+  if (!actor || !target || actor.apRemaining < 2) {
+    return state;
+  }
+
+  // Weapon type restriction: ranged only
+  if (actor.weaponType !== 'ranged') {
+    return state;
+  }
+
+  // Validate target is an enemy
+  if (actor.isPlayerControlled === target.isPlayerControlled) {
+    return state;
+  }
+
+  // Calculate expiration turn (expires when marker's next turn starts)
+  // Find marker's position in initiative order
+  const markerIndex = state.initiativeOrder.indexOf(actor.id);
+  let expiresOnTurn = state.turn;
+
+  // If marker is last in initiative, mark expires next round
+  if (markerIndex === state.initiativeOrder.length - 1) {
+    expiresOnTurn = state.turn + 1;
+  } else {
+    // Otherwise, expires this round when marker's turn comes again
+    expiresOnTurn = state.turn + 1;
+  }
+
+  const updatedActor: Combatant = {
+    ...actor,
+    apRemaining: 0,
+  };
+
+  const logEntry: CombatLogEntry = {
+    id: generateUUID(),
+    turn: state.turn,
+    actorId: actor.id,
+    actorName: actor.name,
+    actionType: 'mark_target',
+    targetId: target.id,
+    targetName: target.name,
+    result: {},
+    mechanicalText: `${actor.name} marks ${target.name} for attack! All allies get +2 to hit.`,
+  };
+
+  const newState: CombatState = {
+    ...state,
+    combatants: {
+      ...state.combatants,
+      [actor.id]: updatedActor,
+    },
+    markedTargets: [
+      ...state.markedTargets,
+      {
+        targetId: target.id,
+        markerId: actor.id,
+        expiresOnTurn,
+      },
+    ],
+    log: [...state.log, logEntry],
+    pendingEvents: [
+      ...state.pendingEvents,
+      {
+        type: 'mark_target_placed',
+        turn: state.turn,
+        actorId: actor.id,
+        targetId: target.id,
+        data: {
+          actorName: actor.name,
+          targetName: target.name,
+          expiresOnTurn,
+        },
       },
     ],
   };
@@ -1035,11 +1343,73 @@ function executeFlee(state: CombatState, action: CombatAction): CombatState {
 // =============================================================================
 
 /**
+ * Clear defend relationships when a combatant is knocked out.
+ */
+export function clearDefendRelationships(state: CombatState, combatantId: string): Record<string, Combatant> {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) return state.combatants;
+
+  const updatedCombatants = { ...state.combatants };
+
+  // If this combatant was defending someone, clear the protection
+  if (combatant.defendingAllyId) {
+    const protectedAlly = updatedCombatants[combatant.defendingAllyId];
+    if (protectedAlly) {
+      updatedCombatants[combatant.defendingAllyId] = {
+        ...protectedAlly,
+        protectedByDefenderId: undefined,
+      };
+    }
+  }
+
+  // If this combatant was being protected, clear the defender's relationship
+  if (combatant.protectedByDefenderId) {
+    const defender = updatedCombatants[combatant.protectedByDefenderId];
+    if (defender) {
+      updatedCombatants[combatant.protectedByDefenderId] = {
+        ...defender,
+        defendingAllyId: undefined,
+        isDefending: false,
+      };
+    }
+  }
+
+  return updatedCombatants;
+}
+
+/**
  * Get the current actor (whose turn it is).
  */
 export function getCurrentActor(state: CombatState): Combatant | null {
   const id = state.initiativeOrder[state.currentTurnIndex];
   return state.combatants[id] || null;
+}
+
+/**
+ * Get valid defend targets for an actor.
+ * Returns adjacent allies that are not self, not knocked out, and not already protected.
+ */
+export function getValidDefendTargets(state: CombatState, actorId: string): Combatant[] {
+  const actor = state.combatants[actorId];
+  if (!actor) return [];
+
+  const currentSlot = actor.slotPosition;
+  const adjacentSlots = [currentSlot - 1, currentSlot + 1].filter(s => s >= 0 && s <= 4);
+
+  const slots = actor.isPlayerControlled
+    ? state.battlefield.allySlots
+    : state.battlefield.enemySlots;
+
+  return adjacentSlots
+    .map(s => slots[s])
+    .filter((id): id is string => id !== null)
+    .map(id => state.combatants[id])
+    .filter(c =>
+      c &&
+      !c.isKnockedOut &&
+      c.id !== actorId &&
+      !c.protectedByDefenderId
+    );
 }
 
 /**
@@ -1117,11 +1487,24 @@ export function getAvailableActions(state: CombatState): ActionType[] {
 
   if (ap >= 2) {
     actions.push('attack');
-    actions.push('overwatch');
+
+    // Weapon type restrictions
+    if (actor.weaponType === 'melee') {
+      actions.push('overwatch');
+    } else if (actor.weaponType === 'ranged') {
+      actions.push('aimed_shot');
+      // Mark target only if there are valid enemy targets
+      if (getValidAttackTargets(state, actor.id).length > 0) {
+        actions.push('mark_target');
+      }
+    }
   }
 
   if (ap >= 1) {
-    actions.push('defend');
+    // Defend only available if there are valid targets
+    if (getValidDefendTargets(state, actor.id).length > 0) {
+      actions.push('defend');
+    }
     if (getValidMoveSlots(state, actor.id).length > 0) {
       actions.push('move');
     }
@@ -1136,3 +1519,4 @@ export function getAvailableActions(state: CombatState): ActionType[] {
 
   return actions;
 }
+

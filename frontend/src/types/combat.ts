@@ -117,9 +117,11 @@ export interface Combatant {
   // Status effects
   isDefending: boolean;
   isOverwatching: boolean;
+  hasAimedShot: boolean;         // Ranged only: stored +3 hit, +2 damage bonus
   isKnockedOut: boolean;
-  defendBonus?: number;      // Variable defense boost when defending (2-4)
-  overwatchPenalty?: number; // Variable accuracy penalty for overwatch (1-3)
+  defendingAllyId?: string;      // ID of ally this combatant is protecting
+  protectedByDefenderId?: string; // ID of defender protecting this combatant
+  overwatchPenalty?: number;      // Variable accuracy penalty for overwatch (1-3)
 
   // UI state (clears after render)
   recentDamage: number | null;
@@ -158,6 +160,7 @@ export function createCombatant(
     apRemaining: 2,
     isDefending: false,
     isOverwatching: false,
+    hasAimedShot: false,
     isKnockedOut: false,
     recentDamage: null,
     recentHeal: null,
@@ -185,6 +188,8 @@ export type ActionType =
   | 'attack'
   | 'defend'
   | 'overwatch'
+  | 'aimed_shot'
+  | 'mark_target'
   | 'move'
   | 'swap'
   | 'item'
@@ -233,8 +238,12 @@ export type CombatEventType =
   | 'turn_start'
   | 'attack_resolved'
   | 'defend_activated'
+  | 'damage_intercepted'
   | 'overwatch_activated'
   | 'overwatch_triggered'
+  | 'aimed_shot_activated'
+  | 'mark_target_placed'
+  | 'mark_expired'
   | 'move_completed'
   | 'swap_completed'
   | 'flee_attempted'
@@ -277,7 +286,8 @@ export interface CombatLogEntry {
     damage?: number;
     hitQuality?: HitQuality;
     special?: 'killing_blow' | 'fled' | 'fled_failed';
-    defendBonus?: number;
+    interceptedDamage?: number;
+    interceptedByDefender?: string;
   };
   mechanicalText: string;  // "Aria strikes Goblin for 14 damage!"
   narratorText?: string;   // AI-generated flavor (added async)
@@ -314,6 +324,13 @@ export interface CombatState {
   // Turn order
   initiativeOrder: string[]; // Combatant IDs sorted by initiative
   currentTurnIndex: number;
+
+  // Active marks (ranged action)
+  markedTargets: Array<{
+    targetId: string;
+    markerId: string;
+    expiresOnTurn: number;
+  }>;
 
   // Combat log
   log: CombatLogEntry[];

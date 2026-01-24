@@ -22,7 +22,7 @@
     "@types/react-window": "^1.8.8",
     "cropperjs": "^1.6.1",
     "lucide-react": "^0.263.1",
-    "pixi.js": "^8.0.0",
+    "pixi.js": "^8.14.3",
     "prosemirror-model": "^1.19.3",
     "prosemirror-state": "^1.4.3",
     "prosemirror-view": "^1.31.7",
