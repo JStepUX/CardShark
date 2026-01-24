@@ -47,6 +47,13 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom']
+    include: [
+      'react',
+      'react-dom',
+      'pixi.js',
+      '@tiptap/core',
+      '@tiptap/react',
+      'lucide-react'
+    ]
   }
 });

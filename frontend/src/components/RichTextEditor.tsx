@@ -62,6 +62,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   })();
 
   const editor = useEditor({
+    shouldRerenderOnTransaction: true, // Required for v3 to ensure markdown highlighting updates
     extensions: [
       StarterKit.configure({
         // Disable built-in markdown parsing features
