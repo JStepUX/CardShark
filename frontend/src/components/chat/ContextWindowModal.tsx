@@ -328,11 +328,11 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
               </div>
               <div>
                 <div className="text-xs text-gray-400">Context Limit</div>
-                <div>{((contextData.api_config || contextData.config)?.max_context_length)?.toLocaleString() || '8192'} tokens</div>
+                <div>{((contextData.api_config || contextData.config)?.generation_settings?.max_context_length)?.toLocaleString() || '8192'} tokens</div>
               </div>
               <div>
                 <div className="text-xs text-gray-400">Max Output</div>
-                <div>{((contextData.api_config || contextData.config)?.max_length)?.toLocaleString() || '220'} tokens</div>
+                <div>{((contextData.api_config || contextData.config)?.generation_settings?.max_length)?.toLocaleString() || '220'} tokens</div>
               </div>
             </div>
           </div>
