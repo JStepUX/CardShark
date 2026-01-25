@@ -391,6 +391,17 @@ class ApiHandler:
                 "Assistant:"
             ])
             quiet = generation_params.get('quiet', True)
+
+            # Handle system_instruction - prepend to memory for proper instruction handling
+            # This ensures generation instructions are treated as directives in system context,
+            # not as content to continue (which causes instruction leakage in KoboldCPP)
+            system_instruction = generation_params.get('system_instruction')
+            if system_instruction:
+                self.logger.log_step(f"Prepending system_instruction to memory ({len(system_instruction)} chars)")
+                if memory:
+                    memory = f"{system_instruction}\n\n{memory}"
+                else:
+                    memory = system_instruction
             
             # Process lore if character data is available
             character_data = generation_params.get('character_data')

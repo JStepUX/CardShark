@@ -591,27 +591,33 @@ async def generate_greeting(request: Request):
         if character_context:
              full_memory += "Character Data:\n" + character_context
 
-        # Construct prompt
+        # Construct generation instruction
         # Get internal prompt template from request or use default
         prompt_template = request_data.get('prompt_template')
-        
-        if prompt_template:
+
+        # Check for custom_prompt (used by combat narratives and other custom generation)
+        custom_prompt = request_data.get('custom_prompt')
+
+        if custom_prompt:
+            # Use custom prompt as the instruction
+            generation_instruction = custom_prompt
+        elif prompt_template:
             # Use provided template
-            prompt = prompt_template.replace('{{char}}', name)
-            # Ensure {{user}} remains as {{user}} for the LLM if it was in the template
-            # (No action needed if we just replace {{char}})
+            generation_instruction = prompt_template.replace('{{char}}', name)
         else:
-            # Default prompt
-            prompt = f"#Generate an alternate first message for {name}. ##Only requirements: - Establish the world: Where are we? What does it feel like here? - Establish {name}'s presence (not bio): How do they occupy this space? Everything else (tone, structure, acknowledging/ignoring {{{{user}}}}, dialogue/action/interiority, length) is your choice. ##Choose what best serves this character in this moment. ##Goal: Create a scene unique to {name} speaking only for {name}"
-        
+            # Default instruction for greeting generation
+            generation_instruction = f"#Generate an alternate first message for {name}. ##Only requirements: - Establish the world: Where are we? What does it feel like here? - Establish {name}'s presence (not bio): How do they occupy this space? Everything else (tone, structure, acknowledging/ignoring {{{{user}}}}, dialogue/action/interiority, length) is your choice. ##Choose what best serves this character in this moment. ##Goal: Create a scene unique to {name} speaking only for {name}"
+
         # Stream the response using ApiHandler
-        # Pass full_memory as the memory context
+        # Use system_instruction for the generation directive (goes into system context)
+        # Use prompt as just the turn marker (what the model continues from)
         stream_request_data = {
             "api_config": api_config,
             "generation_params": {
-                "prompt": prompt,
+                "system_instruction": generation_instruction,
+                "prompt": f"\n{name}:",
                 "memory": full_memory,
-                "stop_sequence": ["User:", "Human:", "</s>"],
+                "stop_sequence": ["User:", "Human:", "</s>", f"\n{name}:", "{{user}}:"],
                 "character_data": character_data,
                 "quiet": True
             }
@@ -700,26 +706,28 @@ async def generate_impersonate(request: Request):
             elif role == 'user':
                 chat_history += f"{user_name}: {content}\n\n"
         
-        # Construct the impersonation prompt
+        # Construct the impersonation instruction (goes into system context)
         if prompt_template:
             # Use provided template
-            prompt = prompt_template.replace('{{char}}', char_name).replace('{{user}}', user_name)
+            generation_instruction = prompt_template.replace('{{char}}', char_name).replace('{{user}}', user_name)
         else:
-            # Default prompt
-            prompt = f"You are now speaking as {user_name}, responding to {char_name}. Based on the conversation so far, write a natural response that {user_name} might give. Stay true to any established personality or traits for {user_name}. Write in first person as {user_name}."
-        
-        # Add the conversation context and partial message
-        prompt += f"\n\n## Recent Conversation:\n{chat_history}"
-        
+            # Default instruction
+            generation_instruction = f"You are now speaking as {user_name}, responding to {char_name}. Based on the conversation so far, write a natural response that {user_name} might give. Stay true to any established personality or traits for {user_name}. Write in first person as {user_name}."
+
+        # Build the prompt (conversation history + turn marker)
+        prompt = f"## Recent Conversation:\n{chat_history}"
+
         if partial_message and partial_message.strip():
             prompt += f"\n## Continue this message from {user_name} (write ONLY the continuation, do not repeat what's already written):\n{user_name}: {partial_message}"
         else:
             prompt += f"\n## Write a response as {user_name}:\n{user_name}:"
-        
+
         # Stream the response using ApiHandler
+        # Use system_instruction for the generation directive (goes into system context)
         stream_request_data = {
             "api_config": api_config,
             "generation_params": {
+                "system_instruction": generation_instruction,
                 "prompt": prompt,
                 "memory": full_memory,
                 "stop_sequence": [f"{char_name}:", "</s>", "\n\n"],
