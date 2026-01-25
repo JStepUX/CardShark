@@ -1,4 +1,5 @@
 import { GridRoom, DisplayNPC } from '../../utils/worldStateApi';
+import type { NPCRelationship, TimeState, TimeConfig } from '../../types/worldRuntime';
 
 export type SidePanelMode = 'world' | 'character' | 'assistant';
 
@@ -15,6 +16,9 @@ export interface SidePanelProps {
     onDismissNpc?: (id: string) => void;
     onOpenMap?: () => void;
     worldId?: string;
+    relationships?: Record<string, NPCRelationship>;
+    timeState?: TimeState;
+    timeConfig?: TimeConfig;
 
     // Character mode props (optional)
     characterName?: string;
@@ -24,3 +28,4 @@ export interface SidePanelProps {
     // Journal modal callback (used in all modes)
     onOpenJournal?: () => void;
 }
+

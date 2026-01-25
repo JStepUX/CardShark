@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll, Save, Check } from 'lucide-react';
 import { NPCShowcase } from '../world/NPCShowcase';
+import { DayNightSphere } from '../world/DayNightSphere';
 import { SidePanelProps } from './types';
 import { ContextManagementDropdown } from './ContextManagementDropdown';
 import { useChat } from '../../contexts/ChatContext';
@@ -23,6 +24,9 @@ export function SidePanel({
     onImageChange,
     onUnloadCharacter,
     onOpenJournal,
+    relationships,
+    timeState,
+    timeConfig,
 }: SidePanelProps) {
     const { compressionLevel, setCompressionLevel, sessionName, setSessionName, saveSessionNameNow } = useChat();
     const [animationClass, setAnimationClass] = useState('');
@@ -167,6 +171,9 @@ export function SidePanel({
                     onDismissNpc={onDismissNpc}
                     onOpenMap={onOpenMap}
                     worldId={worldId}
+                    relationships={relationships}
+                    timeState={timeState}
+                    timeConfig={timeConfig}
                 />}
 
                 {mode === 'character' && <CharacterModeContent
@@ -216,7 +223,10 @@ function WorldModeContent({
     onSelectNpc,
     onDismissNpc,
     onOpenMap,
-    worldId
+    worldId,
+    relationships,
+    timeState,
+    timeConfig
 }: {
     currentRoom?: any;
     npcs: any[];
@@ -225,10 +235,13 @@ function WorldModeContent({
     onDismissNpc?: (id: string) => void;
     onOpenMap?: () => void;
     worldId?: string;
+    relationships?: Record<string, any>;
+    timeState?: any;
+    timeConfig?: any;
 }) {
     return (
         <>
-            {/* Room Image */}
+            {/* Room Image with Day/Night Sphere */}
             {currentRoom && (
                 <div className="border-b border-gray-800 overflow-hidden">
                     <div className="relative w-full aspect-video bg-[#0a0a0a]">
@@ -251,6 +264,16 @@ function WorldModeContent({
                                 No image available
                             </div>
                         )}
+
+                        {/* Day/Night Sphere Overlay */}
+                        {timeState && timeConfig?.enableDayNightCycle && (
+                            <DayNightSphere
+                                timeOfDay={timeState.timeOfDay}
+                                currentDay={timeState.currentDay}
+                                messagesInDay={timeState.messagesInDay}
+                                messagesPerDay={timeConfig.messagesPerDay}
+                            />
+                        )}
                     </div>
                 </div>
             )}
@@ -261,6 +284,7 @@ function WorldModeContent({
                 activeNpcId={activeNpcId}
                 onSelectNpc={onSelectNpc || (() => { })}
                 onDismissNpc={onDismissNpc}
+                relationships={relationships}
             />
 
             {/* Map Button */}

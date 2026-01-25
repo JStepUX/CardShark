@@ -1,15 +1,18 @@
 import { ImageWithFallback } from '../shared/ImageWithFallback';
 import { DisplayNPC } from '../../utils/worldStateApi';
 import { Skull, Link } from 'lucide-react';
+import { AffinityHearts } from './AffinityHearts';
+import type { NPCRelationship } from '../../types/worldRuntime';
 
 interface NPCCardProps {
   npc: DisplayNPC & { hostile?: boolean; monster_level?: number };
   isActive: boolean;
   onClick: () => void;
   onDismiss?: () => void;
+  relationship?: NPCRelationship | null;
 }
 
-export function NPCCard({ npc, isActive, onClick, onDismiss }: NPCCardProps) {
+export function NPCCard({ npc, isActive, onClick, onDismiss, relationship }: NPCCardProps) {
   const isHostile = npc.hostile || false;
   const isBound = isActive && !isHostile;
 
@@ -18,8 +21,8 @@ export function NPCCard({ npc, isActive, onClick, onDismiss }: NPCCardProps) {
       onClick={onClick}
       disabled={isBound} // Prevent re-clicking bound allies
       className={`relative flex flex-col items-center gap-2 p-2 rounded-lg transition-all ${isBound
-          ? 'cursor-default bg-[#2a2a2a]' // Bound ally - no hover effect
-          : 'hover:bg-[#2a2a2a]' // Normal hover
+        ? 'cursor-default bg-[#2a2a2a]' // Bound ally - no hover effect
+        : 'hover:bg-[#2a2a2a]' // Normal hover
         } ${isActive
           ? isHostile
             ? 'ring-2 ring-red-500 bg-[#2a2a2a]'
@@ -74,6 +77,13 @@ export function NPCCard({ npc, isActive, onClick, onDismiss }: NPCCardProps) {
         }`} title={npc.name}>
         {npc.name}
       </span>
+
+      {/* Affinity hearts for non-hostile NPCs */}
+      {!isHostile && (
+        <div className="mt-1">
+          <AffinityHearts relationship={relationship || null} size="sm" />
+        </div>
+      )}
     </button>
   );
 }

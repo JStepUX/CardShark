@@ -5,6 +5,12 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import type { WorldCard } from '../types/worldCard';
 import type { RoomCard } from '../types/room';
+import type { NPCRelationship } from '../types/worldRuntime';
+import { AffinityTier } from '../types/worldRuntime';
+import {
+  createDefaultRelationship,
+  updateRelationshipAffinity
+} from '../utils/affinityUtils';
 
 interface Position {
   x: number;
@@ -26,6 +32,7 @@ interface WorldPlayState {
   currentRoom: RoomCard | null;
   playerPosition: Position | null;
   roomHistory: RoomHistory;
+  relationships: Record<string, NPCRelationship>;
   isLoading: boolean;
   error: string | null;
 }
@@ -39,6 +46,11 @@ interface WorldPlayContextType extends WorldPlayState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
+
+  // Relationship management
+  updateRelationship: (npcUuid: string, affinityDelta: number, reason?: string) => void;
+  getRelationship: (npcUuid: string) => NPCRelationship;
+  getAffinityTier: (npcUuid: string) => AffinityTier;
 }
 
 const WorldPlayContext = createContext<WorldPlayContextType | undefined>(undefined);
@@ -48,6 +60,7 @@ const initialState: WorldPlayState = {
   currentRoom: null,
   playerPosition: null,
   roomHistory: {},
+  relationships: {},
   isLoading: false,
   error: null,
 };
@@ -99,6 +112,35 @@ export const WorldPlayProvider: React.FC<{ children: ReactNode }> = ({ children 
     setState(initialState);
   }, []);
 
+  // Relationship management methods
+  const updateRelationship = useCallback((npcUuid: string, affinityDelta: number, reason?: string) => {
+    setState(prev => {
+      const currentRelationship = prev.relationships[npcUuid] || createDefaultRelationship(npcUuid);
+      const updatedRelationship = updateRelationshipAffinity(currentRelationship, affinityDelta);
+
+      // Log the change for debugging
+      console.log(`[Affinity] ${npcUuid}: ${currentRelationship.affinity} -> ${updatedRelationship.affinity} (${affinityDelta > 0 ? '+' : ''}${affinityDelta})${reason ? ` - ${reason}` : ''}`);
+
+      return {
+        ...prev,
+        relationships: {
+          ...prev.relationships,
+          [npcUuid]: updatedRelationship,
+        },
+      };
+    });
+  }, []);
+
+  const getRelationship = useCallback((npcUuid: string): NPCRelationship => {
+    return state.relationships[npcUuid] || createDefaultRelationship(npcUuid);
+  }, [state.relationships]);
+
+  const getAffinityTier = useCallback((npcUuid: string): AffinityTier => {
+    const relationship = state.relationships[npcUuid];
+    if (!relationship) return AffinityTier.STRANGER;
+    return relationship.tier;
+  }, [state.relationships]);
+
   return (
     <WorldPlayContext.Provider
       value={{
@@ -111,6 +153,9 @@ export const WorldPlayProvider: React.FC<{ children: ReactNode }> = ({ children 
         setLoading,
         setError,
         reset,
+        updateRelationship,
+        getRelationship,
+        getAffinityTier,
       }}
     >
       {children}

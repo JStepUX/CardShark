@@ -26,6 +26,12 @@ import { roomCardToGridRoom, placementToGridRoomStub } from '../utils/roomCardAd
 import { injectRoomContext, injectNPCContext } from '../utils/worldCardAdapter';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
+import { calculateCombatAffinity } from '../utils/combatAffinityCalculator';
+import type { NPCRelationship, TimeState, TimeConfig } from '../types/worldRuntime';
+import { createDefaultRelationship, updateRelationshipAffinity, resetDailyAffinity } from '../utils/affinityUtils';
+import { useEmotionDetection } from '../hooks/useEmotionDetection';
+import { calculateSentimentAffinity, updateSentimentHistory, resetSentimentAfterGain } from '../utils/sentimentAffinityCalculator';
+import { createDefaultTimeState, advanceTime } from '../utils/timeUtils';
 
 // Extended DisplayNPC with combat info from RoomNPC
 interface CombatDisplayNPC extends DisplayNPC {
@@ -72,9 +78,22 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [missingRoomCount, setMissingRoomCount] = useState(0);
   const [showMissingRoomWarning, setShowMissingRoomWarning] = useState(false);
 
+  // Affinity/relationship tracking
+  const [npcRelationships, setNpcRelationships] = useState<Record<string, NPCRelationship>>({});
+
+  // Time system state
+  const [timeState, setTimeState] = useState<TimeState>(createDefaultTimeState());
+  const [timeConfig] = useState<TimeConfig>({
+    messagesPerDay: 50,
+    enableDayNightCycle: true
+  });
+
   // Combat state
   const [combatInitData, setCombatInitData] = useState<CombatInitData | null>(null);
   const [isInCombat, setIsInCombat] = useState(false);
+
+  // Emotion detection for sentiment-based affinity
+  const { currentEmotion } = useEmotionDetection(messages, activeNpcName);
 
   // Load world data from API (V2) - LAZY LOADING
   // Only fetches world card + starting room (2 API calls instead of N+1)
@@ -238,6 +257,117 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       setCharacterDataOverride(null);
     }
   }, [characterData, currentRoom, activeNpcCard, setCharacterDataOverride]);
+
+  // Track sentiment and grant affinity for positive conversations
+  useEffect(() => {
+    // Only track sentiment when actively talking to an NPC
+    if (!activeNpcId || !activeNpcName || !currentEmotion) return;
+
+    // Get or create relationship
+    const relationship = npcRelationships[activeNpcId] || createDefaultRelationship(activeNpcId);
+
+    // Update sentiment history with current valence
+    const updatedRelationship = updateSentimentHistory(
+      relationship,
+      currentEmotion.valence,
+      messages.length
+    );
+
+    // Calculate potential affinity change with daily cap
+    const sentimentResult = calculateSentimentAffinity(
+      updatedRelationship,
+      currentEmotion.valence,
+      messages.length,
+      timeState.currentDay,
+      60 // daily cap
+    );
+
+    // Update relationship in state (even if no affinity gain, to track sentiment history)
+    setNpcRelationships(prev => ({
+      ...prev,
+      [activeNpcId]: updatedRelationship,
+    }));
+
+    // Grant affinity if conditions are met
+    if (sentimentResult.shouldGainAffinity) {
+      // Update affinity
+      const finalRelationship = updateRelationshipAffinity(updatedRelationship, sentimentResult.affinityDelta);
+
+      // Track daily gain
+      finalRelationship.affinity_gained_today += sentimentResult.affinityDelta;
+      finalRelationship.affinity_day_started = timeState.currentDay;
+
+      // Reset sentiment tracking after gain
+      const resetRelationship = resetSentimentAfterGain(finalRelationship, messages.length);
+
+      setNpcRelationships(prev => ({
+        ...prev,
+        [activeNpcId]: resetRelationship,
+      }));
+
+      // Log the change
+      console.log(`[Affinity] ${activeNpcName}: ${updatedRelationship.affinity} -> ${finalRelationship.affinity} (${sentimentResult.affinityDelta > 0 ? '+' : ''}${sentimentResult.affinityDelta}) - ${sentimentResult.reason} (avg valence: ${Math.round(sentimentResult.averageValence)})`);
+
+      // Add notification to chat
+      const emoji = sentimentResult.affinityDelta > 0 ? '❤️' : '💔';
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'system' as const,
+        content: `*${activeNpcName} ${sentimentResult.affinityDelta > 0 ? '+' : ''}${sentimentResult.affinityDelta} ${emoji} (${sentimentResult.reason})*`,
+        timestamp: Date.now(),
+        metadata: {
+          type: 'affinity_change',
+          source: 'sentiment',
+          npcId: activeNpcId,
+          delta: sentimentResult.affinityDelta,
+          reason: sentimentResult.reason,
+        }
+      });
+    }
+  }, [messages.length, currentEmotion, activeNpcId, activeNpcName, npcRelationships, addMessage]);
+
+  // Advance time on each new message
+  useEffect(() => {
+    if (!timeConfig.enableDayNightCycle) return;
+
+    // Count only user and assistant messages (exclude system messages to prevent infinite loop)
+    const gameplayMessages = messages.filter(msg => msg.role === 'user' || msg.role === 'assistant');
+    const gameplayMessageCount = gameplayMessages.length;
+
+    // Only advance time if gameplay message count has increased
+    if (gameplayMessageCount <= timeState.totalMessages) {
+      return; // No new gameplay messages
+    }
+
+    const { newState, newDayStarted } = advanceTime(timeState, timeConfig);
+    setTimeState(newState);
+
+    if (newDayStarted) {
+      // Reset daily affinity for all NPCs
+      setNpcRelationships(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(npcId => {
+          updated[npcId] = resetDailyAffinity(updated[npcId], newState.currentDay);
+        });
+        return updated;
+      });
+
+      // Add day transition message
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'system' as const,
+        content: `*A new day dawns... (Day ${newState.currentDay})*`,
+        timestamp: Date.now(),
+        metadata: {
+          type: 'day_transition',
+          day: newState.currentDay
+        }
+      });
+
+      console.log(`[Time] Day ${newState.currentDay} started - Daily affinity caps reset`);
+    }
+  }, [messages, timeState, timeConfig, addMessage]);
+
 
   // Handle NPC selection - either starts combat (hostile) or sets active responder
   const handleSelectNpc = useCallback(async (npcId: string) => {
@@ -570,6 +700,52 @@ Style: Write in second person, present tense. Acknowledge the player's victory, 
             type: 'combat_victory',
             roomId: currentRoom.id,
             rewards: result.rewards,
+          }
+        });
+      }
+
+      // Calculate and apply affinity changes from combat with daily cap
+      const affinityChanges = calculateCombatAffinity(
+        finalState,
+        npcRelationships,
+        timeState.currentDay,
+        60 // daily cap
+      );
+      if (affinityChanges.length > 0) {
+        setNpcRelationships(prev => {
+          const updated = { ...prev };
+          affinityChanges.forEach(({ npcUuid, delta, reason }) => {
+            const currentRelationship = updated[npcUuid] || createDefaultRelationship(npcUuid);
+            const newRelationship = updateRelationshipAffinity(currentRelationship, delta);
+
+            // Track daily gain
+            newRelationship.affinity_gained_today += delta;
+            newRelationship.affinity_day_started = timeState.currentDay;
+
+            updated[npcUuid] = newRelationship;
+
+            // Log affinity change with daily tracking
+            console.log(`[Affinity] ${npcUuid}: ${currentRelationship.affinity} -> ${newRelationship.affinity} (+${delta}) (${newRelationship.affinity_gained_today}/60 today) - ${reason}`);
+          });
+          return updated;
+        });
+
+        // Add affinity change notification to chat
+        const affinityMessage = affinityChanges.map(({ npcUuid, delta }) => {
+          // Try to find NPC name from roomNpcs
+          const npc = roomNpcs.find((n: CombatDisplayNPC) => n.id === npcUuid);
+          const npcName = npc?.name || 'Ally';
+          return `${npcName} ${delta > 0 ? '+' : ''}${delta} ❤️`;
+        }).join(', ');
+
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'system' as const,
+          content: `*${affinityMessage}*`,
+          timestamp: Date.now(),
+          metadata: {
+            type: 'affinity_change',
+            changes: affinityChanges,
           }
         });
       }
@@ -1122,6 +1298,9 @@ Style: Write in second person, present tense. Convey the weight of defeat, menti
         onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
         worldId={worldId}
         onOpenJournal={() => setShowJournal(true)}
+        relationships={npcRelationships}
+        timeState={timeState}
+        timeConfig={timeConfig}
       />
 
       {/* Map Modal */}
