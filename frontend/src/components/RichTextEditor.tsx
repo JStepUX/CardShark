@@ -4,7 +4,6 @@ import StarterKit from '@tiptap/starter-kit';
 import Paragraph from '@tiptap/extension-paragraph';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
-import Link from '@tiptap/extension-link';
 import { MarkdownSyntaxHighlighter } from './tiptap/extensions/MarkdownSyntaxHighlighter';
 import { MarkdownImage } from './tiptap/extensions/MarkdownImage';
 import { htmlToPlainText, markdownToHtml, textToHtmlParagraphs } from '../utils/contentUtils';
@@ -76,6 +75,10 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         bulletList: false,
         orderedList: false,
         blockquote: false,
+        link: {
+          openOnClick: true,
+          linkOnPaste: true,
+        }
       }),
       Paragraph.configure({
         HTMLAttributes: {
@@ -89,10 +92,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       MarkdownImage, // Add the fixed MarkdownImage extension
       Placeholder.configure({
         placeholder,
-      }),
-      Link.configure({
-        openOnClick: true,
-        linkOnPaste: true,
       }),
       // Use only the consolidated markdown highlighter
       MarkdownSyntaxHighlighter,
