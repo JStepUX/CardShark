@@ -1,0 +1,1266 @@
+# ============================================================================
+# CARDSHARK PLAY VIEW SPECIFICATION
+# Version: 0.1.0
+# Target: Claude Sonnet 4.5 (Implementation Agent)
+# Author: James Stephenson + Claude Opus 4.5 (Design Collaboration)
+# ============================================================================
+# 
+# This specification defines the unified "Play View" system for CardShark,
+# encompassing exploration, travel, and tactical combat within a single
+# spatial interface. The design philosophy prioritizes:
+#
+#   1. Spatial storytelling - the map IS the game state
+#   2. Strict separation of generative (LLM) and programmatic (deterministic) systems
+#   3. Emergent gameplay through simple, composable rules
+#   4. Visual clarity through consistent card-based entity representation
+#
+# ============================================================================
+
+metadata:
+  spec_version: "0.1.0"
+  last_updated: "2025-01-25"
+  status: "active_development"
+  renderer: "pixi.js"
+  framework: "react_typescript"
+
+# ============================================================================
+# SECTION 1: MAP SYSTEM
+# ============================================================================
+# The map is a 2D grid overlaid on a background image. The background provides
+# aesthetic context; the grid provides tactical structure. Maps exist at two
+# conceptual levels (world/local) but use the same rendering system.
+
+map_system:
+  description: |
+    Maps are the primary play surface. A map consists of a background image
+    (optional but recommended) with a logical grid overlay. Tiles are the
+    atomic unit of position for all entities (player, NPCs, objects).
+
+  grid:
+    structure:
+      type: "rectangular"
+      origin: "top_left"
+      coordinate_system: "x_y_zero_indexed"
+      
+    tile:
+      properties:
+        - name: "coordinates"
+          type: "{ x: number, y: number }"
+          description: "Grid position, 0-indexed from top-left"
+          
+        - name: "traversable"
+          type: "boolean"
+          description: "Whether entities can occupy this tile"
+          default: true
+          
+        - name: "is_exit"
+          type: "boolean"
+          description: "Whether this tile transitions to another map"
+          default: false
+          
+        - name: "exit_target"
+          type: "{ map_id: string, spawn_tile: coordinates } | null"
+          description: "Destination when exit is used"
+          
+        - name: "terrain_type"
+          type: "TerrainType"
+          description: "Visual/mechanical terrain classification"
+          default: "normal"
+          
+      terrain_types:
+        - id: "normal"
+          movement_cost: 1
+          description: "Standard traversable terrain"
+          
+        - id: "difficult"
+          movement_cost: 2
+          description: "Slows movement (future implementation)"
+          status: "TBD"
+          
+        - id: "impassable"
+          movement_cost: null
+          description: "Cannot be entered"
+          
+        - id: "hazard"
+          movement_cost: 1
+          description: "Causes effect on entry (future implementation)"
+          status: "TBD"
+
+  background:
+    description: |
+      The background image provides visual context for the map. The grid
+      overlays this image. If no background is provided, tiles render
+      with a minimal dark aesthetic.
+      
+    properties:
+      - name: "image_url"
+        type: "string | null"
+        description: "URL/path to background image asset"
+        
+      - name: "grid_alignment"
+        type: "{ offset_x: number, offset_y: number, tile_width: number, tile_height: number }"
+        description: "How the logical grid maps to the background image pixels"
+
+  exit_generation:
+    description: |
+      Exits are automatically derived from world map topology. Creators do not
+      manually wire connections between rooms. Instead, the system checks
+      adjacent tiles in the world grid and generates corresponding exits
+      on the local map edges.
+      
+    derivation_logic: |
+      For each room at world_position (x, y):
+        - Check North: if room exists at (x, y-1) → generate North exit
+        - Check South: if room exists at (x, y+1) → generate South exit  
+        - Check East:  if room exists at (x+1, y) → generate East exit
+        - Check West:  if room exists at (x-1, y) → generate West exit
+        
+    benefits:
+      - "Zero creator overhead - placing rooms creates traversability"
+      - "No broken connections - bidirectional travel is automatic"
+      - "Backtracking just works - exit South from A means B has exit North to A"
+      - "World topology IS the connection graph"
+      
+    exit_placement:
+      strategy: "fixed_edge_position"
+      description: |
+        Each cardinal direction has a fixed exit tile position on the local map.
+        This is predictable and simple, even if it doesn't perfectly align
+        with background image doorways.
+        
+      positions:
+        north:
+          tile: "center_of_top_edge"
+          calculation: "{ x: floor(grid_width / 2), y: 0 }"
+          
+        south:
+          tile: "center_of_bottom_edge"
+          calculation: "{ x: floor(grid_width / 2), y: grid_height - 1 }"
+          
+        east:
+          tile: "center_of_right_edge"
+          calculation: "{ x: grid_width - 1, y: floor(grid_height / 2) }"
+          
+        west:
+          tile: "center_of_left_edge"
+          calculation: "{ x: 0, y: floor(grid_height / 2) }"
+          
+    exit_tile_properties:
+      is_exit: true
+      traversable: true
+      icon: "directional_arrow_or_door"
+      
+      exit_target:
+        description: "Automatically set based on adjacent world tile"
+        structure:
+          map_id: "id of room at adjacent world position"
+          spawn_tile: "opposite edge entry point"
+          
+      spawn_mapping:
+        description: |
+          When player uses an exit, they spawn at the opposite edge of
+          the destination room.
+        mappings:
+          exit_north: "spawn_at_south_edge_of_destination"
+          exit_south: "spawn_at_north_edge_of_destination"
+          exit_east: "spawn_at_west_edge_of_destination"
+          exit_west: "spawn_at_east_edge_of_destination"
+          
+    visualization:
+      exploration_mode:
+        - "Exit tiles display directional icon (arrow, door, stairs)"
+        - "Hover shows destination room name"
+        - "Click to travel (triggers movement to exit tile, then transition)"
+        
+      combat_mode:
+        - "Exit tiles still visible but labeled as 'Flee' opportunity"
+        - "Must be adjacent to exit tile to attempt flee"
+        - "Exiting during combat triggers flee resolution"
+        
+    edge_cases:
+      no_exits:
+        condition: "Room has no adjacent rooms in world grid"
+        behavior: "No exit tiles generated. Room is isolated/terminal."
+        note: "Creator should avoid this unless intentional (prison cell, etc.)"
+        
+      world_edge:
+        condition: "Room is at edge of world grid"
+        behavior: "No exit generated for directions beyond world bounds"
+        
+    future_considerations:
+      - "Diagonal exits (NE, SE, SW, NW) if diagonal adjacency is added"
+      - "Multiple exits per edge for larger local maps"
+      - "Creator override to disable specific exits (locked doors, etc.)"
+      - "Exit requirements (key items, quest flags) - future gating system"
+
+  map_hierarchy:
+    description: |
+      Maps can be conceptually "world" level (outdoor, regional) or "local"
+      level (interior, detailed). This is primarily a content/design distinction;
+      the technical implementation is identical. Exits are auto-generated from
+      world topology.
+      
+    levels:
+      - id: "world"
+        typical_use: "Outdoor areas, regions, overworld travel"
+        grid_size: "variable, typically larger (10x10+)"
+        
+      - id: "local"
+        typical_use: "Interiors, dungeons, detailed locations"
+        grid_size: "variable, typically smaller (4x6 to 8x8)"
+
+  rendering:
+    layers:
+      - order: 0
+        name: "background"
+        content: "Background image (if present) or solid color"
+        
+      - order: 1
+        name: "grid_lines"
+        content: "Tile boundaries, subtle by default"
+        opacity: 0.3
+        color: "#ffffff"
+        behavior: "Consider hiding entirely when background present, show on hover"
+        
+      - order: 2
+        name: "tile_highlights"
+        content: "State-based tile overlays (threat zones, selection, valid moves)"
+        
+      - order: 3
+        name: "entity_shadows"
+        content: "Drop shadows for cards, cast onto map surface"
+        
+      - order: 4
+        name: "entity_cards"
+        content: "Character/NPC cards positioned on tiles"
+        
+      - order: 5
+        name: "ui_overlay"
+        content: "Exit icons, interaction prompts, floating UI"
+
+# ============================================================================
+# SECTION 1B: CREATOR VS PLAYER VIEWS
+# ============================================================================
+# The world map and local map serve different users with different needs.
+
+view_paradigm:
+  description: |
+    Creators and Players interact with the map system differently. Creators
+    author the world structure; Players navigate individual locations.
+
+  creator_view:
+    name: "World Build View"
+    access: "Creator/Author only"
+    purpose: "World authoring and configuration"
+    
+    displays:
+      - "Full world grid with all rooms visible"
+      - "Room cards showing name, description preview, NPC count"
+      - "Empty tile placeholders with add (+) buttons"
+      
+    capabilities:
+      - "Create/delete rooms at any grid position"
+      - "Edit room properties (name, description, intro text)"
+      - "Assign background image to room (gallery or upload)"
+      - "Assign NPCs to room (friendly, neutral, hostile)"
+      - "Reposition rooms via move tool"
+      
+    does_not_control:
+      - "Tile-level layout within rooms (grid is uniform)"
+      - "Exact NPC positioning within room (auto-placed)"
+      - "Exit connections (auto-derived from adjacency)"
+      - "Tactical terrain features (future consideration)"
+      
+    design_philosophy: |
+      The creator is a storyteller, not a level designer. They define
+      WHAT exists and WHO is there. The system handles HOW it renders
+      tactically.
+
+  player_view:
+    name: "Play View / Local Map"
+    access: "Player during gameplay"
+    purpose: "Navigation, exploration, and combat"
+    
+    displays:
+      - "Current room only as tactical grid"
+      - "Background image (if assigned by creator)"
+      - "Entity cards for player, companion, and visible NPCs"
+      - "Exit tiles derived from world adjacency"
+      - "Threat zones around hostile NPCs"
+      
+    capabilities:
+      - "Move between tiles within current room"
+      - "Interact with NPCs (conversation or combat)"
+      - "Use exits to travel to adjacent rooms"
+      - "Engage in tactical combat"
+      
+    does_not_see:
+      - "World map overview (unless fast travel unlocked, future)"
+      - "Rooms not currently occupied"
+      - "NPCs in non-adjacent rooms"
+      
+    design_philosophy: |
+      The player experiences the world one room at a time. Geography
+      is discovered through exploration, not revealed upfront. The
+      local map IS their entire tactical awareness.
+
+  fast_travel:
+    status: "future_consideration"
+    description: |
+      Currently, fast travel is disabled in favor of room-to-room navigation.
+      A future unlock could reveal a simplified world map for quick travel
+      to previously visited locations.
+    
+    potential_implementation:
+      - "Unlock condition: visit X locations, or acquire map item"
+      - "Shows visited rooms only (fog of war on unvisited)"
+      - "Click to travel instantly (skips intermediate rooms)"
+      - "May be disabled in certain contexts (combat, story beats)"
+
+# ============================================================================
+# SECTION 2: ENTITY CARD SYSTEM
+# ============================================================================
+# All characters (player, companions, NPCs, enemies) are represented as cards
+# on the map. Cards communicate identity, allegiance, and state through
+# consistent visual language.
+
+entity_cards:
+  description: |
+    Entity cards are the visual representation of all characters on the map.
+    They "hover" above the map surface (communicated via drop shadow) and
+    display portrait, allegiance, and contextual state information.
+
+  card_structure:
+    base:
+      - name: "portrait"
+        type: "image"
+        description: "Character portrait image, standard card aspect ratio"
+        
+      - name: "frame"
+        type: "styled_border"
+        description: "Border color/style indicates allegiance"
+        
+      - name: "level_badge"
+        type: "circular_badge"
+        position: "top_left"
+        description: "Character level, colored by allegiance"
+        
+      - name: "status_badge"
+        type: "icon_badge"
+        position: "bottom_right"
+        description: "Contextual status indicator (heart, skull, lock, etc.)"
+
+  allegiance_types:
+    description: |
+      Allegiance determines card frame color, badge color, and behavioral
+      rules for combat triggers and interactions.
+      
+    types:
+      - id: "player"
+        frame_color: "#FFD700"  # Gold
+        badge_color: "#FFD700"
+        description: "The player character"
+        combat_trigger: "never_self_trigger"
+        
+      - id: "bonded_ally"
+        frame_color: "#3B82F6"  # Blue
+        badge_color: "#3B82F6"
+        status_badge: "heart"
+        description: "Currently bound companion, follows player"
+        combat_trigger: "never_triggers_with_player"
+        
+      - id: "friendly"
+        frame_color: "#3B82F6"  # Blue (same as bonded, no heart)
+        badge_color: "#3B82F6"
+        status_badge: null
+        description: "Positive affinity NPC, not currently bonded"
+        combat_trigger: "never_triggers_with_player"
+        
+      - id: "neutral"
+        frame_color: "#6B7280"  # Gray
+        badge_color: "#6B7280"
+        status_badge: null
+        description: "Unknown or indifferent NPC"
+        combat_trigger: "no_trigger_unless_attacked"
+        
+      - id: "hostile"
+        frame_color: "#EF4444"  # Red
+        badge_color: "#EF4444"
+        status_badge: "skull"
+        description: "Enemy, will attack on proximity"
+        combat_trigger: "triggers_on_adjacency"
+        
+      - id: "captured"
+        frame_color: "#3B82F6"  # Blue (was ally)
+        badge_color: "#6B7280"  # Gray (incapacitated)
+        status_badge: "lock"
+        description: "Downed companion awaiting rescue"
+        combat_trigger: "none_incapacitated"
+
+  card_sizing:
+    description: |
+      Card size communicates importance/focus. Player card is largest,
+      NPCs in same tile slightly smaller, NPCs in adjacent tiles smaller still.
+      
+    sizes:
+      - context: "player_card"
+        scale: 1.0
+        description: "Full size, most prominent"
+        
+      - context: "same_tile_npc"
+        scale: 0.85
+        description: "Slightly smaller, offset to show overlap"
+        
+      - context: "adjacent_tile_npc"
+        scale: 0.75
+        description: "Smaller, lower visual priority"
+        
+      - context: "distant_npc"
+        scale: 0.7
+        opacity: 0.8
+        description: "NPCs beyond adjacent tiles (if rendered at all)"
+
+  visibility_rules:
+    description: |
+      To optimize loading and maintain visual clarity, not all NPCs need
+      to be rendered at all times.
+      
+    rules:
+      - "Player card: always visible"
+      - "Bonded ally: always visible"
+      - "NPCs in same tile: always visible"
+      - "NPCs in adjacent tiles: always visible"
+      - "NPCs 2+ tiles away: optional, consider fade or hide"
+      - "Captured companions: always visible (shows rescue objective)"
+
+  drop_shadows:
+    description: |
+      Cards cast soft drop shadows onto the map surface below them,
+      creating the illusion of hovering game pieces on a board.
+      
+    properties:
+      offset_x: 4
+      offset_y: 8
+      blur: 12
+      color: "rgba(0, 0, 0, 0.5)"
+      
+    note: |
+      Shadow should be more pronounced for player card, subtler for
+      distant NPCs. Consider shadow direction consistency (light source top-left).
+
+# ============================================================================
+# SECTION 3: GAME MODES
+# ============================================================================
+# The play view operates in two modes: Exploration and Combat. Both use the
+# same map and card systems but differ in interaction rules and UI state.
+
+game_modes:
+  description: |
+    The play view has two modes that share spatial state but differ in
+    available actions and UI configuration. Mode transitions are triggered
+    by specific game events.
+
+  modes:
+    exploration:
+      id: "exploration"
+      description: |
+        Default mode. Player can move freely, interact with NPCs via
+        conversation, and observe the environment. Generative AI handles
+        NPC dialogue and narration.
+        
+      ui_configuration:
+        map_panel: "visible"
+        chat_panel: "visible"
+        combat_log: "hidden"
+        action_bar: "hidden"
+        
+      interaction_model:
+        click_tile: "move_to_tile_if_valid"
+        click_npc_friendly: "open_conversation"
+        click_npc_neutral: "open_conversation"
+        click_npc_hostile: "show_warning_or_trigger_combat"
+        click_self: "open_self_menu"
+        click_exit: "transition_to_target_map"
+        
+      movement:
+        type: "free"
+        description: "Click any traversable tile to path and move there"
+        pathfinding: "auto"
+        animation: "tween_along_path"
+        
+      generation_lock:
+        description: |
+          Map interaction is disabled while generative content is streaming.
+          Player must wait for NPC to finish speaking before moving.
+          This prevents state conflicts and respects conversational flow.
+        behavior: "disable_map_clicks_during_generation"
+        
+    combat:
+      id: "combat"
+      description: |
+        Tactical turn-based mode. Movement costs AP, actions are discrete,
+        and all behavior is deterministic/programmatic. No generative AI
+        during combat.
+        
+      ui_configuration:
+        map_panel: "visible"
+        chat_panel: "hidden"
+        combat_log: "visible"
+        action_bar: "context_sensitive"  # appears on entity click
+        
+      interaction_model:
+        click_enemy: "show_actions_attack_examine"
+        click_ally: "show_actions_defend_support"
+        click_tile: "show_move_if_in_range"
+        click_self: "show_actions_hunker_overwatch_items"
+        click_exit: "show_flee_action_if_adjacent"
+        
+      movement:
+        type: "ap_constrained"
+        cost_per_tile: 1
+        description: "Each tile moved costs 1 AP"
+        
+      turn_structure:
+        order_determination: "random_per_round"
+        description: |
+          At the start of each round, turn order is randomized among all
+          combatants. Each entity gets exactly one turn per round.
+          Future: initiative stats could influence order.
+        round_phases:
+          - "determine_turn_order"
+          - "execute_turns_sequentially"
+          - "check_combat_end_conditions"
+          - "next_round_or_resolve"
+
+  mode_transitions:
+    exploration_to_combat:
+      triggers:
+        - trigger: "player_enters_hostile_adjacency"
+          description: |
+            Player moves to a tile adjacent to a hostile NPC.
+            Combat initiates immediately, no confirmation prompt.
+            
+        - trigger: "hostile_enters_player_adjacency"
+          description: |
+            During exploration, if enemy movement is implemented,
+            an enemy moving adjacent to player triggers combat.
+          status: "future_consideration"
+          
+        - trigger: "narrative_event"
+          description: |
+            Story/scripted event initiates combat.
+          status: "TBD"
+          
+      transition_behavior:
+        - "Lock all entity positions at current tiles"
+        - "Switch UI from chat_panel to combat_log"
+        - "Calculate initial turn order"
+        - "Display combat initiation feedback (visual/audio)"
+        - "Begin first round"
+        
+    combat_to_exploration:
+      triggers:
+        - trigger: "victory"
+          condition: "all_hostile_npcs_eliminated"
+          
+        - trigger: "flee_success"
+          condition: "player_exits_map_during_combat"
+          
+        - trigger: "defeat"
+          condition: "player_hp_reaches_zero"
+          
+      transition_behavior:
+        victory:
+          - "Remove defeated enemy cards from map"
+          - "Update world state (enemies permanently gone)"
+          - "Switch UI back to chat_panel"
+          - "Resume exploration mode"
+          - "Optional: trigger loot/narrative event"
+          
+        flee:
+          - "Transition player to exit target map"
+          - "Enemies persist in vacated map"
+          - "If bonded companion was downed, mark as captured"
+          - "Resume exploration in new location"
+          
+        defeat:
+          - "Respawn player at world origin (0,0) or nearest camp"
+          - "Respawn bonded companion with player (if not captured)"
+          - "Both respawn at low HP"
+          - "If combat was at spawn location, reset enemies to allow escape"
+
+# ============================================================================
+# SECTION 4: COMBAT SYSTEM
+# ============================================================================
+# Combat is fully deterministic/programmatic. No LLM generation during combat.
+# All outcomes are calculated from stats and dice rolls with clear rules.
+
+combat_system:
+  design_philosophy: |
+    Combat exists in strict separation from the generative RP system.
+    What generative AI does well (nuanced dialogue, emergent narrative),
+    programmatic systems do poorly, and vice versa. Combat demands
+    consistency, balance, and predictable outcomes. The LLM is not
+    involved in combat resolution.
+
+  combatants:
+    stats:
+      implemented:
+        - name: "hp"
+          type: "integer"
+          description: "Hit points. Zero = incapacitated."
+          display: "hp_bar_under_card"
+          
+        - name: "max_hp"
+          type: "integer"
+          description: "Maximum hit points"
+          
+        - name: "attack"
+          type: "integer"
+          description: "Base attack value (ATK)"
+          display: "badge_on_card"
+          
+        - name: "defense"
+          type: "integer"
+          description: "Base defense value (DEF)"
+          display: "badge_on_card"
+          
+        - name: "level"
+          type: "integer"
+          description: "Character level, affects stat scaling"
+          display: "level_badge_top_left"
+          
+      future:
+        - name: "initiative"
+          description: "Affects turn order calculation"
+          status: "TBD"
+          
+        - name: "range"
+          description: "Attack range in tiles (1 = melee)"
+          status: "scaffolded_not_toggled"
+          
+        - name: "movement_ap"
+          description: "AP available for movement per turn"
+          status: "TBD_currently_assumed_sufficient"
+
+  turn_structure:
+    ap_system:
+      description: |
+        Each combatant has Action Points to spend on their turn.
+        For v0.1, assume sufficient AP for one move + one action.
+        
+      movement_cost: 1  # per tile
+      action_cost: 1    # per action (attack, defend, etc.)
+      
+    turn_flow:
+      - step: "turn_start"
+        description: "Active combatant highlighted, AP refreshed"
+        
+      - step: "player_input_or_ai_decision"
+        description: "Player clicks to act, or NPC AI determines action"
+        
+      - step: "action_resolution"
+        description: "Calculate and apply action effects"
+        
+      - step: "combat_log_update"
+        description: "Record action and outcome in combat log"
+        
+      - step: "check_incapacitation"
+        description: "If any combatant at 0 HP, handle accordingly"
+        
+      - step: "turn_end"
+        description: "Pass to next combatant in turn order"
+
+  actions:
+    implemented:
+      - id: "move"
+        target: "tile"
+        cost: "1_ap_per_tile"
+        description: "Move to target tile if traversable and in range"
+        validation:
+          - "Target tile must be traversable"
+          - "Path must exist"
+          - "Sufficient AP for distance"
+          
+      - id: "attack"
+        target: "enemy_combatant"
+        cost: "1_ap"
+        range: 1  # melee, adjacent tiles only for v0.1
+        description: "Deal damage to target"
+        resolution: |
+          damage = attacker.attack - defender.defense + roll_modifier
+          minimum_damage = 1
+          defender.hp -= max(damage, minimum_damage)
+        combat_log_format: "{{attacker}} hit {{defender}} for {{damage}} hp!"
+        
+      - id: "defend"
+        target: "self_or_ally"
+        cost: "1_ap"
+        description: "Increase defense until next turn"
+        resolution: |
+          target.defense_modifier += defense_bonus
+          modifier_expires = next_turn_start
+        status: "basic_implementation"
+        
+    scaffolded:
+      - id: "overwatch"
+        target: "self"
+        cost: "1_ap"
+        description: "Attack first enemy that enters adjacent tile"
+        status: "ui_exists_logic_TBD"
+        
+      - id: "flee"
+        target: "exit_tile"
+        cost: "all_remaining_ap"
+        description: "Attempt to escape combat via exit"
+        validation:
+          - "Must be adjacent to exit tile"
+        resolution: |
+          success = roll_escape_check()  # or auto-succeed for v0.1
+          if success: trigger combat_end_flee
+        
+    future:
+      - id: "ranged_attack"
+        description: "Attack from distance based on range stat"
+        status: "scaffolded_needs_class_toggle"
+        
+      - id: "use_item"
+        description: "Use consumable from inventory"
+        status: "TBD_no_inventory_yet"
+        
+      - id: "use_skill"
+        description: "Activate character-specific ability"
+        status: "TBD"
+        
+      - id: "summon_affinity"
+        description: "Call in allied NPC via affinity card"
+        status: "affinity_exists_summon_TBD"
+
+  threat_zones:
+    description: |
+      Hostile NPCs project a "threat zone" - tiles that will trigger combat
+      if the player enters. Visualized during exploration to enable tactical
+      decision-making about movement.
+      
+    properties:
+      default_range: 1  # adjacent tiles
+      visualization:
+        color: "rgba(239, 68, 68, 0.4)"  # red, semi-transparent
+        render_layer: "tile_highlights"
+        visibility: "always_during_exploration"
+        
+    behavior: |
+      Threat zones are calculated from hostile NPC positions.
+      Player entering any threat zone tile triggers combat with
+      all hostiles whose zones include that tile.
+      
+    future_considerations:
+      - "Variable threat range per enemy type"
+      - "Stealth mechanics to reduce/avoid detection"
+      - "Line of sight blocking"
+
+  npc_ai:
+    hostile:
+      description: |
+        During combat, hostile NPCs take actions on their turn
+        according to simple behavioral rules.
+        
+      behavior_priority:
+        - "If adjacent to enemy: attack"
+        - "If not adjacent: move toward nearest enemy"
+        - "If no path: defend or skip"
+        
+      future: "More sophisticated AI, ability usage, tactical positioning"
+      
+    neutral:
+      description: |
+        Neutral NPCs present during combat take self-preservation actions.
+        They do not attack unless attacked first.
+        
+      behavior_priority:
+        - "If not attacked: move toward nearest exit"
+        - "If attacked: fight back OR flee (personality dependent)"
+        - "If exit reached: leave combat (removed from encounter)"
+        
+      status: "new_concept_needs_implementation"
+      
+      design_notes: |
+        Neutral NPCs add environmental chaos to combat. The hooded
+        figure in the tavern might just book it for the door, or
+        might get caught in an AOE and become hostile. Emergent.
+
+  combat_log:
+    description: |
+      During combat, the chat panel is replaced by a combat log showing
+      turn order and action outcomes.
+      
+    components:
+      turn_order_display:
+        position: "top_of_log_panel"
+        content: "Portrait thumbnails in turn order, active turn highlighted"
+        
+      action_feed:
+        position: "scrolling_list"
+        content: "Timestamped entries of actions and outcomes"
+        format_examples:
+          - "Combat Turn #1"
+          - "BigStinky Orc hit Mirabelle for 3 hp!"
+          - "Mirabelle hit BigStinky Orc for 7 hp! CRUSHING!"
+          - "Jake attempts to flee..."
+          
+    flavor_text:
+      description: |
+        Combat log entries may include randomized flavor text for
+        impact/style, but this is NOT LLM-generated. It's selected
+        from predefined templates based on damage thresholds, crits, etc.
+        
+      examples:
+        high_damage: ["CRUSHING!", "DEVASTATING!", "BRUTAL!"]
+        low_damage: ["Glancing blow.", "Barely scratched."]
+        miss: ["Whiffed!", "Dodged!", "Wide!"]
+
+# ============================================================================
+# SECTION 5: COMPANION SYSTEM
+# ============================================================================
+# The player can have one bonded companion who accompanies them. Additional
+# allies can be summoned temporarily via the affinity system.
+
+companion_system:
+  bonded_companion:
+    description: |
+      The bonded companion is the player's primary ally. They follow the
+      player during exploration, fight alongside in combat, and are the
+      current RP conversation partner.
+      
+    limits:
+      max_bonded: 1
+      description: "Only one companion can be bonded at a time"
+      
+    binding:
+      requirements:
+        - "NPC must have positive affinity with player"
+        - "NPC must not be currently bonded to another (N/A for single-player)"
+        - "Player must explicitly choose to bond via UI"
+        
+      unbinding:
+        triggers:
+          - "Player explicitly unbinds"
+          - "Player chooses different companion after rescue event"
+          - "Companion affinity drops below threshold"
+          - "Narrative event forces separation"
+          
+    behavior:
+      exploration:
+        - "Follows player automatically (no separate movement)"
+        - "Positioned on same tile or adjacent tile to player"
+        - "Available for conversation (bonded ally = current RP partner)"
+        
+      combat:
+        - "Separate combatant with own turn"
+        - "Player can direct actions (or AI auto-acts, TBD)"
+        - "Cannot accidentally attack bonded companion"
+
+  capture_and_rescue:
+    description: |
+      If the bonded companion is incapacitated during combat and the player
+      flees, the companion becomes "captured" - they remain on the map
+      where they fell, awaiting rescue.
+      
+    capture_trigger:
+      - "Bonded companion HP reaches 0"
+      - "Player flees combat before companion is revived/combat ends"
+      
+    captured_state:
+      visualization:
+        frame_color: "#3B82F6"  # still blue (ally)
+        badge_color: "#6B7280"  # gray (incapacitated)
+        status_badge: "lock"
+        position: "tile_where_incapacitated"
+        
+      world_state:
+        - "Companion removed from player's party"
+        - "Companion card persists on map at capture location"
+        - "Companion likely within threat zone of captor enemy"
+        
+    rescue:
+      requirements:
+        - "Player returns to capture location"
+        - "Player defeats enemies in that location"
+        - "Companion card is still present"
+        
+      resolution:
+        - "Combat victory triggers rescue"
+        - "Companion revived at low HP"
+        - "UI prompt: choose to rebond or bond different ally"
+        
+      companion_choice:
+        description: |
+          After rescue, if the player has built affinity with the rescuing
+          ally (if any), they can choose who to continue with.
+          
+        ui: "modal_dialog"
+        prompt: "Choose who to continue adventuring with"
+        options:
+          - "Original bonded companion (just rescued)"
+          - "Rescuing ally (if applicable)"
+          - "Neither (travel alone)"
+
+  companion_death:
+    description: |
+      If companion is incapacitated but player WINS combat (doesn't flee),
+      the companion is revived automatically.
+      
+    resolution:
+      - "Combat ends in victory"
+      - "Companion revived at low HP (e.g., 25% max_hp)"
+      - "No capture state, companion remains bonded"
+      - "Continue exploration normally"
+
+# ============================================================================
+# SECTION 6: AFFINITY SYSTEM
+# ============================================================================
+# Affinity represents relationship quality between player and NPCs. It is
+# driven by sentiment analysis of conversation content.
+
+affinity_system:
+  description: |
+    Affinity is a numeric representation of how an NPC feels about the player.
+    It is calculated via sentiment analysis of chat interactions - not through
+    explicit "gift giving" or gamey actions. You build relationships by
+    actually being kind, interesting, or persuasive in conversation.
+    
+  status: "implemented_core_system"
+
+  affinity_scale:
+    range: [-100, 100]
+    thresholds:
+      hostile: { min: -100, max: -50, allegiance: "hostile" }
+      negative: { min: -49, max: -10, allegiance: "neutral" }
+      neutral: { min: -9, max: 9, allegiance: "neutral" }
+      positive: { min: 10, max: 49, allegiance: "friendly" }
+      devoted: { min: 50, max: 100, allegiance: "friendly" }
+      
+  sentiment_analysis:
+    description: |
+      After each conversation exchange, sentiment analysis evaluates
+      the emotional valence of the interaction and adjusts affinity.
+      
+    implementation_notes: |
+      This is an existing system. The spec does not need to define
+      the sentiment analysis algorithm, only its role in the broader
+      affinity mechanics.
+
+  affinity_cards:
+    description: |
+      NPCs with positive affinity can be "called upon" during combat as
+      temporary summons. This represents cashing in goodwill for help.
+      
+    status: "affinity_exists_card_pulls_not_implemented"
+    
+    design_intent:
+      acquisition: "Reaching affinity thresholds unlocks summon cards"
+      usage: "During combat, spend affinity card to summon NPC for limited turns"
+      cost: "May reduce affinity with that NPC (they did you a favor)"
+      limitations: "Summons are temporary, NPCs return to their location after"
+      
+    future_implementation:
+      - "Define affinity threshold for card unlock"
+      - "Define summon duration (turns)"
+      - "Define affinity cost per summon"
+      - "UI for managing/selecting affinity cards"
+
+# ============================================================================
+# SECTION 7: CONTRACTS SYSTEM (FUTURE)
+# ============================================================================
+# Contracts are alternatives to affinity-based companionship. They represent
+# relationships built on obligation rather than mutual regard.
+
+contracts_system:
+  status: "future_design_concept"
+  
+  description: |
+    Not all companions need to like the player. Contracts represent
+    relationships based on obligation, transaction, or coercion rather
+    than affinity. These NPCs help because they must, not because they
+    want to.
+
+  contract_types:
+    mercenary:
+      description: "NPC is paid to assist. No affinity, transactional."
+      mechanics:
+        - "Requires currency/payment"
+        - "Reliable while paid"
+        - "May abandon if payment stops or danger exceeds pay grade"
+        - "No affinity gain/loss from interactions"
+        
+    slavery:
+      description: "NPC is coerced/owned. Obedient but resentful."
+      mechanics:
+        - "Always available regardless of affinity"
+        - "Hidden resentment stat builds over time"
+        - "Risk of sabotage, escape attempt, betrayal"
+        - "Dark path gameplay option"
+        
+    blood_obligation:
+      description: "Family member who dislikes player but bound by duty."
+      mechanics:
+        - "Shows up regardless of personal feelings"
+        - "Dialogue reflects resentment/obligation conflict"
+        - "May perform bare minimum, not go above and beyond"
+        - "Cannot be dismissed easily (family is complicated)"
+        
+    debt:
+      description: "NPC owes the player, helping to repay."
+      mechanics:
+        - "Finite assistance (counting down to debt paid)"
+        - "Reliable until debt cleared"
+        - "May become affinity-based or leave when debt resolved"
+        
+  design_notes: |
+    Contracts add moral complexity and alternative playstyles. A player
+    who struggles with social/affinity building can still acquire help
+    through other means - but those means have their own costs and risks.
+    
+    The slavery option is intentionally dark and should have meaningful
+    negative consequences to avoid trivializing it.
+
+# ============================================================================
+# SECTION 8: UI LAYOUT
+# ============================================================================
+# The play view layout shifts between exploration and combat modes.
+
+ui_layout:
+  description: |
+    The play view consists of a primary map panel and a secondary content
+    panel. The content of the secondary panel changes based on game mode.
+
+  layout_structure:
+    exploration:
+      primary_panel:
+        content: "map_view"
+        position: "center_or_left"
+        width: "60-70%"
+        
+      secondary_panel:
+        content: "chat_interface"
+        position: "right_or_bottom"
+        width: "30-40%"
+        components:
+          - "npc_portrait_and_name"
+          - "conversation_history"
+          - "player_input_field"
+          - "generation_indicator"
+          
+    combat:
+      primary_panel:
+        content: "map_view"
+        position: "center_or_left"
+        width: "60-70%"
+        
+      secondary_panel:
+        content: "combat_log_interface"
+        position: "right_or_bottom"
+        width: "30-40%"
+        components:
+          - "turn_order_portraits"
+          - "current_turn_indicator"
+          - "action_log_feed"
+          
+  context_menus:
+    description: |
+      Instead of a persistent action bar, actions are accessed via
+      context menus triggered by clicking entities or tiles.
+      
+    trigger: "click_on_entity_or_tile"
+    position: "near_click_location"
+    dismiss: "click_elsewhere_or_escape"
+    
+    menu_contents:
+      click_enemy:
+        actions: ["Attack", "Examine"]
+        future: ["Intimidate", "Taunt"]
+        
+      click_ally:
+        actions: ["Defend", "Swap Position"]
+        future: ["Heal", "Command"]
+        
+      click_self:
+        actions: ["Hunker Down", "Overwatch"]
+        future: ["Use Item", "Use Skill"]
+        
+      click_tile:
+        validation: "must_be_in_movement_range"
+        actions: ["Move"]
+        
+      click_exit:
+        validation: "must_be_adjacent"
+        actions: ["Flee"]
+        exploration_mode: ["Travel"]
+
+  tile_highlighting:
+    description: |
+      Tiles highlight to communicate valid actions, danger, and state.
+      
+    highlight_types:
+      player_position:
+        color: "#FFD700"  # gold
+        style: "glowing_border"
+        
+      valid_movement:
+        color: "#3B82F6"  # blue
+        style: "subtle_fill"
+        trigger: "hover_or_move_action_selected"
+        
+      threat_zone:
+        color: "rgba(239, 68, 68, 0.4)"  # red, semi-transparent
+        style: "fill"
+        trigger: "always_visible_in_exploration"
+        
+      attack_range:
+        color: "rgba(239, 68, 68, 0.6)"  # red, more opaque
+        style: "border"
+        trigger: "attack_action_selected"
+        
+      exit_tile:
+        icon: "stairs_or_door_icon"
+        style: "icon_overlay"
+        interaction: "shows_destination_on_hover"
+
+# ============================================================================
+# SECTION 9: WORLD STATE PERSISTENCE
+# ============================================================================
+# The state of the world persists across sessions and reflects player actions.
+
+world_state:
+  description: |
+    World state tracks the persistent condition of maps, NPCs, and
+    player progress. Changes made during play are saved and reflected
+    in subsequent sessions.
+    
+  implementation_note: |
+    The code agent should research existing persistence patterns in
+    the codebase. This section defines WHAT should persist, not HOW.
+
+  persisted_elements:
+    maps:
+      - "Which maps have been visited"
+      - "Background image assignments per map"
+      - "Tile configurations (exits, terrain)"
+      
+    npcs:
+      - "NPC positions on maps"
+      - "NPC alive/dead/captured state"
+      - "NPC affinity values"
+      - "NPC allegiance states (may change based on actions)"
+      
+    player:
+      - "Current map and tile position"
+      - "HP and stats"
+      - "Bonded companion reference"
+      - "Inventory (future)"
+      
+    combat_outcomes:
+      - "Defeated enemies removed from world"
+      - "Captured companions flagged and positioned"
+      - "Fled encounters leave enemies in place"
+
+  spawn_handling:
+    default_spawn: "coordinates (0, 0) on world map"
+    defeat_respawn: "default_spawn or nearest camp (future)"
+    
+    edge_case:
+      description: |
+        If player is defeated at spawn location (0,0), enemies reset
+        on respawn to prevent soft-lock. Player can attempt to flee
+        before triggering combat again.
+
+# ============================================================================
+# SECTION 10: IMPLEMENTATION PRIORITIES
+# ============================================================================
+# Guidance for the implementing agent on what to build first.
+
+implementation_priorities:
+  description: |
+    The following prioritization guides implementation order. Phase 1
+    represents the minimum viable play view. Later phases add depth.
+
+  phase_1_mvp:
+    goal: "Functional exploration/combat loop with visual upgrade"
+    tasks:
+      - task: "Background image support for maps"
+        description: "Allow maps to specify a background image that renders behind the grid"
+        
+      - task: "Refined grid rendering"
+        description: "Subtle grid lines (reduced opacity), hidden when not needed"
+        
+      - task: "Card drop shadows"
+        description: "Cards cast shadows onto map surface"
+        
+      - task: "Allegiance-based card styling"
+        description: "Frame colors, badge colors, status icons per allegiance type"
+        
+      - task: "Threat zone visualization"
+        description: "Red overlay on tiles adjacent to hostile NPCs"
+        
+      - task: "Auto-generated exits from world topology"
+        description: |
+          Derive exit tiles from adjacent rooms in world grid.
+          North/South/East/West exits placed at fixed edge positions.
+          No manual connection wiring required.
+        
+      - task: "Exit visualization and interaction"
+        description: "Exit tiles show directional icons, hover shows destination, click to travel"
+        
+      - task: "Spawn positioning on room entry"
+        description: "Player spawns at opposite edge when entering via exit (e.g., exit North → spawn South)"
+        
+      - task: "Adjacency-triggered combat"
+        description: "Combat initiates when player enters hostile threat zone"
+        
+      - task: "Context menu actions"
+        description: "Click entity/tile to see available actions, no persistent action bar"
+        
+      - task: "Combat log panel"
+        description: "Replace chat panel during combat with turn order and action feed"
+        
+      - task: "Combat resolution states"
+        description: "Victory, flee, and defeat outcomes with appropriate state changes"
+
+  phase_2_companion_depth:
+    goal: "Full companion capture/rescue loop"
+    tasks:
+      - task: "Captured companion state"
+        description: "Lock icon, persisted position, rescue requirements"
+        
+      - task: "Companion choice modal"
+        description: "UI for choosing bonded companion after rescue events"
+        
+      - task: "Companion auto-revive on victory"
+        description: "Downed companion restored at low HP if player wins"
+
+  phase_3_npc_behavior:
+    goal: "Neutral NPCs and enemy variety"
+    tasks:
+      - task: "Neutral NPC combat AI"
+        description: "Self-preservation behavior, flee toward exits"
+        
+      - task: "Neutral reaction to AOE/attacks"
+        description: "Neutrals become hostile if attacked"
+        
+      - task: "Variable threat ranges"
+        description: "Different enemy types have different detection ranges"
+
+  phase_4_future:
+    goal: "Expanded systems"
+    tasks:
+      - "Ranged attack implementation"
+      - "Affinity card summons"
+      - "Skills and items"
+      - "Inventory system"
+      - "Contract types"
+      - "Terrain effects"
+      - "Line of sight"
+
+# ============================================================================
+# END OF SPECIFICATION
+# ============================================================================

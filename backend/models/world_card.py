@@ -37,6 +37,7 @@ class WorldData(BaseModel):
     rooms: List[WorldRoomPlacement] = Field(default_factory=list, description="Room placements on the grid")
     starting_position: Position = Field(default_factory=lambda: Position(x=0, y=0), description="Where player starts")
     player_position: Position = Field(default_factory=lambda: Position(x=0, y=0), description="Current player position")
+    map_image: Optional[str] = Field(None, description="Custom map backdrop image path (relative to world assets)")
     world_state: Optional[WorldState] = Field(None, description="Full world state (optional, computed)")
 
 

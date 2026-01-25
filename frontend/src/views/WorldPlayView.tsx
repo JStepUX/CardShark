@@ -13,7 +13,7 @@ import ChatView from '../components/chat/ChatView';
 import { SidePanel } from '../components/SidePanel';
 import { JournalModal } from '../components/SidePanel/JournalModal';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
-import { MapModal } from '../components/world/MapModal';
+import { PixiMapModal } from '../components/world/pixi/PixiMapModal';
 import { CombatModal } from '../components/combat';
 import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
@@ -1339,8 +1339,8 @@ Style: Write in second person, present tense. Convey the weight of defeat, menti
       />
 
       {/* Map Modal */}
-      {showMap && (
-        <MapModal
+      {showMap && worldState && currentRoom && (
+        <PixiMapModal
           worldData={worldState}
           currentRoomId={currentRoom.id}
           onNavigate={handleNavigate}

@@ -32,6 +32,7 @@ export interface WorldData {
   rooms: WorldRoomPlacement[]; // Room placements on the grid
   starting_position: Position; // Where player starts
   player_position: Position; // Current player position
+  map_image?: string; // Custom map backdrop image path
   // Full world state (includes rooms array with full Room objects)
   world_state?: WorldState;
 }
