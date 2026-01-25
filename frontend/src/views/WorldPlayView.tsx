@@ -324,7 +324,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         }
       });
     }
-  }, [messages.length, currentEmotion, activeNpcId, activeNpcName, npcRelationships, addMessage]);
+  }, [messages.length, currentEmotion, activeNpcId, activeNpcName, addMessage, timeState.currentDay]);
 
   // Advance time on each new message
   useEffect(() => {
@@ -390,6 +390,27 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       // Gather all hostile NPCs in the room for combat
       const hostileNpcs = roomNpcs.filter((n: CombatDisplayNPC) => n.hostile);
 
+      // Include bound NPC as ally if one is active
+      const allies: Array<{
+        id: string;
+        name: string;
+        level: number;
+        imagePath: string | null;
+      }> = [];
+
+      if (activeNpcId && activeNpcName) {
+        // Find the bound NPC in roomNpcs
+        const boundNpc = roomNpcs.find((n: CombatDisplayNPC) => n.id === activeNpcId);
+        if (boundNpc && !boundNpc.hostile) {
+          allies.push({
+            id: boundNpc.id,
+            name: boundNpc.name,
+            level: 5, // Use same level as player for now (TODO: get from NPC data when implemented)
+            imagePath: boundNpc.imageUrl || null,
+          });
+        }
+      }
+
       // Build combat init data
       const initData: CombatInitData = {
         playerData: {
@@ -397,7 +418,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           name: currentUser?.name || 'Player',
           level: 5, // TODO: Get from player state when implemented
           imagePath: currentUser?.filename
-            ? `/users/${currentUser.filename}`
+            ? `/api/user-image/${encodeURIComponent(currentUser.filename)}`
             : null, // Generic user icon will be used as fallback in combat UI
         },
         enemies: hostileNpcs.map((enemy: CombatDisplayNPC) => ({
@@ -406,6 +427,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           level: enemy.monster_level || 1,
           imagePath: enemy.imageUrl || null,
         })),
+        allies: allies.length > 0 ? allies : undefined, // Only include if there are allies
         roomImagePath: currentRoom.image_path
           ? `/api/world-assets/${worldId}/${currentRoom.image_path.split('/').pop()}`
           : null,

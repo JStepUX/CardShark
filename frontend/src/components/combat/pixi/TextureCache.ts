@@ -50,6 +50,7 @@ class TextureCacheManager {
         }
 
         // Start new load
+        // Note: Paths should already be URL-encoded when passed to this function
         const loadPromise = PIXI.Assets.load<PIXI.Texture>(path)
             .then(texture => {
                 this.cache.set(path, texture);
