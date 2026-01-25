@@ -51,7 +51,15 @@ export function useScrollToBottom() {
   };
 }
 
-// Add an event listener wrapper for global scrolling 
+/**
+ * Dispatches a global event to trigger scroll-to-bottom in any listening component
+ * Use this when updating message content during streaming from outside ChatView
+ */
+export function dispatchScrollToBottom() {
+  window.dispatchEvent(new Event('cardshark:scroll-to-bottom'));
+}
+
+// Add an event listener wrapper for global scrolling
 export function setupScrollToBottomEvent(scrollCallback: () => void) {
   // Create the event handler
   const handleScrollToBottom = () => {

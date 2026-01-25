@@ -30,6 +30,7 @@ import { calculateCombatAffinity } from '../utils/combatAffinityCalculator';
 import type { NPCRelationship, TimeState, TimeConfig } from '../types/worldRuntime';
 import { createDefaultRelationship, updateRelationshipAffinity, resetDailyAffinity } from '../utils/affinityUtils';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
+import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
 import { calculateSentimentAffinity, updateSentimentHistory, resetSentimentAfterGain } from '../utils/sentimentAffinityCalculator';
 import { createDefaultTimeState, advanceTime } from '../utils/timeUtils';
 
@@ -561,6 +562,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
               ? { ...msg, content: generatedIntro }
               : msg
           ));
+
+          // Trigger scroll-to-bottom in ChatView during streaming
+          dispatchScrollToBottom();
         }, isFinal ? 0 : bufferInterval);
       };
 
@@ -680,6 +684,9 @@ Style: Write in second person, present tense. Acknowledge the player's victory, 
                   ? { ...msg, content: generatedNarrative }
                   : msg
               ));
+
+              // Trigger scroll-to-bottom in ChatView during streaming
+              dispatchScrollToBottom();
             }, isFinal ? 0 : bufferInterval);
           };
 
@@ -835,6 +842,9 @@ Style: Write in second person, present tense. Convey the tension of escape, ment
                   ? { ...msg, content: generatedNarrative }
                   : msg
               ));
+
+              // Trigger scroll-to-bottom in ChatView during streaming
+              dispatchScrollToBottom();
             }, isFinal ? 0 : bufferInterval);
           };
 
@@ -938,6 +948,9 @@ Style: Write in second person, present tense. Convey the weight of defeat, menti
                   ? { ...msg, content: generatedNarrative }
                   : msg
               ));
+
+              // Trigger scroll-to-bottom in ChatView during streaming
+              dispatchScrollToBottom();
             }, isFinal ? 0 : bufferInterval);
           };
 
