@@ -161,6 +161,14 @@ export function gridToWorldState(gridState: GridWorldState, existingState?: Worl
       stamina: 100,
       level: 1,
       experience: 0,
+      relationships: {},
+      time_state: {
+        currentDay: 1,
+        messagesInDay: 0,
+        totalMessages: 0,
+        timeOfDay: 0,
+        lastMessageTimestamp: now,
+      },
     },
   };
 }
