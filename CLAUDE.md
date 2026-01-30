@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 CardShark is an AI chat application with interactive storytelling and character-driven conversations. It uses embedded PNG metadata for character management and supports world/room navigation with NPCs. Built exclusively by AI assistants (~98%).
 
 **Stack:**
-- Frontend: React 18 + TypeScript + Vite + Tailwind CSS
+- Frontend: React 18 + TypeScript + Vite + Tailwind CSS + PixiJS
 - Backend: Python FastAPI + SQLite
 - Build: PyInstaller for executable distribution
 
@@ -79,26 +79,43 @@ backend/
 ```
 frontend/src/
 ├── components/       # UI components
-│   ├── ChatView.tsx  # Main chat interface
+│   ├── chat/         # Chat interface (ChatView.tsx, ChatBubble, ChatHeader, etc.)
+│   ├── combat/       # Grid combat UI (GridCombatHUD, CombatLogPanel, CombatEndScreen)
+│   │   └── pixi/     # Shared PixiJS utilities (TextureCache, AnimationManager, easing)
+│   ├── world/        # World navigation and local map
+│   │   ├── pixi/     # PixiJS world map (PixiMapModal, WorldMapStage)
+│   │   │   └── local/ # Local map tile grid (LocalMapView, EntityCardSprite, etc.)
+│   │   ├── PlayViewLayout.tsx  # Unified play view layout
+│   │   ├── DayNightSphere.tsx  # Time of day indicator
+│   │   └── AffinityHearts.tsx  # NPC relationship display
+│   ├── inventory/    # Equipment and inventory management
 │   ├── SidePanel/    # Mode-based side panel (world/character/assistant)
 │   └── ...
 ├── views/           # Page-level components
-│   ├── WorldCardsView.tsx
-│   ├── WorldView.tsx
-│   └── WorldPlayView.tsx
+│   ├── WorldCardsView.tsx  # World management
+│   └── WorldPlayView.tsx   # Main gameplay orchestrator
 ├── contexts/        # React context providers
-│   ├── ChatContext.tsx
-│   ├── CharacterContext.tsx
-│   ├── WorldPlayContext.tsx
-│   └── APIConfigContext.tsx
 ├── hooks/           # Custom React hooks
-│   └── useChatMessages.ts
+│   ├── useGridCombat.ts    # Grid combat state management
+│   ├── useChatMessages.ts
+│   └── ...
+├── services/combat/ # Combat engine and support services
+│   ├── gridCombatEngine.ts     # Pure reducer-based combat engine
+│   ├── gridEnemyAI.ts          # Tactical enemy AI
+│   ├── combatMapSync.ts        # Map <-> combat state sync
+│   ├── gridCombatAnimations.ts # Combat visual effects
+│   └── postCombatNarrative.ts  # AI narrative generation
 ├── handlers/        # Business logic
 │   └── promptHandler.ts
 ├── api/             # Backend API clients
-│   ├── worldApi.ts
-│   └── characterApi.ts
+├── utils/           # Utility modules
+│   ├── pathfinding.ts, gridCombatUtils.ts, localMapUtils.ts
+│   ├── progressionUtils.ts, affinityUtils.ts, timeUtils.ts
+│   └── multiSpeakerParser.ts, worldCardAdapter.ts
 └── types/           # TypeScript definitions
+    ├── combat.ts, localMap.ts, inventory.ts
+    ├── worldCard.ts, worldRuntime.ts
+    └── ...
 ```
 
 ### Data Directories
@@ -158,6 +175,88 @@ Worlds and rooms are stored as PNG cards (V2 Character Card format with extensio
 
 **Migration note:** Prior to 2025-12, worlds/rooms used JSON files (`world_state.json`). Now they use PNG cards exclusively. Legacy `world_state_manager.py` references may exist but are deprecated.
 
+### Grid Combat System
+
+Tile-based tactical combat replacing the older slot-based system. Combat takes place on the local map (5x8 grid).
+
+**Architecture:**
+- **Engine:** `gridCombatEngine.ts` - Pure reducer: `gridCombatReducer(state, action) => { state, events }`
+- **Hook:** `useGridCombat.ts` - React integration, AI turn scheduling, animation triggers
+- **AI:** `gridEnemyAI.ts` - Tactical AI with flanking, threat assessment, ranged/melee behavior
+- **Map sync:** `combatMapSync.ts` - Converts LocalMapState entities to GridCombatants and back
+
+**Combat flow:**
+1. Player enters hostile entity's threat zone on local map
+2. `initializeCombatFromMap()` converts entities to GridCombatants
+3. Turn-based: initiative order, 4 AP per turn
+4. Actions: move (1 AP/tile), attack (2 AP), defend (1 AP), end turn, flee
+5. Victory when all enemies defeated; defeat when player KO'd
+6. `CombatEndScreen` displays rewards, then `handleCombatContinue` processes results
+
+**Stats:** Single `monster_level` (1-60) determines all stats via `deriveGridCombatStats()`. Weapon type (melee/ranged) affects attack range (1 vs 3-5 tiles).
+
+**Key types:** `GridCombatant` (extends Combatant with position/range), `GridCombatState`, `GridCombatAction`
+
+### Local Map System
+
+PixiJS-rendered tile grid for room-level exploration and combat.
+
+- **Grid:** 5 columns x 8 rows, each tile has terrain type, traversability, highlights
+- **Entities:** Player, NPCs, allies rendered as portrait card sprites with allegiance-colored frames
+- **Exits:** Edge tiles with directional arrows for room transitions
+- **Pathfinding:** A* algorithm in `pathfinding.ts` with terrain cost support
+- **Threat zones:** Highlighted tiles around hostile entities showing engagement range
+- **Key files:** `LocalMapView.tsx`, `LocalMapStage.ts`, `EntityCardSprite.ts`, `localMapUtils.ts`
+
+### Inventory and Equipment
+
+- **Types:** `types/inventory.ts` - InventoryItem, CharacterInventory
+- **Weapon types:** Melee (range 1, +2 damage) and ranged (range 3-5, +1 damage)
+- **Equipment slots:** Weapon and armor (armor is future-use)
+- **UI:** `InventoryModal.tsx` for managing equipped items
+- **Impact:** Equipped weapon determines combat attack range and bonus damage
+
+### NPC Interaction: Conversation vs Bonding
+
+Two-tier interaction system for NPCs in world play:
+
+- **Conversation (talk):** Lightweight interaction using thin frame context (name + description only). No full character card loaded.
+- **Bonding:** Full character card loaded into chat context. Bonded ally follows player between rooms.
+- **Thin frames:** `buildThinNPCContext()` creates lightweight NPC summaries so bonded allies "know" about other NPCs in the room.
+- **Multi-speaker:** `multiSpeakerParser.ts` detects and parses ally interjections in LLM responses (e.g., `[Aria]: *tugs sleeve* "Ask about the discount!"`)
+- **Dual-speaker context:** `buildDualSpeakerContext()` instructs LLM to allow ally participation
+
+### Affinity System
+
+NPC relationship tracking with numeric scores and visual hearts:
+
+- **Scale:** 0-100 with 5 tiers (Hostile, Stranger, Acquaintance, Friend, Best Friend)
+- **Sources:** Sentiment analysis from conversations + combat participation rewards
+- **Daily cap:** Maximum 60 affinity gain per NPC per day (prevents farming)
+- **Display:** `AffinityHearts.tsx` - 0 to 5 hearts with partial fill
+- **Key files:** `affinityUtils.ts`, `sentimentAffinityCalculator.ts`, `combatAffinityCalculator.ts`
+
+### Day/Night Cycle
+
+Message-based time progression (not real-time):
+
+- **Config:** 50 messages = 1 full day cycle (configurable via TimeConfig)
+- **Time of day:** 0.0 (dawn) to 1.0 (midnight), advances per message
+- **UI:** `DayNightSphere.tsx` - rotating icon showing current time
+- **Impact:** Affinity daily caps reset on new day
+- **Key files:** `timeUtils.ts`, `types/worldRuntime.ts` (TimeState, TimeConfig)
+
+### Progression System
+
+XP, gold, and leveling for world gameplay:
+
+- **XP formula:** Next level requires `100 * level^1.5` XP
+- **XP sources:** Kill enemy (level * 10), incapacitate (level * 5)
+- **Gold:** Enemy drops (level * 5 per enemy)
+- **Level-up:** Triggers stat recalculation, displayed in CombatEndScreen
+- **Persistence:** Stored in world card extensions (player_xp, player_level, player_gold)
+- **Key files:** `progressionUtils.ts`, `types/worldCard.ts` (WorldData)
+
 ## Built-in Utilities (Don't Reinvent the Wheel)
 
 Before adding dependencies, check if these already exist:
@@ -174,6 +273,15 @@ Before adding dependencies, check if these already exist:
 | Sanitize HTML | `sanitizeHtml()` | `frontend/src/utils/contentUtils.ts` |
 | Create messages | `MessageUtils.createUserMessage()` | `frontend/src/utils/messageUtils.ts` |
 | Debounced save | `MessageUtils.createDebouncedSave()` | `frontend/src/utils/messageUtils.ts` |
+| Pathfinding | `findPath()`, `getReachableTiles()` | `frontend/src/utils/pathfinding.ts` |
+| Combat math | `calculateDistance()`, `hasLineOfSight()` | `frontend/src/utils/gridCombatUtils.ts` |
+| XP/Level | `calculateXPForNextLevel()`, `checkLevelUp()` | `frontend/src/utils/progressionUtils.ts` |
+| Affinity | `calculateAffinityTier()`, `updateRelationshipAffinity()` | `frontend/src/utils/affinityUtils.ts` |
+| Time | `advanceTime()`, `createDefaultTimeState()` | `frontend/src/utils/timeUtils.ts` |
+| Multi-speaker | `parseMultiSpeakerResponse()` | `frontend/src/utils/multiSpeakerParser.ts` |
+| Local map | `getSpawnPosition()`, `generateLocalMapState()` | `frontend/src/utils/localMapUtils.ts` |
+| Combat stats | `deriveGridCombatStats()`, `createGridCombatant()` | `frontend/src/types/combat.ts` |
+| Inventory | `createDefaultInventory()`, `equipWeapon()` | `frontend/src/types/inventory.ts` |
 
 **Do NOT** add packages like `uuid`, `nanoid`, `lodash`, `sanitize-html` - we have lightweight implementations.
 
@@ -284,6 +392,18 @@ Binary format with ecosystem constraints. Breaking V2 spec compatibility affects
 
 ### State Synchronization
 Frontend vs backend state can diverge. SQLite is source of truth; frontend is cache. Handle silent failures by refreshing state on error or uncertainty.
+
+### WorldPlayView.tsx
+The main gameplay orchestrator (~2000+ lines). Manages: local map, grid combat, NPC interactions, bonding, room transitions, day/night cycle, affinity, progression, inventory, multi-speaker, combat end screen. Consider decomposition when modifying. Key state flows:
+- Room transition: navigate -> party gather -> load room -> spawn entities on local map
+- Combat: threat zone entry -> initializeCombatFromMap -> useGridCombat -> CombatEndScreen -> handleCombatContinue
+- NPC interaction: conversation (thin frame) -> bonding (full card) -> multi-speaker context
+
+### Grid Combat Engine
+Pure reducer pattern (`gridCombatReducer`). Changes to combat mechanics must go through actions dispatched to the reducer. Do not mutate state directly. The engine handles: movement, attacks (melee/ranged), defense, fleeing, initiative, knockouts, revives, overwatch zones.
+
+### Combat-Map Synchronization
+`combatMapSync.ts` bridges LocalMapState and GridCombatState. During combat, GridCombatState owns entity positions. After combat, results sync back. Breaking this sync causes entity position desync.
 
 ## Common Issues
 

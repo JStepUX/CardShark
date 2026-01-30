@@ -57,6 +57,7 @@ interface ChatContextType {
   compressionLevel: CompressionLevel;
   isCompressing: boolean;
   compressedContextCache: CompressedContextCache | null;
+  characterDataOverride: CharacterCard | null;
   setCharacterDataOverride: (characterData: CharacterCard | null) => void;
   updateMessage: (messageId: string, content: string) => void;
   deleteMessage: (messageId: string) => void;
@@ -82,7 +83,7 @@ interface ChatContextType {
   saveSessionNameNow: (nameOverride?: string) => Promise<void>;
   setCompressionLevel: (level: CompressionLevel) => void;
   invalidateCompressionCache: () => void;
-  forkChat: (atMessageIndex: number) => Promise<string | null>;
+  forkChat: (atMessageIndex: number, bringCount?: number | 'all') => Promise<string | null>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -854,11 +855,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
   /**
    * Fork the current chat at a specific message index.
-   * Creates a new chat with messages 0..atMessageIndex copied from the current chat.
+   * Creates a new chat with messages copied from the current chat.
    * The original chat is preserved unchanged.
    * After forking, automatically loads the new forked chat.
+   *
+   * @param atMessageIndex - The index of the message being forked (this message is always included)
+   * @param bringCount - How many messages to bring: 5, 10, or 'all' (default 'all')
    */
-  const forkChat = useCallback(async (atMessageIndex: number): Promise<string | null> => {
+  const forkChat = useCallback(async (atMessageIndex: number, bringCount: number | 'all' = 'all'): Promise<string | null> => {
     const effectiveCharacter = characterDataOverride || characterData;
     if (!effectiveCharacter?.data?.character_uuid) {
       setError('No character selected');
@@ -875,16 +879,26 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       return null;
     }
 
+    // Calculate start index based on bringCount
+    // bringCount includes the forked message itself
+    let startIndex = 0;
+    if (bringCount !== 'all') {
+      // Bring X messages means: max(0, atMessageIndex - bringCount + 1) to atMessageIndex
+      // +1 because the forked message itself counts as one of the "brought" messages
+      startIndex = Math.max(0, atMessageIndex - bringCount + 1);
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // Call the fork API
+      // Call the fork API with start index
       const newChatId = await chatService.forkChat(
         currentChatId,
         atMessageIndex,
         effectiveCharacter.data.character_uuid,
-        currentUser?.id
+        currentUser?.id,
+        startIndex
       );
 
       console.log(`Chat forked: ${currentChatId} -> ${newChatId} at message index ${atMessageIndex}`);
@@ -1791,7 +1805,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     generatingId, reasoningSettings, triggeredLoreImages, availablePreviewImages,
     currentPreviewImageIndex, currentChatId: currentChatId,
     sessionNotes, sessionName, compressionLevel, isCompressing, compressedContextCache,
-    setCharacterDataOverride,
+    characterDataOverride, setCharacterDataOverride,
     updateMessage, deleteMessage, addMessage, setMessages, cycleVariation,
     generateResponse, regenerateMessage, regenerateGreeting, impersonateUser, continueResponse, stopGeneration,
     setCurrentUser: setCurrentUserHandler, loadExistingChat, createNewChat,

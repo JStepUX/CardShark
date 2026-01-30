@@ -17,6 +17,9 @@ const TOKEN_SIZE = 24;
 const TOKEN_COLOR = 0x3B82F6; // blue-500
 const TOKEN_GLOW = 0x60A5FA; // blue-400
 
+// Text resolution multiplier for crisp text on high-DPI displays
+const TEXT_RESOLUTION = Math.max(window.devicePixelRatio || 1, 2);
+
 export class PlayerToken extends PIXI.Container {
     private innerCircle!: PIXI.Graphics;
     private outerGlow!: PIXI.Graphics;
@@ -68,7 +71,8 @@ export class PlayerToken extends PIXI.Container {
             text: '👤',
             style: {
                 fontSize: 16,
-            }
+            },
+            resolution: TEXT_RESOLUTION,
         });
         text.anchor.set(0.5);
         return text;

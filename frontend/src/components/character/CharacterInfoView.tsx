@@ -11,6 +11,7 @@ import MessagesView from '../MessagesView';
 import { saveCharacterCardToPng } from '../../handlers/exportHandlers';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import { htmlToPlainText } from '../../utils/contentUtils';
+import CharacterImageGallery from './CharacterImageGallery';
 
 // Dedicated modal version of JsonViewer without redundant title
 const JsonViewerModal: React.FC<{
@@ -571,6 +572,19 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           {/* Removed inline 'Save Now' button - now handled by ChatHeader */}
 
           <div className="space-y-6">
+            {/* Character Image Gallery - only show when editing existing character */}
+            {characterData?.data?.character_uuid && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Character Images</label>
+                <CharacterImageGallery
+                  characterUuid={characterData.data.character_uuid}
+                  onImageSelect={(image) => {
+                    console.log('Selected secondary image:', image.filename);
+                  }}
+                />
+              </div>
+            )}
+
             {/* Name Field */}            <div>
               <label className="block text-sm font-medium mb-2">Name</label>
               <input

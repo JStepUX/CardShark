@@ -82,11 +82,58 @@ Before adding a dependency or writing new utility code, check if these already e
   - `compression_enabled`: Toggle for automatic message compression
   - Auto-saved with debounce, loaded on session switch
 
-### World Cards System
-- **Directory structure**: `/worlds/{worldName}/` with `world_state.json`
-- **State management**: `world_state_manager.py` handles loading/saving
-- **Room-based organization**: Each world contains rooms with NPCs and events
-- **API integration**: `world_endpoints.py` provides CRUD operations
+### World Cards System ("Cards All The Way Down")
+- **World cards**: `characters/worlds/*.png` with `world_data` extension (V2 Character Card format)
+- **Room cards**: `characters/rooms/*.png` with `room_data` extension
+- **Grid layout**: Worlds use grid-based room placements with player position tracking
+- **Export/import**: `.cardshark.zip` archives for world distribution
+- **API integration**: `world_endpoints.py` and `world_card_endpoints_v2.py` provide CRUD operations
+- **Local maps**: Each room has a 5x8 tile grid with entity placement, exits, and terrain
+- **Player progression**: Per-world XP, level, and gold tracked in world card extensions
+
+### Combat System (Grid-Based)
+- **Engine**: `gridCombatEngine.ts` - pure reducer pattern, tile-based positioning
+- **Hook**: `useGridCombat.ts` - React hook managing combat state, AI turns, map sync
+- **AI**: `gridEnemyAI.ts` - tactical AI with flanking, threat assessment, ranged behavior
+- **Map sync**: `combatMapSync.ts` - bidirectional sync between LocalMapState and GridCombatState
+- **Animations**: `gridCombatAnimations.ts` - combat visual effects on local map
+- **Types**: `types/combat.ts` - GridCombatant, GridCombatState, GridCombatAction
+- **Stat derivation**: Single `monster_level` (1-60) determines all combat stats via `deriveGridCombatStats()`
+- **AP economy**: 4 AP per turn; move=1/tile, attack=2, defend=1
+
+### Inventory System
+- **Types**: `types/inventory.ts` - InventoryItem, CharacterInventory, weapon subtypes
+- **Equipment**: Weapon slot (melee/ranged) and armor slot
+- **Weapon types**: Melee (range 1) vs ranged (range 3-5), affects combat behavior
+- **Defaults**: Starter iron sword and short bow
+- **UI**: `InventoryModal.tsx` for equipment management
+
+### Affinity System
+- **Types**: `types/worldRuntime.ts` - NPCRelationship, AffinityTier (0-100 scale, 5 tiers)
+- **Sources**: Sentiment-based (conversation analysis) and combat-based (ally participation)
+- **Daily cap**: Maximum 60 affinity gain per NPC per day (prevents farming)
+- **Utilities**: `affinityUtils.ts`, `sentimentAffinityCalculator.ts`, `combatAffinityCalculator.ts`
+- **Display**: `AffinityHearts.tsx` - 0-5 hearts with partial fill
+
+### NPC Interaction System
+- **Conversation**: Lightweight talk with thin frame context (name, description only)
+- **Bonding**: Full character card loaded, ally follows player between rooms
+- **Thin frames**: `buildThinNPCContext()` - lightweight NPC summaries for ally room awareness
+- **Multi-speaker**: `multiSpeakerParser.ts` - parses LLM responses for bonded ally interjections
+- **Dual-speaker context**: `buildDualSpeakerContext()` - enables ally participation in conversations
+
+### Day/Night Cycle
+- **Time state**: `types/worldRuntime.ts` - TimeState (day counter, timeOfDay 0.0-1.0)
+- **Progression**: Message-based (default 50 messages per day cycle)
+- **UI**: `DayNightSphere.tsx` - rotating icon showing time of day
+- **Utilities**: `timeUtils.ts` - time advancement and day detection
+
+### Progression System
+- **XP**: Level-based formula (100 * level^1.5 per level)
+- **Gold**: Enemy drops (level * 5 per enemy)
+- **Level-up**: Stat changes displayed in combat end screen
+- **Persistence**: Stored in world card extensions (player_xp, player_level, player_gold)
+- **Utilities**: `progressionUtils.ts` - XP thresholds, level calculation, gold drops
 
 ### API Communication Patterns
 - **RESTful design**: Consistent endpoint naming and HTTP methods

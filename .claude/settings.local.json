@@ -12,7 +12,28 @@
       "Bash(npm run build:*)",
       "WebSearch",
       "WebFetch(domain:docs.sillytavern.app)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(powershell -Command \"cd ''D:\\\\Bolt-On\\\\cardshark\\\\frontend'' ; npm run build\")",
+      "Bash(powershell -Command \"cd ''D:\\\\Bolt-On\\\\cardshark\\\\frontend'' ; npx tsc --noEmit src/components/world/pixi/local/LocalMapStage.ts src/components/world/pixi/local/LocalMapView.tsx src/components/chat/ChatView.tsx\")",
+      "Bash(powershell -Command \"cd ''D:\\\\Bolt-On\\\\cardshark\\\\frontend'' ; npm run build 2>&1 | Select-String -Pattern ''error TS'' | Select-Object -First 30\")",
+      "Bash(powershell -Command \"cd ''D:\\\\Bolt-On\\\\cardshark\\\\frontend'' ; npm run build 2>&1\")",
+      "Bash(cd:*)",
+      "Bash(pushd:*)",
+      "WebFetch(domain:pixijs.com)",
+      "Bash(claude --print \"\nTASK: Create a CombatEndScreen React component for post-combat victory/defeat display\n\nCONTEXT FILES:\n- D:/Bolt-On/cardshark/frontend/src/components/combat/GridCombatHUD.tsx \\(lines 183-199 have basic victory/defeat - extract and enhance\\)\n- D:/Bolt-On/cardshark/frontend/src/types/combat.ts \\(CombatState.result interface lines 346-356\\)\n\nDEPENDENCIES: None\n\nDELIVERABLE:\n1. Create new file: D:/Bolt-On/cardshark/frontend/src/components/combat/CombatEndScreen.tsx\n2. Victory screen should show:\n   - Large ''VICTORY!'' header with gold styling\n   - XP and Gold rewards from result.rewards\n   - List of defeated enemies\n   - ''Continue'' button\n3. Defeat screen should show:\n   - ''DEFEAT'' header with red styling  \n   - Message about being defeated\n   - ''Continue'' button\n4. Modal overlay styling \\(dark semi-transparent background\\)\n5. Export the component with proper TypeScript typing\n\nCONSTRAINTS:\n- Use Tailwind CSS for styling \\(no inline styles\\)\n- Follow existing patterns in GridCombatHUD.tsx\n- Use lucide-react for any icons\n- Component should accept: phase \\(''victory'' | ''defeat''\\), result \\(CombatState[''result'']\\), onContinue callback\n\nSUCCESS CRITERIA:\n- Component renders without errors\n- TypeScript compiles without errors\n- Styling matches the dark theme of the combat system\n\")",
+      "Bash(claude --print \"\nTASK: Implement the death vs incapacitation roll system for defeated enemies\n\nCONTEXT FILES:\n- D:/Bolt-On/cardshark/frontend/src/types/combat.ts \\(GridCombatant interface around line 396\\)\n- D:/Bolt-On/cardshark/frontend/src/types/localMap.ts \\(LocalMapEntity interface lines 26-43\\)\n- D:/Bolt-On/cardshark/frontend/src/services/combat/gridCombatEngine.ts \\(executeGridAttack around line 278\\)\n\nDEPENDENCIES: None\n\nDELIVERABLE:\n1. Add new fields to GridCombatant in types/combat.ts:\n   - isIncapacitated: boolean \\(knocked out but alive\\)\n   - isDead: boolean \\(permanently dead\\)\n   \n2. Add same fields to LocalMapEntity in types/localMap.ts\n\n3. Create a rollDeathOrIncapacitation function in gridCombatEngine.ts:\n   - Returns ''death'' or ''incapacitation''\n   - Incapacitation should be MORE LIKELY \\(70% incapacitated, 30% dead\\)\n   \n4. Integrate the roll into executeGridAttack:\n   - When isKillingBlow is true, call rollDeathOrIncapacitation\n   - Set the appropriate flag on the target \\(isIncapacitated or isDead\\)\n   - Update the character_defeated event data to include the outcome\n\n5. Update createGridCombatant function to initialize the new fields\n\nCONSTRAINTS:\n- Keep existing isKnockedOut field for backward compatibility\n- Both isIncapacitated and isDead should only be true when isKnockedOut is also true\n- Do not modify the CombatEvent types \\(use existing data field\\)\n\nSUCCESS CRITERIA:\n- TypeScript compiles without errors\n- Killing blows now determine death vs incapacitation\n- 70/30 probability split for incapacitation/death\n\")",
+      "Bash(npm run typecheck:*)",
+      "Bash(claude:*)",
+      "Bash(npx tsx:*)",
+      "Bash(git rm:*)",
+      "Bash(npx vite build)",
+      "Bash(python -c:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(for:*)",
+      "Bash(do wc -l \"$file\")",
+      "Bash(done)",
+      "Bash(do wc:*)",
+      "Bash(wc:*)"
     ]
   }
 }

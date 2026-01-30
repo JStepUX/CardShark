@@ -1,5 +1,8 @@
 // frontend/src/services/combat/index.ts
-// Combat system exports
+// Grid-based combat system exports
 
-export * from './combatEngine';
-export * from './enemyAI';
+export * from './gridCombatEngine';
+export * from './gridEnemyAI';
+export * from './gridCombatAnimations';
+export * from './combatMapSync';
+export * from './postCombatNarrative';

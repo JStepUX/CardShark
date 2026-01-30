@@ -524,22 +524,24 @@ export class ChatService {
 
   /**
    * Fork a chat session at a specific message index
-   * 
+   *
    * Creates a new chat session with messages copied from the source chat,
-   * from index 0 to forkAtMessageIndex (inclusive). The original chat
+   * from startMessageIndex to forkAtMessageIndex (inclusive). The original chat
    * is preserved unchanged.
-   * 
+   *
    * @param sourceChatUuid - UUID of the source chat to fork from
    * @param forkAtMessageIndex - Index of the last message to include (0-based, inclusive)
    * @param characterUuid - UUID of the character for the new chat
    * @param userUuid - Optional UUID of the user
+   * @param startMessageIndex - Index of the first message to include (default 0 for full history)
    * @returns The new chat session UUID
    */
   async forkChat(
     sourceChatUuid: string,
     forkAtMessageIndex: number,
     characterUuid: string,
-    userUuid?: string
+    userUuid?: string,
+    startMessageIndex: number = 0
   ): Promise<string> {
     if (!sourceChatUuid || typeof sourceChatUuid !== 'string') {
       throw new Error('sourceChatUuid must be a non-empty string');
@@ -564,6 +566,7 @@ export class ChatService {
       }>('/fork-chat', {
         source_chat_session_uuid: sourceChatUuid,
         fork_at_message_index: forkAtMessageIndex,
+        start_message_index: startMessageIndex,
         character_uuid: characterUuid,
         user_uuid: userUuid,
       });

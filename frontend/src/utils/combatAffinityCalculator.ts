@@ -1,7 +1,7 @@
 // frontend/src/utils/combatAffinityCalculator.ts
 // Calculate affinity changes based on combat outcomes
 
-import type { CombatState } from '../types/combat';
+import type { GridCombatState } from '../types/combat';
 
 export interface AffinityChange {
     npcUuid: string;
@@ -22,7 +22,7 @@ export interface AffinityChange {
  * Future: Could add faction-based affinity (killing goblin → -affinity with goblin tribe)
  */
 export function calculateCombatAffinity(
-    finalState: CombatState,
+    finalState: GridCombatState,
     relationships: Record<string, any> = {},
     currentDay: number = 1,
     dailyCap: number = 60

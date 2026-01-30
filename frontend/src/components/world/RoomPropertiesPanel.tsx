@@ -1,32 +1,65 @@
-import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import { useState, useCallback } from 'react';
 import { GridRoom } from '../../utils/worldStateApi';
 import { RoomNPC } from '../../types/room';
 import { NPCSettingsModal } from '../NPCSettingsModal';
 import { UnifiedImageGallery, ImageSelection } from '../common/UnifiedImageGallery';
+import { APIConfig } from '../../types/api';
+
+interface WorldContext {
+  name: string;
+  description: string;
+}
 
 // Simple Modal for full content editing
 function TextEditorModal({
   title,
   value,
   onSave,
-  onClose
+  onClose,
+  onWriteForMe,
+  isGenerating
 }: {
   title: string;
   value: string;
   onSave: (val: string) => void;
   onClose: () => void;
+  onWriteForMe?: (currentText: string, onChunk: (chunk: string) => void) => Promise<void>;
+  isGenerating?: boolean;
 }) {
   const [text, setText] = useState(value);
+
+  const handleWriteForMe = async () => {
+    if (!onWriteForMe || isGenerating) return;
+    await onWriteForMe(text, (chunk) => {
+      setText(prev => prev + chunk);
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-4xl bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
           <h3 className="text-lg font-medium text-white">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            {onWriteForMe && (
+              <button
+                onClick={handleWriteForMe}
+                disabled={isGenerating}
+                className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={text.trim() ? "Continue writing with AI" : "Generate content with AI"}
+              >
+                {isGenerating ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Sparkles size={18} />
+                )}
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-white">
+              <X size={20} />
+            </button>
+          </div>
         </div>
         <div className="flex-1 p-4 min-h-[300px]">
           <textarea
@@ -65,9 +98,11 @@ interface RoomPropertiesPanelProps {
   onOpenNPCPicker?: () => void;
   onRemoveFromCell?: () => void;
   isVisible?: boolean;
+  apiConfig?: APIConfig | null;
+  worldContext?: WorldContext;
 }
 
-export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, onRemoveFromCell, isVisible = true }: RoomPropertiesPanelProps) {
+export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, onRemoveFromCell, isVisible = true, apiConfig, worldContext }: RoomPropertiesPanelProps) {
   const [uploading, setUploading] = useState(false);
   const [editingField, setEditingField] = useState<{
     field: 'description' | 'introduction_text';
@@ -76,6 +111,116 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
   } | null>(null);
   const [editingNPC, setEditingNPC] = useState<RoomNPC | null>(null);
   const [showGalleryModal, setShowGalleryModal] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingField, setGeneratingField] = useState<'description' | 'introduction_text' | null>(null);
+
+  // Generate room content using the LLM API with streaming
+  const handleWriteForMe = useCallback(async (
+    fieldType: 'description' | 'introduction_text',
+    existingText: string,
+    onChunk: (chunk: string) => void,
+    updateRoom?: boolean
+  ) => {
+    if (!apiConfig || !room || isGenerating) return;
+
+    setIsGenerating(true);
+    setGeneratingField(fieldType);
+
+    try {
+      const response = await fetch('/api/generate-room-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_config: apiConfig,
+          world_context: worldContext || { name: 'Unknown World', description: '' },
+          room_context: {
+            name: room.name,
+            description: fieldType === 'introduction_text' ? room.description : '',
+            npcs: room.npcs.map(npc => ({
+              name: getNpcName(npc.character_uuid),
+              character_uuid: npc.character_uuid
+            }))
+          },
+          field_type: fieldType === 'introduction_text' ? 'introduction' : 'description',
+          existing_text: existingText,
+          user_prompt: ''
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `API responded with status ${response.status}`);
+      }
+
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Response body is not readable");
+
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') continue;
+
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.error) {
+                throw new Error(data.error.message || "Streaming error");
+              }
+              if (data.content) {
+                fullResponse += data.content;
+                onChunk(data.content);
+              }
+            } catch {
+              // Ignore JSON parse errors for non-JSON lines
+            }
+          }
+        }
+      }
+
+      // If updateRoom is true (inline editing), update the room directly
+      if (updateRoom && fullResponse) {
+        onUpdate({ ...room, [fieldType]: existingText + fullResponse });
+      }
+    } catch (error) {
+      console.error('Error generating room content:', error);
+    } finally {
+      setIsGenerating(false);
+      setGeneratingField(null);
+    }
+  }, [apiConfig, room, worldContext, isGenerating, onUpdate]);
+
+  // Wrapper for inline field generation
+  const handleInlineWriteForMe = useCallback(async (fieldType: 'description' | 'introduction_text') => {
+    if (!room) return;
+    const existingText = room[fieldType];
+    let accumulated = '';
+
+    await handleWriteForMe(fieldType, existingText, (chunk) => {
+      accumulated += chunk;
+      // Update room in real-time as chunks come in
+      onUpdate({ ...room, [fieldType]: existingText + accumulated });
+    }, false); // Don't update at the end since we're updating in real-time
+  }, [room, handleWriteForMe, onUpdate]);
+
+  // Wrapper for modal field generation
+  const handleModalWriteForMe = useCallback(async (existingText: string, onChunk: (chunk: string) => void) => {
+    if (!editingField) return;
+    await handleWriteForMe(editingField.field, existingText, onChunk, false);
+  }, [editingField, handleWriteForMe]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!room || !e.target.files || e.target.files.length === 0) return;
@@ -155,6 +300,8 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
             }
           }}
           onClose={() => setEditingField(null)}
+          onWriteForMe={apiConfig ? handleModalWriteForMe : undefined}
+          isGenerating={isGenerating}
         />
       )}
 
@@ -226,17 +373,33 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-gray-400">Description</label>
-                  <button
-                    onClick={() => room && setEditingField({
-                      field: 'description',
-                      title: 'Room Description',
-                      value: room.description
-                    })}
-                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                  >
-                    <Maximize2 size={12} />
-                    Expand
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => room && setEditingField({
+                        field: 'description',
+                        title: 'Room Description',
+                        value: room.description
+                      })}
+                      className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                    >
+                      <Maximize2 size={12} />
+                      Expand
+                    </button>
+                    {apiConfig && (
+                      <button
+                        onClick={() => handleInlineWriteForMe('description')}
+                        disabled={isGenerating}
+                        className="p-1 text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={room.description.trim() ? "Continue writing with AI" : "Generate description with AI"}
+                      >
+                        {isGenerating && generatingField === 'description' ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Sparkles size={12} />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <textarea
                   value={room.description}
@@ -251,17 +414,33 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-gray-400">Introduction Text</label>
-                  <button
-                    onClick={() => room && setEditingField({
-                      field: 'introduction_text',
-                      title: 'Introduction Text',
-                      value: room.introduction_text
-                    })}
-                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                  >
-                    <Maximize2 size={12} />
-                    Expand
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => room && setEditingField({
+                        field: 'introduction_text',
+                        title: 'Introduction Text',
+                        value: room.introduction_text
+                      })}
+                      className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                    >
+                      <Maximize2 size={12} />
+                      Expand
+                    </button>
+                    {apiConfig && (
+                      <button
+                        onClick={() => handleInlineWriteForMe('introduction_text')}
+                        disabled={isGenerating}
+                        className="p-1 text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={room.introduction_text.trim() ? "Continue writing with AI" : "Generate introduction with AI"}
+                      >
+                        {isGenerating && generatingField === 'introduction_text' ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Sparkles size={12} />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <textarea
                   value={room.introduction_text}

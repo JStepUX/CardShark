@@ -15,6 +15,7 @@
 - **Rich Text**: TipTap editor with extensions for images and links
 - **Routing**: React Router v7
 - **State Management**: React Context API with custom hooks
+- **2D Graphics**: PixiJS for world map rendering, local map tile grids, and combat animations
 - **Testing**: Jest with React Testing Library and MSW for API mocking
 - **Debug Logging**: DEBUG flag pattern for controlling console.log output (production vs development)
 
@@ -69,5 +70,5 @@ python build.py
 
 ## Key Dependencies
 - **Backend**: fastapi, uvicorn, sqlalchemy, pydantic, pillow, requests, psutil
-- **Frontend**: react, react-dom, @tiptap/react, tailwindcss, lucide-react, zod
+- **Frontend**: react, react-dom, @tiptap/react, tailwindcss, lucide-react, zod, pixi.js
 - **Build**: pyinstaller, vite, typescript, jest

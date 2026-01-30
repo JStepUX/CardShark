@@ -17,7 +17,7 @@ export interface IMessage {
   order?: number;
   parentMessageId?: string;
   status?: 'streaming' | 'complete' | 'aborted' | 'error' | 'generating_variation'; // Added status field
-  metadata?: Record<string, unknown>; // Optional metadata for special message types (e.g., combat events)
+  metadata?: MessageMetadata; // Optional metadata for special message types (e.g., combat events, speaker attribution)
 }
 
 /**
@@ -65,6 +65,29 @@ export interface ReasoningSettings {
   enabled: boolean;
   visible: boolean;
   instructions?: string;
+}
+
+/**
+ * Speaker metadata for multi-speaker conversations (e.g., bonded ally interjections)
+ * Used when multiple NPCs can speak in a single conversation
+ */
+export interface SpeakerMetadata {
+  /** UUID of the speaking character */
+  speakerId?: string;
+  /** Display name for the chat bubble header */
+  speakerName?: string;
+  /** Role of the speaker in the conversation */
+  speakerRole?: 'target' | 'ally' | 'narrator';
+}
+
+/**
+ * Extended message metadata that includes speaker information
+ * This extends the base Record<string, unknown> with typed speaker fields
+ */
+export interface MessageMetadata extends SpeakerMetadata {
+  /** Type of special message (e.g., 'combat_event', 'affinity_change', etc.) */
+  type?: string;
+  [key: string]: unknown;
 }
 
 export const BACKGROUND_SETTINGS_KEY = 'cardshark_background';

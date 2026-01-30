@@ -17,13 +17,13 @@ class WorldRoomPlacement(BaseModel):
     """Room placement in world grid with instance-specific overrides"""
     room_uuid: str = Field(..., description="UUID of the room card")
     grid_position: Position = Field(..., description="Position on the world grid")
-    
+
     # Instance-specific overrides (for lazy loading and world-specific customization)
     instance_name: Optional[str] = Field(None, description="Cached room name for map display (lazy loading)")
     instance_description: Optional[str] = Field(None, description="Cached room description for tooltips")
     instance_npcs: Optional[List[Dict[str, Any]]] = Field(None, description="Instance-specific NPC assignments (overrides room card defaults)")
     instance_image_path: Optional[str] = Field(None, description="Custom image path override for this instance")
-    # instance_state: Optional[Dict[str, Any]] = Field(None, description="Future: instance state (loot, doors, enemy HP, etc.)")
+    instance_state: Optional[Dict[str, Any]] = Field(None, description="Per-room runtime state (legacy field, prefer WorldData.room_states)")
 
 
 
@@ -39,6 +39,17 @@ class WorldData(BaseModel):
     player_position: Position = Field(default_factory=lambda: Position(x=0, y=0), description="Current player position")
     map_image: Optional[str] = Field(None, description="Custom map backdrop image path (relative to world assets)")
     world_state: Optional[WorldState] = Field(None, description="Full world state (optional, computed)")
+
+    # Runtime state - persisted gameplay progress
+    player_xp: Optional[int] = Field(None, description="Cumulative XP earned in this world")
+    player_level: Optional[int] = Field(None, description="Current player level (1-60)")
+    player_gold: Optional[int] = Field(None, description="Gold accumulated")
+    bonded_ally_uuid: Optional[str] = Field(None, description="character_uuid of currently bonded ally")
+    time_state: Optional[Dict[str, Any]] = Field(None, description="Day/night cycle state (currentDay, timeOfDay, etc.)")
+    npc_relationships: Optional[Dict[str, Any]] = Field(None, description="NPC affinity data keyed by character_uuid")
+    player_inventory: Optional[Dict[str, Any]] = Field(None, description="Player equipment and items")
+    ally_inventory: Optional[Dict[str, Any]] = Field(None, description="Bonded ally equipment and items")
+    room_states: Optional[Dict[str, Any]] = Field(None, description="Per-room runtime state keyed by room_uuid (NPC alive/dead, positions)")
 
 
 class WorldCardExtensions(BaseModel):
@@ -135,6 +146,17 @@ class UpdateWorldRequest(BaseModel):
     starting_position: Optional[Position] = Field(None, description="Starting position")
     player_position: Optional[Position] = Field(None, description="Player position")
     tags: Optional[List[str]] = Field(None, description="World tags")
+
+    # Runtime state fields
+    player_xp: Optional[int] = Field(None, description="Cumulative XP")
+    player_level: Optional[int] = Field(None, description="Current level")
+    player_gold: Optional[int] = Field(None, description="Gold accumulated")
+    bonded_ally_uuid: Optional[str] = Field(None, description="Bonded ally character_uuid (empty string to clear)")
+    time_state: Optional[Dict[str, Any]] = Field(None, description="Day/night cycle state")
+    npc_relationships: Optional[Dict[str, Any]] = Field(None, description="NPC affinity data")
+    player_inventory: Optional[Dict[str, Any]] = Field(None, description="Player inventory")
+    ally_inventory: Optional[Dict[str, Any]] = Field(None, description="Ally inventory")
+    room_states: Optional[Dict[str, Any]] = Field(None, description="Per-room runtime state")
 
     class Config:
         extra = "forbid"

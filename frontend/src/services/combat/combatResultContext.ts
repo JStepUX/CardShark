@@ -13,7 +13,7 @@
  * @see CardShark_Combat_System_v04.yaml lines 384-483 for spec
  */
 
-import { CombatState, HitQuality } from '../../types/combat';
+import { GridCombatState, HitQuality } from '../../types/combat';
 
 /**
  * Structured combat result context for AI narrative generation.
@@ -73,7 +73,7 @@ export interface CombatResultContext {
  * const context = buildCombatResultContext(finalState);
  * // Pass to AI: "Generate a return-to-RP narrative: ${JSON.stringify(context)}"
  */
-export function buildCombatResultContext(finalState: CombatState): CombatResultContext {
+export function buildCombatResultContext(finalState: GridCombatState): CombatResultContext {
     const combatLog = finalState.log;
     const combatants = finalState.combatants;
 

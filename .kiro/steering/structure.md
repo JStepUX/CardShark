@@ -10,13 +10,13 @@
 
 ### Data Directories
 - `characters/` - Character PNG files with embedded metadata and UUIDs
-- `worlds/` - World state JSON files, images, and location-specific chats
+- `characters/worlds/` - World PNG cards (V2 format with world_data extensions)
+- `characters/rooms/` - Room PNG cards (V2 format with room_data extensions)
 - `backgrounds/` - Background images with metadata.json for chat customization
 - `users/` - User profile PNGs with embedded metadata
 - `templates/` - Chat prompt templates in JSON format
 - `content_filters/` - Content moderation filters (builtin/ and custom)
 - `uploads/` - User-uploaded files and rich text editor images
-- `chats/` - Chat history storage (JSONL/JSON files organized by character)
 
 ### Configuration & Logs
 - `settings.json` - Global application configuration
@@ -65,22 +65,66 @@
 
 ### Feature Organization
 - `components/` - Reusable UI components
-  - `ChatView.tsx` - Main chat interface
-  - `CharacterGallery.tsx` - Character browsing and selection
-  - `WorldMap.tsx` - World Cards navigation interface
-  - `APISettingsView.tsx` - AI provider configuration
+  - `chat/` - Chat interface components
+    - `ChatView.tsx` - Main chat interface
+    - `ChatBubble.tsx`, `ChatHeader.tsx`, `ChatInputArea.tsx` - Chat sub-components
+  - `combat/` - Grid combat system components
+    - `GridCombatHUD.tsx` - Combat action buttons and status display
+    - `CombatLogPanel.tsx` - Turn-by-turn combat log
+    - `CombatEndScreen.tsx` - Victory/defeat results with rewards display
+    - `pixi/` - Shared PixiJS utilities (TextureCache, AnimationManager, ParticleSystem, easing)
+  - `world/` - World navigation and local map
+    - `PlayViewLayout.tsx` - Unified play view layout (map + chat side-by-side)
+    - `AffinityHearts.tsx` - NPC relationship heart display
+    - `DayNightSphere.tsx` - Time of day rotating icon
+    - `NPCShowcase.tsx`, `NPCCard.tsx` - NPC interaction components
+    - `PartyGatherModal.tsx` - Ally gathering for room transitions
+    - `pixi/` - PixiJS world map rendering
+      - `PixiMapModal.tsx` - World map modal
+      - `WorldMapStage.ts` - World grid renderer
+      - `local/` - Local map (room-level tile grid)
+        - `LocalMapView.tsx` - React wrapper for local map
+        - `LocalMapStage.ts` - Pixi stage for tile grid
+        - `LocalMapTile.ts` - Individual tile rendering
+        - `EntityCardSprite.ts` - NPC/player portrait cards on grid
+        - `CombatParticleSystem.ts` - Combat visual effects
+  - `inventory/` - Equipment and inventory management
+    - `InventoryModal.tsx` - Inventory UI
   - `SidePanel/` - Unified side panel with mode-based rendering
-    - `SidePanel.tsx` - Main container with world/character/assistant modes
-    - `SessionNotes.tsx` - Auto-saving notes with character limit
-    - `CompressionToggle.tsx` - Message compression toggle
-    - `types.ts` - TypeScript definitions
+  - `CharacterGallery.tsx` - Character browsing and selection
+  - `APISettingsView.tsx` - AI provider configuration
 - `views/` - Page-level components
   - `WorldCardsView.tsx` - World management interface
-  - `WorldPlayView.tsx` - World gameplay interface
+  - `WorldPlayView.tsx` - Main gameplay orchestrator (local map, chat, combat, inventory)
 - `contexts/` - React Context providers for state management
 - `hooks/` - Custom React hooks for shared logic
+  - `useGridCombat.ts` - Grid combat state management and AI turn execution
+  - `useScrollToBottom.ts`, `useEmotionDetection.ts`, `useChatMessages.ts`, etc.
+- `services/combat/` - Combat engine and support services
+  - `gridCombatEngine.ts` - Pure reducer-based grid combat engine
+  - `gridEnemyAI.ts` - Tactical enemy AI with flanking and range awareness
+  - `gridCombatAnimations.ts` - Combat animation sequences
+  - `combatMapSync.ts` - LocalMapState <-> GridCombatState synchronization
+  - `postCombatNarrative.ts` - AI narrative generation after combat
+  - `combatResultContext.ts` - Structured combat results for AI context
+- `utils/` - Utility modules
+  - `pathfinding.ts` - A* pathfinding for grid movement
+  - `gridCombatUtils.ts` - Distance, LOS, flanking calculations
+  - `localMapUtils.ts` - Local map generation and entity placement
+  - `progressionUtils.ts` - XP, leveling, gold calculations
+  - `affinityUtils.ts` - NPC relationship management
+  - `sentimentAffinityCalculator.ts` - Conversation sentiment analysis
+  - `combatAffinityCalculator.ts` - Combat-based affinity changes
+  - `multiSpeakerParser.ts` - Multi-speaker LLM response parsing
+  - `timeUtils.ts` - Day/night cycle time management
+  - `worldCardAdapter.ts` - Thin frames, dual-speaker context building
 - `api/` - API client modules for backend communication
-- `types/` - TypeScript type definitions and interfaces
+- `types/` - TypeScript type definitions
+  - `combat.ts` - Combat types (GridCombatant, GridCombatState, stats derivation)
+  - `localMap.ts` - Tile grid types (TilePosition, LocalMapState, terrain, highlights)
+  - `inventory.ts` - Item and equipment types
+  - `worldCard.ts` - World card V2 types with progression extensions
+  - `worldRuntime.ts` - Runtime types (affinity, time, player state)
 
 ### Build Configuration
 - `vite.config.ts` - Vite build configuration with aliases
@@ -103,7 +147,9 @@
 - **Type-safe development** - Comprehensive TypeScript usage
 
 ### Data Flow
-- **PNG metadata embedding** - Characters stored as PNG files with JSON metadata
+- **PNG metadata embedding** - Characters, worlds, and rooms stored as PNG files with JSON metadata
 - **Streaming chat responses** - Server-sent events for real-time AI responses
-- **File-based persistence** - JSON files for world state, chat history
+- **PNG-based world persistence** - World cards store grid layout, room placements, and player progression
 - **Database normalization** - SQLite for relational data (users, rooms, sessions)
+- **Combat state flow** - LocalMapState -> GridCombatState (during combat) -> sync back to LocalMapState
+- **Affinity flow** - Conversation sentiment + combat outcomes -> NPC relationship updates (daily capped)

@@ -108,7 +108,7 @@ export interface Combatant {
   armor: number;
   weaponType: 'melee' | 'ranged';
 
-  // Position on battlefield (0-4)
+  // Position on battlefield (0-4) - legacy slot-based system, unused in grid combat
   slotPosition: number;
 
   // Per-turn state
@@ -123,13 +123,18 @@ export interface Combatant {
   protectedByDefenderId?: string; // ID of defender protecting this combatant
   overwatchPenalty?: number;      // Variable accuracy penalty for overwatch (1-3)
 
+  // Death/Incapacitation state (set when knocked out)
+  isIncapacitated: boolean;      // Knocked out but alive - can be revived/captured
+  isDead: boolean;               // Permanently dead - removed from world
+
   // UI state (clears after render)
   recentDamage: number | null;
   recentHeal: number | null;
 }
 
 /**
- * Create a combatant from NPC data.
+ * @deprecated Use createGridCombatant() instead for grid-based combat.
+ * Create a combatant from NPC data (slot-based system).
  */
 export function createCombatant(
   id: string,
@@ -162,18 +167,21 @@ export function createCombatant(
     isOverwatching: false,
     hasAimedShot: false,
     isKnockedOut: false,
+    isIncapacitated: false,
+    isDead: false,
     recentDamage: null,
     recentHeal: null,
   };
 }
 
 // =============================================================================
-// Battlefield Types
+// Battlefield Types (DEPRECATED - use GridCombatState for grid-based combat)
 // =============================================================================
 
 /**
- * The battlefield: 2 rows × 5 slots.
- * Index 0-4 for each row, null means empty slot.
+ * @deprecated The slot-based battlefield has been replaced by grid-based combat.
+ * Use GridCombatState and GridCombatant (with TilePosition) instead.
+ * Kept for backward compatibility with combatResultContext.ts.
  */
 export interface Battlefield {
   enemySlots: (string | null)[]; // Combatant IDs, top row
@@ -248,6 +256,8 @@ export type CombatEventType =
   | 'swap_completed'
   | 'flee_attempted'
   | 'character_defeated'
+  | 'ally_revived'     // Incapacitated ally revived after victory
+  | 'player_revived'   // Player revived by ally after they carried the fight
   | 'combat_victory'
   | 'combat_defeat';
 
@@ -308,9 +318,13 @@ export type CombatPhase =
   | 'defeat';         // Combat lost (TPK)
 
 // =============================================================================
-// Combat State (Main State Object)
+// Combat State (DEPRECATED - use GridCombatState for grid-based combat)
 // =============================================================================
 
+/**
+ * @deprecated Use GridCombatState instead. This was the slot-based combat state.
+ * The grid combat system uses GridCombatState with tile-based positioning.
+ */
 export interface CombatState {
   phase: CombatPhase;
   turn: number;
@@ -352,6 +366,9 @@ export interface CombatState {
     };
     survivingAllies: string[];
     defeatedEnemies: string[];
+    revivedAllies?: string[];  // Allies that were incapacitated and auto-revived on victory
+    revivedPlayer?: boolean;   // True if THE player was incapacitated but ally carried the fight
+    revivedByAllyId?: string;  // ID of the ally who "revived" the player (last ally standing)
   };
 }
 
@@ -382,3 +399,229 @@ export interface CombatInitData {
   roomName: string;
   playerAdvantage: boolean; // true = player initiated, false = ambush
 }
+
+// =============================================================================
+// Grid Combat Extensions (for unified local map combat)
+// =============================================================================
+
+import { TilePosition, LocalMapState, LocalMapEntity } from './localMap';
+
+/**
+ * Extended combatant with grid position for local map combat.
+ * Position is optional for backward compatibility with slot-based combat.
+ */
+export interface GridCombatant extends Combatant {
+  /** Grid position (x, y) on the local map */
+  position: TilePosition;
+  /** Movement range in tiles per turn */
+  movementRange: number;
+  /** Attack range in tiles (1 = melee, >1 = ranged) */
+  attackRange: number;
+  /** Threat range in tiles for engagement (default 1, higher for elite enemies) */
+  threatRange: number;
+  /** Facing direction for backstab/flanking visuals */
+  facing?: 'north' | 'south' | 'east' | 'west';
+}
+
+/**
+ * Grid-based combat actions
+ */
+export type GridActionType =
+  | 'grid_move'       // Move along a path
+  | 'grid_attack'     // Attack a target at range
+  | 'grid_defend'     // Defend (reduces incoming damage)
+  | 'grid_overwatch'  // Watch an area, attack enemies entering
+  | 'grid_flee'       // Attempt to flee combat
+  | 'grid_end_turn';  // End turn early
+
+export interface GridMoveAction {
+  type: 'grid_move';
+  actorId: string;
+  path: TilePosition[];  // Full path from current to destination
+}
+
+export interface GridAttackAction {
+  type: 'grid_attack';
+  actorId: string;
+  targetId: string;
+  targetPosition: TilePosition;
+}
+
+export interface GridDefendAction {
+  type: 'grid_defend';
+  actorId: string;
+}
+
+export interface GridOverwatchAction {
+  type: 'grid_overwatch';
+  actorId: string;
+  watchArea: TilePosition[];  // Tiles being watched
+}
+
+export interface GridEndTurnAction {
+  type: 'grid_end_turn';
+  actorId: string;
+}
+
+export interface GridFleeAction {
+  type: 'grid_flee';
+  actorId: string;
+}
+
+export type GridCombatAction =
+  | GridMoveAction
+  | GridAttackAction
+  | GridDefendAction
+  | GridOverwatchAction
+  | GridFleeAction
+  | GridEndTurnAction;
+
+/**
+ * Grid combat state extends base combat state with map integration
+ */
+export interface GridCombatState {
+  phase: CombatPhase;
+  turn: number;
+
+  /** All combatants by ID (with grid positions) */
+  combatants: Record<string, GridCombatant>;
+
+  /** Turn order */
+  initiativeOrder: string[];
+  currentTurnIndex: number;
+
+  /** Active marks (ranged action) */
+  markedTargets: Array<{
+    targetId: string;
+    markerId: string;
+    expiresOnTurn: number;
+  }>;
+
+  /** Combat log */
+  log: CombatLogEntry[];
+
+  /** Pending events for narrator */
+  pendingEvents: CombatEvent[];
+
+  /** Reference to the local map state (source of truth for terrain) */
+  mapRoomId: string;
+
+  /** Computed overlays for UI */
+  validMoveTargets: TilePosition[];
+  validAttackTargets: TilePosition[];
+  activeOverwatchZones: Array<{
+    combatantId: string;
+    tiles: TilePosition[];
+  }>;
+
+  /** Result (set when combat ends) */
+  result?: {
+    outcome: 'victory' | 'defeat' | 'fled';
+    rewards?: {
+      xp: number;
+      gold: number;
+      items: string[];
+    };
+    survivingAllies: string[];
+    defeatedEnemies: string[];
+    revivedAllies?: string[];  // Allies that were incapacitated and auto-revived on victory
+    revivedPlayer?: boolean;   // True if THE player was incapacitated but ally carried the fight
+    revivedByAllyId?: string;  // ID of the ally who "revived" the player (last ally standing)
+  };
+}
+
+/**
+ * Derive grid combat stats from level.
+ * Extends base deriveCombatStats with movement and attack range.
+ *
+ * @param level - Combatant level (1-60)
+ * @param weaponType - Melee or ranged weapon
+ * @returns Stats including movement and attack range
+ */
+export function deriveGridCombatStats(
+  level: number,
+  weaponType: 'melee' | 'ranged' = 'melee'
+): CombatStats & { movementRange: number; attackRange: number; threatRange: number } {
+  const baseStats = deriveCombatStats(level);
+
+  // Movement range: 3 base + speed bonus
+  // Speed ranges from 3-9, so movement is 3-4 tiles
+  const movementRange = 3 + Math.floor((baseStats.speed - 3) / 3);
+
+  // Attack range: 1 for melee, 3-5 for ranged based on level
+  const attackRange = weaponType === 'melee'
+    ? 1
+    : 3 + Math.floor(level / 20); // 3-5 tiles
+
+  // Threat range: engagement distance for combat initiation
+  // Level 1-19: 1 tile (standard)
+  // Level 20-39: 2 tiles (elite)
+  // Level 40+: 3 tiles (boss-tier)
+  const threatRange = level >= 40 ? 3 : level >= 20 ? 2 : 1;
+
+  return {
+    ...baseStats,
+    movementRange,
+    attackRange,
+    threatRange,
+  };
+}
+
+/**
+ * Create a grid combatant from NPC/player data.
+ */
+export function createGridCombatant(
+  id: string,
+  name: string,
+  level: number,
+  imagePath: string | null,
+  isPlayerControlled: boolean,
+  isPlayer: boolean,
+  position: TilePosition,
+  weaponType: 'melee' | 'ranged' = 'melee'
+): GridCombatant {
+  const stats = deriveGridCombatStats(level, weaponType);
+
+  return {
+    id,
+    name,
+    level,
+    imagePath,
+    isPlayerControlled,
+    isPlayer,
+    currentHp: stats.maxHp,
+    maxHp: stats.maxHp,
+    damage: stats.damage,
+    defense: stats.defense,
+    speed: stats.speed,
+    armor: stats.armor,
+    weaponType: stats.weaponType,
+    slotPosition: 0, // Legacy field, not used in grid combat
+    apRemaining: 2,  // Grid combat uses 2 AP per turn
+    isDefending: false,
+    isOverwatching: false,
+    hasAimedShot: false,
+    isKnockedOut: false,
+    isIncapacitated: false,
+    isDead: false,
+    recentDamage: null,
+    recentHeal: null,
+    // Grid-specific
+    position,
+    movementRange: stats.movementRange,
+    attackRange: stats.attackRange,
+    threatRange: stats.threatRange,
+    facing: 'south', // Default facing
+  };
+}
+
+/**
+ * AP costs for grid combat actions
+ */
+export const GRID_AP_COSTS = {
+  move: 1,           // Per tile moved
+  attack: 2,         // Basic attack
+  defend: 1,         // Enter defend stance
+  overwatch: 2,      // Set up overwatch
+  aimedShot: 3,      // Careful aimed shot (ranged only)
+} as const;

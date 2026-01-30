@@ -30,7 +30,7 @@ interface ChatBubbleProps {
   onNextVariation: () => void;
   onPrevVariation: () => void;
   onRegenerateGreeting?: () => void; // New prop for greeting regeneration
-  onFork?: () => void; // New prop for forking chat from this message
+  onFork?: (bringCount: number | 'all') => void; // New prop for forking chat from this message
   currentUser?: string | UserProfile; // Updated to accept both string and UserProfile
   characterName?: string;
   triggeredLoreImages?: string[]; // Lore images to display inline
@@ -63,6 +63,10 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const hasReceivedContent = useRef(false);
   const generationStartTime = useRef<number | null>(null);
   const { settings } = useSettings(); // Get settings from context
+
+  // Fork dropdown state
+  const [showForkDropdown, setShowForkDropdown] = useState(false);
+  const forkDropdownRef = useRef<HTMLDivElement>(null);
 
   // Initialize generation start time
   useEffect(() => {
@@ -126,6 +130,22 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       }
     };
   }, []);
+
+  // Close fork dropdown when clicking outside
+  useEffect(() => {
+    if (!showForkDropdown) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (forkDropdownRef.current && !forkDropdownRef.current.contains(event.target as Node)) {
+        setShowForkDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showForkDropdown]);
 
   // Enhanced cursor position tracking
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -295,6 +315,16 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const variationCount = message.variations ? message.variations.length : 0;
   // Helper to get user name display - already using formatUserName function which handles both string and UserProfile objects
   const formattedUserName = currentUser ? formatUserName(currentUser) : 'User';
+
+  // Determine the display name for assistant messages
+  // Priority: metadata.speakerName > characterName prop > 'Assistant'
+  const speakerDisplayName = message.role === 'assistant'
+    ? (message.metadata?.speakerName as string | undefined) || characterName || 'Assistant'
+    : formattedUserName;
+
+  // Check if this is an ally interjection (for potential visual differentiation)
+  const isAllyMessage = message.metadata?.speakerRole === 'ally';
+
   // Debug log for empty messages - only warn for non-assistant messages or completed assistant messages
   if (!message.content && !isGenerating && message.role !== 'assistant') {
     console.warn(`[ChatBubble] Rendering bubble with empty content: ID=${message.id}, Role=${message.role}`);
@@ -304,11 +334,14 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     console.warn(`[ChatBubble] Rendering completed assistant message with empty content: ID=${message.id}`);
   }  // Use original styling with performance optimizations
   return (
-    <div className="w-full rounded-lg transition-colors bg-stone-800 text-white performance-contain performance-transform">
+    <div className={`w-full rounded-lg transition-colors text-white performance-contain performance-transform ${
+      isAllyMessage ? 'bg-stone-800/90 border-l-2 border-purple-500/50' : 'bg-stone-800'
+    }`}>
       {/* Message header - shows name and buttons */}
       <div className="px-4 pt-2 flex justify-between items-center performance-contain">
-        <div className="font-medium text-sm text-white/50">
-          {message.role === 'assistant' ? characterName : formattedUserName}
+        <div className={`font-medium text-sm ${isAllyMessage ? 'text-purple-300/70' : 'text-white/50'}`}>
+          {speakerDisplayName}
+          {isAllyMessage && <span className="ml-1.5 text-xs text-purple-400/50">(companion)</span>}
         </div>
 
         <div className="flex items-center gap-1 performance-contain performance-transform">
@@ -402,15 +435,51 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           {/* Show delete button for all message types when not generating */}
           {!isGenerating && (
             <>
-              {/* Fork from here button */}
+              {/* Fork from here dropdown */}
               {onFork && (
-                <button
-                  onClick={onFork}
-                  className="p-1.5 text-stone-400 hover:text-purple-400 hover:bg-stone-700 rounded-lg transition-colors"
-                  title="Fork chat from here"
-                >
-                  <GitFork size={16} />
-                </button>
+                <div className="relative" ref={forkDropdownRef}>
+                  <button
+                    onClick={() => setShowForkDropdown(!showForkDropdown)}
+                    className="p-1.5 text-stone-400 hover:text-purple-400 hover:bg-stone-700 rounded-lg transition-colors"
+                    title="Fork chat from here"
+                  >
+                    <GitFork size={16} />
+                  </button>
+                  {showForkDropdown && (
+                    <div className="absolute right-0 top-full mt-1 w-36 bg-stone-800 border border-stone-600 rounded-lg shadow-lg py-1 z-50">
+                      <div className="px-3 py-1.5 text-xs text-stone-400 border-b border-stone-700">
+                        Bring History
+                      </div>
+                      <button
+                        onClick={() => {
+                          onFork(5);
+                          setShowForkDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-stone-700 transition-colors"
+                      >
+                        Bring 5
+                      </button>
+                      <button
+                        onClick={() => {
+                          onFork(10);
+                          setShowForkDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-stone-700 transition-colors"
+                      >
+                        Bring 10
+                      </button>
+                      <button
+                        onClick={() => {
+                          onFork('all');
+                          setShowForkDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-stone-700 transition-colors"
+                      >
+                        Bring All
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               <button
                 onClick={onDelete}

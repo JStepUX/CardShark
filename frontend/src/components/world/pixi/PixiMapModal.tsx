@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as PIXI from 'pixi.js';
-import { X, Map as MapIcon, ZoomIn, ZoomOut, Home } from 'lucide-react';
+import { X, Map as MapIcon, ZoomIn, ZoomOut, Home, Hand, MousePointer } from 'lucide-react';
 import { GridWorldState } from '../../../types/worldGrid';
 import { WorldMapStage } from './WorldMapStage';
 import { MapCamera } from './MapCamera';
@@ -36,6 +36,7 @@ export function PixiMapModal({
 }: PixiMapModalProps) {
     // UI state
     const [isAnimating, setIsAnimating] = useState(false);
+    const [isPanMode, setIsPanMode] = useState(false);
 
     // PixiJS refs
     const containerRef = useRef<HTMLDivElement>(null);
@@ -48,16 +49,28 @@ export function PixiMapModal({
     // Callback refs to avoid stale closures
     const onNavigateRef = useRef(onNavigate);
     const onCloseRef = useRef(onClose);
+    const currentRoomIdRef = useRef(currentRoomId);
+    const isPanModeRef = useRef(isPanMode);
     useEffect(() => {
         onNavigateRef.current = onNavigate;
         onCloseRef.current = onClose;
     }, [onNavigate, onClose]);
+    useEffect(() => {
+        currentRoomIdRef.current = currentRoomId;
+    }, [currentRoomId]);
+    useEffect(() => {
+        isPanModeRef.current = isPanMode;
+    }, [isPanMode]);
 
-    // Handle ESC key to close
+    // Handle keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && !isAnimating) {
                 onCloseRef.current();
+            }
+            // P key toggles pan mode
+            if (e.key === 'p' || e.key === 'P') {
+                setIsPanMode(prev => !prev);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -225,8 +238,13 @@ export function PixiMapModal({
 
     // Handle room click with travel animation
     const handleRoomClick = useCallback(async (targetRoomId: string) => {
+        // Skip navigation in pan mode
+        if (isPanModeRef.current) return;
         if (isAnimating) return;
-        if (targetRoomId === currentRoomId) return;
+
+        // Use ref for current room ID to avoid stale closure
+        const currentRoom = currentRoomIdRef.current;
+        if (targetRoomId === currentRoom) return;
         if (!stageRef.current || !animationManagerRef.current || !particleSystemRef.current) {
             // Fallback: navigate without animation
             onNavigateRef.current(targetRoomId);
@@ -238,8 +256,9 @@ export function PixiMapModal({
         const animationManager = animationManagerRef.current;
         const particleSystem = particleSystemRef.current;
 
-        // Get positions
-        const sourcePos = currentRoomId ? mapStage.getRoomPosition(currentRoomId) : null;
+        // Get positions - use player token's actual position for accurate animation start
+        const playerToken = mapStage.getPlayerToken();
+        const sourcePos = currentRoom ? { x: playerToken.x, y: playerToken.y } : null;
         const targetPos = mapStage.getRoomPosition(targetRoomId);
 
         if (!targetPos) {
@@ -252,8 +271,6 @@ export function PixiMapModal({
         setIsAnimating(true);
 
         try {
-            const playerToken = mapStage.getPlayerToken();
-
             // Phase 1: Depart current room (if we have a source)
             if (sourcePos) {
                 // Emit dust particles at liftoff
@@ -303,7 +320,7 @@ export function PixiMapModal({
         } finally {
             setIsAnimating(false);
         }
-    }, [isAnimating, currentRoomId, worldData]);
+    }, [isAnimating, worldData]);
 
     return (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex flex-col">
@@ -331,13 +348,31 @@ export function PixiMapModal({
             {/* PixiJS Canvas Container (fills remaining space) */}
             <div
                 ref={containerRef}
-                className="flex-1 relative overflow-hidden"
+                className={`flex-1 relative overflow-hidden ${isPanMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
             >
-                {/* Zoom controls (bottom-right corner) */}
+                {/* Mode toggle + Zoom controls (bottom-right corner) */}
                 <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
+                    {/* Mode toggle */}
+                    <button
+                        onClick={() => setIsPanMode(!isPanMode)}
+                        className={`p-2 rounded-lg transition-colors backdrop-blur-sm ${
+                            isPanMode
+                                ? 'bg-blue-600/80 text-white'
+                                : 'bg-gray-800/80 text-gray-300 hover:bg-gray-700 hover:text-white'
+                        }`}
+                        aria-label={isPanMode ? 'Switch to navigate mode' : 'Switch to pan mode'}
+                        title={isPanMode ? 'Pan mode (click to switch to navigate)' : 'Navigate mode (click to switch to pan)'}
+                    >
+                        {isPanMode ? <Hand className="w-5 h-5" /> : <MousePointer className="w-5 h-5" />}
+                    </button>
+
+                    {/* Divider */}
+                    <div className="h-px bg-gray-600/50 my-1" />
+
+                    {/* Zoom controls */}
                     <button
                         onClick={() => cameraRef.current?.setZoom((cameraRef.current?.getZoom() || 1) + 0.25)}
-                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700 
+                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700
                                    hover:text-white transition-colors backdrop-blur-sm"
                         aria-label="Zoom in"
                     >
@@ -345,7 +380,7 @@ export function PixiMapModal({
                     </button>
                     <button
                         onClick={() => cameraRef.current?.setZoom((cameraRef.current?.getZoom() || 1) - 0.25)}
-                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700 
+                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700
                                    hover:text-white transition-colors backdrop-blur-sm"
                         aria-label="Zoom out"
                     >
@@ -353,7 +388,7 @@ export function PixiMapModal({
                     </button>
                     <button
                         onClick={() => cameraRef.current?.reset()}
-                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700 
+                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700
                                    hover:text-white transition-colors backdrop-blur-sm"
                         aria-label="Reset view"
                     >
@@ -370,7 +405,7 @@ export function PixiMapModal({
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-5 h-5 bg-[#2a2a2a] border border-gray-600 rounded" />
-                    <span className="text-gray-300">Click to Travel</span>
+                    <span className="text-gray-300">{isPanMode ? 'Drag to Pan' : 'Click to Travel'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-lg">👥</span>
@@ -381,7 +416,7 @@ export function PixiMapModal({
                     <span className="text-gray-300">Hostile NPCs</span>
                 </div>
                 <div className="text-gray-500 text-xs ml-4">
-                    Press ESC to close
+                    P: Toggle pan | ESC: Close
                 </div>
             </div>
 

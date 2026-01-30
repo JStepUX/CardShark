@@ -16,8 +16,6 @@ import {
 } from 'lucide-react';
 import { useOptionalChat } from '../hooks/useOptionalProviders';
 import { useCharacter } from '../contexts/CharacterContext';
-// Remove View import if no longer needed elsewhere
-// import { View } from '../types/navigation';
 import DropdownMenu from './DropDownMenu';
 import SelectedCharacterChip from './SelectedCharacterChip';
 import usePrefetchRoute from '../hooks/usePrefetchRoute';

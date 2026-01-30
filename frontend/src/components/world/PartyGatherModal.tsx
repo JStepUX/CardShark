@@ -32,13 +32,13 @@ export function PartyGatherModal({
             backdropClassName="bg-black/70 backdrop-blur-sm"
             buttons={[
                 {
-                    label: 'Stay Here',
+                    label: 'Continue Alone',
                     onClick: onLeaveHere,
-                    variant: 'secondary',
-                    className: 'flex-1 bg-stone-700 hover:bg-stone-600'
+                    variant: 'primary',
+                    className: 'flex-1 !bg-stone-600 hover:!bg-stone-500 text-white'
                 },
                 {
-                    label: 'Come Along',
+                    label: 'Bring Along',
                     onClick: onBringAlong,
                     variant: 'primary',
                     className: 'flex-1 bg-purple-600 hover:bg-purple-700 font-semibold'

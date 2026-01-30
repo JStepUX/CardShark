@@ -30,12 +30,6 @@ import ChatInputArea from './ChatInputArea';
 import { SidePanel } from '../SidePanel';
 import { JournalModal } from '../SidePanel/JournalModal';
 
-// Types and Utilities
-// Reserved for future world card functionality
-// import { Room, WorldData } from '../../types/world';
-
-
-
 // Local storage keys
 const BACKGROUND_SETTINGS_KEY = 'cardshark_background_settings';
 
@@ -89,10 +83,11 @@ export const useStallDetection = (
 
 interface ChatViewProps {
   disableSidePanel?: boolean;
+  hideHeader?: boolean;
 }
 
 // Main ChatView component
-const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
+const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeader = false }) => {
   const navigate = useNavigate();
   const { characterData, setCharacterData, setImageUrl, handleImageChange } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
@@ -146,10 +141,12 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
     sessionNotes,
     setSessionNotes,
     triggeredLoreImages,
-    forkChat
+    forkChat,
+    characterDataOverride,
   } = useChat();
 
-
+  // Effective character name: use override (bonded ally) if set, otherwise base character
+  const effectiveCharacterName = (characterDataOverride || characterData)?.data?.name || 'Character';
 
   // Extract lore image paths for display in chat bubbles
   const loreImagePaths = useMemo(() => {
@@ -276,7 +273,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
         const substitutedContent = substituteVariables(
           rawContent,
           currentUser,
-          characterData?.data?.name
+          effectiveCharacterName
         );
         customEvent.detail.substituteWith = substitutedContent;
       }
@@ -407,7 +404,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
   // }, []);
 
   // Compute emotion here to pass to InputArea
-  const { currentEmotion: emotion } = useEmotionDetection(messages, characterData?.data?.name);
+  const { currentEmotion: emotion } = useEmotionDetection(messages, effectiveCharacterName);
 
   // Determine SidePanel mode
   const sidePanelMode = useMemo(() => {
@@ -434,17 +431,19 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
       <ChatBackgroundLayer
         backgroundSettings={backgroundSettings}
         messages={messages}
-        characterName={characterData?.data?.name || 'Character'}
+        characterName={effectiveCharacterName}
       />
 
-      {/* Header */}
-      <ChatHeader
-        characterName={characterData?.data?.name || 'Character'}
-        onShowContextWindow={() => setShowContextWindow(true)}
-        onShowBackgroundSettings={() => setShowBackgroundSettings(true)}
-        onShowChatSelector={() => setShowChatSelector(true)}
-        onNewChat={handleNewChat}
-      />
+      {/* Header - conditionally rendered */}
+      {!hideHeader && (
+        <ChatHeader
+          characterName={effectiveCharacterName}
+          onShowContextWindow={() => setShowContextWindow(true)}
+          onShowBackgroundSettings={() => setShowBackgroundSettings(true)}
+          onShowChatSelector={() => setShowChatSelector(true)}
+          onNewChat={handleNewChat}
+        />
+      )}
 
       <div className="flex-1 overflow-hidden relative z-10 flex flex-row">
         {/* Main Chat Column */}
@@ -481,13 +480,13 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
                       isGenerating={message.status === 'streaming'}
                       onContentChange={(newContent) => console.log('Thought changed (not implemented):', newContent)}
                       onDelete={() => console.log('Delete thought (not implemented)')}
-                      characterName={characterData?.data?.name || 'Character'}
+                      characterName={effectiveCharacterName}
                     />
                   ) : null}
                   {message.role !== 'thinking' && (
                     <ChatBubble
                       message={message}
-                      characterName={characterData?.data?.name || 'Character'}
+                      characterName={effectiveCharacterName}
                       currentUser={currentUser || undefined}
                       isGenerating={isGenerating && generatingId === message.id}
                       onTryAgain={() => regenerateMessage(message)}
@@ -500,10 +499,10 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
                       isRegeneratingGreeting={isGenerating && isFirstAssistantMessage(message.id)}
                       onNextVariation={() => cycleVariation(message.id, 'next')}
                       onPrevVariation={() => cycleVariation(message.id, 'prev')}
-                      onFork={() => {
+                      onFork={(bringCount) => {
                         const messageIndex = messages.findIndex(m => m.id === message.id);
                         if (messageIndex >= 0) {
-                          forkChat(messageIndex);
+                          forkChat(messageIndex, bringCount);
                         }
                       }}
                       triggeredLoreImages={loreImagePaths}
@@ -550,7 +549,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false }) => {
             mode={sidePanelMode}
             isCollapsed={sidePanelCollapsed}
             onToggleCollapse={() => setSidePanelCollapsed(!sidePanelCollapsed)}
-            characterName={characterData?.data?.name || 'Character'}
+            characterName={effectiveCharacterName}
             onImageChange={handleImageChange}
             onUnloadCharacter={handleUnloadCharacter}
             onOpenJournal={() => setShowJournal(true)}

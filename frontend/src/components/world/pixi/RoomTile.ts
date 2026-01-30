@@ -32,6 +32,9 @@ const FONT_FAMILY = 'Poppins, system-ui, -apple-system, sans-serif';
 const NAME_FONT_SIZE = 13;
 const NPC_FONT_SIZE = 11;
 
+// Text resolution multiplier for crisp text on high-DPI displays
+const TEXT_RESOLUTION = Math.max(window.devicePixelRatio || 1, 2);
+
 export type RoomTileState = 'normal' | 'current' | 'highlighted' | 'disabled';
 
 export class RoomTile extends PIXI.Container {
@@ -249,7 +252,8 @@ export class RoomTile extends PIXI.Container {
                 wordWrap: true,
                 wordWrapWidth: TILE_WIDTH - 12,
                 align: 'center',
-            }
+            },
+            resolution: TEXT_RESOLUTION,
         });
 
         text.anchor.set(0.5, 0);
@@ -328,7 +332,8 @@ export class RoomTile extends PIXI.Container {
                 fontSize: NPC_FONT_SIZE,
                 fontWeight: 'bold',
                 fill: 0xFFFFFF,
-            }
+            },
+            resolution: TEXT_RESOLUTION,
         });
         text.anchor.set(0.5);
         text.x = 16;

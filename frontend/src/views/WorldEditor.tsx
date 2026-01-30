@@ -3,7 +3,7 @@
  * @description World Builder interface for creating and editing world maps.
  * @dependencies worldApi (V2), roomApi, GridCanvas, ToolPalette, RoomPropertiesPanel, NPCPickerModal
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { ToolPalette, type Tool } from '../components/world/ToolPalette';
@@ -20,6 +20,7 @@ import type { GridRoom } from '../types/worldGrid';
 import { roomCardToGridRoom } from '../utils/roomCardAdapter';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
+import { useAPIConfig } from '../contexts/APIConfigContext';
 
 interface WorldEditorProps {
   worldId?: string;
@@ -29,6 +30,7 @@ interface WorldEditorProps {
 export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) {
   const { uuid } = useParams<{ uuid: string }>();
   const navigate = useNavigate();
+  const { apiConfig } = useAPIConfig();
 
   const worldId = propWorldId || uuid || '';
 
@@ -57,6 +59,15 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
   // Room gallery picker state
   const [showRoomPicker, setShowRoomPicker] = useState(false);
+
+  // Memoized world context for room content generation
+  const worldContext = useMemo(() => {
+    if (!worldCard) return undefined;
+    return {
+      name: worldCard.data.name,
+      description: worldCard.data.description || ''
+    };
+  }, [worldCard]);
 
   // Load world data and available characters
   useEffect(() => {
@@ -525,6 +536,8 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           onOpenNPCPicker={() => setShowNPCPicker(true)}
           onRemoveFromCell={handleRemoveSelectedRoom}
           isVisible={!!selectedRoom}
+          apiConfig={apiConfig}
+          worldContext={worldContext}
         />
       </div>
 

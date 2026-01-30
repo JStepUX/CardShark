@@ -758,7 +758,8 @@ def fork_chat_endpoint(
             source_chat_uuid=payload.source_chat_session_uuid,
             fork_at_message_index=payload.fork_at_message_index,
             character_uuid=payload.character_uuid,
-            user_uuid=payload.user_uuid
+            user_uuid=payload.user_uuid,
+            start_message_index=payload.start_message_index
         )
         
         if not new_session:

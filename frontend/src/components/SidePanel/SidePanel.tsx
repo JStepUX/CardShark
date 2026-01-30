@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll, Save, Check } from 'lucide-react';
+import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll, Save, Check, Loader2 } from 'lucide-react';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { DayNightSphere } from '../world/DayNightSphere';
 import { SidePanelProps } from './types';
@@ -7,6 +7,7 @@ import { ContextManagementDropdown } from './ContextManagementDropdown';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
 import ImagePreview from '../ImagePreview';
+import { CharacterImageService, CharacterImage } from '../../services/characterImageService';
 
 
 export function SidePanel({
@@ -323,24 +324,120 @@ function CharacterModeContent({
     onUnloadCharacter?: () => void;
 }) {
     // Get the actual image URL from CharacterContext (same as gallery uses)
-    const { imageUrl } = useCharacter();
+    const { imageUrl, characterData } = useCharacter();
+    const characterUuid = characterData?.data?.character_uuid;
+
+    // Secondary images state
+    const [secondaryImages, setSecondaryImages] = useState<CharacterImage[]>([]);
+    const [selectedSecondaryImage, setSelectedSecondaryImage] = useState<CharacterImage | null>(null);
+    const [isLoadingImages, setIsLoadingImages] = useState(false);
+
+    // Load secondary images when character changes
+    useEffect(() => {
+        if (characterUuid) {
+            loadSecondaryImages();
+        } else {
+            setSecondaryImages([]);
+            setSelectedSecondaryImage(null);
+        }
+    }, [characterUuid]);
+
+    const loadSecondaryImages = async () => {
+        if (!characterUuid) return;
+
+        setIsLoadingImages(true);
+        try {
+            const images = await CharacterImageService.listImages(characterUuid);
+            setSecondaryImages(images);
+        } catch (error) {
+            console.error('Error loading secondary images:', error);
+        } finally {
+            setIsLoadingImages(false);
+        }
+    };
+
+    const handleSecondaryImageClick = (image: CharacterImage) => {
+        setSelectedSecondaryImage(image);
+    };
+
+    const handleBackToMain = () => {
+        setSelectedSecondaryImage(null);
+    };
+
+    // Determine which image to show in the main preview
+    const displayImageUrl = selectedSecondaryImage && characterUuid
+        ? CharacterImageService.getImageUrl(characterUuid, selectedSecondaryImage.filename)
+        : imageUrl;
 
     return (
         <>
             {/* Character Portrait */}
             <div className="p-4">
                 <div className="relative w-full aspect-[4/5] rounded-xl overflow-hidden border-2 border-white/20 shadow-lg shadow-black/50">
-                    <ImagePreview
-                        imageUrl={imageUrl}
-                        placeholderUrl="/pngPlaceholder.png"
-                        onImageChange={onImageChange}
-                        hasCharacterLoaded={!!imageUrl}
-                        onUnloadCharacter={onUnloadCharacter}
-                    />
+                    {selectedSecondaryImage ? (
+                        // Show selected secondary image
+                        <div className="relative w-full h-full">
+                            <img
+                                src={displayImageUrl}
+                                alt={selectedSecondaryImage.filename}
+                                className="w-full h-full object-cover"
+                            />
+                            {/* Back to main button */}
+                            <button
+                                onClick={handleBackToMain}
+                                className="absolute top-2 left-2 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded transition-colors"
+                            >
+                                ← Main
+                            </button>
+                        </div>
+                    ) : (
+                        <ImagePreview
+                            imageUrl={imageUrl}
+                            placeholderUrl="/pngPlaceholder.png"
+                            onImageChange={onImageChange}
+                            hasCharacterLoaded={!!imageUrl}
+                            onUnloadCharacter={onUnloadCharacter}
+                        />
+                    )}
                 </div>
             </div>
 
-
+            {/* Secondary Images Gallery */}
+            {characterUuid && (secondaryImages.length > 0 || isLoadingImages) && (
+                <div className="px-4 pb-4">
+                    <div className="text-xs text-gray-500 mb-2">Gallery</div>
+                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-stone-800">
+                        {isLoadingImages ? (
+                            <div className="flex items-center justify-center py-4">
+                                <Loader2 className="w-5 h-5 text-stone-400 animate-spin" />
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-2">
+                                {secondaryImages.map((image) => (
+                                    <button
+                                        key={image.id}
+                                        onClick={() => handleSecondaryImageClick(image)}
+                                        className={`
+                                            aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all
+                                            ${selectedSecondaryImage?.id === image.id
+                                                ? 'border-blue-500 ring-2 ring-blue-500/50'
+                                                : 'border-stone-700 hover:border-stone-500'
+                                            }
+                                        `}
+                                    >
+                                        <img
+                                            src={CharacterImageService.getImageUrl(characterUuid, image.filename)}
+                                            alt={image.filename}
+                                            className="w-full h-full object-cover"
+                                            loading="lazy"
+                                        />
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </>
     );
 }

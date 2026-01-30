@@ -1,6 +1,6 @@
 # This is a copy of models.py but renamed to avoid conflicts with the models package
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from backend.database import Base
@@ -257,8 +257,25 @@ class UserProfileCard(Base):
     png_file_path = Column(String, nullable=False, unique=True)  # Absolute path to PNG
     file_last_modified = Column(Integer, nullable=True)  # Timestamp of last modification
     extensions_json = Column(JSON, nullable=True)  # Store additional metadata
-    
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     db_metadata_last_synced_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class CharacterImage(Base):
+    """
+    Stores metadata for character secondary images (additional images beyond the main portrait).
+    Files are stored in characters/images/{character_uuid}/ directory.
+    """
+    __tablename__ = "character_images"
+    __table_args__ = (
+        UniqueConstraint('character_uuid', 'filename', name='_character_image_uc'),
+        {'extend_existing': True}
+    )
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    character_uuid = Column(String, nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    display_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

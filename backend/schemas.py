@@ -208,7 +208,8 @@ class ChatSessionReadV2(BaseModel):
 class ChatForkPayload(BaseModel):
     """Payload for forking a chat session at a specific message index."""
     source_chat_session_uuid: str
-    fork_at_message_index: int  # Messages 0..n (inclusive) are copied to the new chat
+    fork_at_message_index: int  # Messages start..n (inclusive) are copied to the new chat
+    start_message_index: int = 0  # Start index for partial history fork (default 0 for "bring all")
     character_uuid: str
     user_uuid: Optional[str] = None
 

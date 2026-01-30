@@ -21,7 +21,6 @@ import HighlightingSettings from '../HighlightingSettings';
 import { ContentFilteringTab } from './ContentFilteringTab';
 
 import { WordSwapRule } from '../../utils/contentProcessing';
-// import KoboldCPPManager from './KoboldCPPManager'; // Removed
 import ModelDirectorySettings from './ModelDirectorySettings';
 
 interface APISettingsViewProps {}

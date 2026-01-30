@@ -388,6 +388,29 @@ class WorldCardHandlerV2:
         if request.tags is not None:
             world_card.data.tags = request.tags
 
+        # Runtime state fields
+        if request.player_xp is not None:
+            world_card.data.extensions.world_data.player_xp = request.player_xp
+        if request.player_level is not None:
+            world_card.data.extensions.world_data.player_level = request.player_level
+        if request.player_gold is not None:
+            world_card.data.extensions.world_data.player_gold = request.player_gold
+        if request.bonded_ally_uuid is not None:
+            # Empty string means "clear" (unbond); any other value sets the ally
+            world_card.data.extensions.world_data.bonded_ally_uuid = (
+                None if request.bonded_ally_uuid == "" else request.bonded_ally_uuid
+            )
+        if request.time_state is not None:
+            world_card.data.extensions.world_data.time_state = request.time_state
+        if request.npc_relationships is not None:
+            world_card.data.extensions.world_data.npc_relationships = request.npc_relationships
+        if request.player_inventory is not None:
+            world_card.data.extensions.world_data.player_inventory = request.player_inventory
+        if request.ally_inventory is not None:
+            world_card.data.extensions.world_data.ally_inventory = request.ally_inventory
+        if request.room_states is not None:
+            world_card.data.extensions.world_data.room_states = request.room_states
+
         # Get PNG file path
         with self.character_service._get_session_context() as db:
             character = self.character_service.get_character_by_uuid(world_uuid, db)

@@ -1,9 +1,7 @@
 // frontend/src/handlers/loreHandler.ts
 
-import { LoreEntry } from '../types/schema'; // Assuming LoreEntry is defined here
-import { getApiBaseUrl } from '../utils/apiConfig'; // Import API base URL helper
-// If CharacterCard is needed for characterImagePath, import it too.
-// import { CharacterCard } from '../types/schema';
+import { LoreEntry } from '../types/schema';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
 
 // I. Frontend Development - Chat & PNG Preview

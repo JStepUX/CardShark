@@ -75,10 +75,34 @@ class ExportHandler:
         # Create ZIP in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Add world card
+            # Add world card (with runtime state stripped for clean export)
             self.logger.log_step(f"Adding world card: {world_png_path.name}")
             with open(world_png_path, 'rb') as f:
-                zip_file.writestr('world.png', f.read())
+                world_png_bytes = f.read()
+
+            # Strip runtime progress from world metadata so exports are clean templates
+            world_metadata = self.png_handler.read_metadata(world_png_bytes)
+            world_data_section = (
+                world_metadata.get('data', {})
+                .get('extensions', {})
+                .get('world_data', {})
+            )
+            runtime_fields = [
+                'player_xp', 'player_level', 'player_gold',
+                'bonded_ally_uuid', 'time_state', 'npc_relationships',
+                'player_inventory', 'ally_inventory', 'room_states',
+            ]
+            for field in runtime_fields:
+                world_data_section.pop(field, None)
+            # Reset player position to starting position
+            if 'starting_position' in world_data_section:
+                world_data_section['player_position'] = world_data_section['starting_position']
+            # Strip per-room instance_state from placements
+            for room_placement in world_data_section.get('rooms', []):
+                room_placement.pop('instance_state', None)
+
+            clean_world_png = self.png_handler.write_metadata(world_png_bytes, world_metadata)
+            zip_file.writestr('world.png', clean_world_png)
 
             # Process rooms
             world_data = world_card.data.extensions.world_data
@@ -242,8 +266,21 @@ class ExportHandler:
                 # Step 6: Import world card (update room references)
                 world_metadata['data']['character_uuid'] = new_world_uuid
 
+                # Strip any runtime progress (safety net for older exports)
+                import_world_data = world_metadata.get('data', {}).get('extensions', {}).get('world_data', {})
+                for rt_field in [
+                    'player_xp', 'player_level', 'player_gold',
+                    'bonded_ally_uuid', 'time_state', 'npc_relationships',
+                    'player_inventory', 'ally_inventory', 'room_states',
+                ]:
+                    import_world_data.pop(rt_field, None)
+                if 'starting_position' in import_world_data:
+                    import_world_data['player_position'] = import_world_data['starting_position']
+                for rp in import_world_data.get('rooms', []):
+                    rp.pop('instance_state', None)
+
                 # Update room references
-                world_data = world_metadata.get('data', {}).get('extensions', {}).get('world_data', {})
+                world_data = import_world_data
                 rooms = world_data.get('rooms', [])
                 for room_placement in rooms:
                     old_room_uuid = room_placement.get('room_uuid')

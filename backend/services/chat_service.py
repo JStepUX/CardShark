@@ -376,21 +376,23 @@ def update_session_settings(db: Session, chat_session_uuid: str,
     return True
 
 
-def fork_chat_session(db: Session, source_chat_uuid: str, fork_at_message_index: int, 
-                      character_uuid: str, user_uuid: Optional[str] = None) -> Optional[sql_models.ChatSession]:
+def fork_chat_session(db: Session, source_chat_uuid: str, fork_at_message_index: int,
+                      character_uuid: str, user_uuid: Optional[str] = None,
+                      start_message_index: int = 0) -> Optional[sql_models.ChatSession]:
     """
     Fork a chat session at a specific message index.
-    
+
     Creates a new chat session with messages copied from the source chat,
-    from index 0 to fork_at_message_index (inclusive).
-    
+    from start_message_index to fork_at_message_index (inclusive).
+
     Args:
         db: Database session
         source_chat_uuid: UUID of the source chat to fork from
         fork_at_message_index: Index of the last message to include (0-based, inclusive)
         character_uuid: UUID of the character for the new chat
         user_uuid: Optional UUID of the user
-    
+        start_message_index: Index of the first message to include (default 0 for full history)
+
     Returns:
         The newly created ChatSession, or None if source chat not found
     """
@@ -407,9 +409,15 @@ def fork_chat_session(db: Session, source_chat_uuid: str, fork_at_message_index:
         if fork_at_message_index < 0 or fork_at_message_index >= len(source_messages):
             # Clamp to valid range
             fork_at_message_index = max(0, min(fork_at_message_index, len(source_messages) - 1))
-        
-        # 4. Slice messages to copy (0 to fork_at_message_index inclusive)
-        messages_to_copy = source_messages[:fork_at_message_index + 1]
+
+        # 3.5. Validate and clamp start index
+        if start_message_index < 0:
+            start_message_index = 0
+        if start_message_index > fork_at_message_index:
+            start_message_index = fork_at_message_index
+
+        # 4. Slice messages to copy (start_message_index to fork_at_message_index inclusive)
+        messages_to_copy = source_messages[start_message_index:fork_at_message_index + 1]
         
         # 5. Create new chat session
         original_title = source_chat.title or "Untitled Chat"

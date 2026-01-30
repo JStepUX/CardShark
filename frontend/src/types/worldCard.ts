@@ -4,6 +4,29 @@
 
 import { WorldState, GridSize, Position } from './worldV2';
 import { RoomNPC } from './room';
+import { NPCRelationship, TimeState } from './worldRuntime';
+import { CharacterInventory } from './inventory';
+
+// =============================================================================
+// Per-Room Runtime State (persisted in WorldData.room_states)
+// =============================================================================
+
+/**
+ * Status of an individual NPC within a room instance.
+ * Tracks alive/dead/incapacitated and last known position on the local map.
+ */
+export interface NpcInstanceState {
+  status: 'alive' | 'incapacitated' | 'dead';
+  position?: Position; // Last known local map tile position
+}
+
+/**
+ * Runtime state for a specific room instance.
+ * Keyed by room_uuid in WorldData.room_states.
+ */
+export interface RoomInstanceState {
+  npc_states: Record<string, NpcInstanceState>; // character_uuid -> state
+}
 
 /**
  * Room placement in world grid
@@ -35,6 +58,17 @@ export interface WorldData {
   map_image?: string; // Custom map backdrop image path
   // Full world state (includes rooms array with full Room objects)
   world_state?: WorldState;
+
+  // Runtime state - persisted gameplay progress
+  player_xp?: number; // Cumulative XP earned in this world
+  player_level?: number; // Current player level (1-60)
+  player_gold?: number; // Gold accumulated
+  bonded_ally_uuid?: string; // character_uuid of currently bonded ally
+  time_state?: TimeState; // Day/night cycle state
+  npc_relationships?: Record<string, NPCRelationship>; // character_uuid -> relationship
+  player_inventory?: CharacterInventory; // Player equipment and items
+  ally_inventory?: CharacterInventory; // Bonded ally equipment and items
+  room_states?: Record<string, RoomInstanceState>; // room_uuid -> per-room runtime state
 }
 
 /**
@@ -116,6 +150,16 @@ export interface UpdateWorldRequest {
   starting_position?: Position;
   player_position?: Position;
   image?: File | null;
+  // Runtime state fields
+  player_xp?: number;
+  player_level?: number;
+  player_gold?: number;
+  bonded_ally_uuid?: string; // Empty string "" to clear (unbond)
+  time_state?: TimeState;
+  npc_relationships?: Record<string, NPCRelationship>;
+  player_inventory?: CharacterInventory;
+  ally_inventory?: CharacterInventory;
+  room_states?: Record<string, RoomInstanceState>;
 }
 
 /**

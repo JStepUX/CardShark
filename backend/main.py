@@ -151,6 +151,7 @@ from backend.gallery_endpoints import router as gallery_router # Import the gall
 from backend.npc_room_assignment_endpoints import router as npc_room_assignment_router # Import the new NPC-Room assignment router
 # from backend.character_inventory_endpoints import router as character_inventory_router # REMOVED - functionality integrated into CharacterService
 # from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
+from backend.character_image_endpoints import router as character_image_router # Import the character image router
 
 # Import koboldcpp handler & manager
 from backend.koboldcpp_handler import router as koboldcpp_router
@@ -505,6 +506,7 @@ app.include_router(world_asset_router) # Include the world asset router
 app.include_router(gallery_router) # Include the gallery router
 # app.include_router(character_inventory_router) # REMOVED
 # app.include_router(world_chat_router) # Removed, functionality merged into world_router
+app.include_router(character_image_router) # Include the character image router
 app.include_router(background_router)
 app.include_router(chat_session_router) # Include the new chat session router
 
@@ -746,6 +748,116 @@ async def generate_impersonate(request: Request):
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": f"Failed to generate impersonate response: {str(e)}"}
+        )
+
+@app.post("/api/generate-room-content")
+async def generate_room_content(request: Request):
+    """Generate room description or introduction text using the LLM API with streaming.
+
+    This endpoint generates content for room fields (description or introduction) based on
+    world context, room context, and optional user guidance.
+    """
+    try:
+        logger.log_step("Received room content generation request")
+        request_data = await request.json()
+
+        # Extract required fields
+        api_config = request_data.get('api_config')
+        world_context = request_data.get('world_context', {})  # World name, description, etc.
+        room_context = request_data.get('room_context', {})    # Room name, existing content
+        field_type = request_data.get('field_type', 'description')  # 'description' or 'introduction'
+        existing_text = request_data.get('existing_text', '')  # Current text to continue from
+        user_prompt = request_data.get('user_prompt', '')      # Optional user guidance
+
+        if not api_config:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "API configuration is required"}
+            )
+
+        # Build context from world and room data
+        world_name = world_context.get('name', 'Unknown World')
+        world_description = world_context.get('description', '')
+        room_name = room_context.get('name', 'Unknown Room')
+        room_description = room_context.get('description', '')
+        room_npcs = room_context.get('npcs', [])
+
+        # Build memory context
+        memory_parts = []
+        memory_parts.append(f"## World: {world_name}")
+        if world_description:
+            memory_parts.append(f"World Description: {world_description}")
+        memory_parts.append(f"\n## Room: {room_name}")
+        if room_description and field_type == 'introduction':
+            memory_parts.append(f"Room Description: {room_description}")
+        if room_npcs:
+            npc_names = [npc.get('name', 'Unknown NPC') for npc in room_npcs]
+            memory_parts.append(f"NPCs present: {', '.join(npc_names)}")
+
+        full_memory = "\n".join(memory_parts)
+
+        # Build generation instruction based on field type
+        if field_type == 'introduction':
+            base_instruction = f"""You are a creative writer helping to craft an introduction scene for a room in a story/roleplay world.
+
+The room is "{room_name}" in the world "{world_name}".
+
+Write an evocative introduction that:
+- Sets the scene and atmosphere
+- Describes what the player sees, hears, and feels upon entering
+- Hints at the room's purpose or history
+- Creates immersion without being overly verbose
+
+Write in second person perspective (e.g., "You enter...", "You see...").
+Keep it to 2-4 paragraphs unless the user requests otherwise."""
+        else:  # description
+            base_instruction = f"""You are a creative writer helping to craft a room description for a story/roleplay world.
+
+The room is "{room_name}" in the world "{world_name}".
+
+Write a detailed description that:
+- Captures the physical layout and key features
+- Establishes the atmosphere and mood
+- Notes important objects or points of interest
+- Can be referenced by AI for roleplay context
+
+Write in a neutral, informative tone that provides context without being a narrative.
+Keep it to 2-4 paragraphs unless the user requests otherwise."""
+
+        # Add user guidance if provided
+        if user_prompt:
+            generation_instruction = f"{base_instruction}\n\nUser guidance: {user_prompt}"
+        else:
+            generation_instruction = base_instruction
+
+        # Build the prompt
+        if existing_text and existing_text.strip():
+            prompt = f"## Continue this {field_type} (write ONLY the continuation, do not repeat what's already written):\n\n{existing_text}"
+        else:
+            prompt = f"## Write the {field_type}:\n\n"
+
+        # Stream the response
+        stream_request_data = {
+            "api_config": api_config,
+            "generation_params": {
+                "system_instruction": generation_instruction,
+                "prompt": prompt,
+                "memory": full_memory,
+                "stop_sequence": ["</s>", "[END]", "---"],
+                "quiet": True
+            }
+        }
+
+        return StreamingResponse(
+            api_handler.stream_generate(stream_request_data),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.log_error(f"Error generating room content: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Failed to generate room content: {str(e)}"}
         )
 
 @app.post("/api/debug-png")

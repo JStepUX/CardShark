@@ -13,9 +13,8 @@ import { LoreEntry, WorldInfoLogic } from '../types/schema';
 import RichTextEditor from './RichTextEditor';
 import LoreImageUploader from './LoreImageUploader'; // Import the uploader
 import LoadingSpinner from './common/LoadingSpinner'; // Added
-import { useCharacter } from '../contexts/CharacterContext'; // To get character UUID
-// import { useChat } from '../contexts/ChatContext'; // Import useChat when needed
-import { useCharacterUuid } from '../hooks/useCharacterUuid'; // Import UUID hook
+import { useCharacter } from '../contexts/CharacterContext';
+import { useCharacterUuid } from '../hooks/useCharacterUuid';
 import { htmlToPlainText } from '../utils/contentUtils'; // Import HTML to plain text converter
 import { getApiBaseUrl } from '../utils/apiConfig'; // Import API base URL helper
 
