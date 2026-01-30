@@ -17,6 +17,7 @@ import {
     TilePosition,
     Allegiance,
 } from '../../types/localMap';
+import { calculateThreatZones } from '../../utils/localMapUtils';
 import {
     GridCombatant,
     GridCombatState,
@@ -382,10 +383,14 @@ export function cleanupDefeatedEntities(
             return e;
         });
 
+    // Recalculate threat zones based on remaining hostile entities
+    const updatedThreatZones = calculateThreatZones(updatedEntities, mapState.config);
+
     return {
         updatedMapState: {
             ...mapState,
             entities: updatedEntities,
+            threatZones: updatedThreatZones,
         },
         deadEntityIds: deadIds,
         incapacitatedEntityIds: incapacitatedIds,

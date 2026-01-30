@@ -495,6 +495,24 @@ export class EntityCardSprite extends PIXI.Container {
 
         // Update level
         this.levelText.text = entity.level.toString();
+
+        // Update status badge (bonded status may have changed)
+        this.updateStatusBadge(entity);
+    }
+
+    /**
+     * Update status badge based on current entity state
+     */
+    private updateStatusBadge(entity: LocalMapEntity): void {
+        // Remove existing badge
+        if (this.statusBadge) {
+            this.removeChild(this.statusBadge);
+            this.statusBadge.destroy();
+            this.statusBadge = null;
+        }
+
+        // Recreate if needed
+        this.createStatusBadge(entity);
     }
 
     /**
@@ -967,5 +985,144 @@ export class EntityCardSprite extends PIXI.Container {
         this.eventMode = 'dynamic';
         this.cursor = 'pointer';
         this.bobEnabled = true;
+    }
+
+    /**
+     * Play revival animation: stand back up from incapacitated state with flourish.
+     * Reverse of incapacitation - rotate back to upright, restore color, add glow effect.
+     * @param onComplete Called when animation finishes
+     */
+    playRevivalAnimation(onComplete?: () => void): void {
+        // If not incapacitated, just complete immediately
+        if (this.rotation === 0 && this.eventMode !== 'none') {
+            onComplete?.();
+            return;
+        }
+
+        const duration = 800;
+        const startTime = performance.now();
+        const startRotation = this.rotation;
+        const startAlpha = this.alpha;
+        const startPivotY = this.pivot.y;
+
+        // Create golden glow particles for revival effect
+        this.spawnRevivalParticles();
+
+        const animate = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Ease out elastic for dramatic standing up
+            const eased = this.easeOutElastic(progress);
+
+            // Rotate back to upright (from 90 degrees to 0)
+            this.rotation = startRotation * (1 - eased);
+
+            // Restore color from grey to white with golden flash at peak
+            if (progress < 0.5) {
+                // First half: grey to gold
+                this.tint = this.lerpColor(0x666666, 0xFFD700, progress * 2);
+            } else {
+                // Second half: gold to white
+                this.tint = this.lerpColor(0xFFD700, 0xFFFFFF, (progress - 0.5) * 2);
+            }
+
+            // Restore alpha
+            this.alpha = startAlpha + (1 - startAlpha) * eased;
+
+            // Restore pivot
+            this.pivot.y = startPivotY + (PIVOT_Y_OFFSET - startPivotY) * eased;
+
+            // Add a slight scale bounce at the end
+            if (progress > 0.7) {
+                const bounceProgress = (progress - 0.7) / 0.3;
+                const bounce = Math.sin(bounceProgress * Math.PI) * 0.1;
+                this.scale.set(1 + bounce);
+            }
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                // Final state: fully restored
+                this.rotation = 0;
+                this.tint = 0xFFFFFF;
+                this.alpha = 1;
+                this.pivot.y = PIVOT_Y_OFFSET;
+                this.scale.set(1);
+                this.eventMode = 'dynamic';
+                this.cursor = 'pointer';
+                this.bobEnabled = true;
+                onComplete?.();
+            }
+        };
+
+        requestAnimationFrame(animate);
+    }
+
+    /**
+     * Spawn golden particle effect for revival animation
+     */
+    private spawnRevivalParticles(): void {
+        const particleCount = 16;
+
+        for (let i = 0; i < particleCount; i++) {
+            const particle = new PIXI.Graphics();
+            const size = 2 + Math.random() * 4;
+            particle.circle(0, 0, size);
+            // Mix of gold and white particles
+            const color = Math.random() > 0.5 ? 0xFFD700 : 0xFFFFFF;
+            particle.fill({ color, alpha: 0.9 });
+
+            // Start from center/bottom of card
+            particle.x = CARD_WIDTH / 2;
+            particle.y = CARD_HEIGHT * 0.7;
+            this.addChild(particle);
+
+            // Upward and outward velocity (like rising sparkles)
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8; // Mostly upward
+            const speed = 30 + Math.random() * 50;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+
+            // Animate particle
+            const startTime = performance.now();
+            const duration = 600 + Math.random() * 400;
+
+            const animateParticle = (currentTime: number) => {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Move upward with slight deceleration
+                const eased = 1 - Math.pow(1 - progress, 2);
+                particle.x = CARD_WIDTH / 2 + vx * eased;
+                particle.y = CARD_HEIGHT * 0.7 + vy * eased;
+
+                // Fade and shrink
+                particle.alpha = (1 - progress) * 0.9;
+                particle.scale.set(1 - progress * 0.3);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateParticle);
+                } else {
+                    this.removeChild(particle);
+                    particle.destroy();
+                }
+            };
+
+            // Stagger particle starts for more natural effect
+            setTimeout(() => requestAnimationFrame(animateParticle), i * 30);
+        }
+    }
+
+    /**
+     * Ease out elastic for dramatic bounce effect
+     */
+    private easeOutElastic(x: number): number {
+        const c4 = (2 * Math.PI) / 3;
+        return x === 0
+            ? 0
+            : x === 1
+            ? 1
+            : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
     }
 }

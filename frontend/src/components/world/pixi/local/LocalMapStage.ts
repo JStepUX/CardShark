@@ -208,8 +208,13 @@ export class LocalMapStage extends PIXI.Container {
                 this.backgroundOverlay.fill({ color: 0x000000, alpha: 0.2 });
                 this.backgroundLayer.addChild(this.backgroundOverlay);
 
-                // Reduce grid visibility when background is present (per spec)
-                this.gridLayer.alpha = 0.15;
+                // Reduce grid LINE visibility when background is present (per spec)
+                // Only affect grid lines, not exit icons or highlights
+                for (const row of this.tiles) {
+                    for (const tile of row) {
+                        tile.setGridLineAlpha(0.15);
+                    }
+                }
             })
             .catch((err: Error) => {
                 console.error('[LocalMapStage] Background texture failed to load:', imagePath, err);
@@ -288,7 +293,7 @@ export class LocalMapStage extends PIXI.Container {
             const tile = this.getTile(exit.position);
             if (tile) {
                 tile.setExit(exit.direction, exit.targetRoomName);
-                tile.setHighlight('exit');
+                // No permanent highlight - exit icon is sufficient
             }
         }
     }
@@ -320,11 +325,8 @@ export class LocalMapStage extends PIXI.Container {
     /**
      * Update player position highlight
      */
-    private updatePlayerPosition(position: TilePosition): void {
-        const tile = this.getTile(position);
-        if (tile) {
-            tile.setHighlight('player_position');
-        }
+    private updatePlayerPosition(_position: TilePosition): void {
+        // Player card is sufficient indicator - no tile highlight needed
     }
 
     /**

@@ -224,7 +224,10 @@ export function PixiMapModal({
                 appRef.current.destroy(true, { children: true, texture: true });
                 appRef.current = null;
             }
-            TextureCache.clear();
+            // NOTE: Do NOT call TextureCache.clear() here!
+            // The texture cache is shared between LocalMapView and PixiMapModal.
+            // Clearing it here destroys textures the local map is still using,
+            // causing the local map to disappear when the world map is closed.
         };
     }, []); // Only run once on mount
 

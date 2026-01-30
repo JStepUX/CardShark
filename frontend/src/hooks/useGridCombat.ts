@@ -274,6 +274,37 @@ export function useGridCombat(
                         }, 400); // Wait for attack animation to complete
                     }
                 }
+
+                // Trigger revival animations (player revived by ally after they carried the fight)
+                if (event.type === 'player_revived' && mapRef?.current) {
+                    const targetId = event.targetId;
+                    if (targetId) {
+                        pendingAnimations++;
+                        console.log('[Combat] Playing player revival animation for', targetId);
+                        // Delay to let victory state settle
+                        setTimeout(() => {
+                            mapRef.current?.playRevivalAnimation(targetId, () => {
+                                pendingAnimations--;
+                                checkComplete();
+                            });
+                        }, 500);
+                    }
+                }
+
+                // Trigger ally revival animations
+                if (event.type === 'ally_revived' && mapRef?.current) {
+                    const actorId = event.actorId; // For ally_revived, the revived ally is the actor
+                    if (actorId) {
+                        pendingAnimations++;
+                        console.log('[Combat] Playing ally revival animation for', actorId);
+                        setTimeout(() => {
+                            mapRef.current?.playRevivalAnimation(actorId, () => {
+                                pendingAnimations--;
+                                checkComplete();
+                            });
+                        }, 600); // Slightly longer delay so revivals are staggered
+                    }
+                }
             }
 
             // If no animations, resolve immediately

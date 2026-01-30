@@ -27,8 +27,10 @@ const GRID_LINE_ALPHA = 0.3;
 const GRID_LINE_WIDTH = 1;
 
 // Exit icon colors
-const EXIT_ICON_COLOR = 0xFFFFFF;
-const EXIT_BG_COLOR = 0x1F2937; // gray-800
+const EXIT_ARROW_COLOR = 0xFFFFFF;
+const EXIT_BG_COLOR = 0x3B82F6; // Blue-500
+const EXIT_SHADOW_COLOR = 0x000000;
+const EXIT_ICON_SIZE = 16;
 
 export class LocalMapTile extends PIXI.Container {
     private tileSize: number;
@@ -47,6 +49,10 @@ export class LocalMapTile extends PIXI.Container {
     // Animation
     private pulseTime: number = 0;
     private isPulsing: boolean = false;
+    private exitPulseTime: number = 0;
+
+    // Grid line base opacity (can be reduced when background is present)
+    private gridLineBaseAlpha: number = 1.0;
 
     // Hover state
     private hoverOverlay!: PIXI.Graphics;
@@ -207,17 +213,29 @@ export class LocalMapTile extends PIXI.Container {
         }
 
         this.exitIcon = new PIXI.Container();
+        const centerX = this.tileSize / 2;
+        const centerY = this.tileSize / 2;
 
-        // Background circle
+        // Set pivot to center so scale animation throbs from center
+        this.exitIcon.pivot.set(centerX, centerY);
+        this.exitIcon.position.set(centerX, centerY);
+
+        // Shadow (offset slightly)
+        const shadow = new PIXI.Graphics();
+        shadow.circle(centerX + 2, centerY + 2, EXIT_ICON_SIZE);
+        shadow.fill({ color: EXIT_SHADOW_COLOR, alpha: 0.4 });
+        this.exitIcon.addChild(shadow);
+
+        // Background circle - blue with lower opacity
         const bg = new PIXI.Graphics();
-        bg.circle(this.tileSize / 2, this.tileSize / 2, 16);
-        bg.fill({ color: EXIT_BG_COLOR, alpha: 0.9 });
+        bg.circle(centerX, centerY, EXIT_ICON_SIZE);
+        bg.fill({ color: EXIT_BG_COLOR, alpha: 0.7 });
         this.exitIcon.addChild(bg);
 
         // Directional arrow
         const arrow = this.createArrow(direction);
-        arrow.x = this.tileSize / 2;
-        arrow.y = this.tileSize / 2;
+        arrow.x = centerX;
+        arrow.y = centerY;
         this.exitIcon.addChild(arrow);
 
         this.addChild(this.exitIcon);
@@ -238,7 +256,7 @@ export class LocalMapTile extends PIXI.Container {
         arrow.lineTo(size * 0.6, size * 0.5);
         arrow.lineTo(-size * 0.6, size * 0.5);
         arrow.closePath();
-        arrow.fill({ color: EXIT_ICON_COLOR, alpha: 1 });
+        arrow.fill({ color: EXIT_ARROW_COLOR, alpha: 1 });
 
         // Rotate based on direction
         switch (direction) {
@@ -277,11 +295,19 @@ export class LocalMapTile extends PIXI.Container {
      * Update pulse animation
      */
     updatePulse(deltaTime: number): void {
-        if (!this.isPulsing || !this.highlightOverlay.visible) return;
+        // Pulse highlight overlay
+        if (this.isPulsing && this.highlightOverlay.visible) {
+            this.pulseTime += deltaTime * 2;
+            const pulse = 0.3 + Math.sin(this.pulseTime) * 0.15; // 0.15 to 0.45
+            this.highlightOverlay.alpha = pulse / HIGHLIGHT_COLORS[this.currentHighlight].alpha;
+        }
 
-        this.pulseTime += deltaTime * 2;
-        const pulse = 0.3 + Math.sin(this.pulseTime) * 0.15; // 0.15 to 0.45
-        this.highlightOverlay.alpha = pulse / HIGHLIGHT_COLORS[this.currentHighlight].alpha;
+        // Subtle throb for exit icons
+        if (this.isExit && this.exitIcon) {
+            this.exitPulseTime += deltaTime * 1.5; // Gentle speed
+            const scale = 1.0 + Math.sin(this.exitPulseTime) * 0.06; // 0.94 to 1.06
+            this.exitIcon.scale.set(scale);
+        }
     }
 
     /**
@@ -289,8 +315,8 @@ export class LocalMapTile extends PIXI.Container {
      */
     private onHoverStart(): void {
         this.isHovered = true;
-        // Brighten grid lines on hover
-        this.gridLines.alpha = 1.5;
+        // Brighten grid lines on hover (relative to base)
+        this.gridLines.alpha = Math.min(this.gridLineBaseAlpha * 2, 1.0);
         // Show hover overlay
         this.hoverOverlay.visible = true;
     }
@@ -300,7 +326,7 @@ export class LocalMapTile extends PIXI.Container {
      */
     private onHoverEnd(): void {
         this.isHovered = false;
-        this.gridLines.alpha = 1.0;
+        this.gridLines.alpha = this.gridLineBaseAlpha;
         this.hoverOverlay.visible = false;
     }
 
@@ -309,6 +335,17 @@ export class LocalMapTile extends PIXI.Container {
      */
     getIsHovered(): boolean {
         return this.isHovered;
+    }
+
+    /**
+     * Set grid line opacity (for reducing grid visibility when background is present)
+     * This only affects the grid lines, not exit icons or highlights
+     */
+    setGridLineAlpha(alpha: number): void {
+        this.gridLineBaseAlpha = alpha;
+        if (!this.isHovered) {
+            this.gridLines.alpha = alpha;
+        }
     }
 
     /**

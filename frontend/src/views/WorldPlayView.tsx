@@ -1493,11 +1493,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     setConversationTargetName('');
     setConversationTargetCard(null);
 
-    // PRUNE MESSAGES: Keep only the last 2 messages for continuity
-    if (messages.length > 0) {
-      const lastTwoMessages = messages.slice(-2);
-      setMessages(lastTwoMessages);
-      console.log(`Pruned messages: kept last ${lastTwoMessages.length} messages for continuity`);
+    // PRUNE MESSAGES: Keep last 8 messages for continuity when traveling between rooms
+    const MAX_MESSAGES_ON_TRAVEL = 8;
+    if (messages.length > MAX_MESSAGES_ON_TRAVEL) {
+      const recentMessages = messages.slice(-MAX_MESSAGES_ON_TRAVEL);
+      setMessages(recentMessages);
+      console.log(`[Travel] Pruned messages: kept last ${recentMessages.length} of ${messages.length}`);
     }
 
     // Find coordinates for the target room
@@ -2111,6 +2112,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
                 onActionClick={(action) => {
                   if (action === 'defend') gridCombat.executeDefend();
                   else if (action === 'end_turn') gridCombat.endTurn();
+                  else if (action === 'flee') gridCombat.attemptFlee();
                 }}
                 onStartTargeting={gridCombat.setTargetingMode}
                 onCancelTargeting={() => gridCombat.setTargetingMode('none')}

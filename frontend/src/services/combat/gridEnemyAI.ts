@@ -49,6 +49,32 @@ interface TargetScore {
 // =============================================================================
 
 /**
+ * Calculate threat map from combat log.
+ * Returns a map of enemy ID -> total damage dealt to this actor.
+ * This allows enemies to "remember" who has been attacking them and prioritize those targets.
+ */
+function calculateThreatMap(state: GridCombatState, actorId: string): Map<string, number> {
+    const threatMap = new Map<string, number>();
+
+    // Look through combat log for attacks that hit this actor
+    for (const entry of state.log) {
+        // Only consider attacks that targeted this actor
+        if (entry.targetId !== actorId) continue;
+        if (entry.actionType !== 'attack') continue;
+        if (!entry.result.hit) continue;
+
+        const damage = entry.result.damage ?? 0;
+        if (damage > 0) {
+            const attackerId = entry.actorId;
+            const currentThreat = threatMap.get(attackerId) ?? 0;
+            threatMap.set(attackerId, currentThreat + damage);
+        }
+    }
+
+    return threatMap;
+}
+
+/**
  * Decide actions for an AI-controlled combatant.
  *
  * @param state - Current combat state
@@ -76,8 +102,11 @@ export function decideAIActions(
         };
     }
 
+    // Calculate threat map: who has been dealing damage to this actor?
+    const threatMap = calculateThreatMap(state, combatantId);
+
     // Score and prioritize targets
-    const scoredTargets = scoreTargets(actor, enemies, grid);
+    const scoredTargets = scoreTargets(actor, enemies, grid, threatMap);
     const primaryTarget = scoredTargets[0]?.target;
 
     if (!primaryTarget) {
@@ -273,17 +302,35 @@ function getEnemyTargets(state: GridCombatState, combatantId: string): GridComba
 /**
  * Score targets by priority.
  * Higher score = more desirable target.
+ *
+ * Targeting factors:
+ * 1. THREAT (damage dealt to actor) - up to 100 points
+ * 2. Proximity - up to 80 points
+ * 3. Low HP - up to 50 points
+ * 4. In attack range - 30 points
+ * 5. Clear LOS (ranged) - 15 points
+ * 6. Player preference - 5 points
  */
 function scoreTargets(
     actor: GridCombatant,
     enemies: GridCombatant[],
-    grid: CombatGrid
+    grid: CombatGrid,
+    threatMap?: Map<string, number>
 ): TargetScore[] {
     const scores: TargetScore[] = [];
 
     for (const enemy of enemies) {
         const distance = calculateDistance(actor.position, enemy.position);
         let score = 0;
+
+        // THREAT PRIORITY: Enemies who dealt damage draw aggro
+        // This makes enemies focus on whoever is attacking them
+        const threatValue = threatMap?.get(enemy.id) ?? 0;
+        if (threatValue > 0) {
+            // Scale threat: 10 damage = ~50 points, 20+ damage = ~100 points (capped)
+            // This makes taking damage the primary aggro factor
+            score += Math.min(100, threatValue * 5);
+        }
 
         // Prefer low HP targets (finish them off)
         const hpPercent = enemy.currentHp / enemy.maxHp;

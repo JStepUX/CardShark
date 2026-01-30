@@ -286,14 +286,16 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
 
                         <div className="w-px h-10 bg-gray-700 mx-2" />
 
-                        {/* Flee button */}
-                        <ActionButton
-                            icon={<LogOut className="w-5 h-5" />}
-                            label="Flee"
-                            apCost={0}
-                            disabled={false}
-                            onClick={() => onActionClick('flee')}
-                        />
+                        {/* Flee button - dice roll d20 + speed/5 vs DC 12 */}
+                        <div title="Roll d20 + Speed/5 vs DC 12. Success: escape combat. Failure: lose your turn.">
+                            <ActionButton
+                                icon={<LogOut className="w-5 h-5" />}
+                                label="Flee"
+                                apCost={0}
+                                disabled={false}
+                                onClick={() => onActionClick('flee')}
+                            />
+                        </div>
 
                         {/* End Turn button */}
                         <ActionButton

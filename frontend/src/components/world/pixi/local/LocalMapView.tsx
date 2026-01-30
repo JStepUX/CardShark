@@ -62,6 +62,8 @@ export interface LocalMapViewHandle {
     playDeathAnimation: (entityId: string, onComplete?: () => void) => void;
     /** Play incapacitation animation for an entity (grey, topple) */
     playIncapacitationAnimation: (entityId: string, onComplete?: () => void) => void;
+    /** Play revival animation for an entity (stand back up from incapacitated, golden particles) */
+    playRevivalAnimation: (entityId: string, onComplete?: () => void) => void;
     /** Play ranged attack effect with projectile and impact */
     playRangedAttackEffect: (attackerId: string, targetId: string, damage: number, isCritical: boolean, onComplete?: () => void) => void;
     /** Play miss whiff effect at target */
@@ -259,6 +261,18 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 const card = stageRef.current.getEntityCard(entityId);
                 if (card) {
                     card.playIncapacitationAnimation(onComplete);
+                } else {
+                    onComplete?.();
+                }
+            } else {
+                onComplete?.();
+            }
+        },
+        playRevivalAnimation: (entityId: string, onComplete?: () => void) => {
+            if (stageRef.current) {
+                const card = stageRef.current.getEntityCard(entityId);
+                if (card) {
+                    card.playRevivalAnimation(onComplete);
                 } else {
                     onComplete?.();
                 }
