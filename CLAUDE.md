@@ -56,22 +56,29 @@ python build.py    # Generates CardShark.spec and builds EXE
 
 ```
 backend/
-├── main.py                    # FastAPI entry point
+├── main.py                    # FastAPI entry point (~590 lines)
 ├── *_endpoints.py             # Route handlers (root level)
+│   ├── generation_endpoints.py    # LLM generation (streaming, greetings)
+│   ├── health_endpoints.py        # Health check and LLM status
+│   └── file_upload_endpoints.py   # Image uploads for rich text
 ├── endpoints/                 # Additional route handlers
 │   ├── room_card_endpoints.py
 │   └── world_card_endpoints_v2.py
 ├── services/                  # Business logic layer
-│   ├── chat_service.py        # Core chat orchestration
-│   ├── character_service.py
-│   ├── world_service.py
+│   ├── chat_service.py            # Core chat orchestration
+│   ├── character_service.py       # Character CRUD (~1100 lines)
+│   ├── character_lore_service.py  # Lore book sync
+│   ├── character_sync_service.py  # PNG-to-DB sync at startup
+│   ├── world_card_service.py      # World card business logic
+│   ├── world_export_service.py    # World ZIP export/import
 │   └── room_service.py
-├── handlers/                  # Domain handlers
-│   ├── world_card_handler_v2.py
+├── handlers/                  # Request/response handlers
 │   ├── room_card_handler.py
+│   ├── character_image_handler.py
 │   └── png_metadata_handler.py
 ├── models/                    # Pydantic data models
 └── utils/                     # Helper utilities
+    └── cross_drive_static_files.py
 ```
 
 ### Frontend Structure

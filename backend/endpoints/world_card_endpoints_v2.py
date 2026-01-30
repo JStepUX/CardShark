@@ -17,9 +17,9 @@ from backend.models.world_card import (
     WorldDeletePreview
 )
 from backend.models.world_state import GridSize
-from backend.handlers.world_card_handler_v2 import WorldCardHandlerV2
+from backend.services.world_card_service import WorldCardService
 from backend.handlers.room_card_handler import RoomCardHandler
-from backend.handlers.export_handler import ExportHandler
+from backend.services.world_export_service import WorldExportService
 from backend.services.character_service import CharacterService
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.settings_manager import SettingsManager
@@ -50,9 +50,9 @@ def get_world_card_handler(
     png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
     settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
     logger: LogManager = Depends(get_logger_dependency)
-) -> WorldCardHandlerV2:
-    """Dependency injection for WorldCardHandlerV2"""
-    return WorldCardHandlerV2(character_service, png_handler, settings_manager, logger)
+) -> WorldCardService:
+    """Dependency injection for WorldCardService"""
+    return WorldCardService(character_service, png_handler, settings_manager, logger)
 
 
 def get_room_card_handler(
@@ -66,14 +66,14 @@ def get_room_card_handler(
 
 
 def get_export_handler(
-    world_handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    world_handler: WorldCardService = Depends(get_world_card_handler),
     room_handler: RoomCardHandler = Depends(get_room_card_handler),
     character_service: CharacterService = Depends(get_character_service_dependency),
     png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
     logger: LogManager = Depends(get_logger_dependency)
-) -> ExportHandler:
-    """Dependency injection for ExportHandler"""
-    return ExportHandler(world_handler, room_handler, character_service, png_handler, logger)
+) -> WorldExportService:
+    """Dependency injection for WorldExportService"""
+    return WorldExportService(world_handler, room_handler, character_service, png_handler, logger)
 
 
 @router.post(
@@ -90,7 +90,7 @@ async def create_world_card(
     first_mes: str = Form(None, description="World introduction text"),
     system_prompt: str = Form(None, description="World atmosphere/system prompt"),
     image: UploadFile = File(None, description="Optional world image (uses default if not provided)"),
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Create a new world card PNG file"""
@@ -137,7 +137,7 @@ async def create_world_card(
 )
 async def convert_character_to_world(
     request: ConvertWorldRequest,
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Convert character to world"""
@@ -169,7 +169,7 @@ async def convert_character_to_world(
     description="Returns a list of all world card PNG files"
 )
 async def list_world_cards(
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """List all world cards"""
@@ -195,7 +195,7 @@ async def list_world_cards(
 )
 async def get_world_card(
     world_uuid: str,
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Get a single world card by UUID"""
@@ -226,7 +226,7 @@ async def get_world_card(
 async def update_world_card(
     world_uuid: str,
     request: UpdateWorldRequest,
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Update an existing world card"""
@@ -261,7 +261,7 @@ async def update_world_card(
 )
 async def get_delete_preview(
     world_uuid: str,
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Get a preview of what will happen when deleting a world"""
@@ -293,7 +293,7 @@ async def get_delete_preview(
 async def delete_world_card(
     world_uuid: str,
     delete_rooms: bool = False,
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Delete a world card with optional cascade deletion of auto-generated rooms"""
@@ -343,7 +343,7 @@ async def delete_world_card(
 )
 async def get_world_card_image(
     world_uuid: str,
-    handler: WorldCardHandlerV2 = Depends(get_world_card_handler),
+    handler: WorldCardService = Depends(get_world_card_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Serve the world card PNG image"""
@@ -371,7 +371,7 @@ async def get_world_card_image(
 )
 async def export_world_card(
     world_uuid: str,
-    handler: ExportHandler = Depends(get_export_handler),
+    handler: WorldExportService = Depends(get_export_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Export world and all dependencies as ZIP archive"""
@@ -405,7 +405,7 @@ async def export_world_card(
 )
 async def import_world_card(
     file: UploadFile = File(..., description="World archive (.cardshark.zip)"),
-    handler: ExportHandler = Depends(get_export_handler),
+    handler: WorldExportService = Depends(get_export_handler),
     logger: LogManager = Depends(get_logger_dependency)
 ):
     """Import world and all dependencies from ZIP archive"""

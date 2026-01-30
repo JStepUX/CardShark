@@ -155,7 +155,6 @@ function ItemSlot({
 // =============================================================================
 
 export function InventoryModal({
-  characterId,
   characterName,
   characterImagePath,
   currentHp,

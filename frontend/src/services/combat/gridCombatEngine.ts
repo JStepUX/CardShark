@@ -27,9 +27,7 @@ import {
     GridMoveAction,
     GridAttackAction,
     GridDefendAction,
-    GridEndTurnAction,
     GridFleeAction,
-    CombatPhase,
     CombatEvent,
     CombatEventType,
     CombatLogEntry,
@@ -37,9 +35,8 @@ import {
     calculateHitQuality,
     GRID_AP_COSTS,
 } from '../../types/combat';
-import { TilePosition, LocalMapTileData } from '../../types/localMap';
+import { TilePosition } from '../../types/localMap';
 import { generateUUID } from '../../utils/generateUUID';
-import { findPath, validatePath, PathfindingGrid } from '../../utils/pathfinding';
 import {
     calculateDistance,
     hasLineOfSight,
@@ -54,10 +51,6 @@ import {
 
 function rollD20(): number {
     return Math.floor(Math.random() * 20) + 1;
-}
-
-function rollD6(): number {
-    return Math.floor(Math.random() * 6) + 1;
 }
 
 function rollDamageVariance(): number {

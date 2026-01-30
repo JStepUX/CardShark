@@ -404,7 +404,7 @@ export interface CombatInitData {
 // Grid Combat Extensions (for unified local map combat)
 // =============================================================================
 
-import { TilePosition, LocalMapState, LocalMapEntity } from './localMap';
+import { TilePosition } from './localMap';
 
 /**
  * Extended combatant with grid position for local map combat.

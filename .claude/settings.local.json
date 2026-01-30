@@ -33,7 +33,9 @@
       "Bash(do wc -l \"$file\")",
       "Bash(done)",
       "Bash(do wc:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(powershell -Command \"\\(Get-Content ''D:\\\\Bolt-On\\\\cardshark\\\\backend\\\\main.py''\\).Count\")",
+      "Bash(python build.py:*)"
     ]
   }
 }

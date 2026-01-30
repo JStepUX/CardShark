@@ -42,11 +42,27 @@
   - `room_endpoints.py` - Chat room management
   - `background_endpoints.py` - Background image handling
   - `content_filter_endpoints.py` - Content moderation APIs
+  - `generation_endpoints.py` - LLM generation (streaming, greetings, impersonation)
+  - `health_endpoints.py` - Health check and LLM status
+  - `file_upload_endpoints.py` - Image uploads for rich text editor
 
 ### Business Logic (`handlers/`, `services/`)
-- `handlers/` - Core business logic classes
-- `services/` - Service layer for complex operations
+- `handlers/` - Request/response handlers for specific domains:
+  - `background_api.py` - Background image operations
+  - `character_image_handler.py` - Character image management
+  - `room_card_handler.py` - Room card operations
+  - `world_card_chat_handler.py` - World card chat integration
+  - `world_chat_handler.py` - World chat operations
+- `services/` - Business logic services:
+  - `character_service.py` - Character CRUD and management
+  - `character_lore_service.py` - Lore book synchronization
+  - `character_sync_service.py` - PNG-to-database synchronization
+  - `character_indexing_service.py` - Character search indexing
+  - `chat_service.py` - Chat session orchestration
+  - `world_card_service.py` - World card business logic
+  - `world_export_service.py` - World ZIP export/import
 - `utils/` - Utility functions and helpers
+  - `cross_drive_static_files.py` - Static file serving across drives
 - `models/` - Pydantic data models
 - `errors.py` - Custom exception definitions
 

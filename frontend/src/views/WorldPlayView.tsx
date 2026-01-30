@@ -59,7 +59,7 @@ import { deriveGridCombatStats } from '../types/combat';
 // Inventory system
 import { InventoryModal } from '../components/inventory';
 import type { CharacterInventory } from '../types/inventory';
-import { createDefaultInventory, getEquippedWeaponType, getEquippedWeaponDamage, getAttackRange } from '../types/inventory';
+import { createDefaultInventory } from '../types/inventory';
 
 // Local map config (must match LocalMapView defaults)
 const LOCAL_MAP_CONFIG: LocalMapConfig = {
@@ -515,10 +515,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     };
   }, []);
 
-  // Legacy alias - kept for any remaining callers
-  const savePlayerProgression = useCallback(async (_progression: PlayerProgression) => {
-    await saveWorldRuntimeState();
-  }, [saveWorldRuntimeState]);
 
   // Auto-save on relationship changes (debounced)
   const prevRelationshipsRef = useRef(npcRelationships);
@@ -662,15 +658,13 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     const newMessages = splitIntoMessages(segments, targetMessage, config);
 
     // Replace the original message with the split messages
-    setMessages(prev => {
-      const messageIndex = prev.findIndex(m => m.id === targetMessage.id);
-      if (messageIndex === -1) return prev;
+    const messageIndex = messages.findIndex(m => m.id === targetMessage.id);
+    if (messageIndex === -1) return;
 
-      const before = prev.slice(0, messageIndex);
-      const after = prev.slice(messageIndex + 1);
+    const before = messages.slice(0, messageIndex);
+    const after = messages.slice(messageIndex + 1);
 
-      return [...before, ...newMessages, ...after];
-    });
+    setMessages([...before, ...newMessages, ...after]);
 
   }, [messages, conversationTargetId, conversationTargetName, activeNpcId, activeNpcName, setMessages]);
 
@@ -2154,9 +2148,35 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
               roundNumber={gridCombat.combatState.turn}
               turnOrder={gridCombat.combatState.initiativeOrder.map(id => {
                 const c = gridCombat.combatState!.combatants[id];
-                return c ? { id: c.id, name: c.name, isActive: false } : { id, name: 'Unknown', isActive: false };
+                const currentTurnId = gridCombat.combatState!.initiativeOrder[gridCombat.combatState!.currentTurnIndex];
+                return c ? {
+                  id: c.id,
+                  name: c.name,
+                  imagePath: c.imagePath || null,
+                  isPlayerControlled: c.isPlayerControlled,
+                  isCurrentTurn: c.id === currentTurnId
+                } : {
+                  id,
+                  name: 'Unknown',
+                  imagePath: null,
+                  isPlayerControlled: false,
+                  isCurrentTurn: id === currentTurnId
+                };
               })}
-              logEntries={gridCombat.combatState.log}
+              logEntries={gridCombat.combatState.log.map(entry => ({
+                id: entry.id,
+                type: entry.actionType === 'attack' ? 'attack' as const :
+                      entry.actionType === 'defend' ? 'defend' as const :
+                      entry.actionType === 'move' ? 'move' as const :
+                      entry.actionType === 'flee' ? 'flee' as const :
+                      'system' as const,
+                message: `${entry.actorName} ${entry.actionType}${entry.targetName ? ` ${entry.targetName}` : ''}`,
+                timestamp: Date.now(),
+                actorName: entry.actorName,
+                targetName: entry.targetName,
+                damage: entry.result?.damage,
+                isCritical: entry.result?.hitQuality === 'crushing'
+              }))}
             />
           ) : (
             <ChatView disableSidePanel={true} hideHeader={true} />

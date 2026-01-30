@@ -28,7 +28,7 @@ from .handlers.world_card_chat_handler import WorldCardChatHandler
 
 # New Handlers
 from .world_asset_handler import WorldAssetHandler
-from .handlers.world_card_handler_v2 import WorldCardHandlerV2
+from .services.world_card_service import WorldCardService
 
 # Core dependency providers
 def get_logger(request: Request) -> LogManager:
@@ -145,9 +145,9 @@ def get_world_asset_handler(request: Request) -> WorldAssetHandler:
         raise HTTPException(status_code=500, detail="World asset handler not initialized")
     return world_asset_handler
 
-def get_world_card_handler(request: Request) -> WorldCardHandlerV2:
+def get_world_card_handler(request: Request) -> WorldCardService:
     """Get WorldCardHandler instance from app state."""
-    world_card_handler = cast(WorldCardHandlerV2, request.app.state.world_card_handler)
+    world_card_handler = cast(WorldCardService, request.app.state.world_card_handler)
     if world_card_handler is None:
         raise HTTPException(status_code=500, detail="World card handler not initialized")
     return world_card_handler
@@ -242,6 +242,6 @@ def get_world_asset_handler_dependency(request: Request) -> WorldAssetHandler:
     """Get WorldAssetHandler instance from app state (standardized dependency)."""
     return get_world_asset_handler(request)
 
-def get_world_card_handler_dependency(request: Request) -> WorldCardHandlerV2:
+def get_world_card_handler_dependency(request: Request) -> WorldCardService:
     """Get WorldCardHandler instance from app state (standardized dependency)."""
     return get_world_card_handler(request)

@@ -11,7 +11,7 @@
  * All functions are pure and testable without browser environment.
  */
 
-import { TilePosition, LocalMapTileData, LocalMapEntity, Allegiance } from '../types/localMap';
+import { TilePosition, LocalMapTileData, Allegiance } from '../types/localMap';
 import { PathfindingGrid, getReachableTiles } from './pathfinding';
 
 // =============================================================================

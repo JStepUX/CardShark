@@ -1,5 +1,5 @@
 """
-backend/handlers/export_handler.py
+backend/services/world_export_service.py
 Business logic for exporting and importing worlds as ZIP archives.
 
 Exports a world card along with all referenced room and character cards
@@ -16,21 +16,21 @@ from pathlib import Path
 from typing import Set, Optional, Dict
 from datetime import datetime
 
-from backend.handlers.world_card_handler_v2 import WorldCardHandlerV2
+from backend.services.world_card_service import WorldCardService
 from backend.handlers.room_card_handler import RoomCardHandler
 from backend.services.character_service import CharacterService
 from backend.png_metadata_handler import PngMetadataHandler
 from backend.log_manager import LogManager
 
 
-class ExportHandler:
+class WorldExportService:
     """
     Business logic for exporting and importing world cards as ZIP archives.
     """
 
     def __init__(
         self,
-        world_handler: WorldCardHandlerV2,
+        world_handler: WorldCardService,
         room_handler: RoomCardHandler,
         character_service: CharacterService,
         png_handler: PngMetadataHandler,
@@ -381,3 +381,7 @@ class ExportHandler:
             self.character_service.sync_character_file(str(file_path))
         except Exception as e:
             self.logger.log_warning(f"Failed to sync after world import: {e}")
+
+
+# Backward compatibility alias
+ExportHandler = WorldExportService

@@ -1,9 +1,9 @@
 """
-backend/handlers/world_card_handler_v2.py
-Business logic for World Card PNG files (V2).
+backend/services/world_card_service.py
+Business logic service for World Card PNG files (V2).
 
 World cards are character cards with card_type="world" stored as PNG files.
-This handler manages CRUD operations for world card PNG files.
+This service manages CRUD operations for world card PNG files.
 """
 
 import json
@@ -26,9 +26,9 @@ from backend.log_manager import LogManager
 from backend.utils.location_extractor import LocationExtractor
 
 
-class WorldCardHandlerV2:
+class WorldCardService:
     """
-    Business logic for World Card PNG files (V2).
+    Business logic service for World Card PNG files (V2).
     Handles creation, retrieval, updates, and deletion of world cards.
     """
 
@@ -522,7 +522,7 @@ class WorldCardHandlerV2:
         # Get all characters to build room info and world references
         characters = self.character_service.get_all_characters()
 
-        # Build map of room_uuid → room info (name, created_by_world_uuid)
+        # Build map of room_uuid -> room info (name, created_by_world_uuid)
         room_info_map = {}
         for char in characters:
             try:
@@ -536,7 +536,7 @@ class WorldCardHandlerV2:
             except Exception:
                 continue
 
-        # Build map of room_uuid → list of world_uuids (excluding the world being deleted)
+        # Build map of room_uuid -> list of world_uuids (excluding the world being deleted)
         room_to_other_worlds = {}
         for char in characters:
             try:
@@ -657,3 +657,7 @@ class WorldCardHandlerV2:
             result["success"] = True
 
         return result
+
+
+# Backward compatibility alias
+WorldCardHandlerV2 = WorldCardService

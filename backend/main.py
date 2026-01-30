@@ -36,64 +36,8 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, Streamin
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# Add a custom StaticFiles implementation to handle cross-drive paths
-from starlette.staticfiles import StaticFiles as StarletteStaticFiles
-from starlette.types import Scope, Receive, Send
-import os
-import anyio
-
-# Extend StaticFiles to handle cross-drive paths
-class CrossDriveStaticFiles(StarletteStaticFiles):
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Handle a request and return a response."""
-        assert scope["type"] == "http"
-        request = Request(scope)
-        path = request.path_params.get("path", "")
-        response = await self.get_response(path, scope)
-        await response(scope, receive, send)
-
-    async def get_response(self, path: str, scope: Scope):
-        """Get a response for a given path."""
-        if path.startswith("/"):
-            path = path[1:]
-
-        try:
-            full_path, stat_result = await anyio.to_thread.run_sync(
-                self.safe_lookup_path, path
-            )
-            return self.file_response(full_path, stat_result, scope)
-        except (FileNotFoundError, PermissionError):
-            return self.not_found(scope)
-
-    def not_found(self, scope: Scope):
-        """Return a 404 Not Found response."""
-        if self.html:
-            return HTMLResponse(content="Not Found", status_code=404)
-        return PlainTextResponse(content="Not Found", status_code=404)
-    
-    def safe_lookup_path(self, path: str):
-        """Modified lookup path that handles cross-drive paths."""
-        try:
-            full_path = os.path.join(self.directory, path)
-            
-            # Skip the path containment check if paths are on different drives
-            if os.path.splitdrive(full_path)[0] != os.path.splitdrive(self.directory)[0]:
-                if not os.path.exists(full_path):
-                    raise FileNotFoundError()
-            else:
-                # If same drive, perform the normal security check
-                if not os.path.exists(full_path):
-                    raise FileNotFoundError()
-                if os.path.commonpath([full_path, self.directory]) != self.directory:
-                    raise PermissionError()
-                    
-            stat_result = os.stat(full_path)
-            if stat_result.st_mode & 0o100000 == 0:
-                raise FileNotFoundError()
-                
-            return full_path, stat_result
-        except (FileNotFoundError, PermissionError) as exc:
-            raise exc
+# Custom StaticFiles implementation to handle cross-drive paths
+from backend.utils.cross_drive_static_files import CrossDriveStaticFiles
 
 # Internal modules/handlers
 from backend.log_manager import LogManager
@@ -152,6 +96,9 @@ from backend.npc_room_assignment_endpoints import router as npc_room_assignment_
 # from backend.character_inventory_endpoints import router as character_inventory_router # REMOVED - functionality integrated into CharacterService
 # from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
 from backend.character_image_endpoints import router as character_image_router # Import the character image router
+from backend.generation_endpoints import router as generation_router, setup_generation_router # Import generation router
+from backend.health_endpoints import router as health_router, setup_health_router # Import health router
+from backend.file_upload_endpoints import router as file_upload_router, setup_file_upload_router # Import file upload router
 
 # Import koboldcpp handler & manager
 from backend.koboldcpp_handler import router as koboldcpp_router
@@ -162,7 +109,7 @@ from backend.utils.user_dirs import get_users_dir # type: ignore
 # Import various handlers
 from backend.handlers.world_card_chat_handler import WorldCardChatHandler
 from backend.world_asset_handler import WorldAssetHandler
-from backend.handlers.world_card_handler_v2 import WorldCardHandlerV2
+from backend.services.world_card_service import WorldCardService
 
 # Global configuration
 VERSION = "0.1.0"
@@ -175,6 +122,7 @@ from backend.services.character_service import CharacterService # Import Charact
 from backend.services.character_sync_service import CharacterSyncService # Import CharacterSyncService
 from backend.services.user_profile_service import UserProfileService # Import UserProfileService
 from backend.services.image_storage_service import ImageStorageService # Import ImageStorageService
+from backend.services.character_lore_service import CharacterLoreService # Import CharacterLoreService
 from sqlalchemy.orm import Session # For type hinting in dependency
 from fastapi import Depends # For dependency injection
 
@@ -193,6 +141,10 @@ async def lifespan(app: FastAPI):
         init_db()
         logger.log_info("Database tables initialised")        
         # Synchronize character directories
+        # Initialize CharacterLoreService (extracted from CharacterService)
+        lore_service = CharacterLoreService(logger=logger)
+        app.state.lore_service = lore_service
+
         # Initialize CharacterService and attach to app.state
         db_session_generator = SessionLocal # Pass the callable for CharacterService to manage its own sessions
         app.state.character_service = CharacterService(
@@ -200,6 +152,7 @@ async def lifespan(app: FastAPI):
             png_handler=png_handler,
             settings_manager=settings_manager,
             logger=logger,
+            lore_service=lore_service,
             # character_indexing_service=character_indexing_service # Add this if CharacterService needs it
         )
         
@@ -208,7 +161,7 @@ async def lifespan(app: FastAPI):
         
         # Initialize World Handlers
         app.state.world_asset_handler = WorldAssetHandler(logger)
-        app.state.world_card_handler = WorldCardHandlerV2(
+        app.state.world_card_handler = WorldCardService(
             character_service=app.state.character_service,
             png_handler=png_handler,
             settings_manager=settings_manager,
@@ -345,97 +298,8 @@ app.state.logger = logger
 # Register global exception handlers
 register_exception_handlers(app)
 
-# Original database initialization block removed; moved to startup event.
-# Create a dedicated router for health check
-health_router = APIRouter(prefix="/api", tags=["health"])
-
-@health_router.get("/health", response_model=HealthCheckResponse, responses=STANDARD_RESPONSES)
-async def health_check(request: Request):
-    """Health check endpoint with standardized response.
-    
-    Note: This endpoint does NOT return LLM status to avoid interfering with
-    the separate /api/llm-status endpoint which fetches live model information.
-    It does not make external API calls to ensure fast, reliable responses.
-    """
-    import time
-    start_time = time.time()
-    
-    # Calculate response latency
-    latency_ms = round((time.time() - start_time) * 1000, 2)
-    
-    return HealthCheckResponse(
-        status="healthy",
-        version=VERSION,
-        latency_ms=latency_ms,
-        llm=None  # Don't return LLM status here - use /api/llm-status instead
-    )
-
-@health_router.get("/llm-status")
-async def get_llm_status(request: Request):
-    """Get live LLM provider status including actual loaded model.
-    
-    This endpoint makes external API calls to fetch the currently loaded model
-    from KoboldCPP and other providers. It should be called periodically by the
-    frontend, not during critical startup paths.
-    
-    Returns:
-        dict: LLM status with configured provider and live model info
-    """
-    import httpx
-    
-    llm_status = {
-        "configured": False,
-        "provider": None,
-        "model": None,
-        "model_source": "none"  # "settings", "live", or "none"
-    }
-    
-    try:
-        # Get the active API from settings
-        all_settings = settings_manager.settings
-        active_api_id = all_settings.get("activeApiId")
-        apis = all_settings.get("apis", {})
-        
-        if active_api_id and active_api_id in apis:
-            active_api = apis[active_api_id]
-            provider = active_api.get("provider", "")
-            
-            if provider and active_api.get("enabled", False):
-                llm_status["configured"] = True
-                llm_status["provider"] = provider
-                
-                # Get model name from settings first
-                model_name = active_api.get("model") or active_api.get("model_info", {}).get("name")
-                
-                # For KoboldCPP, try to fetch actual loaded model from the API
-                if provider.lower() == "koboldcpp" and active_api.get("url"):
-                    try:
-                        async with httpx.AsyncClient(timeout=1.0) as client:
-                            kobold_url = active_api["url"].rstrip("/")
-                            response = await client.get(f"{kobold_url}/api/v1/model")
-                            if response.status_code == 200:
-                                model_data = response.json()
-                                # KoboldCPP returns {"result": "model_name"}
-                                live_model = model_data.get("result")
-                                if live_model:
-                                    model_name = live_model
-                                    llm_status["model_source"] = "live"
-                    except Exception as e:
-                        logger.log_debug(f"Could not fetch live model from KoboldCPP: {e}")
-                        # Fall back to settings value
-                
-                if model_name:
-                    llm_status["model"] = model_name
-                    if llm_status["model_source"] == "none":
-                        llm_status["model_source"] = "settings"
-                else:
-                    llm_status["model"] = "unknown"
-                    
-    except Exception as e:
-        logger.log_warning(f"Error getting LLM status: {e}")
-    
-    return llm_status
-
+# Setup health router with dependencies
+setup_health_router(logger, settings_manager, VERSION)
 
 # Add CORS middleware to allow all origins (for development)
 app.add_middleware(
@@ -452,6 +316,12 @@ app.add_middleware(
 debug_handler = PngDebugHandler(logger)
 
 api_handler = ApiHandler(logger)
+
+# Setup generation router with dependencies
+setup_generation_router(logger, api_handler)
+
+# Setup file upload router with dependencies
+setup_file_upload_router(logger)
 
 template_handler = TemplateHandler(logger)
 background_handler = BackgroundHandler(logger)
@@ -509,6 +379,8 @@ app.include_router(gallery_router) # Include the gallery router
 app.include_router(character_image_router) # Include the character image router
 app.include_router(background_router)
 app.include_router(chat_session_router) # Include the new chat session router
+app.include_router(generation_router) # Include the generation router
+app.include_router(file_upload_router) # Include the file upload router
 
 # ---------- FastAPI Dependency for Services ----------
 # get_character_service_dependency is now imported from backend.dependencies
@@ -518,347 +390,6 @@ from backend.content_filter_endpoints import router as content_filter_router
 app.include_router(content_filter_router)
 
 # ---------- Direct routes that haven't been modularized yet ----------
-
-@app.post("/api/generate")
-async def generate(request: Request):
-    """Generate a chat response using the LLM API with streaming."""
-    try:
-        logger.log_step("Received generation request at /api/generate")
-        # Parse the request JSON
-        request_data = await request.json()
-        
-        # Use the ApiHandler to stream the response
-        return StreamingResponse(
-            api_handler.stream_generate(request_data),
-            media_type="text/event-stream"
-        )
-    except Exception as e:
-        logger.log_error(f"Error in /api/generate endpoint: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500, 
-            content={"error": f"Generation failed: {str(e)}"}
-        )
-
-@app.post("/api/generate-greeting")
-async def generate_greeting(request: Request):
-    """Generate a greeting using the LLM API without streaming."""
-    try:
-        logger.log_step("Received greeting generation request")
-        # Parse the request JSON
-        request_data = await request.json()
-        
-        # Extract character data and API config
-        character_data = request_data.get('character_data')
-        api_config = request_data.get('api_config')
-        
-        if not character_data:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": "Character data is required"}
-            )
-            
-        if not api_config:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": "API configuration is required"}
-            )
-            
-        # Extract character fields for context
-        data = character_data.get('data', {})
-        name = data.get('name', 'Character')
-        personality = data.get('personality', '')
-        description = data.get('description', '')
-        scenario = data.get('scenario', '')
-        first_mes = data.get('first_mes', '')
-        
-        # Construct detailed context
-        context_parts = []
-        if description:
-            context_parts.append(f"Description: {description}")
-        if personality:
-            context_parts.append(f"Personality: {personality}")
-        if scenario:
-            context_parts.append(f"Scenario: {scenario}")
-            
-        character_context = "\n\n".join(context_parts)
-        
-        # Get existing system prompt if any
-        system_prompt = data.get('system_prompt', '')
-        
-        # Combine system prompt and character context
-        full_memory = ""
-        if system_prompt:
-             full_memory += system_prompt + "\n\n"
-        if character_context:
-             full_memory += "Character Data:\n" + character_context
-
-        # Construct generation instruction
-        # Get internal prompt template from request or use default
-        prompt_template = request_data.get('prompt_template')
-
-        # Check for custom_prompt (used by combat narratives and other custom generation)
-        custom_prompt = request_data.get('custom_prompt')
-
-        if custom_prompt:
-            # Use custom prompt as the instruction
-            generation_instruction = custom_prompt
-        elif prompt_template:
-            # Use provided template
-            generation_instruction = prompt_template.replace('{{char}}', name)
-        else:
-            # Default instruction for greeting generation
-            generation_instruction = f"#Generate an alternate first message for {name}. ##Only requirements: - Establish the world: Where are we? What does it feel like here? - Establish {name}'s presence (not bio): How do they occupy this space? Everything else (tone, structure, acknowledging/ignoring {{{{user}}}}, dialogue/action/interiority, length) is your choice. ##Choose what best serves this character in this moment. ##Goal: Create a scene unique to {name} speaking only for {name}"
-
-        # Stream the response using ApiHandler
-        # Use system_instruction for the generation directive (goes into system context)
-        # Use prompt as just the turn marker (what the model continues from)
-        stream_request_data = {
-            "api_config": api_config,
-            "generation_params": {
-                "system_instruction": generation_instruction,
-                "prompt": f"\n{name}:",
-                "memory": full_memory,
-                "stop_sequence": ["User:", "Human:", "</s>", f"\n{name}:", "{{user}}:"],
-                "character_data": character_data,
-                "quiet": True
-            }
-        }
-        
-        return StreamingResponse(
-            api_handler.stream_generate(stream_request_data),
-            media_type="text/event-stream"
-        )
-    except Exception as e:
-        logger.log_error(f"Error generating greeting: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "message": f"Failed to generate greeting: {str(e)}"}
-        )
-
-@app.post("/api/generate-impersonate")
-async def generate_impersonate(request: Request):
-    """Generate a response as the user ({{user}}) using the LLM API with streaming.
-    
-    This endpoint allows the AI to 'impersonate' the user, generating a response
-    on their behalf based on the conversation context. If the user has provided
-    a partial message, the AI will continue from where they left off.
-    """
-    try:
-        logger.log_step("Received impersonate generation request")
-        # Parse the request JSON
-        request_data = await request.json()
-        
-        # Extract required fields
-        character_data = request_data.get('character_data')
-        api_config = request_data.get('api_config')
-        messages = request_data.get('messages', [])  # Chat history
-        partial_message = request_data.get('partial_message', '')  # User's partial input
-        user_name = request_data.get('user_name', 'User')
-        prompt_template = request_data.get('prompt_template')
-        
-        if not character_data:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": "Character data is required"}
-            )
-            
-        if not api_config:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": "API configuration is required"}
-            )
-            
-        # Extract character fields for context
-        data = character_data.get('data', {})
-        char_name = data.get('name', 'Character')
-        personality = data.get('personality', '')
-        description = data.get('description', '')
-        scenario = data.get('scenario', '')
-        
-        # Construct character context
-        context_parts = []
-        if description:
-            context_parts.append(f"Description: {description}")
-        if personality:
-            context_parts.append(f"Personality: {personality}")
-        if scenario:
-            context_parts.append(f"Scenario: {scenario}")
-            
-        character_context = "\n\n".join(context_parts)
-        
-        # Get existing system prompt if any
-        system_prompt = data.get('system_prompt', '')
-        
-        # Build memory context
-        full_memory = ""
-        if system_prompt:
-             full_memory += system_prompt + "\n\n"
-        if character_context:
-             full_memory += "Character Data:\n" + character_context
-        
-        # Build conversation history for context
-        chat_history = ""
-        for msg in messages[-10:]:  # Use last 10 messages for context
-            role = msg.get('role', 'user')
-            content = msg.get('content', '')
-            if role == 'assistant':
-                chat_history += f"{char_name}: {content}\n\n"
-            elif role == 'user':
-                chat_history += f"{user_name}: {content}\n\n"
-        
-        # Construct the impersonation instruction (goes into system context)
-        if prompt_template:
-            # Use provided template
-            generation_instruction = prompt_template.replace('{{char}}', char_name).replace('{{user}}', user_name)
-        else:
-            # Default instruction
-            generation_instruction = f"You are now speaking as {user_name}, responding to {char_name}. Based on the conversation so far, write a natural response that {user_name} might give. Stay true to any established personality or traits for {user_name}. Write in first person as {user_name}."
-
-        # Build the prompt (conversation history + turn marker)
-        prompt = f"## Recent Conversation:\n{chat_history}"
-
-        if partial_message and partial_message.strip():
-            prompt += f"\n## Continue this message from {user_name} (write ONLY the continuation, do not repeat what's already written):\n{user_name}: {partial_message}"
-        else:
-            prompt += f"\n## Write a response as {user_name}:\n{user_name}:"
-
-        # Stream the response using ApiHandler
-        # Use system_instruction for the generation directive (goes into system context)
-        stream_request_data = {
-            "api_config": api_config,
-            "generation_params": {
-                "system_instruction": generation_instruction,
-                "prompt": prompt,
-                "memory": full_memory,
-                "stop_sequence": [f"{char_name}:", "</s>", "\n\n"],
-                "character_data": character_data,
-                "quiet": True
-            }
-        }
-        
-        return StreamingResponse(
-            api_handler.stream_generate(stream_request_data),
-            media_type="text/event-stream"
-        )
-    except Exception as e:
-        logger.log_error(f"Error generating impersonate response: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "message": f"Failed to generate impersonate response: {str(e)}"}
-        )
-
-@app.post("/api/generate-room-content")
-async def generate_room_content(request: Request):
-    """Generate room description or introduction text using the LLM API with streaming.
-
-    This endpoint generates content for room fields (description or introduction) based on
-    world context, room context, and optional user guidance.
-    """
-    try:
-        logger.log_step("Received room content generation request")
-        request_data = await request.json()
-
-        # Extract required fields
-        api_config = request_data.get('api_config')
-        world_context = request_data.get('world_context', {})  # World name, description, etc.
-        room_context = request_data.get('room_context', {})    # Room name, existing content
-        field_type = request_data.get('field_type', 'description')  # 'description' or 'introduction'
-        existing_text = request_data.get('existing_text', '')  # Current text to continue from
-        user_prompt = request_data.get('user_prompt', '')      # Optional user guidance
-
-        if not api_config:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": "API configuration is required"}
-            )
-
-        # Build context from world and room data
-        world_name = world_context.get('name', 'Unknown World')
-        world_description = world_context.get('description', '')
-        room_name = room_context.get('name', 'Unknown Room')
-        room_description = room_context.get('description', '')
-        room_npcs = room_context.get('npcs', [])
-
-        # Build memory context
-        memory_parts = []
-        memory_parts.append(f"## World: {world_name}")
-        if world_description:
-            memory_parts.append(f"World Description: {world_description}")
-        memory_parts.append(f"\n## Room: {room_name}")
-        if room_description and field_type == 'introduction':
-            memory_parts.append(f"Room Description: {room_description}")
-        if room_npcs:
-            npc_names = [npc.get('name', 'Unknown NPC') for npc in room_npcs]
-            memory_parts.append(f"NPCs present: {', '.join(npc_names)}")
-
-        full_memory = "\n".join(memory_parts)
-
-        # Build generation instruction based on field type
-        if field_type == 'introduction':
-            base_instruction = f"""You are a creative writer helping to craft an introduction scene for a room in a story/roleplay world.
-
-The room is "{room_name}" in the world "{world_name}".
-
-Write an evocative introduction that:
-- Sets the scene and atmosphere
-- Describes what the player sees, hears, and feels upon entering
-- Hints at the room's purpose or history
-- Creates immersion without being overly verbose
-
-Write in second person perspective (e.g., "You enter...", "You see...").
-Keep it to 2-4 paragraphs unless the user requests otherwise."""
-        else:  # description
-            base_instruction = f"""You are a creative writer helping to craft a room description for a story/roleplay world.
-
-The room is "{room_name}" in the world "{world_name}".
-
-Write a detailed description that:
-- Captures the physical layout and key features
-- Establishes the atmosphere and mood
-- Notes important objects or points of interest
-- Can be referenced by AI for roleplay context
-
-Write in a neutral, informative tone that provides context without being a narrative.
-Keep it to 2-4 paragraphs unless the user requests otherwise."""
-
-        # Add user guidance if provided
-        if user_prompt:
-            generation_instruction = f"{base_instruction}\n\nUser guidance: {user_prompt}"
-        else:
-            generation_instruction = base_instruction
-
-        # Build the prompt
-        if existing_text and existing_text.strip():
-            prompt = f"## Continue this {field_type} (write ONLY the continuation, do not repeat what's already written):\n\n{existing_text}"
-        else:
-            prompt = f"## Write the {field_type}:\n\n"
-
-        # Stream the response
-        stream_request_data = {
-            "api_config": api_config,
-            "generation_params": {
-                "system_instruction": generation_instruction,
-                "prompt": prompt,
-                "memory": full_memory,
-                "stop_sequence": ["</s>", "[END]", "---"],
-                "quiet": True
-            }
-        }
-
-        return StreamingResponse(
-            api_handler.stream_generate(stream_request_data),
-            media_type="text/event-stream"
-        )
-    except Exception as e:
-        logger.log_error(f"Error generating room content: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "message": f"Failed to generate room content: {str(e)}"}
-        )
 
 @app.post("/api/debug-png")
 async def debug_png(file: UploadFile = File(...)):
@@ -1008,84 +539,6 @@ uploads_dir = get_application_base_path() / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", CrossDriveStaticFiles(directory=uploads_dir), name="uploads")
 
-# Removed direct @app.get("/api/health") definition, now handled by health_router
-
-# ---------- Utility Endpoints (Migrated from old main.py) ----------
-
-@app.post("/api/upload-image")
-async def upload_image(request: Request, file: UploadFile = File(...)):
-    """Handle image upload for rich text editor."""
-    try:
-        # Check if file is an image
-        content_type = file.content_type.lower() if file.content_type else ""
-        if not content_type.startswith('image/'):
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": "File must be an image"}
-            )
-
-        # Check allowed image types
-        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-        if content_type not in allowed_types:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": f"Unsupported image format. Allowed: {', '.join(t.split('/')[1] for t in allowed_types)}"}
-            )
-
-        # Use ImageStorageService for consistent path handling
-        service = request.app.state.image_storage_service
-        content = await file.read()
-        result = service.save_image(
-            category="general",
-            file_data=content,
-            original_filename=file.filename
-        )
-
-        logger.log_step(f"Uploaded image for editor: {result['absolute_path']}")
-
-        # Return success with URL for TipTap to use
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "url": result["relative_url"]
-            }
-        )
-    except Exception as e:
-        logger.log_error(f"Error uploading image: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "message": str(e)}
-        )
-
-@app.get("/api/uploads/{filename}")
-async def get_uploaded_image(filename: str):
-    """Serve uploaded images from the 'uploads' directory."""
-    try:
-        # Basic sanitization to prevent path traversal
-        safe_filename = re.sub(r'[\\/]', '', filename) # Remove slashes
-        if safe_filename != filename:
-             raise HTTPException(status_code=400, detail="Invalid filename")
-
-        uploads_dir = Path("uploads")
-        file_path = uploads_dir / safe_filename
-
-        if not file_path.is_file(): # Check if it's a file and exists
-            logger.log_warning(f"Uploaded image not found: {file_path}")
-            raise HTTPException(status_code=404, detail="Image not found")
-
-        logger.log_step(f"Serving uploaded image: {file_path}")
-        return FileResponse(file_path)
-    except HTTPException as http_exc:
-        raise http_exc
-    except Exception as e:
-        logger.log_error(f"Error serving uploaded image '{filename}': {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-# Removed duplicate @app.get("/api/health") definition.
-# The health check is now handled solely by the health_router included earlier.
 # ---------- Main entry point ----------
 
 def main():

@@ -15,7 +15,6 @@ import {
     Shield,
     SkipForward,
     Footprints,
-    Target,
     Heart,
     Zap,
     LogOut,
@@ -23,7 +22,6 @@ import {
 import {
     GridCombatState,
     GridCombatant,
-    GridCombatAction,
     CombatLogEntry,
     GRID_AP_COSTS,
 } from '../../types/combat';
@@ -56,7 +54,7 @@ const TurnPortrait: React.FC<{
     combatant: GridCombatant;
     isActive: boolean;
     isPlayer: boolean;
-}> = ({ combatant, isActive, isPlayer }) => {
+}> = ({ combatant, isActive }) => {
     const borderColor = combatant.isPlayerControlled
         ? isActive ? 'border-yellow-400' : 'border-blue-500'
         : isActive ? 'border-yellow-400' : 'border-red-500';

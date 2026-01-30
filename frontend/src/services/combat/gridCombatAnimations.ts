@@ -12,7 +12,6 @@
  */
 
 import { TilePosition } from '../../types/localMap';
-import { GridCombatant, CombatLogEntry } from '../../types/combat';
 
 // =============================================================================
 // Types

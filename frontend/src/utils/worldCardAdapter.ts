@@ -350,7 +350,7 @@ export function buildThinNPCContext(
     }
 
     // Clear character book for thin context (no lore injection)
-    modifiedCard.data.character_book = undefined;
+    modifiedCard.data.character_book = null as unknown as typeof modifiedCard.data.character_book;
 
     return modifiedCard;
 }

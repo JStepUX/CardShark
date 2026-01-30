@@ -16,7 +16,6 @@ import type {
     GridCombatState,
     GridCombatant,
     CombatLogEntry,
-    CombatEvent,
 } from '../../types/combat';
 
 // =============================================================================

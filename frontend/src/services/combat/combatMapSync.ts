@@ -25,7 +25,7 @@ import {
 } from '../../types/combat';
 import { toCombatAllegiance, CombatAllegiance } from '../../utils/gridCombatUtils';
 import type { CharacterInventory } from '../../types/inventory';
-import { getEquippedWeaponType, getEquippedWeaponDamage, getAttackRange } from '../../types/inventory';
+import { getEquippedWeaponType, getEquippedWeaponDamage } from '../../types/inventory';
 
 // =============================================================================
 // Types
@@ -224,7 +224,7 @@ function rollInitiative(
     combatants: Record<string, GridCombatant>,
     playerAdvantage: boolean,
     playerSide: string[],
-    enemySide: string[]
+    _enemySide: string[]
 ): string[] {
     const entries = Object.entries(combatants);
 

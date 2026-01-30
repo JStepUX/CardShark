@@ -19,9 +19,6 @@ import {
     GridCombatState,
     GridCombatAction,
     GridMoveAction,
-    GridAttackAction,
-    GridDefendAction,
-    GridEndTurnAction,
     GRID_AP_COSTS,
 } from '../../types/combat';
 import { TilePosition } from '../../types/localMap';
@@ -29,9 +26,7 @@ import { findPath, getReachableTiles, PathfindingGrid } from '../../utils/pathfi
 import {
     calculateDistance,
     hasLineOfSight,
-    getValidAttackTargets,
     CombatGrid,
-    CombatEntity,
 } from '../../utils/gridCombatUtils';
 
 // =============================================================================

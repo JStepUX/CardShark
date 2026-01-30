@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Loader2, ImageIcon, Upload } from 'lucide-react';
+import { Plus, X, Loader2, ImageIcon } from 'lucide-react';
 import { CharacterImageService, CharacterImage } from '../../services/characterImageService';
 import ImageCropperModal from '../ImageCropperModal';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';

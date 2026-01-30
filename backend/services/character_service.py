@@ -64,11 +64,12 @@ def _as_json_str(value):
     return value if isinstance(value, str) else json.dumps(value)
 
 class CharacterService:
-    def __init__(self, db_session_generator, png_handler, settings_manager, logger, character_indexing_service=None):
+    def __init__(self, db_session_generator, png_handler, settings_manager, logger, character_indexing_service=None, lore_service=None):
         self.db_session_generator = db_session_generator
         self.png_handler = png_handler
         self.settings_manager = settings_manager
         self.logger = logger
+        self.lore_service = lore_service
 
     def _safe_json_load(self, json_str: Optional[str], default_value: Any, field_name: str, character_uuid: str) -> Any:
         """
@@ -267,8 +268,8 @@ class CharacterService:
                     db.flush() # Necessary to get ID for new entries
                     # ImageStorageService will create lore image directory when needed
                 # Sync Lore for this character (only if we have lore data)
-                if not is_incomplete_char:
-                    self._sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)
+                if not is_incomplete_char and self.lore_service:
+                    self.lore_service.sync_character_lore(final_char_uuid, data_section.get("character_book", {}), db)
                 db.commit() # Commit changes for this character
 
             return True
@@ -331,149 +332,26 @@ class CharacterService:
             db.commit()
 
         self.logger.log_info("Character directory synchronization finished.")
-
-    def _sync_character_lore(self, character_uuid: str, character_book_data: Optional[Dict], db: Session):
-        """
-        Synchronizes lore for a given character.
-        Creates, updates, or deletes lore book and entries in the DB
-        to match the provided character_book_data from a character card.
-        """
-        self.logger.log_info(f"Syncing lore for character_uuid: {character_uuid}")
-
-        # Ensure the character exists in DB before trying to associate lore
-        character_in_db = db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
-        if not character_in_db:
-            self.logger.log_error(f"Cannot sync lore. Character {character_uuid} not found in DB.")
-            return
-
-        # Case 1: No character_book_data provided, or it's not a dictionary (e.g., None or empty)
-        if not character_book_data or not isinstance(character_book_data, dict):
-            self.logger.log_info(f"No valid character_book data for {character_uuid}. Ensuring no lore exists in DB.")
-            existing_lore_book = db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
-            if existing_lore_book:
-                self.logger.log_info(f"Deleting existing lore book (ID: {existing_lore_book.id}) and its entries for {character_uuid}.")
-                # Cascade delete should handle LoreEntry items due to relationship in models.py
-                db.delete(existing_lore_book)
-            return # Nothing more to do
-
-        # Case 2: Valid character_book_data provided
-        lore_book_name = character_book_data.get("name", "") # Default to empty string if name not present
-        entries_data = character_book_data.get("entries", [])
-        if not isinstance(entries_data, list): # Ensure entries is a list
-            self.logger.log_warning(f"Lore entries for {character_uuid} is not a list. Treating as empty.")
-            entries_data = []
-
-        # Find or create the LoreBook for this character
-        lore_book = db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
-        if not lore_book:
-            self.logger.log_info(f"Creating new lore book for {character_uuid} with name '{lore_book_name}'.")
-            lore_book = LoreBookModel(character_uuid=character_uuid, name=lore_book_name)
-            db.add(lore_book)
-            db.flush() # Necessary to get lore_book.id for new entries
-        elif lore_book.name != lore_book_name:
-            self.logger.log_info(f"Updating lore book name for {character_uuid} from '{lore_book.name}' to '{lore_book_name}'.")
-            lore_book.name = lore_book_name
-            db.add(lore_book) # Mark as dirty        # Sync LoreEntries: Clear existing entries and recreate them
-        # Since JSON IDs are not unique across characters, we need to clear and recreate
-        # Delete all existing entries for this lore book
-        if lore_book.entries:
-            self.logger.log_info(f"Clearing {len(lore_book.entries)} existing lore entries for book {lore_book.id} (Char: {character_uuid})")
-            for entry in lore_book.entries:
-                db.delete(entry)
-            db.flush()  # Ensure deletions are processed before creating new entries        # Create new entries from the character book data
-        for entry_data in entries_data:
-            if not isinstance(entry_data, dict):
-                self.logger.log_warning(f"Skipping non-dict lore entry item for {character_uuid}: {entry_data}")
-                continue
-
-            # Store the original JSON ID for reference but don't use it as DB primary key
-            original_json_id = entry_data.get("id", "unknown")
-            
-            # Data for the LoreEntry model instance
-            lore_entry_model_data = {
-                "lore_book_id": lore_book.id,
-                "keys_json": json.dumps(entry_data.get("keys", [])),
-                "secondary_keys_json": json.dumps(entry_data.get("secondary_keys", [])),
-                "content": entry_data.get("content", ""), # Ensure content is not None
-                "comment": entry_data.get("comment", ""),
-                "enabled": entry_data.get("enabled", True),
-                "position": entry_data.get("position", "before_char"), # Default if not present
-                "selective": entry_data.get("selective", False),
-                "insertion_order": entry_data.get("insertion_order", 100), # Default if not present
-                "image_uuid": entry_data.get("image_uuid"),
-                "extensions_json": json.dumps(entry_data.get("extensions", {}))
-            }
-
-            # Create new entry (let DB auto-generate the primary key)
-            self.logger.log_info(f"Creating new lore entry (JSON ID: {original_json_id}) for book {lore_book.id}")
-            new_db_entry = LoreEntryModel(**lore_entry_model_data)
-            db.add(new_db_entry)        # self.db.commit() will be called by the calling function (e.g. sync_character_directories or save_uploaded_character_card)
-
     def add_lore_entries(self, character_uuid: str, entries_data: List[Dict], write_to_png: bool = True):
         """
         Adds multiple lore entries to a character's lore book.
         Appends to existing entries instead of replacing them.
+
+        This method delegates to CharacterLoreService for the database operations
+        and handles PNG writing if requested.
         """
-        self.logger.log_info(f"Adding {len(entries_data)} lore entries to character: {character_uuid}")
+        if not self.lore_service:
+            self.logger.log_error("Lore service not available. Cannot add lore entries.")
+            return False
 
         with self._get_session_context() as db:
-            # Ensure the character exists
-            character = db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
-            if not character:
-                self.logger.log_error(f"Cannot add lore entries. Character {character_uuid} not found.")
-                return False
+            result = self.lore_service.add_lore_entries(character_uuid, entries_data, db)
 
-            # Find or create LoreBook
-            lore_book = db.query(LoreBookModel).filter(LoreBookModel.character_uuid == character_uuid).first()
-            if not lore_book:
-                self.logger.log_info(f"Creating new lore book for {character_uuid}")
-                lore_book = LoreBookModel(character_uuid=character_uuid, name=f"{character.name}'s Lorebook")
-                db.add(lore_book)
-                db.flush()
-
-            # Add entries
-            for entry_data in entries_data:
-                if not isinstance(entry_data, dict):
-                    continue
-                
-                # Determine insertion order (append to end)
-                # This could be optimized by query but for now relying on provided or default
-                # Ideally we check max existing order but let's trust the input or default
-                
-                lore_entry_model_data = {
-                    "lore_book_id": lore_book.id,
-                    "keys_json": json.dumps(entry_data.get("keys", [])),
-                    "secondary_keys_json": json.dumps(entry_data.get("secondary_keys", [])),
-                    "content": entry_data.get("content", ""),
-                    "comment": entry_data.get("comment", ""),
-                    "enabled": entry_data.get("enabled", True),
-                    "position": entry_data.get("position", "before_char"),
-                    "selective": entry_data.get("selective", False),
-                    "insertion_order": entry_data.get("insertion_order", 0), # Caller should set this ideally
-                    "image_uuid": entry_data.get("image_uuid"),
-                    "extensions_json": json.dumps(entry_data.get("extensions", {}))
-                }
-
-                new_db_entry = LoreEntryModel(**lore_entry_model_data)
-                db.add(new_db_entry)
-            
-            db.commit()
-            
-            # Write back to PNG if requested
-            if write_to_png:
-                # We need to reload the character to get full state including new lore
-                # Actually update_character calls _sync_character_lore if data is passed,
-                # but here we just want to serialize existing DB state to PNG.
-                # update_character already has logic to write to PNG from DB state.
-                # So we can just call it with empty update?
-                # Or reuse the logic.
-                
-                # Let's reuse the logic from update_character but without changing fields
-                # We'll just trigger a "dummy" update to force PNG sync
-                # Or better, replicate the PNG writing part since update_character takes a dict of updates
+            if result and write_to_png:
+                # Trigger a dummy update to force PNG sync with the new lore entries
                 self.update_character(character_uuid, {}, write_to_png=True)
-                
-            return True
+
+            return result
 
     def get_character_by_uuid(self, character_uuid: str, db: Session) -> Optional[CharacterModel]:
         return db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
@@ -623,12 +501,13 @@ class CharacterService:
                 db_char.is_incomplete = False
 
             # Sync lore if provided (usually nested in 'data')
-            data_section = character_data.get("data", character_data)
-            if "character_book" in data_section and isinstance(data_section["character_book"], dict):
-                self._sync_character_lore(character_uuid, data_section["character_book"], db)
-            elif "character_book" in character_data and isinstance(character_data["character_book"], dict):
-                # Check top level too just in case
-                self._sync_character_lore(character_uuid, character_data["character_book"], db)
+            if self.lore_service:
+                data_section = character_data.get("data", character_data)
+                if "character_book" in data_section and isinstance(data_section["character_book"], dict):
+                    self.lore_service.sync_character_lore(character_uuid, data_section["character_book"], db)
+                elif "character_book" in character_data and isinstance(character_data["character_book"], dict):
+                    # Check top level too just in case
+                    self.lore_service.sync_character_lore(character_uuid, character_data["character_book"], db)
 
             if write_to_png:
                 # Reconstruct metadata for PNG with all fields
@@ -731,8 +610,8 @@ class CharacterService:
             session.flush() # Ensure the row is visible to subsequent queries
             
             # Handle lore book from character_data if present
-            if "character_book" in character_data and isinstance(character_data["character_book"], dict):
-                self._sync_character_lore(char_uuid, character_data["character_book"], session)
+            if self.lore_service and "character_book" in character_data and isinstance(character_data["character_book"], dict):
+                self.lore_service.sync_character_lore(char_uuid, character_data["character_book"], session)
                 
             return db_char
 
@@ -978,7 +857,8 @@ class CharacterService:
                 db.flush() # Ensure IDs are available for lore sync, and model is populated
 
                 # 7. Sync Lore
-                self._sync_character_lore(final_uuid_str, data_section.get("character_book", {}), db)
+                if self.lore_service:
+                    self.lore_service.sync_character_lore(final_uuid_str, data_section.get("character_book", {}), db)
 
                 db.commit()
                 db.refresh(saved_db_model) # Get any DB-generated values like auto-increments (not used here but good practice)

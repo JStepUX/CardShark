@@ -18,13 +18,12 @@ import {
     GridAttackAction,
     CombatEvent,
 } from '../types/combat';
-import { LocalMapState, TilePosition, LocalMapTileData } from '../types/localMap';
+import { LocalMapState, TilePosition } from '../types/localMap';
 import { gridCombatReducer, getCurrentCombatant, getEnemies } from '../services/combat/gridCombatEngine';
 import { initializeCombatFromMap, syncPositionsToMap, cleanupDefeatedEntities, CombatInitOptions } from '../services/combat/combatMapSync';
-import type { CharacterInventory } from '../types/inventory';
 import { executeAITurn } from '../services/combat/gridEnemyAI';
 import { getReachableTiles, findPath, PathfindingGrid } from '../utils/pathfinding';
-import { getValidAttackTargets, CombatGrid, CombatEntity } from '../utils/gridCombatUtils';
+import { CombatGrid } from '../utils/gridCombatUtils';
 import type { LocalMapViewHandle } from '../components/world/pixi/local/LocalMapView';
 
 // =============================================================================
@@ -214,7 +213,7 @@ export function useGridCombat(
 
                 // Trigger attack animations
                 if (event.type === 'attack_resolved' && mapRef?.current) {
-                    const { finalDamage, hitQuality, actorName, targetName } = event.data;
+                    const { finalDamage, hitQuality } = event.data;
                     const actorId = event.actorId;
                     const targetId = event.targetId;
 
