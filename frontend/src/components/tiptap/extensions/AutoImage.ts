@@ -1,10 +1,10 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Slice, Fragment, Node } from 'prosemirror-model';
+import { MARKDOWN_IMAGE_REGEX } from '../../../utils/contentUtils';
 
 // URL regex pattern for detecting image links
 const imageUrlRegex = /(https?:\/\/.*\.(?:png|jpg|jpeg|gif|webp)(\?.*)?)/i;
-const markdownImageRegex = /!\[(.*?)\]\((.*?)\)/g;
 
 export const AutoImage = Extension.create({
   name: 'autoImage',
@@ -31,7 +31,7 @@ export const AutoImage = Extension.create({
                 }
                 
                 // Check for markdown image syntax
-                if (markdownImageRegex.test(text)) {
+                if (MARKDOWN_IMAGE_REGEX.test(text)) {
                   transformed = true;
                   // Replace markdown syntax with image nodes
                   return true;

@@ -9,6 +9,11 @@ interface FindReplaceDialogProps {
   onReplace: (updates: CharacterCard) => void;
 }
 
+// Escape special regex characters so user input is treated as literal text
+const escapeRegExp = (str: string): string => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
 export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
   isOpen,
   onClose,
@@ -101,7 +106,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
         if (caseSensitive) {
           updatedData.data[field] = text.split(findText).join(replaceText);
         } else {
-          const regex = new RegExp(findText, 'gi');
+          const regex = new RegExp(escapeRegExp(findText), 'gi');
           updatedData.data[field] = text.replace(regex, replaceText);
         }
       }
@@ -114,7 +119,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
           if (caseSensitive) {
             return greeting.split(findText).join(replaceText);
           } else {
-            const regex = new RegExp(findText, 'gi');
+            const regex = new RegExp(escapeRegExp(findText), 'gi');
             return greeting.replace(regex, replaceText);
           }
         }
@@ -129,7 +134,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
           if (caseSensitive) {
             return greeting.split(findText).join(replaceText);
           } else {
-            const regex = new RegExp(findText, 'gi');
+            const regex = new RegExp(escapeRegExp(findText), 'gi');
             return greeting.replace(regex, replaceText);
           }
         }
@@ -144,7 +149,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
           if (caseSensitive) {
             return { ...entry, content: entry.content.split(findText).join(replaceText) };
           } else {
-            const regex = new RegExp(findText, 'gi');
+            const regex = new RegExp(escapeRegExp(findText), 'gi');
             return { ...entry, content: entry.content.replace(regex, replaceText) };
           }
         }

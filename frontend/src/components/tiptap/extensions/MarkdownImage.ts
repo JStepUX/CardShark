@@ -1,9 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Slice, Fragment } from 'prosemirror-model';
-
-// Regex for markdown image syntax: ![alt text](url)
-const MARKDOWN_IMAGE_REGEX = /!\[(.*?)\]\((.*?)\)/g;
+import { MARKDOWN_IMAGE_REGEX } from '../../../utils/contentUtils';
 
 /**
  * MarkdownImage extension for TipTap

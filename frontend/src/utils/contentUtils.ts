@@ -3,6 +3,12 @@
  */
 
 /**
+ * Regex for markdown image syntax: ![alt](url)
+ * Tolerates optional whitespace between ] and ( for compatibility with imported cards
+ */
+export const MARKDOWN_IMAGE_REGEX = /!\[(.*?)\]\s*\((.*?)\)/g;
+
+/**
  * Extract plain text from HTML content
  */
 export function htmlToText(html: string): string {
@@ -70,7 +76,7 @@ export function markdownToHtml(markdown: string): string {
   if (!markdown) return '';
 
   // Convert markdown image syntax ![alt](url) to HTML <img src="url" alt="alt">
-  return markdown.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
+  return markdown.replace(MARKDOWN_IMAGE_REGEX, '<img src="$2" alt="$1">');
 }
 
 /**
@@ -108,10 +114,7 @@ export function textToHtmlParagraphs(text: string): string {
  * Used specifically for handling images in messages
  */
 export const convertMarkdownImagesToHtml = (content: string): string => {
-  // Match markdown image syntax ![alt](url)
-  const imageRegex = /!\[(.*?)\]\((.*?)\)/g;
-
-  return content.replace(imageRegex, (_matchStr, alt, url) => {
+  return content.replace(MARKDOWN_IMAGE_REGEX, (_matchStr, alt, url) => {
     // Clean the URL and alt text
     const cleanUrl = url.trim();
     const cleanAlt = alt.trim();
