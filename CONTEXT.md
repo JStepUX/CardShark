@@ -7,7 +7,7 @@ type: web_application
 architecture: client_server
 purpose: PNG_metadata_editor + LLM_chat_frontend
 built_by: AI_assistants (≈98%)
-license: AGPL-3.0
+license: proprietary
 ```
 
 ## TECH_STACK

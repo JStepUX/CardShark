@@ -15,7 +15,7 @@ CardShark is an AI chat application with interactive storytelling and character-
 - Frontend: 6969
 - Backend: 9696
 
-**License:** AGPL-3.0
+**License:** Proprietary
 
 ## Essential Commands
 

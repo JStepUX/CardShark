@@ -37,7 +37,11 @@
       "Bash(powershell -Command \"\\(Get-Content ''D:\\\\Bolt-On\\\\cardshark\\\\backend\\\\main.py''\\).Count\")",
       "Bash(python build.py:*)",
       "Bash(npm install:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)",
+      "Bash(powershell -Command \"[System.Text.Encoding]::UTF8.GetString\\([System.Convert]::FromBase64String\\(\\(Get-Content -Raw\\)\\)\\)\")",
+      "Bash(git clone:*)"
     ]
   }
 }
