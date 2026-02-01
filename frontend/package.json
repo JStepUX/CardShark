@@ -13,6 +13,7 @@
     "test:coverage": "jest --coverage --config jest.config.cjs"
   },
   "dependencies": {
+    "@pixi/sound": "^6.0.1",
     "@tiptap/core": "^3.17.0",
     "@tiptap/extension-image": "^3.17.0",
     "@tiptap/extension-link": "^3.17.0",

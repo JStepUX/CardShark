@@ -7,10 +7,14 @@ import {
   CreateWorldRequest,
   UpdateWorldRequest,
   WorldDeletePreview,
-  WorldDeleteResult
+  WorldDeleteResult,
+  WorldUserProgress,
+  WorldUserProgressUpdate,
+  WorldUserProgressSummary
 } from '../types/worldCard';
 
 const BASE_URL = '/api/world-cards-v2';
+const PROGRESS_BASE_URL = '/api/world';
 
 /**
  * API client for World Card CRUD operations (V2 PNG-based)
@@ -192,5 +196,77 @@ export const worldApi = {
       name: data.data.world.name,
       message: data.data.message,
     };
+  },
+
+  // =============================================================================
+  // World User Progress API (Per-User Save Slots)
+  // =============================================================================
+
+  /**
+   * Get progress for a world+user combination.
+   * Returns null if no progress exists (fresh start).
+   */
+  async getProgress(worldUuid: string, userUuid: string): Promise<WorldUserProgress | null> {
+    const response = await fetch(`${PROGRESS_BASE_URL}/${worldUuid}/progress/${userUuid}`);
+
+    if (response.status === 404) {
+      // No progress found - fresh start
+      return null;
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to fetch progress' }));
+      throw new Error(error.detail || 'Failed to fetch progress');
+    }
+
+    const data = await response.json();
+    return data.data;
+  },
+
+  /**
+   * Save (upsert) progress for a world+user combination.
+   */
+  async saveProgress(worldUuid: string, userUuid: string, update: WorldUserProgressUpdate): Promise<void> {
+    const response = await fetch(`${PROGRESS_BASE_URL}/${worldUuid}/progress/${userUuid}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(update),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to save progress' }));
+      throw new Error(error.detail || 'Failed to save progress');
+    }
+  },
+
+  /**
+   * List all users who have progress for a world (save slot display).
+   */
+  async listProgressSummary(worldUuid: string): Promise<WorldUserProgressSummary[]> {
+    const response = await fetch(`${PROGRESS_BASE_URL}/${worldUuid}/progress-summary`);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to fetch progress summary' }));
+      throw new Error(error.detail || 'Failed to fetch progress summary');
+    }
+
+    const data = await response.json();
+    return data.items || [];
+  },
+
+  /**
+   * Delete progress for a world+user combination.
+   */
+  async deleteProgress(worldUuid: string, userUuid: string): Promise<void> {
+    const response = await fetch(`${PROGRESS_BASE_URL}/${worldUuid}/progress/${userUuid}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to delete progress' }));
+      throw new Error(error.detail || 'Failed to delete progress');
+    }
   },
 };

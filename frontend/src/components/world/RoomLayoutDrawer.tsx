@@ -7,7 +7,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { X, LayoutGrid, Users, GripVertical, MapPin, Trash2, Droplets, Square, AlertTriangle, Ban } from 'lucide-react';
 import type { GridRoom } from '../../utils/worldStateApi';
-import type { RoomLayoutData, SpawnPoint, ZoneType, CellPosition } from '../../types/localMap';
+import type { RoomLayoutData, SpawnPoint, ZoneType, CellPosition, ExitDirection } from '../../types/localMap';
 import { createDefaultRoomLayoutData } from '../../types/localMap';
 import { RoomLayoutCanvas } from './RoomLayoutCanvas';
 
@@ -26,6 +26,7 @@ interface RoomLayoutDrawerProps {
   worldId: string;
   availableCharacters: Array<{ id: string; name: string; imageUrl?: string }>;
   onLayoutChange?: (layoutData: RoomLayoutData) => void;
+  exitDirections?: ExitDirection[];
 }
 
 type ToolMode = 'npcs' | 'zones';
@@ -51,6 +52,7 @@ export function RoomLayoutDrawer({
   worldId,
   availableCharacters,
   onLayoutChange,
+  exitDirections = [],
 }: RoomLayoutDrawerProps) {
   const [activeMode, setActiveMode] = useState<ToolMode>('npcs');
   const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
@@ -359,6 +361,7 @@ export function RoomLayoutDrawer({
                 onCellClick={activeMode === 'npcs' ? handleCellClick : handleZonePaint}
                 onCellDrop={activeMode === 'npcs' ? handleCellDrop : undefined}
                 onZoneUnpaint={activeMode === 'zones' ? handleZoneUnpaint : undefined}
+                exitDirections={exitDirections}
               />
             </div>
 

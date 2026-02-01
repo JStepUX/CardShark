@@ -17,7 +17,7 @@ import { roomApi } from '../api/roomApi';
 import type { WorldCard, WorldRoomPlacement } from '../types/worldCard';
 import type { RoomCardSummary } from '../types/room';
 import type { GridRoom } from '../types/worldGrid';
-import type { RoomLayoutData } from '../types/localMap';
+import type { RoomLayoutData, ExitDirection } from '../types/localMap';
 import { roomCardToGridRoom } from '../utils/roomCardAdapter';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
@@ -402,11 +402,36 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       const saveWidth = maxX + 1;
       const saveHeight = maxY + 1;
 
-      // Update world card
-      await worldApi.updateWorld(worldId, {
+      // Auto-detect starting position if current one points to empty cell
+      // This fixes "World not found" when rooms aren't placed at (0,0)
+      const worldData = worldCard.data.extensions.world_data;
+      const currentStart = worldData.starting_position || { x: 0, y: 0 };
+      const hasRoomAtStart = roomPlacements.some(
+        r => r.grid_position.x === currentStart.x && r.grid_position.y === currentStart.y
+      );
+
+      let updatePayload: Parameters<typeof worldApi.updateWorld>[1] = {
         rooms: roomPlacements,
         grid_size: { width: saveWidth, height: saveHeight },
-      });
+      };
+
+      // If no room at starting position, pick top-left-most room
+      if (!hasRoomAtStart && roomPlacements.length > 0) {
+        const sorted = [...roomPlacements].sort((a, b) =>
+          a.grid_position.y - b.grid_position.y || a.grid_position.x - b.grid_position.x
+        );
+        const newStart = sorted[0].grid_position;
+        console.log(`No room at starting position (${currentStart.x}, ${currentStart.y}), ` +
+          `auto-setting to (${newStart.x}, ${newStart.y})`);
+        updatePayload = {
+          ...updatePayload,
+          starting_position: newStart,
+          player_position: newStart,
+        };
+      }
+
+      // Update world card
+      await worldApi.updateWorld(worldId, updatePayload);
 
       setIsDirty(false);
 
@@ -561,6 +586,12 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
             worldId={worldId}
             availableCharacters={availableCharacters}
             onLayoutChange={handleLayoutChange}
+            exitDirections={selectedRoom
+              ? (Object.entries(selectedRoom.connections)
+                .filter(([, roomId]) => roomId !== null)
+                .map(([dir]) => dir) as ExitDirection[])
+              : []
+            }
           />
         </div>
       </div>

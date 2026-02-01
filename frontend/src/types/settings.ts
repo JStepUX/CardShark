@@ -52,6 +52,10 @@ export interface Settings {
   remove_incomplete_sentences?: boolean; // Whether to remove incomplete sentences from chat responses
   theme: 'dark' | 'light';
   version: string;
+
+  // Audio Settings
+  sfxVolume?: number;   // Sound effects volume 0-100
+  musicVolume?: number; // Music volume 0-100
   
   // API Configuration - backwards compatibility
   api?: {
@@ -126,6 +130,10 @@ export const DEFAULT_SETTINGS: Settings = {
   remove_incomplete_sentences: true, // Default to removing incomplete sentences
   theme: 'dark',
   version: '1.0',
+
+  // Audio defaults
+  sfxVolume: 50,    // 50% for sound effects
+  musicVolume: 30,  // 30% for music
   
   // Initialize with a default KoboldCPP configuration
   apis: {

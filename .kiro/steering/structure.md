@@ -105,6 +105,7 @@
         - `LocalMapStage.ts` - Pixi stage for tile grid
         - `LocalMapTile.ts` - Individual tile rendering
         - `EntityCardSprite.ts` - NPC/player portrait cards on grid
+        - `CardAnimationController.ts` - Animation system for entity cards (entrance, movement, attack, death, revival, particles)
         - `CombatParticleSystem.ts` - Combat visual effects
   - `inventory/` - Equipment and inventory management
     - `InventoryModal.tsx` - Inventory UI

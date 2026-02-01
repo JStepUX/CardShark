@@ -29,6 +29,8 @@ from .handlers.world_card_chat_handler import WorldCardChatHandler
 # New Handlers
 from .world_asset_handler import WorldAssetHandler
 from .services.world_card_service import WorldCardService
+from .services.world_progress_service import WorldUserProgressService
+from .services.user_profile_service import UserProfileService
 
 # Core dependency providers
 def get_logger(request: Request) -> LogManager:
@@ -245,3 +247,20 @@ def get_world_asset_handler_dependency(request: Request) -> WorldAssetHandler:
 def get_world_card_handler_dependency(request: Request) -> WorldCardService:
     """Get WorldCardHandler instance from app state (standardized dependency)."""
     return get_world_card_handler(request)
+
+
+def get_world_progress_service_dependency(request: Request) -> WorldUserProgressService:
+    """Get WorldUserProgressService instance for progress management."""
+    logger = get_logger(request)
+    return WorldUserProgressService(
+        db_session_generator=get_db,
+        logger=logger
+    )
+
+
+def get_user_profile_service_dependency(request: Request) -> UserProfileService:
+    """Get UserProfileService instance from app state."""
+    user_profile_service = cast(UserProfileService, request.app.state.user_profile_service)
+    if user_profile_service is None:
+        raise HTTPException(status_code=500, detail="User profile service not initialized")
+    return user_profile_service

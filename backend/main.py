@@ -99,6 +99,7 @@ from backend.character_image_endpoints import router as character_image_router #
 from backend.generation_endpoints import router as generation_router, setup_generation_router # Import generation router
 from backend.health_endpoints import router as health_router, setup_health_router # Import health router
 from backend.file_upload_endpoints import router as file_upload_router, setup_file_upload_router # Import file upload router
+from backend.endpoints.world_progress_endpoints import router as world_progress_router # Import world progress router
 
 # Import koboldcpp handler & manager
 from backend.koboldcpp_handler import router as koboldcpp_router
@@ -364,6 +365,7 @@ app.include_router(koboldcpp_router)
 app.include_router(room_card_router)
 app.include_router(room_card_crud_router) # Room card CRUD (PNG-based)
 app.include_router(world_card_crud_router) # World card CRUD V2 (PNG-based)
+app.include_router(world_progress_router) # World user progress (per-user save slots)
 app.include_router(character_router)
 app.include_router(user_router)
 app.include_router(settings_router)

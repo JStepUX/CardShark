@@ -192,3 +192,66 @@ export interface WorldDeleteResult {
   rooms_kept: number;
   message: string;
 }
+
+// =============================================================================
+// Per-User World Progress Types (Save Slots)
+// =============================================================================
+
+/**
+ * Complete world playthrough progress for a user.
+ * Stored in SQLite keyed by (world_uuid, user_uuid).
+ */
+export interface WorldUserProgress {
+  world_uuid: string;
+  user_uuid: string;
+
+  // Progression
+  player_xp: number;
+  player_level: number;
+  player_gold: number;
+
+  // State
+  current_room_uuid?: string;
+  bonded_ally_uuid?: string;
+  time_state?: TimeState;
+  npc_relationships?: Record<string, NPCRelationship>;
+  player_inventory?: CharacterInventory;
+  ally_inventory?: CharacterInventory;
+  room_states?: Record<string, RoomInstanceState>;
+
+  // Metadata
+  last_played_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Partial update for world user progress.
+ * All fields are optional for PATCH-style updates.
+ */
+export interface WorldUserProgressUpdate {
+  player_xp?: number;
+  player_level?: number;
+  player_gold?: number;
+  current_room_uuid?: string;
+  bonded_ally_uuid?: string; // Empty string "" clears the ally
+  time_state?: TimeState;
+  npc_relationships?: Record<string, NPCRelationship>;
+  player_inventory?: CharacterInventory;
+  ally_inventory?: CharacterInventory;
+  room_states?: Record<string, RoomInstanceState>;
+}
+
+/**
+ * Summary of a user's progress for list endpoints.
+ * Used in progress-summary to show save slots.
+ */
+export interface WorldUserProgressSummary {
+  user_uuid: string;
+  user_name?: string;
+  player_level: number;
+  player_xp: number;
+  player_gold: number;
+  current_room_uuid?: string;
+  last_played_at?: string;
+}

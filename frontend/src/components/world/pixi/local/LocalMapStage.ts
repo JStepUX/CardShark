@@ -37,6 +37,9 @@ const DEFAULT_GRID_HEIGHT = 8;
 const DEFAULT_TILE_SIZE = 80;
 const TILE_GAP = 2;
 
+// Debug logging flag - set to true for development debugging
+const DEBUG = false;
+
 // Text resolution multiplier for crisp text on high-DPI displays
 const TEXT_RESOLUTION = Math.max(window.devicePixelRatio || 1, 2);
 
@@ -103,31 +106,42 @@ export class LocalMapStage extends PIXI.Container {
         this.addChild(this.contentContainer);
 
         // Create layer hierarchy (all inside contentContainer for zoom/pan)
+        // Enable culling on layers for performance when zoomed in
         this.backgroundLayer = new PIXI.Container();
         this.backgroundLayer.eventMode = 'passive'; // Background should not intercept clicks
+        this.backgroundLayer.cullable = true;
         this.contentContainer.addChild(this.backgroundLayer);
 
         this.gridLayer = new PIXI.Container();
+        this.gridLayer.cullable = true;
+        this.gridLayer.cullableChildren = true;
         this.contentContainer.addChild(this.gridLayer);
 
         this.threatZoneLayer = new PIXI.Container();
+        this.threatZoneLayer.cullable = true;
         this.contentContainer.addChild(this.threatZoneLayer);
 
         this.exitLayer = new PIXI.Container();
+        this.exitLayer.cullable = true;
         this.contentContainer.addChild(this.exitLayer);
 
         this.entityShadowLayer = new PIXI.Container();
+        this.entityShadowLayer.cullable = true;
         this.contentContainer.addChild(this.entityShadowLayer);
 
         this.entityLayer = new PIXI.Container();
+        this.entityLayer.cullable = true;
+        this.entityLayer.cullableChildren = true;
         this.contentContainer.addChild(this.entityLayer);
 
         this.effectsLayer = new PIXI.Container();
         this.effectsLayer.eventMode = 'passive'; // Effects should not block clicks
+        this.effectsLayer.cullable = true;
         this.contentContainer.addChild(this.effectsLayer);
 
         this.uiLayer = new PIXI.Container();
         this.uiLayer.eventMode = 'passive'; // UI layer should not block clicks on entities
+        this.uiLayer.cullable = true;
         this.contentContainer.addChild(this.uiLayer);
 
         // Initialize
@@ -173,12 +187,12 @@ export class LocalMapStage extends PIXI.Container {
 
         if (!imagePath) return;
 
-        console.log('[LocalMapStage] Setting background image:', imagePath);
+        if (DEBUG) console.log('[LocalMapStage] Setting background image:', imagePath);
 
         // Load texture asynchronously using Assets API (PixiJS 8)
         PIXI.Assets.load(imagePath)
             .then((texture: PIXI.Texture) => {
-                console.log('[LocalMapStage] Background texture loaded:', imagePath, texture.width, 'x', texture.height);
+                if (DEBUG) console.log('[LocalMapStage] Background texture loaded:', imagePath, texture.width, 'x', texture.height);
 
                 // Create sprite from loaded texture
                 this.backgroundSprite = new PIXI.Sprite(texture);
@@ -374,13 +388,13 @@ export class LocalMapStage extends PIXI.Container {
                 const cardEntityId = entity.id;
                 const cardAllegiance = entity.allegiance;
                 card.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
-                    console.log('[LocalMapStage] Entity card clicked:', cardEntityId, 'allegiance:', cardAllegiance);
+                    if (DEBUG) console.log('[LocalMapStage] Entity card clicked:', cardEntityId, 'allegiance:', cardAllegiance);
                     event.stopPropagation();
                     this.emit('entityClicked', cardEntityId);
                 });
                 this.entityCards.set(entity.id, card);
                 this.entityLayer.addChild(card);
-                console.log('[LocalMapStage] Created card for entity:', entity.id, entity.name);
+                if (DEBUG) console.log('[LocalMapStage] Created card for entity:', entity.id, entity.name);
             }
 
             // Update card state
@@ -390,22 +404,34 @@ export class LocalMapStage extends PIXI.Container {
             // Position card at tile center
             const tileCenter = this.getTileCenter(entity.position);
 
+            // Check distance from current position to target
+            const dx = card.x - tileCenter.x;
+            const dy = card.y - tileCenter.y;
+            const distanceSquared = dx * dx + dy * dy;
+            const atTarget = distanceSquared < 1; // Within 1px tolerance
+
             if (isNewCard) {
                 // New card - position directly (no animation)
                 card.x = tileCenter.x;
                 card.y = tileCenter.y;
-            } else if (!card.isAnimating()) {
-                // Existing card that's not animating - check if it needs to move
-                // Use small tolerance to account for floating point
-                const atTarget = Math.abs(card.x - tileCenter.x) < 1 &&
-                                 Math.abs(card.y - tileCenter.y) < 1;
+            } else if (!atTarget) {
+                // Card needs to move to new position
+                // Large distance (> 2 tiles) = teleport instantly (e.g., room transition, state reset)
+                // Small distance = animate smoothly (e.g., click-to-move)
+                const TELEPORT_THRESHOLD = (this.config.tileSize + TILE_GAP) * 2;
+                const distance = Math.sqrt(distanceSquared);
 
-                if (!atTarget) {
-                    // Card is not at target and not animating - animate to position
+                if (distance > TELEPORT_THRESHOLD) {
+                    // Large position change - teleport immediately
+                    // This handles room transitions, combat state resets, etc.
+                    if (DEBUG) console.log('[LocalMapStage] Teleporting entity', entity.id, 'from', { x: card.x, y: card.y }, 'to', tileCenter);
+                    card.x = tileCenter.x;
+                    card.y = tileCenter.y;
+                } else {
+                    // Small position change - animate (animateMoveTo cancels existing animations)
                     card.animateMoveTo(tileCenter.x, tileCenter.y);
                 }
             }
-            // If already animating, let the current animation complete
 
             // Scale by allegiance (player card is largest)
             // Only set scale if not animating (entrance animation sets its own scale)
@@ -710,13 +736,13 @@ export class LocalMapStage extends PIXI.Container {
      * Animate entity movement (exposed for external control)
      */
     animateEntityMove(entityId: string, targetPosition: TilePosition): void {
-        console.log('[LocalMapStage] animateEntityMove called', { entityId, targetPosition, availableIds: Array.from(this.entityCards.keys()) });
+        if (DEBUG) console.log('[LocalMapStage] animateEntityMove called', { entityId, targetPosition, availableIds: Array.from(this.entityCards.keys()) });
         const card = this.entityCards.get(entityId);
         if (card) {
             const tileCenter = this.getTileCenter(targetPosition);
-            console.log('[LocalMapStage] Animating card to', tileCenter);
+            if (DEBUG) console.log('[LocalMapStage] Animating card to', tileCenter);
             card.animateMoveTo(tileCenter.x, tileCenter.y);
-        } else {
+        } else if (DEBUG) {
             console.warn('[LocalMapStage] Entity card not found:', entityId);
         }
     }
@@ -730,12 +756,12 @@ export class LocalMapStage extends PIXI.Container {
         damage: number,
         onComplete?: () => void
     ): void {
-        console.log('[LocalMapStage] animateAttack called', { attackerId, targetId, damage, availableIds: Array.from(this.entityCards.keys()) });
+        if (DEBUG) console.log('[LocalMapStage] animateAttack called', { attackerId, targetId, damage, availableIds: Array.from(this.entityCards.keys()) });
         const attackerCard = this.entityCards.get(attackerId);
         const targetCard = this.entityCards.get(targetId);
 
         if (!attackerCard || !targetCard) {
-            console.warn('[LocalMapStage] Missing cards for attack animation', { hasAttacker: !!attackerCard, hasTarget: !!targetCard });
+            if (DEBUG) console.warn('[LocalMapStage] Missing cards for attack animation', { hasAttacker: !!attackerCard, hasTarget: !!targetCard });
             onComplete?.();
             return;
         }

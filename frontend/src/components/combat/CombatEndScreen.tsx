@@ -8,10 +8,11 @@
  * - Continue button to return to exploration
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Skull, Coins, Star, Heart, LogOut, TrendingUp, Zap, Shield, Swords } from 'lucide-react';
 import type { GridCombatState, GridCombatant } from '../../types/combat';
 import type { LevelUpInfo } from '../../utils/progressionUtils';
+import { soundManager } from './pixi/SoundManager';
 
 // Combat backdrop images by genre
 // TODO: Add genre-specific backdrops (sci-fi, modern, etc.)
@@ -147,6 +148,15 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
     const isFled = isFledOutcome(result);
     const isVictory = phase === 'victory' && !isFled;
     const backdropUrl = getCombatBackdrop(genre);
+
+    // Play victory or defeat sound when screen appears
+    useEffect(() => {
+        if (isVictory) {
+            soundManager.play('victory');
+        } else if (phase === 'defeat') {
+            soundManager.play('defeat');
+        }
+    }, [isVictory, phase]);
 
     // Get defeated enemy names, categorized by death vs incapacitated
     const deadEnemyNames: string[] = [];

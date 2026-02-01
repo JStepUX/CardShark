@@ -25,6 +25,10 @@ import { executeAITurn } from '../services/combat/gridEnemyAI';
 import { getReachableTiles, findPath, PathfindingGrid } from '../utils/pathfinding';
 import { CombatGrid } from '../utils/gridCombatUtils';
 import type { LocalMapViewHandle } from '../components/world/pixi/local/LocalMapView';
+import { soundManager } from '../components/combat/pixi/SoundManager';
+
+// Debug logging flag - set to true for development debugging
+const DEBUG = false;
 
 // =============================================================================
 // Types
@@ -157,7 +161,7 @@ export function useGridCombat(
     // Calculate valid attack targets
     const validAttackTargets = useMemo(() => {
         if (!combatState || !isPlayerTurn || targetingMode !== 'attack') {
-            console.log('[GridCombat] validAttackTargets: empty (conditions not met)', {
+            if (DEBUG) console.log('[GridCombat] validAttackTargets: empty (conditions not met)', {
                 hasCombatState: !!combatState,
                 isPlayerTurn,
                 targetingMode,
@@ -167,12 +171,12 @@ export function useGridCombat(
 
         const current = getCurrentCombatant(combatState);
         if (!current) {
-            console.log('[GridCombat] validAttackTargets: empty (no current combatant)');
+            if (DEBUG) console.log('[GridCombat] validAttackTargets: empty (no current combatant)');
             return [];
         }
 
         const enemies = getEnemies(combatState, current.id);
-        console.log('[GridCombat] validAttackTargets computed:', enemies.map(e => ({ id: e.id, name: e.name })));
+        if (DEBUG) console.log('[GridCombat] validAttackTargets computed:', enemies.map(e => ({ id: e.id, name: e.name })));
         return enemies;
     }, [combatState, isPlayerTurn, targetingMode]);
 
@@ -188,7 +192,7 @@ export function useGridCombat(
             };
 
             for (const event of events) {
-                console.log('[Combat Event]', event.type, event.data, 'mapRef available:', !!mapRef?.current);
+                if (DEBUG) console.log('[Combat Event]', event.type, event.data, 'mapRef available:', !!mapRef?.current);
 
                 // Trigger move animations
                 if (event.type === 'move_completed') {
@@ -197,7 +201,7 @@ export function useGridCombat(
 
                     if (actorId && path && path.length > 1) {
                         const destination = path[path.length - 1];
-                        console.log('[Combat] Animating move for', actorName, 'to', destination);
+                        if (DEBUG) console.log('[Combat] Animating move for', actorName, 'to', destination);
 
                         if (mapRef?.current) {
                             pendingAnimations++;
@@ -205,13 +209,13 @@ export function useGridCombat(
                                 pendingAnimations--;
                                 checkComplete();
                             });
-                        } else {
+                        } else if (DEBUG) {
                             console.warn('[Combat] mapRef not available for move animation');
                         }
                     }
                 }
 
-                // Trigger attack animations
+                // Trigger attack animations and sounds
                 if (event.type === 'attack_resolved' && mapRef?.current) {
                     const { finalDamage, hitQuality } = event.data;
                     const actorId = event.actorId;
@@ -225,12 +229,16 @@ export function useGridCombat(
                         const isRanged = attacker && attacker.attackRange > 1;
 
                         if (hitQuality === 'miss') {
+                            // Play miss sound
+                            soundManager.play(isRanged ? 'ranged_miss' : 'melee_miss');
                             // Show miss indicator with whiff effect
                             mapRef.current.playMissWhiff(targetId);
                             mapRef.current.showMissIndicator(targetId);
                             pendingAnimations--;
                             checkComplete();
                         } else if (isRanged) {
+                            // Play attack sound (we use melee_attack for all hits)
+                            soundManager.play('melee_attack');
                             // Ranged attack: projectile effect then impact
                             const isCritical = hitQuality === 'crushing';
                             mapRef.current.playRangedAttackEffect(actorId, targetId, finalDamage, isCritical, () => {
@@ -238,6 +246,8 @@ export function useGridCombat(
                                 checkComplete();
                             });
                         } else {
+                            // Play melee attack sound
+                            soundManager.play('melee_attack');
                             // Melee attack: lunge with impact (handled by animateAttack which now includes blood splatter)
                             mapRef.current.animateAttack(actorId, targetId, finalDamage, () => {
                                 pendingAnimations--;
@@ -280,7 +290,7 @@ export function useGridCombat(
                     const targetId = event.targetId;
                     if (targetId) {
                         pendingAnimations++;
-                        console.log('[Combat] Playing player revival animation for', targetId);
+                        if (DEBUG) console.log('[Combat] Playing player revival animation for', targetId);
                         // Delay to let victory state settle
                         setTimeout(() => {
                             mapRef.current?.playRevivalAnimation(targetId, () => {
@@ -296,7 +306,7 @@ export function useGridCombat(
                     const actorId = event.actorId; // For ally_revived, the revived ally is the actor
                     if (actorId) {
                         pendingAnimations++;
-                        console.log('[Combat] Playing ally revival animation for', actorId);
+                        if (DEBUG) console.log('[Combat] Playing ally revival animation for', actorId);
                         setTimeout(() => {
                             mapRef.current?.playRevivalAnimation(actorId, () => {
                                 pendingAnimations--;
@@ -327,6 +337,12 @@ export function useGridCombat(
 
         // Check for combat end
         if (result.state.phase === 'victory' || result.state.phase === 'defeat') {
+            // Stop combat music
+            soundManager.stopMusic();
+            // Play defeat sound if player lost
+            if (result.state.phase === 'defeat') {
+                soundManager.play('defeat');
+            }
             onCombatEnd?.(result.state.phase, result.state);
         }
 
@@ -378,6 +394,12 @@ export function useGridCombat(
 
             // Check for combat end
             if (result.state.phase === 'victory' || result.state.phase === 'defeat') {
+                // Stop combat music
+                soundManager.stopMusic();
+                // Play defeat sound if player lost
+                if (result.state.phase === 'defeat') {
+                    soundManager.play('defeat');
+                }
                 onCombatEnd?.(result.state.phase, result.state);
                 aiActingRef.current = false;
                 return;
@@ -406,6 +428,8 @@ export function useGridCombat(
         const state = initializeCombatFromMap(initialMapState, playerId, options);
         setCombatState(state);
         setTargetingMode('none');
+        // Start combat music
+        soundManager.playMusic();
     }, []);
 
     // End combat
@@ -414,6 +438,8 @@ export function useGridCombat(
             const cleanupResult = cleanupDefeatedEntities(combatState, mapState);
             onMapStateUpdate(cleanupResult.updatedMapState);
         }
+        // Stop combat music
+        soundManager.stopMusic();
         setCombatState(null);
         setTargetingMode('none');
     }, [combatState, mapState, onMapStateUpdate]);
@@ -447,26 +473,26 @@ export function useGridCombat(
 
     // Execute attack
     const executeAttack = useCallback((targetId: string) => {
-        console.log('[GridCombat] executeAttack called', { targetId });
+        if (DEBUG) console.log('[GridCombat] executeAttack called', { targetId });
 
         if (!combatState) {
-            console.log('[GridCombat] executeAttack: no combatState');
+            if (DEBUG) console.log('[GridCombat] executeAttack: no combatState');
             return;
         }
 
         const current = getCurrentCombatant(combatState);
         if (!current || !current.isPlayerControlled) {
-            console.log('[GridCombat] executeAttack: no current player', { current });
+            if (DEBUG) console.log('[GridCombat] executeAttack: no current player', { current });
             return;
         }
 
         const target = combatState.combatants[targetId];
         if (!target) {
-            console.log('[GridCombat] executeAttack: target not found', { targetId, combatants: Object.keys(combatState.combatants) });
+            if (DEBUG) console.log('[GridCombat] executeAttack: target not found', { targetId, combatants: Object.keys(combatState.combatants) });
             return;
         }
 
-        console.log('[GridCombat] Dispatching grid_attack', { actorId: current.id, targetId: target.id });
+        if (DEBUG) console.log('[GridCombat] Dispatching grid_attack', { actorId: current.id, targetId: target.id });
 
         const action: GridAttackAction = {
             type: 'grid_attack',
@@ -536,7 +562,7 @@ export function useGridCombat(
 
     // Handle entity click
     const handleEntityClick = useCallback((entityId: string) => {
-        console.log('[GridCombat] handleEntityClick called', {
+        if (DEBUG) console.log('[GridCombat] handleEntityClick called', {
             entityId,
             targetingMode,
             isPlayerTurn,
@@ -546,28 +572,30 @@ export function useGridCombat(
 
         if (targetingMode === 'attack') {
             const isValid = validAttackTargets.some(t => t.id === entityId);
-            console.log('[GridCombat] Attack target validation:', {
+            if (DEBUG) console.log('[GridCombat] Attack target validation:', {
                 entityId,
                 isValid,
                 targets: validAttackTargets.map(t => t.id),
             });
             if (isValid) {
-                console.log('[GridCombat] Executing attack on', entityId);
+                if (DEBUG) console.log('[GridCombat] Executing attack on', entityId);
                 executeAttack(entityId);
                 setTargetingMode('none'); // Clear targeting after attack
-            } else {
+            } else if (DEBUG) {
                 console.warn('[GridCombat] Entity not in valid attack targets:', entityId);
             }
-        } else {
+        } else if (DEBUG) {
             console.log('[GridCombat] Not in attack targeting mode, ignoring entity click');
         }
     }, [targetingMode, validAttackTargets, executeAttack, isPlayerTurn, combatState]);
 
     // Wrap setTargetingMode to add debug logging
     const setTargetingModeWithLog = useCallback((mode: TargetingMode) => {
-        console.log('[GridCombat] Setting targeting mode:', mode);
-        if (mode === 'none') {
-            console.trace('[GridCombat] Stack trace for targeting mode reset to none');
+        if (DEBUG) {
+            console.log('[GridCombat] Setting targeting mode:', mode);
+            if (mode === 'none') {
+                console.trace('[GridCombat] Stack trace for targeting mode reset to none');
+            }
         }
         setTargetingMode(mode);
     }, []);

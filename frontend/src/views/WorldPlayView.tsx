@@ -5,7 +5,7 @@
  * @dependencies worldApi (V2), roomApi, ChatView, SidePanel, MapModal, GridCombatHUD, LocalMapView
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
@@ -15,7 +15,7 @@ import { PartyGatherModal } from '../components/world/PartyGatherModal';
 import { PixiMapModal } from '../components/world/pixi/PixiMapModal';
 import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
-import type { WorldCard, RoomInstanceState } from '../types/worldCard';
+import type { WorldCard, RoomInstanceState, WorldUserProgress, WorldUserProgressUpdate } from '../types/worldCard';
 import type { CharacterCard } from '../types/schema';
 import type { GridWorldState, GridRoom, DisplayNPC } from '../types/worldGrid';
 import type { CombatInitData } from '../types/combat';
@@ -37,7 +37,7 @@ import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
 import { calculateSentimentAffinity, updateSentimentHistory, resetSentimentAfterGain } from '../utils/sentimentAffinityCalculator';
 import { createDefaultTimeState, advanceTime } from '../utils/timeUtils';
 // Local Map imports for unified Play View
-import { LocalMapView, LocalMapViewHandle } from '../components/world/pixi/local';
+import { LocalMapView, LocalMapViewHandle, soundManager } from '../components/world/pixi/local';
 import { PlayViewLayout } from '../components/world/PlayViewLayout';
 import { CombatLogPanel } from '../components/combat/CombatLogPanel';
 import { GridCombatHUD } from '../components/combat/GridCombatHUD';
@@ -80,9 +80,19 @@ interface WorldPlayViewProps {
   worldId?: string;
 }
 
+// Route state type for user profile passed from WorldLauncher
+interface WorldPlayRouteState {
+  userProfile?: {
+    user_uuid?: string;
+    name?: string;
+    filename?: string;
+  };
+}
+
 export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const { uuid } = useParams<{ uuid: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     messages,
     setMessages,
@@ -96,6 +106,10 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const { apiConfig } = useAPIConfig();
 
   const worldId = propWorldId || uuid || '';
+
+  // Get user profile from route state (passed from WorldLauncher)
+  const routeState = location.state as WorldPlayRouteState | null;
+  const selectedUserUuid = routeState?.userProfile?.user_uuid;
 
   // State
   const [worldCard, setWorldCard] = useState<WorldCard | null>(null);
@@ -116,6 +130,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [showJournal, setShowJournal] = useState(false);
   const [showPartyGatherModal, setShowPartyGatherModal] = useState(false);
   const [pendingDestination, setPendingDestination] = useState<GridRoom | null>(null);
+  const [pendingEntryDirection, setPendingEntryDirection] = useState<ExitDirection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [missingRoomCount, setMissingRoomCount] = useState(0);
@@ -213,6 +228,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
     if (levelUpResult) {
       setLevelUpInfo(levelUpResult);
+      // Play level-up sound
+      soundManager.play('level_up');
       console.log('[Progression] Level-up detected:', levelUpResult);
     }
   }, [combatEndState, playerProgression.xp]);
@@ -231,11 +248,19 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
   // Load world data from API (V2) - LAZY LOADING
   // Only fetches world card + starting room (2 API calls instead of N+1)
+  // Now also loads per-user progress from SQLite via new progress API
   useEffect(() => {
     async function loadWorld() {
       if (!worldId) {
         setError('No world ID provided');
         setIsLoading(false);
+        return;
+      }
+
+      // Check if user was selected - if not, navigate back to launcher
+      if (!selectedUserUuid) {
+        console.warn('[WorldPlayView] No user selected, navigating back to launcher');
+        navigate(`/world/${worldId}`, { replace: true });
         return;
       }
 
@@ -249,34 +274,90 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
         const worldData = world.data.extensions.world_data;
 
-        // Initialize player progression from world data
+        // =========================================
+        // LOAD PER-USER PROGRESS FROM NEW API
+        // =========================================
+        let progress: WorldUserProgress | null = null;
+        let migratedFromWorldData = false;
+
+        try {
+          progress = await worldApi.getProgress(worldId, selectedUserUuid);
+          console.log('[Progress] Loaded from database:', progress ? 'found' : 'not found');
+        } catch (err) {
+          console.warn('[Progress] Failed to load progress:', err);
+        }
+
+        // If no progress exists, check for embedded world_data progress to migrate
+        if (!progress) {
+          const hasEmbeddedProgress = (
+            (worldData.player_xp && worldData.player_xp > 0) ||
+            (worldData.player_level && worldData.player_level > 1) ||
+            (worldData.player_gold && worldData.player_gold > 0) ||
+            (worldData.npc_relationships && Object.keys(worldData.npc_relationships).length > 0) ||
+            worldData.time_state ||
+            worldData.player_inventory
+          );
+
+          if (hasEmbeddedProgress) {
+            console.log('[Progress] Migrating embedded world_data progress to database');
+            migratedFromWorldData = true;
+
+            // Build progress from world_data
+            progress = {
+              world_uuid: worldId,
+              user_uuid: selectedUserUuid,
+              player_xp: worldData.player_xp ?? 0,
+              player_level: worldData.player_level ?? 1,
+              player_gold: worldData.player_gold ?? 0,
+              current_room_uuid: undefined, // Will be set from player_position
+              bonded_ally_uuid: worldData.bonded_ally_uuid,
+              time_state: worldData.time_state,
+              npc_relationships: worldData.npc_relationships,
+              player_inventory: worldData.player_inventory,
+              ally_inventory: worldData.ally_inventory,
+              room_states: worldData.room_states,
+            };
+
+            // Save migrated progress to database
+            try {
+              await worldApi.saveProgress(worldId, selectedUserUuid, progress);
+              console.log('[Progress] Migration saved to database');
+            } catch (saveErr) {
+              console.error('[Progress] Failed to save migrated progress:', saveErr);
+            }
+          }
+        }
+
+        // Initialize state from progress (or defaults)
         const savedProgression: PlayerProgression = {
-          xp: worldData.player_xp ?? 0,
-          level: worldData.player_level ?? calculateLevelFromXP(worldData.player_xp ?? 0),
-          gold: worldData.player_gold ?? 0,
+          xp: progress?.player_xp ?? 0,
+          level: progress?.player_level ?? calculateLevelFromXP(progress?.player_xp ?? 0),
+          gold: progress?.player_gold ?? 0,
         };
         // Ensure level is consistent with XP
         savedProgression.level = calculateLevelFromXP(savedProgression.xp);
         setPlayerProgression(savedProgression);
-        console.log('[Progression] Loaded player progression:', savedProgression);
+        console.log('[Progression] Loaded player progression:', savedProgression, migratedFromWorldData ? '(migrated)' : '');
 
-        // Restore runtime state from world card
-        if (worldData.time_state) {
-          setTimeState(worldData.time_state);
-          console.log('[RuntimeState] Restored time state:', worldData.time_state);
+        // Restore runtime state from progress
+        if (progress?.time_state) {
+          setTimeState(progress.time_state as TimeState);
+          console.log('[RuntimeState] Restored time state');
         }
-        if (worldData.npc_relationships && Object.keys(worldData.npc_relationships).length > 0) {
-          setNpcRelationships(worldData.npc_relationships);
-          console.log('[RuntimeState] Restored NPC relationships:', Object.keys(worldData.npc_relationships).length, 'NPCs');
+        if (progress?.npc_relationships && Object.keys(progress.npc_relationships).length > 0) {
+          setNpcRelationships(progress.npc_relationships as Record<string, NPCRelationship>);
+          console.log('[RuntimeState] Restored NPC relationships:', Object.keys(progress.npc_relationships).length, 'NPCs');
         }
-        if (worldData.player_inventory) {
-          setPlayerInventory(worldData.player_inventory);
+        if (progress?.player_inventory) {
+          setPlayerInventory(progress.player_inventory as CharacterInventory);
           console.log('[RuntimeState] Restored player inventory');
         }
-        if (worldData.room_states) {
-          roomStatesRef.current = worldData.room_states;
-          console.log('[RuntimeState] Restored room states for', Object.keys(worldData.room_states).length, 'rooms');
+        if (progress?.room_states) {
+          roomStatesRef.current = progress.room_states as Record<string, RoomInstanceState>;
+          console.log('[RuntimeState] Restored room states for', Object.keys(progress.room_states).length, 'rooms');
         }
+        // Store bonded ally UUID for restoration after room loads
+        const savedBondedAllyUuid = progress?.bonded_ally_uuid;
         // Bonded ally is restored below after room loads (needs async fetch)
 
         const gridSize = worldData.grid_size;
@@ -387,18 +468,18 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
             // Update worldState with the full room
             setWorldState(prev => prev ? { ...prev, grid } : null);
 
-            // Restore bonded ally if one was saved
-            if (worldData.bonded_ally_uuid) {
+            // Restore bonded ally if one was saved (from progress, not world_data)
+            if (savedBondedAllyUuid) {
               try {
-                const allyResponse = await fetch(`/api/character/${worldData.bonded_ally_uuid}`);
+                const allyResponse = await fetch(`/api/character/${savedBondedAllyUuid}`);
                 if (allyResponse.ok) {
                   const allyCharData = await allyResponse.json();
                   const allyDisplayName = allyCharData.data?.name || allyCharData.name || 'Ally';
-                  setActiveNpcId(worldData.bonded_ally_uuid);
+                  setActiveNpcId(savedBondedAllyUuid);
                   setActiveNpcName(allyDisplayName);
                   setActiveNpcCard(allyCharData);
-                  if (worldData.ally_inventory) {
-                    setAllyInventory(worldData.ally_inventory);
+                  if (progress?.ally_inventory) {
+                    setAllyInventory(progress.ally_inventory as CharacterInventory);
                   }
                   console.log('[RuntimeState] Restored bonded ally:', allyDisplayName);
                 }
@@ -443,7 +524,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     }
 
     loadWorld();
-  }, [worldId]);
+  }, [worldId, selectedUserUuid, navigate]);
 
   // ============================================
   // WORLD RUNTIME STATE PERSISTENCE
@@ -467,12 +548,15 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   }, [roomNpcs]);
 
   /**
-   * Save all world runtime state to the backend in a single API call.
+   * Save all world runtime state to the backend via the per-user progress API.
    * Merges current room's NPC states into the accumulated room_states ref
    * before saving.
    */
   const saveWorldRuntimeState = useCallback(async (opts?: { skipRoomState?: boolean }) => {
-    if (!worldId) return;
+    if (!worldId || !selectedUserUuid) {
+      console.warn('[RuntimeState] Cannot save - missing worldId or userUuid');
+      return;
+    }
 
     // Snapshot current room state into the ref (unless told to skip)
     if (!opts?.skipRoomState && currentRoom) {
@@ -480,22 +564,26 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     }
 
     try {
-      await worldApi.updateWorld(worldId, {
+      // Save to per-user progress API instead of world card
+      const progressUpdate: WorldUserProgressUpdate = {
         player_xp: playerProgression.xp,
         player_level: playerProgression.level,
         player_gold: playerProgression.gold,
+        current_room_uuid: currentRoom?.id,
         bonded_ally_uuid: activeNpcId ?? '',  // Empty string = clear on backend
         time_state: timeState,
         npc_relationships: npcRelationships,
         player_inventory: playerInventory,
         ally_inventory: allyInventory ?? undefined,
         room_states: roomStatesRef.current,
-      });
-      console.log('[RuntimeState] Saved to backend');
+      };
+
+      await worldApi.saveProgress(worldId, selectedUserUuid, progressUpdate);
+      console.log('[RuntimeState] Saved to backend (per-user progress)');
     } catch (err) {
       console.error('[RuntimeState] Failed to save:', err);
     }
-  }, [worldId, currentRoom, buildCurrentRoomState, playerProgression, activeNpcId, timeState, npcRelationships, playerInventory, allyInventory]);
+  }, [worldId, selectedUserUuid, currentRoom, buildCurrentRoomState, playerProgression, activeNpcId, timeState, npcRelationships, playerInventory, allyInventory]);
 
   /**
    * Debounced save - batches frequent state changes (affinity, time, inventory)
@@ -1461,9 +1549,11 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
   // Extracted room transition logic - shared by direct navigate and Party Gather modal
   // LAZY LOADING: Fetches full room data if needed during navigation
+  // entryDir: The direction the player is entering FROM (e.g., 'west' = player is entering from the west edge)
   const performRoomTransition = useCallback(async (
     targetRoomStub: GridRoom,
-    keepActiveNpc: boolean = false
+    keepActiveNpc: boolean = false,
+    entryDir: ExitDirection | null = null
   ) => {
     if (!worldState || !worldId || !worldCard) return;
 
@@ -1551,15 +1641,18 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     setCurrentRoom(targetRoom);
 
     // Set player spawn position based on entry direction
-    // If entering via exit (entryDirection set), spawn at the opposite edge
-    if (entryDirection) {
-      const spawnPos = getSpawnPosition(entryDirection, LOCAL_MAP_CONFIG);
+    // If entering via exit (entryDir passed), spawn at the corresponding edge
+    if (entryDir) {
+      const spawnPos = getSpawnPosition(entryDir, LOCAL_MAP_CONFIG);
       setPlayerTilePosition(spawnPos);
-      setEntryDirection(null); // Clear after use
+      console.log(`[RoomTransition] Spawning at ${entryDir} edge:`, spawnPos);
     } else {
       // Default spawn position when not entering via exit (e.g., world map navigation)
       setPlayerTilePosition({ x: 2, y: 2 });
+      console.log('[RoomTransition] Default spawn position: center');
     }
+    // Clear any stale entry direction state
+    setEntryDirection(null);
 
     // Clear active NPC unless explicitly keeping them
     if (!keepActiveNpc) {
@@ -1652,11 +1745,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
     // Close map modal after navigation
     setShowMap(false);
-  }, [worldCard, worldState, worldId, messages, setMessages, addMessage, activeNpcName, activeNpcId, isInCombat, gridCombat, entryDirection, currentRoom, roomNpcs, playerProgression, timeState, npcRelationships, playerInventory, allyInventory]);
+  }, [worldCard, worldState, worldId, messages, setMessages, addMessage, activeNpcName, activeNpcId, isInCombat, gridCombat, currentRoom, roomNpcs, playerProgression, timeState, npcRelationships, playerInventory, allyInventory]);
 
 
   // Handle room navigation - persists position to backend
-  const handleNavigate = useCallback(async (roomId: string) => {
+  // entryDir: The direction the player is entering FROM (passed from exit click)
+  const handleNavigate = useCallback(async (roomId: string, entryDir: ExitDirection | null = null) => {
     if (!worldState || !worldId) return;
 
     // Find the target room in the grid
@@ -1683,12 +1777,13 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     // Check if we have an active NPC - if so, show Party Gather modal
     if (activeNpcId && activeNpcName) {
       setPendingDestination(targetRoom);
+      setPendingEntryDirection(entryDir); // Store entry direction for modal flow
       setShowPartyGatherModal(true);
       return; // Don't navigate immediately, wait for user choice
     }
 
-    // No active NPC - navigate immediately
-    await performRoomTransition(targetRoom);
+    // No active NPC - navigate immediately with entry direction
+    await performRoomTransition(targetRoom, false, entryDir);
   }, [worldState, worldId, performRoomTransition, activeNpcId, activeNpcName]);
 
   const handleOpenMap = useCallback(() => {
@@ -1835,17 +1930,19 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       return;
     }
 
-    // Set entry direction for spawn positioning
+    // Calculate entry direction (opposite of exit direction)
+    // If you exit via east (>|), you enter the next room from the west (|<)
     const oppositeDirections: Record<ExitDirection, ExitDirection> = {
       north: 'south',
       south: 'north',
       east: 'west',
       west: 'east',
     };
-    setEntryDirection(oppositeDirections[exit.direction]);
+    const entryDir = oppositeDirections[exit.direction];
+    console.log(`[Exit] Exiting ${exit.direction}, will enter from ${entryDir}`);
 
-    // Use existing navigation flow (which handles party gather modal, etc.)
-    await handleNavigate(exit.targetRoomId);
+    // Pass entry direction directly to avoid stale closure issues
+    await handleNavigate(exit.targetRoomId, entryDir);
   }, [worldState, handleNavigate]);
 
   // Handle entering a threat zone (triggers grid combat)
@@ -1881,9 +1978,11 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     if (!pendingDestination) return;
 
     setShowPartyGatherModal(false);
-    await performRoomTransition(pendingDestination, true); // keepActiveNpc = true
+    // Pass the stored entry direction so player spawns at correct edge
+    await performRoomTransition(pendingDestination, true, pendingEntryDirection); // keepActiveNpc = true
     setPendingDestination(null);
-  }, [pendingDestination, performRoomTransition]);
+    setPendingEntryDirection(null);
+  }, [pendingDestination, pendingEntryDirection, performRoomTransition]);
 
   const handleLeaveNpcHere = useCallback(async () => {
     if (!pendingDestination) return;
@@ -1908,13 +2007,16 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     }
 
     // performRoomTransition with keepActiveNpc=false will clear the active NPC state
-    await performRoomTransition(pendingDestination, false);
+    // Pass the stored entry direction so player spawns at correct edge
+    await performRoomTransition(pendingDestination, false, pendingEntryDirection);
     setPendingDestination(null);
-  }, [pendingDestination, activeNpcName, activeNpcId, addMessage, performRoomTransition]);
+    setPendingEntryDirection(null);
+  }, [pendingDestination, pendingEntryDirection, activeNpcName, activeNpcId, addMessage, performRoomTransition]);
 
   const handleClosePartyGatherModal = useCallback(() => {
     setShowPartyGatherModal(false);
     setPendingDestination(null);
+    setPendingEntryDirection(null);
   }, []);
 
   const handleBack = useCallback(() => {

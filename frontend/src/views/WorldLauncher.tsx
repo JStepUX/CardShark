@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { ArrowLeft, Play, Hammer, Download } from 'lucide-react';
 import { CharacterData } from '../types/character';
 import { worldApi } from '../api/worldApi';
+import UserSelect from '../components/UserSelect';
+import { UserProfile } from '../types/messages';
 
 const WorldLauncher: React.FC = () => {
    const { uuid } = useParams<{ uuid: string }>();
@@ -14,6 +16,36 @@ const WorldLauncher: React.FC = () => {
    const [loading, setLoading] = useState(true);
    const [error, setError] = useState<string | null>(null);
    const [imageUrl, setImageUrl] = useState<string | null>(null);
+   const [showUserSelect, setShowUserSelect] = useState(false);
+
+   /**
+    * Handle user selection from UserSelect modal.
+    * Navigates to the play view with user_uuid in route state.
+    */
+   const handleUserSelect = useCallback((user: UserProfile) => {
+      // Close the modal
+      setShowUserSelect(false);
+
+      // Navigate to play view with user info in route state
+      // user_uuid is provided by the database-backed user service
+      navigate(`/world/${uuid}/play`, {
+         state: {
+            userProfile: {
+               user_uuid: user.user_uuid,
+               name: user.name,
+               filename: user.filename,
+            }
+         }
+      });
+   }, [navigate, uuid]);
+
+   /**
+    * Handle Play World button click.
+    * Opens UserSelect modal instead of navigating directly.
+    */
+   const handlePlayWorld = useCallback(() => {
+      setShowUserSelect(true);
+   }, []);
 
    const handleExportWorld = async () => {
       if (!worldCard) return;
@@ -198,9 +230,9 @@ const WorldLauncher: React.FC = () => {
 
                      return (
                         <button
-                           onClick={() => hasLocations && navigate(`/world/${uuid}/play`)}
+                           onClick={() => hasLocations && handlePlayWorld()}
                            disabled={!hasLocations}
-                           className={`group flex flex-col items-center justify-center p-8 border rounded-xl transition-all shadow-lg 
+                           className={`group flex flex-col items-center justify-center p-8 border rounded-xl transition-all shadow-lg
                             ${hasLocations
                                  ? "bg-gradient-to-br from-emerald-900/50 to-stone-900 border-emerald-800/50 hover:border-emerald-500/50 hover:from-emerald-900/80 hover:shadow-emerald-900/20 cursor-pointer"
                                  : "bg-stone-900/50 border-stone-800 opacity-50 cursor-not-allowed"
@@ -211,7 +243,7 @@ const WorldLauncher: React.FC = () => {
                            </div>
                            <span className={`text-xl font-bold ${hasLocations ? "text-emerald-100" : "text-stone-500"}`}>Play World</span>
                            <span className={`${hasLocations ? "text-emerald-400/60" : "text-stone-600"} text-sm mt-2`}>
-                              {hasLocations ? "Enter the simulation" : "No locations to play"}
+                              {hasLocations ? "Select user and enter" : "No locations to play"}
                            </span>
                         </button>
                      );
@@ -246,6 +278,13 @@ const WorldLauncher: React.FC = () => {
                </div>
             </div>
          </div>
+
+         {/* UserSelect Modal for choosing which user profile to play as */}
+         <UserSelect
+            isOpen={showUserSelect}
+            onClose={() => setShowUserSelect(false)}
+            onSelect={handleUserSelect}
+         />
       </div>
    );
 };

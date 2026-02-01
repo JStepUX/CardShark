@@ -6,9 +6,10 @@
  * Supports dead zone painting via click.
  */
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { Users } from 'lucide-react';
-import type { RoomLayoutData, SpawnPoint, CellPosition, ZoneType } from '../../types/localMap';
+import { Users, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
+import type { RoomLayoutData, SpawnPoint, CellPosition, ZoneType, ExitDirection } from '../../types/localMap';
 import { DEFAULT_LAYOUT_GRID_SIZE } from '../../types/localMap';
+import { getExitPosition } from '../../utils/localMapUtils';
 
 interface NPCInfo {
   id: string;
@@ -26,7 +27,16 @@ interface RoomLayoutCanvasProps {
   onCellDrop?: (col: number, row: number, entityId: string) => void;
   onSpawnDragStart?: (spawn: SpawnPoint) => void;
   onZoneUnpaint?: (col: number, row: number) => void;  // Called when clicking a painted zone cell
+  exitDirections?: ExitDirection[];  // Directions where exits exist (prevents zone painting)
 }
+
+// Arrow icons for exit directions
+const EXIT_ARROWS: Record<ExitDirection, typeof ArrowUp> = {
+  north: ArrowUp,
+  south: ArrowDown,
+  east: ArrowRight,
+  west: ArrowLeft,
+};
 
 // Zone type colors for visual feedback
 const ZONE_COLORS: Record<string, string> = {
@@ -46,6 +56,7 @@ export function RoomLayoutCanvas({
   onCellDrop,
   onSpawnDragStart,
   onZoneUnpaint,
+  exitDirections = [],
 }: RoomLayoutCanvasProps) {
   const [hoveredCell, setHoveredCell] = useState<CellPosition | null>(null);
   const [dragOverCell, setDragOverCell] = useState<CellPosition | null>(null);
@@ -76,6 +87,19 @@ export function RoomLayoutCanvas({
     return map;
   }, [layoutData.deadZones]);
 
+  // Build a map of exit cells - these are protected from zone painting
+  const exitCellsMap = useMemo(() => {
+    const map = new Map<string, ExitDirection>();
+    // tileSize is unused by getExitPosition, but required by the type
+    const config = { gridWidth: cols, gridHeight: rows, tileSize: 1 };
+    for (const dir of exitDirections) {
+      const pos = getExitPosition(dir, config);
+      // getExitPosition returns {x, y} but our grid uses {col, row}
+      map.set(`${pos.x},${pos.y}`, dir);
+    }
+    return map;
+  }, [exitDirections, cols, rows]);
+
   // Get NPC info by ID
   const getNpcInfo = useCallback((entityId: string): NPCInfo | undefined => {
     return npcs.find(n => n.id === entityId);
@@ -83,8 +107,14 @@ export function RoomLayoutCanvas({
 
   // Handle cell click - in zone mode, check if we should paint or unpaint
   const handleCellClick = useCallback((col: number, row: number) => {
+    const cellKey = `${col},${row}`;
+
+    // Block zone painting on exit cells
+    if (isZoneMode && exitCellsMap.has(cellKey)) {
+      return; // Exit cells are protected
+    }
+
     if (isZoneMode) {
-      const cellKey = `${col},${row}`;
       const existingZone = zonesByCell.get(cellKey);
 
       if (existingZone) {
@@ -97,7 +127,7 @@ export function RoomLayoutCanvas({
     } else {
       onCellClick(col, row);
     }
-  }, [isZoneMode, zonesByCell, onCellClick, onZoneUnpaint]);
+  }, [isZoneMode, zonesByCell, exitCellsMap, onCellClick, onZoneUnpaint]);
 
   // Handle mouse down for drag painting
   const handleMouseDown = useCallback((col: number, row: number) => {
@@ -112,11 +142,12 @@ export function RoomLayoutCanvas({
     setHoveredCell({ col, row });
     if (isZoneMode && isPainting) {
       const cellKey = `${col},${row}`;
-      if (!zonesByCell.has(cellKey)) {
+      // Skip exit cells and already-painted cells
+      if (!zonesByCell.has(cellKey) && !exitCellsMap.has(cellKey)) {
         onCellClick(col, row);  // Paint while dragging
       }
     }
-  }, [isZoneMode, isPainting, zonesByCell, onCellClick]);
+  }, [isZoneMode, isPainting, zonesByCell, exitCellsMap, onCellClick]);
 
   // Handle mouse up to stop painting
   const handleMouseUp = useCallback(() => {
@@ -161,6 +192,8 @@ export function RoomLayoutCanvas({
         const cellKey = `${col},${row}`;
         const spawn = spawnsByCell.get(cellKey);
         const zoneType = zonesByCell.get(cellKey);
+        const exitDir = exitCellsMap.get(cellKey);
+        const isExit = !!exitDir;
         const isHovered = hoveredCell?.col === col && hoveredCell?.row === row;
         const isDragOver = dragOverCell?.col === col && dragOverCell?.row === row;
         const npcInfo = spawn ? getNpcInfo(spawn.entityId) : undefined;
@@ -174,17 +207,23 @@ export function RoomLayoutCanvas({
 
         // Build tooltip
         let tooltip = `Cell (${col}, ${row})`;
-        if (spawn) tooltip = `${npcInfo?.name || spawn.entityId} at (${col}, ${row})`;
+        if (isExit) tooltip = `Exit ${exitDir} (protected)`;
+        else if (spawn) tooltip = `${npcInfo?.name || spawn.entityId} at (${col}, ${row})`;
         else if (zoneType) tooltip = `${zoneType} zone at (${col}, ${row})`;
+
+        // Get exit arrow icon if this is an exit cell
+        const ExitArrow = exitDir ? EXIT_ARROWS[exitDir] : null;
 
         cellElements.push(
           <div
             key={cellKey}
             className={`
-              relative border border-white/20 transition-all cursor-pointer select-none
+              relative border transition-all select-none
+              ${isExit ? 'border-blue-400/60' : 'border-white/20'}
+              ${isZoneMode && isExit ? 'cursor-not-allowed' : 'cursor-pointer'}
               ${cellBgClass}
-              ${isHovered && !spawn && !zoneType ? 'bg-blue-500/20' : ''}
-              ${isHovered && isZoneMode && !zoneType ? 'bg-blue-500/30' : ''}
+              ${isHovered && !spawn && !zoneType && !isExit ? 'bg-blue-500/20' : ''}
+              ${isHovered && isZoneMode && !zoneType && !isExit ? 'bg-blue-500/30' : ''}
               ${isDragOver ? 'bg-green-500/30 border-green-400' : ''}
               ${isSelectedNpc ? 'ring-2 ring-yellow-400' : ''}
             `}
@@ -198,6 +237,15 @@ export function RoomLayoutCanvas({
             onDrop={(e) => handleDrop(e, col, row)}
             title={tooltip}
           >
+            {/* Exit indicator */}
+            {isExit && ExitArrow && (
+              <div className="absolute inset-0 flex items-center justify-center bg-blue-500/30 pointer-events-none">
+                <div className="bg-blue-500/70 rounded-full p-1.5 shadow-lg">
+                  <ExitArrow size={14} className="text-white" />
+                </div>
+              </div>
+            )}
+
             {/* Spawn marker */}
             {spawn && (
               <div
@@ -242,7 +290,7 @@ export function RoomLayoutCanvas({
 
     return cellElements;
   }, [
-    cols, rows, spawnsByCell, zonesByCell, hoveredCell, dragOverCell,
+    cols, rows, spawnsByCell, zonesByCell, exitCellsMap, hoveredCell, dragOverCell,
     selectedNpcId, isZoneMode, getNpcInfo, handleCellClick, handleMouseDown,
     handleMouseEnter, handleMouseUp, handleDragOver, handleDragLeave,
     handleDrop, handleSpawnDragStart

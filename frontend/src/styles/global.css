@@ -277,3 +277,58 @@
   animation: venetian-expand-left 0.35s ease-in-out forwards;
   transform-origin: left center;
 }
+
+/* ============================================
+   Volume Slider Styling
+   ============================================ */
+
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Webkit (Chrome, Safari) */
+.volume-slider::-webkit-slider-runnable-track {
+  background: rgb(68, 64, 60);
+  border-radius: 4px;
+  height: 100%;
+  width: 4px;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgb(168, 162, 158);
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -3px;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  background: rgb(214, 211, 209);
+}
+
+/* Firefox */
+.volume-slider::-moz-range-track {
+  background: rgb(68, 64, 60);
+  border-radius: 4px;
+  height: 100%;
+  width: 4px;
+}
+
+.volume-slider::-moz-range-thumb {
+  background: rgb(168, 162, 158);
+  border: none;
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  cursor: pointer;
+}
+
+.volume-slider::-moz-range-thumb:hover {
+  background: rgb(214, 211, 209);
+}

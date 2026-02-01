@@ -89,7 +89,8 @@ const UserSelect: React.FC<UserSelectProps> = ({
           filename: user.filename || '', // Use user.filename from response (not user.name)
           size: user.size || 0,
           modified: user.modified || Date.now(),
-          id: ''
+          id: '',
+          user_uuid: user.user_uuid || undefined // UUID from database-backed user service
         })).filter((user: { filename: any; }) => user.filename); // Filter out any users without a filename
 
         setUsers(mappedUsers.sort((a, b) => a.name.localeCompare(b.name)));

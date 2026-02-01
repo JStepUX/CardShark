@@ -285,6 +285,7 @@ block_cipher = None
 frontend_datas = [
     ('frontend/dist/*', 'frontend'),
     ('frontend/dist/assets/*', 'frontend/assets'),
+    ('frontend/dist/sounds/*', 'frontend/sounds'),  # Sound effects for combat
 ]
 
 backend_datas = [

@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect, useCallback, useState, useMemo, useImperativeHandle } from 'react';
 import * as PIXI from 'pixi.js';
-import { Plus, Minus, RotateCcw, Hand, MousePointer } from 'lucide-react';
+import { Plus, Minus, RotateCcw, Hand, MousePointer, Music, Volume2 } from 'lucide-react';
 import { LocalMapStage } from './LocalMapStage';
 import {
     LocalMapState,
@@ -31,6 +31,11 @@ import {
 } from '../../../../utils/localMapUtils';
 import { getCellZoneType } from '../../../../types/localMap';
 import { TextureCache } from '../../../combat/pixi/TextureCache';
+import { soundManager } from '../../../combat/pixi/SoundManager';
+import { useSettings } from '../../../../contexts/SettingsContext';
+
+// Debug logging flag - set to true for development debugging
+const DEBUG = false;
 
 // Default configuration - increased for better visibility
 const DEFAULT_CONFIG: LocalMapConfig = {
@@ -157,6 +162,9 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     const appRef = useRef<PIXI.Application | null>(null);
     const stageRef = useRef<LocalMapStage | null>(null);
 
+    // Settings for volume control
+    const { settings, updateSettings } = useSettings();
+
     // Track when stage is ready (triggers background update effect)
     const [stageReady, setStageReady] = useState(false);
 
@@ -198,7 +206,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     const autoPanAnimationRef = useRef<number | null>(null);
 
     // Refs to always get latest handlers (avoids stale closure in Pixi event)
-    const handleTileClickRef = useRef<(position: TilePosition) => void>(() => {});
+    const handleTileClickRef = useRef<(position: TilePosition) => void>(() => { });
     const onEntityClickRef = useRef<((entityId: string) => void) | undefined>();
 
     // Keep ref in sync with state
@@ -295,18 +303,37 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         },
     }), []);
 
-    // Calculate NPC positions ONLY when room changes (not when companion changes)
+    // Track NPC IDs to detect when room NPCs have loaded/changed
+    const lastPlacedNpcIdsRef = useRef<string>('');
+
+    // Calculate NPC positions when room changes OR when roomNpcs change for this room
     useEffect(() => {
         if (!currentRoom) {
             setPlacedNpcEntities([]);
             lastPlacedRoomIdRef.current = null;
+            lastPlacedNpcIdsRef.current = '';
             return;
         }
 
-        // Only recalculate positions if the room actually changed
-        if (lastPlacedRoomIdRef.current === currentRoom.id) {
+        // Create a signature of current NPCs to detect when they change
+        // Include both IDs and image URLs so we re-place when images resolve
+        const currentNpcSignature = (roomNpcs ?? []).map(n => {
+            const id = 'id' in n ? n.id : (n as any).character_uuid;
+            const imageUrl = 'imageUrl' in n ? n.imageUrl : '';
+            return `${id}:${imageUrl || 'no-img'}`;
+        }).sort().join(',');
+
+        // Recalculate positions if:
+        // 1. Room ID changed, OR
+        // 2. NPC IDs or images changed (new room's NPCs have loaded or images resolved)
+        const roomChanged = lastPlacedRoomIdRef.current !== currentRoom.id;
+        const npcsChanged = lastPlacedNpcIdsRef.current !== currentNpcSignature;
+
+        if (!roomChanged && !npcsChanged) {
             return;
         }
+
+        if (DEBUG) console.log('[LocalMapView] Placing NPCs:', { roomChanged, npcsChanged, npcCount: roomNpcs?.length ?? 0 });
 
         // Get initial player position for NPC placement calculation
         let initialPos = initialPlayerPosition ?? { x: 0, y: Math.floor(config.gridHeight / 2) };
@@ -343,7 +370,9 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             setPlacedNpcEntities([]);
         }
 
+        // Track what we've placed to avoid redundant recalculations
         lastPlacedRoomIdRef.current = currentRoom.id;
+        lastPlacedNpcIdsRef.current = currentNpcSignature;
     }, [currentRoom?.id, roomNpcs, player.id, config, entryDirection, initialPlayerPosition]);
 
     // Build local map state from props (uses pre-calculated NPC positions)
@@ -696,6 +725,32 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         };
     }, []);
 
+    // Initialize sound manager and sync volume settings
+    useEffect(() => {
+        soundManager.init();
+    }, []);
+
+    // Sync volume settings to sound manager when settings change
+    useEffect(() => {
+        const sfxVol = (settings.sfxVolume ?? 50) / 100;
+        const musicVol = (settings.musicVolume ?? 30) / 100;
+        soundManager.setSfxVolume(sfxVol);
+        soundManager.setMusicVolume(musicVol);
+    }, [settings.sfxVolume, settings.musicVolume]);
+
+    // Volume change handlers
+    const handleSfxVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = parseInt(e.target.value, 10);
+        soundManager.setSfxVolume(value / 100);
+        updateSettings({ sfxVolume: value });
+    }, [updateSettings]);
+
+    const handleMusicVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = parseInt(e.target.value, 10);
+        soundManager.setMusicVolume(value / 100);
+        updateSettings({ musicVolume: value });
+    }, [updateSettings]);
+
     // Pan move handler
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
         // Manual panning (drag)
@@ -741,6 +796,55 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
         return blocked;
     }, [placedNpcEntities]);
+
+    // Helper to find a safe adjacent position for companion that doesn't overlap enemies
+    const findSafeCompanionPosition = useCallback((
+        playerPos: TilePosition,
+        entities: LocalMapEntity[]
+    ): TilePosition => {
+        // Get all enemy positions
+        const enemyPositions = entities
+            .filter(e => e.allegiance === 'hostile')
+            .map(e => e.position);
+
+        // Adjacent offsets in priority order: left, up-left, down-left, up, down, right, up-right, down-right
+        const adjacentOffsets: TilePosition[] = [
+            { x: -1, y: 0 },   // left (preferred)
+            { x: -1, y: -1 },  // up-left
+            { x: -1, y: 1 },   // down-left
+            { x: 0, y: -1 },   // up
+            { x: 0, y: 1 },    // down
+            { x: 1, y: 0 },    // right
+            { x: 1, y: -1 },   // up-right
+            { x: 1, y: 1 },    // down-right
+        ];
+
+        for (const offset of adjacentOffsets) {
+            const candidatePos: TilePosition = {
+                x: playerPos.x + offset.x,
+                y: playerPos.y + offset.y,
+            };
+
+            // Check bounds
+            if (candidatePos.x < 0 || candidatePos.x >= config.gridWidth ||
+                candidatePos.y < 0 || candidatePos.y >= config.gridHeight) {
+                continue;
+            }
+
+            // Check if occupied by enemy
+            const isOccupiedByEnemy = enemyPositions.some(
+                ep => ep.x === candidatePos.x && ep.y === candidatePos.y
+            );
+
+            if (!isOccupiedByEnemy) {
+                return candidatePos;
+            }
+        }
+
+        // Fallback: return left position even if out of bounds (clamp to 0)
+        // This shouldn't happen in practice if grid is big enough
+        return { x: Math.max(0, playerPos.x - 1), y: playerPos.y };
+    }, [config.gridWidth, config.gridHeight]);
 
     // Check if a tile is occupied by any entity (NPC or companion)
     const isTileOccupied = useCallback((position: TilePosition, mapState: LocalMapState): boolean => {
@@ -816,8 +920,8 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 if (hostileIds.length > 0) {
                     // Pass current position and updated map state to combat
                     // Must update BOTH playerPosition AND the player entity's position
-                    // Also update companion position to stay adjacent to player
-                    const companionPos = { x: Math.max(0, nextTile.x - 1), y: nextTile.y };
+                    // Also update companion position to stay adjacent to player (avoiding enemies)
+                    const companionPos = findSafeCompanionPosition(nextTile, mapState.entities);
                     const updatedEntities = mapState.entities.map(e => {
                         if (e.allegiance === 'player') return { ...e, position: nextTile };
                         if (e.allegiance === 'bonded_ally') return { ...e, position: companionPos };
@@ -854,7 +958,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         }
 
         setIsMoving(false);
-    }, [isMoving, playerPosition, config, getBlockedTiles, inCombat, animateStep, onEnterThreatZone, onExitClick, onTileClick, isTileOccupied, onEntityClick]);
+    }, [isMoving, playerPosition, config, getBlockedTiles, inCombat, animateStep, onEnterThreatZone, onExitClick, onTileClick, isTileOccupied, onEntityClick, findSafeCompanionPosition]);
 
     // Initialize Pixi application
     useEffect(() => {
@@ -871,7 +975,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
         const initPixi = async () => {
             if (isCleanedUp) return;
-            console.log('[LocalMapView] initializing Pixi...');
+            if (DEBUG) console.log('[LocalMapView] initializing Pixi...');
 
             // Collect all image paths for preloading
             const imagePaths: string[] = [
@@ -880,13 +984,13 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 ...(roomNpcs?.map(n => n.imageUrl) ?? []),
             ].filter((p): p is string => Boolean(p));
 
-            console.log('[LocalMapView] Preloading textures:', imagePaths);
+            if (DEBUG) console.log('[LocalMapView] Preloading textures:', imagePaths);
 
             // Preload all textures before rendering
             if (imagePaths.length > 0) {
                 try {
                     await TextureCache.preload(imagePaths);
-                    console.log('[LocalMapView] Preload complete');
+                    if (DEBUG) console.log('[LocalMapView] Preload complete');
                 } catch (err) {
                     console.warn('[LocalMapView] Some textures failed to preload:', err);
                     // Continue anyway - fallback textures will be used
@@ -904,7 +1008,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             const canvasWidth = stageWidth + CARD_OVERFLOW_PADDING * 2;
             const canvasHeight = stageHeight + CARD_OVERFLOW_PADDING * 2;
 
-            console.log(`[LocalMapView] Creating app: ${canvasWidth}x${canvasHeight}`);
+            if (DEBUG) console.log(`[LocalMapView] Creating app: ${canvasWidth}x${canvasHeight}`);
 
             // Create Pixi application with transparent background
             // so blurred room image shows through letterbox areas
@@ -932,8 +1036,8 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 canvas.style.position = 'relative';
                 canvas.style.zIndex = '10';
                 containerRef.current.appendChild(canvas);
-                console.log('[LocalMapView] Canvas appended to DOM');
-            } else {
+                if (DEBUG) console.log('[LocalMapView] Canvas appended to DOM');
+            } else if (DEBUG) {
                 console.error('[LocalMapView] Container ref is missing!');
             }
 
@@ -954,10 +1058,10 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             });
 
             stage.on('entityClicked', (entityId: string) => {
-                console.log('[LocalMapView] Received entityClicked event:', entityId, 'has handler:', !!onEntityClickRef.current);
+                if (DEBUG) console.log('[LocalMapView] Received entityClicked event:', entityId, 'has handler:', !!onEntityClickRef.current);
                 if (onEntityClickRef.current) {
                     onEntityClickRef.current(entityId);
-                } else {
+                } else if (DEBUG) {
                     console.warn('[LocalMapView] No entity click handler set!');
                 }
             });
@@ -987,7 +1091,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             setStageReady(true);
 
             // Mark loading complete
-            console.log('[LocalMapView] Initialization complete');
+            if (DEBUG) console.log('[LocalMapView] Initialization complete');
             setIsLoading(false);
         };
 
@@ -1040,16 +1144,70 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         };
     }, []); // Only run once on mount
 
-    // Keyboard shortcuts
+    // Keyboard shortcuts with smooth WASD panning
     useEffect(() => {
+        const PAN_SPEED = 8; // Pixels per frame (smooth)
+        const keysHeld = new Set<string>();
+        let animationId: number | null = null;
+
+        const updatePan = () => {
+            if (!stageRef.current || keysHeld.size === 0) {
+                animationId = null;
+                return;
+            }
+
+            let dx = 0, dy = 0;
+            if (keysHeld.has('w')) dy += PAN_SPEED;
+            if (keysHeld.has('s')) dy -= PAN_SPEED;
+            if (keysHeld.has('a')) dx += PAN_SPEED;
+            if (keysHeld.has('d')) dx -= PAN_SPEED;
+
+            if (dx !== 0 || dy !== 0) {
+                stageRef.current.pan(dx, dy);
+            }
+
+            animationId = requestAnimationFrame(updatePan);
+        };
+
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Ignore if user is typing in an input field or contentEditable (TipTap editor)
+            if (e.target instanceof HTMLInputElement ||
+                e.target instanceof HTMLTextAreaElement ||
+                (e.target instanceof HTMLElement && e.target.isContentEditable)) {
+                return;
+            }
+
             // P key toggles pan mode
             if (e.key === 'p' || e.key === 'P') {
                 setIsPanMode(prev => !prev);
+                return;
+            }
+
+            // WASD camera panning
+            const key = e.key.toLowerCase();
+            if (['w', 'a', 's', 'd'].includes(key)) {
+                e.preventDefault();
+                if (!keysHeld.has(key)) {
+                    keysHeld.add(key);
+                    if (!animationId) {
+                        animationId = requestAnimationFrame(updatePan);
+                    }
+                }
             }
         };
+
+        const handleKeyUp = (e: KeyboardEvent) => {
+            const key = e.key.toLowerCase();
+            keysHeld.delete(key);
+        };
+
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+            if (animationId) cancelAnimationFrame(animationId);
+        };
     }, []);
 
     // Handle tile click - uses click-to-move for distant tiles
@@ -1080,9 +1238,15 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
         // EXPLORATION MODE: Handle movement internally
 
+        // Check if this is an exit tile - exits are always clickable regardless of traversability
+        const isExitTile = mapState.exits.some(
+            e => e.position.x === position.x && e.position.y === position.y
+        );
+
         // Check if the clicked tile is traversable (walls block movement)
+        // Exception: exit tiles are always allowed (safety net for misconfigured layouts)
         const tileData = mapState.tiles[position.y]?.[position.x];
-        if (tileData && !tileData.traversable) {
+        if (tileData && !tileData.traversable && !isExitTile) {
             // Don't allow clicking on impassable tiles (walls)
             return;
         }
@@ -1167,9 +1331,9 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
                 // Then trigger combat with updated map state
                 // Must update BOTH playerPosition AND the player entity's position
-                // Also update companion position to stay adjacent to player
+                // Also update companion position to stay adjacent to player (avoiding enemies)
                 if (hostileIds.length > 0) {
-                    const companionPos = { x: Math.max(0, position.x - 1), y: position.y };
+                    const companionPos = findSafeCompanionPosition(position, mapState.entities);
                     const updatedEntities = mapState.entities.map(e => {
                         if (e.allegiance === 'player') return { ...e, position: position };
                         if (e.allegiance === 'bonded_ally') return { ...e, position: companionPos };
@@ -1197,7 +1361,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
         // Distant tile - use click-to-move pathfinding
         startMovement(position, mapState);
-    }, [isMoving, buildMapState, playerPosition, inCombat, onExitClick, onEnterThreatZone, onTileClick, onEntityClick, startMovement, player.id, isTileOccupied]);
+    }, [isMoving, buildMapState, playerPosition, inCombat, onExitClick, onEnterThreatZone, onTileClick, onEntityClick, startMovement, player.id, isTileOccupied, findSafeCompanionPosition]);
 
     // Keep refs updated to avoid stale closure in Pixi event handler
     useEffect(() => {
@@ -1205,13 +1369,15 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     }, [handleTileClick]);
 
     useEffect(() => {
-        console.log('[LocalMapView] Updating onEntityClickRef, handler exists:', !!onEntityClick, 'inCombat:', inCombat);
+        if (DEBUG) console.log('[LocalMapView] Updating onEntityClickRef, handler exists:', !!onEntityClick, 'inCombat:', inCombat);
         onEntityClickRef.current = onEntityClick;
     }, [onEntityClick, inCombat]);
 
     // Update stage when state changes
+    // IMPORTANT: Include stageReady in deps to ensure this runs after Pixi init completes
+    // This fixes a race condition where NPC placement happens before stage is ready
     useEffect(() => {
-        if (!stageRef.current) return;
+        if (!stageRef.current || !stageReady) return;
 
         const mapState = buildMapState();
         if (mapState) {
@@ -1231,13 +1397,13 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 onMapStateChange?.(mapState);
             }
         }
-    }, [currentRoom, worldState, player, companion, playerPosition, inCombat, buildMapState, onMapStateChange]);
+    }, [currentRoom, worldState, player, companion, playerPosition, inCombat, buildMapState, onMapStateChange, stageReady]);
 
     // Update background when it changes or stage becomes ready
     useEffect(() => {
-        console.log('[LocalMapView] Background effect - image:', backgroundImage, 'stageReady:', stageReady);
+        if (DEBUG) console.log('[LocalMapView] Background effect - image:', backgroundImage, 'stageReady:', stageReady);
         if (stageRef.current && backgroundImage && stageReady) {
-            console.log('[LocalMapView] Setting background image:', backgroundImage);
+            if (DEBUG) console.log('[LocalMapView] Setting background image:', backgroundImage);
             stageRef.current.setBackgroundImage(backgroundImage);
         }
     }, [backgroundImage, stageReady]);
@@ -1250,10 +1416,10 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         stageRef.current.clearActionHighlights();
 
         if (targetingMode === 'move' && validMoveTargets && validMoveTargets.length > 0) {
-            console.log('[LocalMapView] Showing valid move targets:', validMoveTargets.length);
+            if (DEBUG) console.log('[LocalMapView] Showing valid move targets:', validMoveTargets.length);
             stageRef.current.showValidMoves(validMoveTargets);
         } else if (targetingMode === 'attack' && validAttackTargets && validAttackTargets.length > 0) {
-            console.log('[LocalMapView] Showing valid attack targets:', validAttackTargets.length);
+            if (DEBUG) console.log('[LocalMapView] Showing valid attack targets:', validAttackTargets.length);
             const attackPositions = validAttackTargets.map(t => t.position);
             stageRef.current.showAttackRange(attackPositions);
             // Also highlight the entity cards themselves
@@ -1315,11 +1481,10 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                     {/* Pan/Navigate mode toggle */}
                     <button
                         onClick={() => setIsPanMode(!isPanMode)}
-                        className={`w-8 h-8 flex items-center justify-center rounded transition-colors shadow-lg border ${
-                            isPanMode
+                        className={`w-8 h-8 flex items-center justify-center rounded transition-colors shadow-lg border ${isPanMode
                                 ? 'bg-blue-600/90 text-white border-blue-500/50'
                                 : 'bg-stone-800/80 hover:bg-stone-700/90 text-white border-stone-600/50'
-                        }`}
+                            }`}
                         title={isPanMode ? 'Pan mode (P) - click to switch to navigate' : 'Navigate mode (P) - click to switch to pan'}
                     >
                         {isPanMode ? <Hand size={16} /> : <MousePointer size={16} />}
@@ -1355,6 +1520,55 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                     {/* Zoom level indicator */}
                     <div className="text-xs text-center text-gray-400 mt-1">
                         {Math.round(currentZoom * 100)}%
+                    </div>
+
+                    {/* Volume Controls */}
+                    <div className="h-px bg-stone-600/30 my-1.5" />
+                    <div className="flex gap-1.5 justify-center">
+                        {/* Music Volume */}
+                        <div className="flex flex-col items-center">
+                            <Music size={12} className="text-gray-400 mb-1" />
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={settings.musicVolume ?? 30}
+                                onChange={handleMusicVolumeChange}
+                                className="volume-slider"
+                                title={`Music: ${settings.musicVolume ?? 30}%`}
+                                style={{
+                                    writingMode: 'vertical-lr',
+                                    direction: 'rtl',
+                                    width: '16px',
+                                    height: '48px',
+                                    appearance: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                }}
+                            />
+                        </div>
+                        {/* SFX Volume */}
+                        <div className="flex flex-col items-center">
+                            <Volume2 size={12} className="text-gray-400 mb-1" />
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={settings.sfxVolume ?? 50}
+                                onChange={handleSfxVolumeChange}
+                                className="volume-slider"
+                                title={`SFX: ${settings.sfxVolume ?? 50}%`}
+                                style={{
+                                    writingMode: 'vertical-lr',
+                                    direction: 'rtl',
+                                    width: '16px',
+                                    height: '48px',
+                                    appearance: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
             )}

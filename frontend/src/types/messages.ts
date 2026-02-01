@@ -32,6 +32,7 @@ export interface IUserProfile {
   filename: string;
   size: number;
   modified: number;
+  user_uuid?: string; // UUID from database (available when using database-backed user service)
 }
 
 /**

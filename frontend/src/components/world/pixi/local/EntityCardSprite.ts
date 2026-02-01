@@ -16,6 +16,7 @@
 import * as PIXI from 'pixi.js';
 import { LocalMapEntity, Allegiance, ALLEGIANCE_COLORS } from '../../../../types/localMap';
 import { TextureCache } from '../../../combat/pixi/TextureCache';
+import { CardAnimationController, CardSpriteInterface } from './CardAnimationController';
 
 // Card dimensions - sized so cards "stand" in tiles with heads extending above
 // Cards are wider than before, and positioned with feet at tile center
@@ -38,6 +39,9 @@ const PIVOT_Y_OFFSET = CARD_HEIGHT - 40;
 const LEVEL_BADGE_RADIUS = 12;
 const STATUS_BADGE_SIZE = 22;
 
+// Hit area padding for better touch targets on mobile
+const HIT_AREA_PADDING = 8;
+
 // Font
 const FONT_FAMILY = 'Poppins, system-ui, -apple-system, sans-serif';
 
@@ -50,7 +54,7 @@ const HP_BAR_BG = 0x450A0A;
 const HP_BAR_FILL = 0xDC2626;
 const HP_BAR_LOW = 0x7F1D1D;
 
-export class EntityCardSprite extends PIXI.Container {
+export class EntityCardSprite extends PIXI.Container implements CardSpriteInterface {
     private entityId: string;
     private allegiance: Allegiance;
 
@@ -75,11 +79,8 @@ export class EntityCardSprite extends PIXI.Container {
     private currentHp: number = 0;
     private maxHp: number = 0;
 
-    // Animation state
-    private bobTime: number = Math.random() * Math.PI * 2; // Random start phase for variety
-    private bobEnabled: boolean = true;
-    private isMoving: boolean = false;
-    private moveAnimationId: number | null = null;
+    // Animation controller - handles all animations
+    private animationController: CardAnimationController;
 
     constructor(entity: LocalMapEntity) {
         super();
@@ -95,8 +96,20 @@ export class EntityCardSprite extends PIXI.Container {
         this.eventMode = 'dynamic';
         this.cursor = 'pointer';
 
-        // Hit area relative to pivot point (pivot is near bottom of card)
-        this.hitArea = new PIXI.Rectangle(-CARD_WIDTH / 2, -PIVOT_Y_OFFSET, CARD_WIDTH, CARD_HEIGHT);
+        // Hit area must account for pivot offset
+        // Pivot is at (CARD_WIDTH/2, PIVOT_Y_OFFSET) = (50, 100)
+        // Visual bounds are drawn from (0,0) to (CARD_WIDTH, CARD_HEIGHT) in local drawing space
+        // PixiJS hit testing transforms click coordinates by subtracting pivot, so the hit area
+        // must be specified relative to the pivot point:
+        //   X: 0 - 50 = -50 to 100 - 50 = 50
+        //   Y: 0 - 100 = -100 to 140 - 100 = 40
+        // Added HIT_AREA_PADDING on all sides for better touch targets
+        this.hitArea = new PIXI.Rectangle(
+            -CARD_WIDTH / 2 - HIT_AREA_PADDING,
+            -PIVOT_Y_OFFSET - HIT_AREA_PADDING,
+            CARD_WIDTH + HIT_AREA_PADDING * 2,
+            CARD_HEIGHT + HIT_AREA_PADDING * 2
+        );
 
         // Create visual layers (order matters)
         this.createShadow();
@@ -111,6 +124,9 @@ export class EntityCardSprite extends PIXI.Container {
         // Position pivot near bottom so card "stands" in tile with head above
         this.pivot.set(CARD_WIDTH / 2, PIVOT_Y_OFFSET);
 
+        // Initialize animation controller
+        this.animationController = new CardAnimationController(this);
+
         // Setup hover effects
         this.on('pointerenter', this.onHoverStart.bind(this));
         this.on('pointerleave', this.onHoverEnd.bind(this));
@@ -120,20 +136,25 @@ export class EntityCardSprite extends PIXI.Container {
     }
 
     /**
-     * Hover start - scale up and add glow effect
+     * Get border graphics for animation controller to manipulate tint
+     */
+    getBorder(): PIXI.Graphics {
+        return this.border;
+    }
+
+    /**
+     * Hover start - enhance shadow for glow effect
      */
     private onHoverStart(): void {
-        if (this.isMoving) return;
-        this.scale.set(1.08);
+        if (this.animationController.isAnimating()) return;
         this.shadow.alpha = 0.7;
     }
 
     /**
-     * Hover end - return to normal
+     * Hover end - return shadow to normal
      */
     private onHoverEnd(): void {
-        if (this.isMoving) return;
-        this.scale.set(1.0);
+        if (this.animationController.isAnimating()) return;
         this.shadow.alpha = 0.5;
     }
 
@@ -521,10 +542,8 @@ export class EntityCardSprite extends PIXI.Container {
     setHighlight(active: boolean): void {
         if (active) {
             this.border.tint = 0xFFFF00;
-            this.scale.set(1.05);
         } else {
             this.border.tint = 0xFFFFFF;
-            this.scale.set(1.0);
         }
     }
 
@@ -546,26 +565,24 @@ export class EntityCardSprite extends PIXI.Container {
      * Cleanup
      */
     destroy(options?: boolean | PIXI.DestroyOptions): void {
-        // Cancel any running movement animation
-        if (this.moveAnimationId !== null) {
-            cancelAnimationFrame(this.moveAnimationId);
-            this.moveAnimationId = null;
-        }
+        // Destroy animation controller first (cancels all pending animations)
+        this.animationController.destroy();
+
         if (this.portraitMask) {
             this.portraitMask.destroy();
         }
         super.destroy(options);
     }
 
+    // =========================================================================
+    // ANIMATION METHODS (delegated to CardAnimationController)
+    // =========================================================================
+
     /**
      * Update idle bob animation (call from ticker)
      */
     updateBob(deltaTime: number): void {
-        if (!this.bobEnabled || this.isMoving) return;
-
-        this.bobTime += deltaTime * 2;
-        const bob = Math.sin(this.bobTime) * 2; // 2px bob range
-        this.pivot.y = PIVOT_Y_OFFSET - bob;
+        this.animationController.updateBob(deltaTime);
     }
 
     /**
@@ -577,57 +594,14 @@ export class EntityCardSprite extends PIXI.Container {
         duration: number = 250,
         onComplete?: () => void
     ): void {
-        // Cancel any existing movement animation
-        if (this.moveAnimationId !== null) {
-            cancelAnimationFrame(this.moveAnimationId);
-        }
-
-        this.isMoving = true;
-        this.bobEnabled = false; // Pause bob during movement
-
-        // Reset pivot to neutral position to ensure animation starts from visual position
-        this.pivot.y = PIVOT_Y_OFFSET;
-
-        const startX = this.x;
-        const startY = this.y;
-        const startTime = performance.now();
-
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            // Ease out cubic for smooth deceleration
-            const eased = 1 - Math.pow(1 - progress, 3);
-
-            // Calculate base position
-            this.x = startX + (targetX - startX) * eased;
-            const baseYPos = startY + (targetY - startY) * eased;
-
-            // Add hop effect (parabolic arc)
-            const hopHeight = Math.sin(progress * Math.PI) * 8;
-            this.y = baseYPos - hopHeight;
-
-            if (progress < 1) {
-                this.moveAnimationId = requestAnimationFrame(animate);
-            } else {
-                // Animation complete
-                this.x = targetX;
-                this.y = targetY;
-                this.isMoving = false;
-                this.bobEnabled = true;
-                this.moveAnimationId = null;
-                onComplete?.();
-            }
-        };
-
-        this.moveAnimationId = requestAnimationFrame(animate);
+        this.animationController.playMoveTo(targetX, targetY, duration, onComplete);
     }
 
     /**
      * Check if currently animating movement
      */
     isAnimating(): boolean {
-        return this.isMoving;
+        return this.animationController.isAnimating();
     }
 
     /**
@@ -639,124 +613,21 @@ export class EntityCardSprite extends PIXI.Container {
         onHit?: () => void,
         onComplete?: () => void
     ): void {
-        // Cancel any existing movement animation
-        if (this.moveAnimationId !== null) {
-            cancelAnimationFrame(this.moveAnimationId);
-        }
-
-        this.isMoving = true;
-        this.bobEnabled = false;
-
-        const startX = this.x;
-        const startY = this.y;
-
-        // Calculate direction to target
-        const dx = targetX - startX;
-        const dy = targetY - startY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const normalizedDx = dist > 0 ? dx / dist : 0;
-        const normalizedDy = dist > 0 ? dy / dist : 0;
-
-        // Lunge distance (move partway toward target)
-        const lungeDistance = Math.min(dist * 0.6, 60);
-        const lungeX = startX + normalizedDx * lungeDistance;
-        const lungeY = startY + normalizedDy * lungeDistance;
-
-        const lungeDuration = 150;
-        const returnDuration = 200;
-        const startTime = performance.now();
-
-        let phase: 'lunge' | 'return' = 'lunge';
-        let phaseStartTime = startTime;
-
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - phaseStartTime;
-
-            if (phase === 'lunge') {
-                const progress = Math.min(elapsed / lungeDuration, 1);
-                // Ease out for fast lunge
-                const eased = 1 - Math.pow(1 - progress, 2);
-
-                this.x = startX + (lungeX - startX) * eased;
-                this.y = startY + (lungeY - startY) * eased;
-
-                if (progress >= 1) {
-                    // Hit moment - trigger callback
-                    onHit?.();
-                    phase = 'return';
-                    phaseStartTime = currentTime;
-                    this.moveAnimationId = requestAnimationFrame(animate);
-                } else {
-                    this.moveAnimationId = requestAnimationFrame(animate);
-                }
-            } else if (phase === 'return') {
-                const progress = Math.min(elapsed / returnDuration, 1);
-                // Ease in-out for return
-                const eased = progress < 0.5
-                    ? 2 * progress * progress
-                    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-                this.x = lungeX + (startX - lungeX) * eased;
-                this.y = lungeY + (startY - lungeY) * eased;
-
-                if (progress >= 1) {
-                    this.x = startX;
-                    this.y = startY;
-                    this.isMoving = false;
-                    this.bobEnabled = true;
-                    this.moveAnimationId = null;
-                    onComplete?.();
-                } else {
-                    this.moveAnimationId = requestAnimationFrame(animate);
-                }
-            }
-        };
-
-        this.moveAnimationId = requestAnimationFrame(animate);
+        this.animationController.playAttack(targetX, targetY, onHit, onComplete);
     }
 
     /**
      * Play damage flash effect (red tint flash)
      */
     playDamageFlash(): void {
-        const originalTint = this.border.tint;
-        this.border.tint = 0xFF4444;
-
-        setTimeout(() => {
-            this.border.tint = originalTint;
-        }, 150);
+        this.animationController.playDamageFlash();
     }
 
     /**
      * Play entrance pop-in animation
      */
     playEntranceAnimation(): void {
-        this.scale.set(0);
-        this.alpha = 0;
-
-        const duration = 300;
-        const startTime = performance.now();
-
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            // Ease out back for bounce overshoot
-            const overshoot = 1.5;
-            const eased = 1 - Math.pow(1 - progress, 2) * (1 + overshoot * (1 - progress));
-
-            this.scale.set(Math.max(0, Math.min(eased, 1.05)));
-            this.alpha = Math.min(progress * 1.5, 1);
-
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                this.scale.set(1);
-                this.alpha = 1;
-            }
-        };
-
-        requestAnimationFrame(animate);
+        this.animationController.playEntrance();
     }
 
     /**
@@ -764,139 +635,7 @@ export class EntityCardSprite extends PIXI.Container {
      * @param onComplete Called when animation finishes and card should be removed
      */
     playDeathAnimation(onComplete?: () => void): void {
-        // Disable interactivity immediately
-        this.eventMode = 'none';
-        this.cursor = 'default';
-        this.bobEnabled = false;
-
-        const shakeDuration = 400;
-        const fadeDuration = 300;
-        const startTime = performance.now();
-        const startX = this.x;
-        const startY = this.y;
-
-        // Phase 1: Violent shaking with red tint
-        const shakePhase = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / shakeDuration, 1);
-
-            // Intense shake that decreases over time
-            const intensity = (1 - progress) * 8;
-            const shakeX = (Math.random() - 0.5) * 2 * intensity;
-            const shakeY = (Math.random() - 0.5) * 2 * intensity;
-            this.x = startX + shakeX;
-            this.y = startY + shakeY;
-
-            // Flash red tint
-            const flashIntensity = Math.sin(elapsed * 0.03) * 0.5 + 0.5;
-            this.border.tint = this.lerpColor(0xFFFFFF, 0xFF0000, flashIntensity);
-
-            if (progress < 1) {
-                requestAnimationFrame(shakePhase);
-            } else {
-                // Reset position before fade
-                this.x = startX;
-                this.y = startY;
-                this.border.tint = 0xFF0000;
-
-                // Spawn particle effect
-                this.spawnDeathParticles();
-
-                // Start fade phase
-                requestAnimationFrame(fadePhase.bind(this, performance.now()));
-            }
-        };
-
-        // Phase 2: Fade out
-        const fadePhase = (fadeStartTime: number, currentTime: number) => {
-            const elapsed = currentTime - fadeStartTime;
-            const progress = Math.min(elapsed / fadeDuration, 1);
-
-            // Fade out and shrink slightly
-            this.alpha = 1 - progress;
-            this.scale.set(1 - progress * 0.3);
-
-            if (progress < 1) {
-                requestAnimationFrame(fadePhase.bind(this, fadeStartTime));
-            } else {
-                this.visible = false;
-                onComplete?.();
-            }
-        };
-
-        requestAnimationFrame(shakePhase);
-    }
-
-    /**
-     * Spawn red particle effect for death animation
-     */
-    private spawnDeathParticles(): void {
-        // Create particles as a child container
-        const particleCount = 12;
-
-        for (let i = 0; i < particleCount; i++) {
-            const particle = new PIXI.Graphics();
-            const size = 3 + Math.random() * 5;
-            particle.circle(0, 0, size);
-            particle.fill({ color: 0xFF0000, alpha: 0.8 + Math.random() * 0.2 });
-
-            // Position at center of card
-            particle.x = CARD_WIDTH / 2;
-            particle.y = CARD_HEIGHT / 2;
-            this.addChild(particle);
-
-            // Random velocity
-            const angle = (i / particleCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
-            const speed = 40 + Math.random() * 60;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-
-            // Animate particle
-            const startTime = performance.now();
-            const duration = 400 + Math.random() * 200;
-
-            const animateParticle = (currentTime: number) => {
-                const elapsed = currentTime - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                // Move outward with deceleration
-                const eased = 1 - Math.pow(1 - progress, 2);
-                particle.x = CARD_WIDTH / 2 + vx * eased;
-                particle.y = CARD_HEIGHT / 2 + vy * eased;
-
-                // Fade and shrink
-                particle.alpha = (1 - progress) * 0.8;
-                particle.scale.set(1 - progress * 0.5);
-
-                if (progress < 1) {
-                    requestAnimationFrame(animateParticle);
-                } else {
-                    this.removeChild(particle);
-                    particle.destroy();
-                }
-            };
-
-            requestAnimationFrame(animateParticle);
-        }
-    }
-
-    /**
-     * Helper to interpolate between two colors
-     */
-    private lerpColor(color1: number, color2: number, t: number): number {
-        const r1 = (color1 >> 16) & 0xFF;
-        const g1 = (color1 >> 8) & 0xFF;
-        const b1 = color1 & 0xFF;
-
-        const r2 = (color2 >> 16) & 0xFF;
-        const g2 = (color2 >> 8) & 0xFF;
-        const b2 = color2 & 0xFF;
-
-        const r = Math.round(r1 + (r2 - r1) * t);
-        const g = Math.round(g1 + (g2 - g1) * t);
-        const b = Math.round(b1 + (b2 - b1) * t);
-
-        return (r << 16) | (g << 8) | b;
+        this.animationController.playDeath(onComplete);
     }
 
     /**
@@ -905,86 +644,21 @@ export class EntityCardSprite extends PIXI.Container {
      * @param onComplete Called when animation finishes
      */
     playIncapacitationAnimation(onComplete?: () => void): void {
-        // Disable interactivity immediately
-        this.eventMode = 'none';
-        this.cursor = 'default';
-        this.bobEnabled = false;
-
-        const duration = 600;
-        const startTime = performance.now();
-        const targetRotation = Math.PI / 2; // 90 degrees
-
-        // Apply greyscale effect using tint (approximation)
-        // True greyscale would need a filter, but tinting to gray is simpler
-
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            // Ease out bounce for toppling effect
-            const eased = this.easeOutBounce(progress);
-
-            // Rotate to lie on side (90 degrees)
-            this.rotation = targetRotation * eased;
-
-            // Gradually desaturate by tinting toward grey
-            // Start: white tint (0xFFFFFF), End: grey tint (0x666666)
-            const greyProgress = Math.min(progress * 1.5, 1); // Faster grey transition
-            this.tint = this.lerpColor(0xFFFFFF, 0x666666, greyProgress);
-
-            // Slight drop as it falls
-            this.pivot.y = PIVOT_Y_OFFSET + progress * 20;
-
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                // Final state: grey, rotated, non-interactive
-                this.rotation = targetRotation;
-                this.tint = 0x666666;
-                this.alpha = 0.7; // Slightly transparent to indicate "out of action"
-                onComplete?.();
-            }
-        };
-
-        requestAnimationFrame(animate);
-    }
-
-    /**
-     * Ease out bounce function for natural falling effect
-     */
-    private easeOutBounce(x: number): number {
-        const n1 = 7.5625;
-        const d1 = 2.75;
-
-        if (x < 1 / d1) {
-            return n1 * x * x;
-        } else if (x < 2 / d1) {
-            return n1 * (x -= 1.5 / d1) * x + 0.75;
-        } else if (x < 2.5 / d1) {
-            return n1 * (x -= 2.25 / d1) * x + 0.9375;
-        } else {
-            return n1 * (x -= 2.625 / d1) * x + 0.984375;
-        }
+        this.animationController.playIncapacitation(onComplete);
     }
 
     /**
      * Check if entity is incapacitated (grey and toppled)
      */
     isIncapacitatedState(): boolean {
-        return this.rotation !== 0 && this.eventMode === 'none';
+        return this.animationController.isIncapacitatedState();
     }
 
     /**
      * Reset from incapacitated state (for dev reset)
      */
     resetFromIncapacitation(): void {
-        this.rotation = 0;
-        this.tint = 0xFFFFFF;
-        this.alpha = 1;
-        this.pivot.y = PIVOT_Y_OFFSET;
-        this.eventMode = 'dynamic';
-        this.cursor = 'pointer';
-        this.bobEnabled = true;
+        this.animationController.resetFromIncapacitation();
     }
 
     /**
@@ -993,136 +667,6 @@ export class EntityCardSprite extends PIXI.Container {
      * @param onComplete Called when animation finishes
      */
     playRevivalAnimation(onComplete?: () => void): void {
-        // If not incapacitated, just complete immediately
-        if (this.rotation === 0 && this.eventMode !== 'none') {
-            onComplete?.();
-            return;
-        }
-
-        const duration = 800;
-        const startTime = performance.now();
-        const startRotation = this.rotation;
-        const startAlpha = this.alpha;
-        const startPivotY = this.pivot.y;
-
-        // Create golden glow particles for revival effect
-        this.spawnRevivalParticles();
-
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            // Ease out elastic for dramatic standing up
-            const eased = this.easeOutElastic(progress);
-
-            // Rotate back to upright (from 90 degrees to 0)
-            this.rotation = startRotation * (1 - eased);
-
-            // Restore color from grey to white with golden flash at peak
-            if (progress < 0.5) {
-                // First half: grey to gold
-                this.tint = this.lerpColor(0x666666, 0xFFD700, progress * 2);
-            } else {
-                // Second half: gold to white
-                this.tint = this.lerpColor(0xFFD700, 0xFFFFFF, (progress - 0.5) * 2);
-            }
-
-            // Restore alpha
-            this.alpha = startAlpha + (1 - startAlpha) * eased;
-
-            // Restore pivot
-            this.pivot.y = startPivotY + (PIVOT_Y_OFFSET - startPivotY) * eased;
-
-            // Add a slight scale bounce at the end
-            if (progress > 0.7) {
-                const bounceProgress = (progress - 0.7) / 0.3;
-                const bounce = Math.sin(bounceProgress * Math.PI) * 0.1;
-                this.scale.set(1 + bounce);
-            }
-
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                // Final state: fully restored
-                this.rotation = 0;
-                this.tint = 0xFFFFFF;
-                this.alpha = 1;
-                this.pivot.y = PIVOT_Y_OFFSET;
-                this.scale.set(1);
-                this.eventMode = 'dynamic';
-                this.cursor = 'pointer';
-                this.bobEnabled = true;
-                onComplete?.();
-            }
-        };
-
-        requestAnimationFrame(animate);
-    }
-
-    /**
-     * Spawn golden particle effect for revival animation
-     */
-    private spawnRevivalParticles(): void {
-        const particleCount = 16;
-
-        for (let i = 0; i < particleCount; i++) {
-            const particle = new PIXI.Graphics();
-            const size = 2 + Math.random() * 4;
-            particle.circle(0, 0, size);
-            // Mix of gold and white particles
-            const color = Math.random() > 0.5 ? 0xFFD700 : 0xFFFFFF;
-            particle.fill({ color, alpha: 0.9 });
-
-            // Start from center/bottom of card
-            particle.x = CARD_WIDTH / 2;
-            particle.y = CARD_HEIGHT * 0.7;
-            this.addChild(particle);
-
-            // Upward and outward velocity (like rising sparkles)
-            const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8; // Mostly upward
-            const speed = 30 + Math.random() * 50;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-
-            // Animate particle
-            const startTime = performance.now();
-            const duration = 600 + Math.random() * 400;
-
-            const animateParticle = (currentTime: number) => {
-                const elapsed = currentTime - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-
-                // Move upward with slight deceleration
-                const eased = 1 - Math.pow(1 - progress, 2);
-                particle.x = CARD_WIDTH / 2 + vx * eased;
-                particle.y = CARD_HEIGHT * 0.7 + vy * eased;
-
-                // Fade and shrink
-                particle.alpha = (1 - progress) * 0.9;
-                particle.scale.set(1 - progress * 0.3);
-
-                if (progress < 1) {
-                    requestAnimationFrame(animateParticle);
-                } else {
-                    this.removeChild(particle);
-                    particle.destroy();
-                }
-            };
-
-            // Stagger particle starts for more natural effect
-            setTimeout(() => requestAnimationFrame(animateParticle), i * 30);
-        }
-    }
-
-    /**
-     * Ease out elastic for dramatic bounce effect
-     */
-    private easeOutElastic(x: number): number {
-        const c4 = (2 * Math.PI) / 3;
-        return x === 0
-            ? 0
-            : x === 1
-            ? 1
-            : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+        this.animationController.playRevival(onComplete);
     }
 }

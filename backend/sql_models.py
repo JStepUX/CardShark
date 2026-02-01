@@ -279,3 +279,43 @@ class CharacterImage(Base):
     filename = Column(String, nullable=False)
     display_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorldUserProgress(Base):
+    """
+    Stores world playthrough progress per-user.
+    Enables multiple save slots by keying progress to (world_uuid, user_uuid).
+
+    Design Philosophy:
+    - No foreign key constraints to avoid cascade delete issues
+    - Orphaned rows are harmless (won't match any lookup)
+    - JSON columns for complex nested structures
+    """
+    __tablename__ = "world_user_progress"
+    __table_args__ = (
+        UniqueConstraint('world_uuid', 'user_uuid', name='_world_user_progress_uc'),
+        {'extend_existing': True}
+    )
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    world_uuid = Column(String, nullable=False, index=True)
+    user_uuid = Column(String, nullable=False, index=True)
+
+    # Progression
+    player_xp = Column(Integer, default=0, nullable=False)
+    player_level = Column(Integer, default=1, nullable=False)
+    player_gold = Column(Integer, default=0, nullable=False)
+
+    # State
+    current_room_uuid = Column(String, nullable=True)
+    bonded_ally_uuid = Column(String, nullable=True)
+    time_state_json = Column(JSON, nullable=True)  # TimeState
+    npc_relationships_json = Column(JSON, nullable=True)  # Record<string, NPCRelationship>
+    player_inventory_json = Column(JSON, nullable=True)  # CharacterInventory
+    ally_inventory_json = Column(JSON, nullable=True)  # CharacterInventory
+    room_states_json = Column(JSON, nullable=True)  # Record<string, RoomInstanceState>
+
+    # Metadata
+    last_played_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

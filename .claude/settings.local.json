@@ -35,7 +35,9 @@
       "Bash(do wc:*)",
       "Bash(wc:*)",
       "Bash(powershell -Command \"\\(Get-Content ''D:\\\\Bolt-On\\\\cardshark\\\\backend\\\\main.py''\\).Count\")",
-      "Bash(python build.py:*)"
+      "Bash(python build.py:*)",
+      "Bash(npm install:*)",
+      "Bash(find:*)"
     ]
   }
 }
