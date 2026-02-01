@@ -301,6 +301,8 @@ class RoomCardHandler:
             room_card.data.extensions.room_data.npcs = request.npcs
         if request.tags is not None:
             room_card.data.tags = request.tags
+        if request.layout_data is not None:
+            room_card.data.extensions.room_data.layout_data = request.layout_data
 
         # Get PNG file path
         with self.character_service._get_session_context() as db:

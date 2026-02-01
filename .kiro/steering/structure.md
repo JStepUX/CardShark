@@ -95,6 +95,8 @@
     - `DayNightSphere.tsx` - Time of day rotating icon
     - `NPCShowcase.tsx`, `NPCCard.tsx` - NPC interaction components
     - `PartyGatherModal.tsx` - Ally gathering for room transitions
+    - `RoomLayoutDrawer.tsx` - Room layout editor drawer for NPC spawns and dead zones
+    - `RoomLayoutCanvas.tsx` - CSS Grid editor overlay for room spatial configuration
     - `pixi/` - PixiJS world map rendering
       - `PixiMapModal.tsx` - World map modal
       - `WorldMapStage.ts` - World grid renderer
@@ -137,7 +139,7 @@
 - `api/` - API client modules for backend communication
 - `types/` - TypeScript type definitions
   - `combat.ts` - Combat types (GridCombatant, GridCombatState, stats derivation)
-  - `localMap.ts` - Tile grid types (TilePosition, LocalMapState, terrain, highlights)
+  - `localMap.ts` - Tile grid types (TilePosition, LocalMapState, terrain, highlights, RoomLayoutData)
   - `inventory.ts` - Item and equipment types
   - `worldCard.ts` - World card V2 types with progression extensions
   - `worldRuntime.ts` - Runtime types (affinity, time, player state)

@@ -2,6 +2,8 @@
 // TypeScript types for Room Card V2 specification
 // Room cards are character cards with card_type="room" and room-specific extensions
 
+import type { RoomLayoutData } from './localMap';
+
 /**
  * NPC assignment within a room
  */
@@ -20,6 +22,7 @@ export interface RoomData {
   uuid: string; // Room UUID
   npcs: RoomNPC[]; // NPCs assigned to this room (character_uuid, role, hostile, etc.)
   created_by_world_uuid?: string; // UUID of the world that auto-generated this room (null if manually created)
+  layout_data?: RoomLayoutData; // Spatial layout configuration (NPC positions, dead zones)
   // Future fields can be added here:
   // connections?: RoomConnection[]; // Links to other rooms
   // items?: string[]; // Item UUIDs in the room
@@ -103,4 +106,5 @@ export interface UpdateRoomRequest {
   tags?: string[];
   image?: File | null;
   npcs?: RoomNPC[]; // NPCs assigned to this room
+  layout_data?: RoomLayoutData; // Spatial layout configuration
 }

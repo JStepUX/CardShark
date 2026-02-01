@@ -66,6 +66,7 @@ export function roomCardToGridRoom(
         connections: { north: null, south: null, east: null, west: null }, // Future: room connections
         position,
         image_path,
+        layout_data: roomCard.data.extensions.room_data.layout_data, // Spatial layout configuration
     };
 }
 

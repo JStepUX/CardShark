@@ -1,14 +1,14 @@
 /**
  * @file WorldEditor.tsx
  * @description World Builder interface for creating and editing world maps.
- * @dependencies worldApi (V2), roomApi, GridCanvas, ToolPalette, RoomPropertiesPanel, NPCPickerModal
+ * @dependencies worldApi (V2), roomApi, GridCanvas, RoomPropertiesPanel, RoomLayoutDrawer, NPCPickerModal
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
-import { ToolPalette, type Tool } from '../components/world/ToolPalette';
-import { GridCanvas } from '../components/world/GridCanvas';
+import { GridCanvas, type Tool } from '../components/world/GridCanvas';
 import { RoomPropertiesPanel } from '../components/world/RoomPropertiesPanel';
+import { RoomLayoutDrawer } from '../components/world/RoomLayoutDrawer';
 import { NPCPickerModal } from '../components/world/NPCPickerModal';
 import { CellActionMenu } from '../components/world/CellActionMenu';
 import { RoomGalleryPicker } from '../components/world/RoomGalleryPicker';
@@ -17,6 +17,7 @@ import { roomApi } from '../api/roomApi';
 import type { WorldCard, WorldRoomPlacement } from '../types/worldCard';
 import type { RoomCardSummary } from '../types/room';
 import type { GridRoom } from '../types/worldGrid';
+import type { RoomLayoutData } from '../types/localMap';
 import { roomCardToGridRoom } from '../utils/roomCardAdapter';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
@@ -46,8 +47,8 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   const [missingRoomCount, setMissingRoomCount] = useState(0);
   const [showMissingRoomWarning, setShowMissingRoomWarning] = useState(false);
 
-  // Responsive panel states
-  const [isToolPanelCollapsed, setIsToolPanelCollapsed] = useState(false);
+  // Room Layout Editor drawer state
+  const [showLayoutDrawer, setShowLayoutDrawer] = useState(false);
 
   // Grid size state - from world card
   const [gridSize, setGridSize] = useState({ width: 10, height: 10 });
@@ -313,6 +314,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           name: updatedRoom.name,
           description: updatedRoom.description,
           first_mes: updatedRoom.introduction_text || undefined,
+          layout_data: (updatedRoom as any).layout_data || undefined,
         });
         console.log(`Room card "${updatedRoom.name}" saved successfully`);
       } catch (err) {
@@ -321,6 +323,19 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       }
     }, 1000); // Wait 1 second after last change before saving
   }, []);
+
+  // Handle layout data changes from the layout editor
+  const handleLayoutChange = useCallback((layoutData: RoomLayoutData) => {
+    if (!selectedRoom) return;
+
+    // Update room with new layout data
+    const updatedRoom = {
+      ...selectedRoom,
+      layout_data: layoutData,
+    } as GridRoom & { layout_data: RoomLayoutData };
+
+    handleRoomUpdate(updatedRoom);
+  }, [selectedRoom, handleRoomUpdate]);
 
   // Cleanup: clear all pending debounced saves on unmount
   useEffect(() => {
@@ -498,20 +513,10 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
         </div>
       </div>
 
-      {/* Main Body (Tools + Canvas + Properties) */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Panel - Tools (Absolute Overlay) */}
-        <div className={`absolute top-0 left-0 bottom-0 z-20 transition-transform duration-200 ${isToolPanelCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
-          <ToolPalette
-            activeTool={activeTool}
-            onToolChange={setActiveTool}
-            isCollapsed={false}
-            onToggleCollapse={() => setIsToolPanelCollapsed(!isToolPanelCollapsed)}
-          />
-        </div>
-
-        {/* Center - Content (Full Width) */}
-        <div className="flex-1 flex flex-col">
+      {/* Main Body (Canvas + Properties) */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Center - Content (Flexible Width) */}
+        <div className="flex-1 flex flex-col min-w-0">
           {/* Grid Canvas */}
           <GridCanvas
             rooms={rooms}
@@ -523,22 +528,41 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
             onRoomDelete={handleRoomDelete}
             onRoomMove={handleRoomMove}
             onCellClick={handleCellClick}
+            onToolChange={setActiveTool}
           />
         </div>
 
-        {/* Right Panel - Properties Overlay */}
-        <RoomPropertiesPanel
-          room={selectedRoom}
-          worldId={worldId}
-          availableCharacters={availableCharacters}
-          onUpdate={handleRoomUpdate}
-          onClose={() => setSelectedRoom(null)}
-          onOpenNPCPicker={() => setShowNPCPicker(true)}
-          onRemoveFromCell={handleRemoveSelectedRoom}
-          isVisible={!!selectedRoom}
-          apiConfig={apiConfig}
-          worldContext={worldContext}
-        />
+        {/* Right Panels Container - Properties + Layout Drawer side by side */}
+        <div className="flex shrink-0">
+          {/* Room Properties Panel - narrower when drawer is open */}
+          <RoomPropertiesPanel
+            room={selectedRoom}
+            worldId={worldId}
+            availableCharacters={availableCharacters}
+            onUpdate={handleRoomUpdate}
+            onClose={() => {
+              setSelectedRoom(null);
+              setShowLayoutDrawer(false);
+            }}
+            onOpenNPCPicker={() => setShowNPCPicker(true)}
+            onRemoveFromCell={handleRemoveSelectedRoom}
+            onOpenLayoutEditor={() => setShowLayoutDrawer(true)}
+            isVisible={!!selectedRoom}
+            isCompact={showLayoutDrawer}
+            apiConfig={apiConfig}
+            worldContext={worldContext}
+          />
+
+          {/* Room Layout Editor Drawer - appears to the right of properties */}
+          <RoomLayoutDrawer
+            isOpen={showLayoutDrawer}
+            onClose={() => setShowLayoutDrawer(false)}
+            room={selectedRoom}
+            worldId={worldId}
+            availableCharacters={availableCharacters}
+            onLayoutChange={handleLayoutChange}
+          />
+        </div>
       </div>
 
       {/* NPC Picker Modal */}

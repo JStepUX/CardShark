@@ -21,6 +21,7 @@ CardShark is a PNG metadata editor and AI chatbot frontend built exclusively by 
 - **Progression System**: XP, gold, and leveling with combat rewards and stat growth
 - **Local Map**: Pixi.js tile grid with entity portrait cards, exits, pathfinding, and terrain types
 - **Combat End Screen**: Genre-themed backdrop with rewards, level-up stats, and ally revival display
+- **Room Layout Editor**: World Builder tool for configuring NPC spawn positions and dead zones (water, walls, hazards)
 
 ## Target Use Cases
 

@@ -215,6 +215,41 @@ PixiJS-rendered tile grid for room-level exploration and combat.
 - **Threat zones:** Highlighted tiles around hostile entities showing engagement range
 - **Key files:** `LocalMapView.tsx`, `LocalMapStage.ts`, `EntityCardSprite.ts`, `localMapUtils.ts`
 
+### Room Layout Editor
+
+World Builder tool for configuring spatial elements within rooms, accessed via the Layout button in Room Properties panel.
+
+**Purpose:** Configure NPC spawn positions and dead zones for each room card.
+
+**Data Model (`RoomLayoutData`):**
+```typescript
+interface RoomLayoutData {
+  gridSize: { cols: number; rows: number };  // Matches local map grid (5x8)
+  spawns: SpawnPoint[];                       // NPC initial positions
+  deadZones: Zone[];                          // Water, walls, hazards, no-spawn areas
+}
+```
+
+**Zone Types:**
+- **Water:** Impassable terrain (blocks movement)
+- **Wall:** Impassable terrain that also blocks vision
+- **Hazard:** Traversable but dangerous terrain
+- **No-Spawn:** Blocks NPC auto-placement only (players can walk through)
+
+**Key Files:**
+- `RoomLayoutDrawer.tsx` - Drawer component with tool mode tabs (NPCs, Dead Zones)
+- `RoomLayoutCanvas.tsx` - CSS Grid editor overlay (not PixiJS)
+- `localMap.ts` (types) - `RoomLayoutData`, `SpawnPoint`, `Zone`, `ZoneType`
+- `localMapUtils.ts` - `autoPlaceEntities()` respects configured spawns and blocked zones
+- `LocalMapView.tsx` - `buildMapState()` applies zone traversability to tile grid
+- `room_card.py` (backend) - Pydantic models for persistence
+
+**Integration with LocalMapStage:**
+1. `autoPlaceEntities()` uses `layoutData.spawns` for configured positions
+2. `buildMapState()` calls `getCellZoneType()` to set tile traversability
+3. Water/walls set `traversable=false`, hazards set `terrainType='hazard'`
+4. No-spawn zones only block `autoPlaceEntities()`, not player movement
+
 ### Inventory and Equipment
 
 - **Types:** `types/inventory.ts` - InventoryItem, CharacterInventory

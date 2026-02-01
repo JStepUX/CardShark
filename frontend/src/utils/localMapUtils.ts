@@ -16,6 +16,8 @@ import {
     LocalMapEntity,
     LocalMapConfig,
     Allegiance,
+    RoomLayoutData,
+    findSpawnForEntity,
 } from '../types/localMap';
 import { GridWorldState } from '../types/worldGrid';
 
@@ -176,16 +178,23 @@ export function calculateThreatZones(
  * Auto-place NPCs on the grid
  *
  * Strategy:
+ * - If layoutData provided, use configured spawn positions first
  * - Player starts at spawn position
  * - Bonded companion adjacent to player
  * - Friendly NPCs spread around the room
  * - Hostile NPCs on opposite side from player
  * - Neutral NPCs in middle areas
+ *
+ * @param npcs - Array of NPC data to place
+ * @param playerPosition - Player's current tile position
+ * @param config - Local map configuration (grid dimensions)
+ * @param layoutData - Optional room layout data with configured spawn positions
  */
 export function autoPlaceEntities(
     npcs: Array<{ id: string; name: string; hostile: boolean; imagePath?: string; level?: number }>,
     playerPosition: TilePosition,
-    config: LocalMapConfig
+    config: LocalMapConfig,
+    layoutData?: RoomLayoutData
 ): LocalMapEntity[] {
     const entities: LocalMapEntity[] = [];
     const occupiedTiles = new Set<string>();
@@ -193,13 +202,39 @@ export function autoPlaceEntities(
     // Mark player position as occupied
     occupiedTiles.add(`${playerPosition.x},${playerPosition.y}`);
 
-    // Helper to find an unoccupied tile
+    // First pass: place NPCs with configured spawn positions
+    // and mark those tiles as occupied
+    if (layoutData) {
+        for (const spawn of layoutData.spawns) {
+            const key = `${spawn.col},${spawn.row}`;
+            // Only mark as occupied if there's an NPC with this spawn
+            const npc = npcs.find(n => n.id === spawn.entityId);
+            if (npc) {
+                occupiedTiles.add(key);
+            }
+        }
+    }
+
+    // Build a set of cells that block spawning (water, wall, no-spawn zones)
+    const blockedForSpawn = new Set<string>();
+    if (layoutData) {
+        for (const zone of layoutData.deadZones) {
+            // All zone types except 'hazard' block NPC auto-spawning
+            if (zone.type !== 'hazard') {
+                for (const cell of zone.cells) {
+                    blockedForSpawn.add(`${cell.col},${cell.row}`);
+                }
+            }
+        }
+    }
+
+    // Helper to find an unoccupied tile that isn't blocked for spawning
     const findUnoccupiedTile = (
         preferredPositions: TilePosition[]
     ): TilePosition | null => {
         for (const pos of preferredPositions) {
             const key = `${pos.x},${pos.y}`;
-            if (!occupiedTiles.has(key)) {
+            if (!occupiedTiles.has(key) && !blockedForSpawn.has(key)) {
                 occupiedTiles.add(key);
                 return pos;
             }
@@ -250,32 +285,48 @@ export function autoPlaceEntities(
         let position: TilePosition | null = null;
         let allegiance: Allegiance = 'neutral';
 
+        // Check if this NPC has a configured spawn position
+        const configuredSpawn = findSpawnForEntity(layoutData, npc.id);
+        if (configuredSpawn) {
+            // Use configured spawn position (col -> x, row -> y)
+            position = { x: configuredSpawn.col, y: configuredSpawn.row };
+            // Don't add to occupiedTiles again - already done in first pass
+        } else {
+            // No configured spawn - use auto-placement logic
+            if (npc.hostile) {
+                allegiance = 'hostile';
+                position = findUnoccupiedTile(hostilePositions);
+            } else {
+                allegiance = 'friendly';
+                position = findUnoccupiedTile(friendlyPositions);
+            }
+
+            // Fallback to neutral positions
+            if (!position) {
+                position = findUnoccupiedTile(neutralPositions);
+            }
+
+            // Last resort: any unoccupied tile (still respecting blocked zones)
+            if (!position) {
+                for (let y = 0; y < gridHeight; y++) {
+                    for (let x = 0; x < gridWidth; x++) {
+                        const key = `${x},${y}`;
+                        if (!occupiedTiles.has(key) && !blockedForSpawn.has(key)) {
+                            position = { x, y };
+                            occupiedTiles.add(key);
+                            break;
+                        }
+                    }
+                    if (position) break;
+                }
+            }
+        }
+
+        // Determine allegiance based on hostile flag
         if (npc.hostile) {
             allegiance = 'hostile';
-            position = findUnoccupiedTile(hostilePositions);
         } else {
             allegiance = 'friendly';
-            position = findUnoccupiedTile(friendlyPositions);
-        }
-
-        // Fallback to neutral positions
-        if (!position) {
-            position = findUnoccupiedTile(neutralPositions);
-        }
-
-        // Last resort: any unoccupied tile
-        if (!position) {
-            for (let y = 0; y < gridHeight; y++) {
-                for (let x = 0; x < gridWidth; x++) {
-                    const key = `${x},${y}`;
-                    if (!occupiedTiles.has(key)) {
-                        position = { x, y };
-                        occupiedTiles.add(key);
-                        break;
-                    }
-                }
-                if (position) break;
-            }
         }
 
         if (position) {

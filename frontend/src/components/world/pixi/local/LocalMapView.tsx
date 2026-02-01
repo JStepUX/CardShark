@@ -29,6 +29,7 @@ import {
     areAdjacent,
     findPath,
 } from '../../../../utils/localMapUtils';
+import { getCellZoneType } from '../../../../types/localMap';
 import { TextureCache } from '../../../combat/pixi/TextureCache';
 
 // Default configuration - increased for better visibility
@@ -335,7 +336,8 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             });
 
             // Place NPCs once based on initial player position
-            const placed = autoPlaceEntities(npcData, initialPos, config);
+            // Use layout_data if available for configured spawn positions
+            const placed = autoPlaceEntities(npcData, initialPos, config, currentRoom.layout_data);
             setPlacedNpcEntities(placed);
         } else {
             setPlacedNpcEntities([]);
@@ -364,17 +366,46 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             // Calculate threat zones (not used in combat, but needed for interface)
             const threatZones = calculateThreatZones(entities, config);
 
-            // Build tile grid
+            // Build tile grid with dead zone data from layout
             const tiles: LocalMapTileData[][] = [];
             for (let y = 0; y < config.gridHeight; y++) {
                 tiles[y] = [];
                 for (let x = 0; x < config.gridWidth; x++) {
+                    // Check if this cell is in a dead zone
+                    const zoneType = getCellZoneType(currentRoom.layout_data, x, y);
+                    let traversable = true;
+                    let terrainType: 'normal' | 'difficult' | 'impassable' | 'hazard' | 'water' = 'normal';
+                    let blocksVision = false;
+
+                    if (zoneType) {
+                        switch (zoneType) {
+                            case 'water':
+                                traversable = true;   // Can wade through but very slow
+                                terrainType = 'water';
+                                break;
+                            case 'wall':
+                                traversable = false;
+                                terrainType = 'impassable';
+                                blocksVision = true;
+                                break;
+                            case 'hazard':
+                                traversable = true;  // Can walk through but dangerous
+                                terrainType = 'hazard';
+                                break;
+                            case 'no-spawn':
+                                traversable = true;  // Can walk through, just blocks NPC placement
+                                break;
+                        }
+                    }
+
                     tiles[y][x] = {
                         position: { x, y },
-                        traversable: true,
-                        terrainType: 'normal',
+                        traversable,
+                        terrainType,
                         highlight: 'none',
                         isExit: false,
+                        blocksVision,
+                        zoneType: zoneType ?? undefined,
                     };
                 }
             }
@@ -443,18 +474,47 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         // Calculate threat zones
         const threatZones = calculateThreatZones(entities, config);
 
-        // Build tile grid with default traversable tiles
+        // Build tile grid with dead zone data from layout
         // This is needed for pathfinding and combat movement
         const tiles: LocalMapTileData[][] = [];
         for (let y = 0; y < config.gridHeight; y++) {
             tiles[y] = [];
             for (let x = 0; x < config.gridWidth; x++) {
+                // Check if this cell is in a dead zone
+                const zoneType = getCellZoneType(currentRoom.layout_data, x, y);
+                let traversable = true;
+                let terrainType: 'normal' | 'difficult' | 'impassable' | 'hazard' | 'water' = 'normal';
+                let blocksVision = false;
+
+                if (zoneType) {
+                    switch (zoneType) {
+                        case 'water':
+                            traversable = true;   // Can wade through but very slow
+                            terrainType = 'water';
+                            break;
+                        case 'wall':
+                            traversable = false;
+                            terrainType = 'impassable';
+                            blocksVision = true;
+                            break;
+                        case 'hazard':
+                            traversable = true;  // Can walk through but dangerous
+                            terrainType = 'hazard';
+                            break;
+                        case 'no-spawn':
+                            traversable = true;  // Can walk through, just blocks NPC placement
+                            break;
+                    }
+                }
+
                 tiles[y][x] = {
                     position: { x, y },
-                    traversable: true,
-                    terrainType: 'normal',
+                    traversable,
+                    terrainType,
                     highlight: 'none',
                     isExit: false,
+                    blocksVision,
+                    zoneType: zoneType ?? undefined,
                 };
             }
         }
@@ -1019,6 +1079,13 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         }
 
         // EXPLORATION MODE: Handle movement internally
+
+        // Check if the clicked tile is traversable (walls block movement)
+        const tileData = mapState.tiles[position.y]?.[position.x];
+        if (tileData && !tileData.traversable) {
+            // Don't allow clicking on impassable tiles (walls)
+            return;
+        }
 
         // Ignore clicks while already moving
         if (isMoving) {

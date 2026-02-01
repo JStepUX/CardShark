@@ -3,6 +3,7 @@
 // Used by WorldEditor, WorldPlayView, MapModal, etc.
 
 import { RoomNPC } from './room';
+import { RoomLayoutData } from './localMap';
 
 /**
  * Grid-compatible room format for UI rendering.
@@ -18,6 +19,7 @@ export interface GridRoom {
     connections: Record<string, string | null>;  // { north: 'room-id', south: null, ... }
     position: { x: number; y: number };
     image_path?: string;
+    layout_data?: RoomLayoutData;  // Spatial layout configuration (NPC positions, dead zones)
 }
 
 /**

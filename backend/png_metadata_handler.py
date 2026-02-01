@@ -293,10 +293,19 @@ class PngMetadataHandler:
             # Write metadata to image
             with Image.open(BytesIO(image_data)) as img:
                 self.logger.log_step(f"Original image: {img.size}, format: {img.format}")
-                
+
+                # Handle ICC profile - ensure it's bytes, not string
+                # PIL will fail if icc_profile is a string when compressing
+                if 'icc_profile' in img.info:
+                    icc = img.info['icc_profile']
+                    if isinstance(icc, str):
+                        # Convert string ICC profile to bytes
+                        img.info['icc_profile'] = icc.encode('latin-1')
+                        self.logger.log_step("Converted ICC profile from string to bytes")
+
                 # Save image with metadata, ensuring we maintain original format and quality
                 output = BytesIO()
-                
+
                 # Make sure we're saving as PNG
                 img.save(output, format="PNG", pnginfo=png_info, optimize=False)
                 self.logger.log_step("Saved image with metadata")

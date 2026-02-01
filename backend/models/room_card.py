@@ -17,6 +17,66 @@ class RoomNPC(BaseModel):
     character_uuid: str = Field(..., description="UUID of the character assigned to this room")
     role: Optional[str] = Field(None, description="Role of the NPC in the room (e.g., shopkeeper, guard)")
     hostile: Optional[bool] = Field(False, description="Whether the NPC is hostile to the player")
+    monster_level: Optional[int] = Field(None, description="Combat level 1-60 for hostile NPCs")
+
+
+# ============================================
+# ROOM LAYOUT DATA MODELS
+# ============================================
+
+class CellPosition(BaseModel):
+    """Position in the room layout grid"""
+    col: int = Field(..., ge=0, description="Column index (0-based)")
+    row: int = Field(..., ge=0, description="Row index (0-based)")
+
+
+class SpawnPoint(BaseModel):
+    """NPC spawn point configuration"""
+    entityId: str = Field(..., description="character_uuid of the NPC")
+    col: int = Field(..., ge=0, description="Column position")
+    row: int = Field(..., ge=0, description="Row position")
+    facing: Optional[Literal['up', 'down', 'left', 'right']] = Field(None, description="Direction entity faces")
+
+
+class Zone(BaseModel):
+    """Dead zone definition (water, walls, hazards)"""
+    type: Literal['water', 'wall', 'hazard', 'no-spawn'] = Field(..., description="Zone type")
+    cells: List[CellPosition] = Field(default_factory=list, description="Cells in this zone")
+
+
+class LayoutContainer(BaseModel):
+    """Interactive container definition (future feature)"""
+    id: str = Field(..., description="Unique container ID")
+    col: int = Field(..., ge=0, description="Column position")
+    row: int = Field(..., ge=0, description="Row position")
+    type: Literal['chest', 'barrel', 'crate'] = Field(..., description="Container type")
+    lootTable: Optional[str] = Field(None, description="Loot table reference")
+
+
+class LayoutExit(BaseModel):
+    """Exit/stairs definition linking rooms (future feature)"""
+    col: int = Field(..., ge=0, description="Column position")
+    row: int = Field(..., ge=0, description="Row position")
+    targetRoomId: str = Field(..., description="Target room UUID")
+    type: Literal['door', 'stairs', 'portal'] = Field(..., description="Exit type")
+
+
+class GridSize(BaseModel):
+    """Grid dimensions for room layout"""
+    cols: int = Field(5, ge=1, description="Number of columns")
+    rows: int = Field(8, ge=1, description="Number of rows")
+
+
+class RoomLayoutData(BaseModel):
+    """
+    Room layout data for spatial configuration
+    Configures NPC positions, dead zones, containers, exits
+    """
+    gridSize: GridSize = Field(default_factory=lambda: GridSize(cols=5, rows=8), description="Grid dimensions")
+    spawns: List[SpawnPoint] = Field(default_factory=list, description="NPC spawn positions")
+    deadZones: List[Zone] = Field(default_factory=list, description="Dead zones (water, walls, hazards)")
+    containers: Optional[List[LayoutContainer]] = Field(None, description="Interactive containers (future)")
+    exits: Optional[List[LayoutExit]] = Field(None, description="Room exits/stairs (future)")
 
 
 class RoomData(BaseModel):
@@ -27,6 +87,7 @@ class RoomData(BaseModel):
     uuid: str = Field(..., description="Unique identifier for the room")
     npcs: List[RoomNPC] = Field(default_factory=list, description="NPCs assigned to this room")
     created_by_world_uuid: Optional[str] = Field(None, description="UUID of the world that auto-generated this room from lore (None if manually created)")
+    layout_data: Optional[RoomLayoutData] = Field(None, description="Spatial layout configuration (NPC positions, dead zones)")
 
     # Future fields for expansion:
     # connections: List[RoomConnection] = Field(default_factory=list)
@@ -119,6 +180,7 @@ class UpdateRoomRequest(BaseModel):
     character_book: Optional[Dict[str, Any]] = Field(None, description="Lore entries")
     npcs: Optional[List[RoomNPC]] = Field(None, description="NPC assignments")
     tags: Optional[List[str]] = Field(None, description="Room tags")
+    layout_data: Optional[RoomLayoutData] = Field(None, description="Spatial layout configuration")
 
     class Config:
         extra = "forbid"

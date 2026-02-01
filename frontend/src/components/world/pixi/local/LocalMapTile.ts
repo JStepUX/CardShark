@@ -45,6 +45,8 @@ export class LocalMapTile extends PIXI.Container {
     private currentHighlight: TileHighlight = 'none';
     private isExit: boolean = false;
     private exitDirection: ExitDirection | null = null;
+    private isTraversable: boolean = true;
+    private zoneType: 'water' | 'wall' | 'hazard' | 'no-spawn' | null = null;
 
     // Animation
     private pulseTime: number = 0;
@@ -56,6 +58,7 @@ export class LocalMapTile extends PIXI.Container {
 
     // Hover state
     private hoverOverlay!: PIXI.Graphics;
+    private blockedOverlay!: PIXI.Graphics;  // X overlay for impassable tiles
     private isHovered: boolean = false;
 
     constructor(tilePos: TilePosition, tileSize: number) {
@@ -74,6 +77,7 @@ export class LocalMapTile extends PIXI.Container {
         this.createGridLines();
         this.createHighlightOverlay();
         this.createHoverOverlay();
+        this.createBlockedOverlay();
 
         // Hover effects
         this.on('pointerover', this.onHoverStart.bind(this));
@@ -162,6 +166,28 @@ export class LocalMapTile extends PIXI.Container {
         this.hoverOverlay.stroke({ color: 0xFFFFFF, alpha: 0.4, width: 2 });
         this.hoverOverlay.visible = false;
         this.addChild(this.hoverOverlay);
+    }
+
+    /**
+     * Create blocked overlay (X icon for impassable tiles, starts invisible)
+     */
+    private createBlockedOverlay(): void {
+        this.blockedOverlay = new PIXI.Graphics();
+        const size = this.tileSize;
+        const margin = size * 0.2;  // 20% margin from edges
+        const strokeWidth = 3;
+
+        // Draw X with semi-transparent red
+        this.blockedOverlay.moveTo(margin, margin);
+        this.blockedOverlay.lineTo(size - margin, size - margin);
+        this.blockedOverlay.stroke({ color: 0xEF4444, alpha: 0.5, width: strokeWidth });
+
+        this.blockedOverlay.moveTo(size - margin, margin);
+        this.blockedOverlay.lineTo(margin, size - margin);
+        this.blockedOverlay.stroke({ color: 0xEF4444, alpha: 0.5, width: strokeWidth });
+
+        this.blockedOverlay.visible = false;
+        this.addChild(this.blockedOverlay);
     }
 
     /**
@@ -317,8 +343,18 @@ export class LocalMapTile extends PIXI.Container {
         this.isHovered = true;
         // Brighten grid lines on hover (relative to base)
         this.gridLines.alpha = Math.min(this.gridLineBaseAlpha * 2, 1.0);
-        // Show hover overlay
-        this.hoverOverlay.visible = true;
+
+        // Show appropriate hover overlay based on traversability
+        if (!this.isTraversable) {
+            // Show X overlay for impassable tiles (walls)
+            this.blockedOverlay.visible = true;
+            // Use red border instead of white for blocked tiles
+            this.hoverOverlay.visible = false;
+        } else {
+            // Show normal white border for traversable tiles
+            this.hoverOverlay.visible = true;
+            this.blockedOverlay.visible = false;
+        }
     }
 
     /**
@@ -328,6 +364,7 @@ export class LocalMapTile extends PIXI.Container {
         this.isHovered = false;
         this.gridLines.alpha = this.gridLineBaseAlpha;
         this.hoverOverlay.visible = false;
+        this.blockedOverlay.visible = false;
     }
 
     /**
@@ -346,6 +383,31 @@ export class LocalMapTile extends PIXI.Container {
         if (!this.isHovered) {
             this.gridLines.alpha = alpha;
         }
+    }
+
+    /**
+     * Set tile traversability (affects hover visual and click behavior)
+     */
+    setTraversable(traversable: boolean, zoneType?: 'water' | 'wall' | 'hazard' | 'no-spawn' | null): void {
+        this.isTraversable = traversable;
+        this.zoneType = zoneType ?? null;
+
+        // Update cursor based on traversability
+        this.cursor = traversable ? 'pointer' : 'not-allowed';
+    }
+
+    /**
+     * Check if tile is traversable
+     */
+    getIsTraversable(): boolean {
+        return this.isTraversable;
+    }
+
+    /**
+     * Get tile's zone type
+     */
+    getZoneType(): 'water' | 'wall' | 'hazard' | 'no-spawn' | null {
+        return this.zoneType;
     }
 
     /**

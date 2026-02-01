@@ -1,4 +1,4 @@
-import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2, Sparkles, Loader2, LayoutGrid } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { GridRoom } from '../../utils/worldStateApi';
 import { RoomNPC } from '../../types/room';
@@ -97,12 +97,14 @@ interface RoomPropertiesPanelProps {
   onClose: () => void;
   onOpenNPCPicker?: () => void;
   onRemoveFromCell?: () => void;
+  onOpenLayoutEditor?: () => void;
   isVisible?: boolean;
+  isCompact?: boolean;  // When layout drawer is open, show narrower panel
   apiConfig?: APIConfig | null;
   worldContext?: WorldContext;
 }
 
-export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, onRemoveFromCell, isVisible = true, apiConfig, worldContext }: RoomPropertiesPanelProps) {
+export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, onRemoveFromCell, onOpenLayoutEditor, isVisible = true, isCompact = false, apiConfig, worldContext }: RoomPropertiesPanelProps) {
   const [uploading, setUploading] = useState(false);
   const [editingField, setEditingField] = useState<{
     field: 'description' | 'introduction_text';
@@ -330,20 +332,32 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
       {/* Panel */}
       <div
         className={`
-          absolute top-0 bottom-0 right-0 w-[500px] max-w-[90vw] bg-[#141414] border-l border-[#2a2a2a] 
-          flex flex-col z-20 shadow-2xl transform transition-transform duration-300 ease-out
-          ${isVisible && room ? 'translate-x-0' : 'translate-x-full'}
+          bg-[#141414] border-l border-[#2a2a2a]
+          flex flex-col shadow-2xl transition-all duration-300 ease-out overflow-hidden
+          ${isVisible && room ? (isCompact ? 'w-[350px]' : 'w-[500px]') : 'w-0'}
         `}
       >
         {/* Header */}
         <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
           <h3 className="text-sm font-medium text-white">Room Properties</h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-[#2a2a2a] rounded transition-colors"
-          >
-            <X size={16} className="text-gray-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenLayoutEditor && room && (
+              <button
+                onClick={onOpenLayoutEditor}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-400 hover:text-blue-400 hover:bg-[#2a2a2a] rounded transition-colors"
+                title="Configure Room Layout"
+              >
+                <LayoutGrid size={14} />
+                <span>Layout</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-[#2a2a2a] rounded transition-colors"
+            >
+              <X size={16} className="text-gray-400" />
+            </button>
+          </div>
         </div>
 
         {!room ? (

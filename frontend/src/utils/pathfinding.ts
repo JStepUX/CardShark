@@ -59,6 +59,7 @@ const TERRAIN_COSTS: Record<TerrainType, number> = {
     normal: 1,
     difficult: 2,
     hazard: 2,      // Can traverse but costly
+    water: 3,       // Traversable but very slow (wading through water)
     impassable: Infinity,
 };
 

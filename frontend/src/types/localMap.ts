@@ -66,7 +66,7 @@ export interface ExitTile {
 /**
  * Terrain type affects movement and visuals
  */
-export type TerrainType = 'normal' | 'difficult' | 'impassable' | 'hazard';
+export type TerrainType = 'normal' | 'difficult' | 'impassable' | 'hazard' | 'water';
 
 /**
  * Tile highlight state for visual feedback
@@ -101,6 +101,8 @@ export interface LocalMapTileData {
     blocksVision?: boolean;
     /** Cover value: reduces incoming ranged damage (0-1, e.g., 0.5 = 50% reduction) */
     coverValue?: number;
+    /** Zone type from room layout (for visual indicators) */
+    zoneType?: ZoneType;
 }
 
 /**
@@ -155,3 +157,150 @@ export const HIGHLIGHT_COLORS: Record<TileHighlight, { color: number; alpha: num
     active_combatant: { color: 0xFFD700, alpha: 0.6 },  // Bright gold
     path_preview: { color: 0x60A5FA, alpha: 0.4 },      // Light blue
 };
+
+// ============================================
+// ROOM LAYOUT EDITOR TYPES
+// ============================================
+
+/**
+ * Cell position in the room layout grid
+ */
+export interface CellPosition {
+    col: number;
+    row: number;
+}
+
+/**
+ * Direction an entity can face
+ */
+export type FacingDirection = 'up' | 'down' | 'left' | 'right';
+
+/**
+ * NPC spawn point configuration
+ */
+export interface SpawnPoint {
+    entityId: string;  // character_uuid of the NPC
+    col: number;
+    row: number;
+    facing?: FacingDirection;
+}
+
+/**
+ * Zone type for dead zones (impassable or hazardous areas)
+ */
+export type ZoneType = 'water' | 'wall' | 'hazard' | 'no-spawn';
+
+/**
+ * Dead zone definition (water, walls, hazards)
+ */
+export interface Zone {
+    type: ZoneType;
+    cells: CellPosition[];
+}
+
+/**
+ * Container type (future feature)
+ */
+export type ContainerType = 'chest' | 'barrel' | 'crate';
+
+/**
+ * Interactive container definition (future feature)
+ */
+export interface LayoutContainer {
+    id: string;
+    col: number;
+    row: number;
+    type: ContainerType;
+    lootTable?: string;
+}
+
+/**
+ * Exit/stairs type (future feature)
+ */
+export type ExitType = 'door' | 'stairs' | 'portal';
+
+/**
+ * Exit/stairs definition linking rooms (future feature)
+ */
+export interface LayoutExit {
+    col: number;
+    row: number;
+    targetRoomId: string;
+    type: ExitType;
+}
+
+/**
+ * Room layout data stored in room cards
+ * Configures spatial elements: NPC positions, dead zones, containers, exits
+ */
+export interface RoomLayoutData {
+    gridSize: {
+        cols: number;  // Default: 5 (matching LocalMapStage)
+        rows: number;  // Default: 8 (matching LocalMapStage)
+    };
+    spawns: SpawnPoint[];
+    deadZones: Zone[];
+    containers?: LayoutContainer[];  // Future
+    exits?: LayoutExit[];            // Future
+}
+
+/**
+ * Default grid size matching LocalMapStage gameplay dimensions
+ */
+export const DEFAULT_LAYOUT_GRID_SIZE = {
+    cols: 5,
+    rows: 8,
+};
+
+/**
+ * Create a default empty RoomLayoutData
+ */
+export function createDefaultRoomLayoutData(): RoomLayoutData {
+    return {
+        gridSize: { ...DEFAULT_LAYOUT_GRID_SIZE },
+        spawns: [],
+        deadZones: [],
+    };
+}
+
+/**
+ * Find spawn position for an NPC by entity ID
+ */
+export function findSpawnForEntity(
+    layoutData: RoomLayoutData | undefined,
+    entityId: string
+): SpawnPoint | undefined {
+    if (!layoutData) return undefined;
+    return layoutData.spawns.find(s => s.entityId === entityId);
+}
+
+/**
+ * Check if a cell is in a dead zone
+ */
+export function isCellInDeadZone(
+    layoutData: RoomLayoutData | undefined,
+    col: number,
+    row: number
+): boolean {
+    if (!layoutData) return false;
+    return layoutData.deadZones.some(zone =>
+        zone.cells.some(cell => cell.col === col && cell.row === row)
+    );
+}
+
+/**
+ * Get the zone type for a cell (if any)
+ */
+export function getCellZoneType(
+    layoutData: RoomLayoutData | undefined,
+    col: number,
+    row: number
+): ZoneType | null {
+    if (!layoutData) return null;
+    for (const zone of layoutData.deadZones) {
+        if (zone.cells.some(cell => cell.col === col && cell.row === row)) {
+            return zone.type;
+        }
+    }
+    return null;
+}

@@ -1,9 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { Plus, ZoomIn, ZoomOut } from 'lucide-react';
+import { Plus, ZoomIn, ZoomOut, Edit3, Move, Trash2 } from 'lucide-react';
 import { GridRoom } from '../../utils/worldStateApi';
 
-// Import Tool type from ToolPalette
-import type { Tool } from './ToolPalette';
+// Tool type - previously from ToolPalette, now defined here
+export type Tool = 'edit' | 'move' | 'eraser';
+
+const tools: { id: Tool; icon: typeof Edit3; label: string; shortcut: string }[] = [
+  { id: 'edit', icon: Edit3, label: 'Edit', shortcut: 'E' },
+  { id: 'move', icon: Move, label: 'Move', shortcut: 'M' },
+  { id: 'eraser', icon: Trash2, label: 'Delete', shortcut: 'D' },
+];
 
 interface GridCanvasProps {
   rooms: GridRoom[];
@@ -15,6 +21,7 @@ interface GridCanvasProps {
   onRoomDelete: (roomId: string) => void;
   onRoomMove: (roomId: string, newPosition: { x: number; y: number }) => void;
   onCellClick?: (position: { x: number; y: number }, event: React.MouseEvent) => void;
+  onToolChange: (tool: Tool) => void;
 }
 
 export function GridCanvas({
@@ -27,6 +34,7 @@ export function GridCanvas({
   onRoomDelete,
   onRoomMove,
   onCellClick,
+  onToolChange,
 }: GridCanvasProps) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -123,11 +131,34 @@ export function GridCanvas({
   return (
     <div className="flex-1 bg-[#0a0a0a] relative overflow-hidden flex flex-col">
       {/* Toolbar */}
-      <div className="bg-[#141414] border-b border-[#2a2a2a] px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Zoom: {Math.round(zoom * 100)}%</span>
+      <div className="bg-[#141414] border-b border-[#2a2a2a] px-4 py-2 flex items-center justify-between">
+        {/* Left side: Tool buttons */}
+        <div className="flex items-center gap-1">
+          {tools.map((tool) => {
+            const Icon = tool.icon;
+            const isActive = activeTool === tool.id;
+
+            return (
+              <button
+                key={tool.id}
+                onClick={() => onToolChange(tool.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
+                  isActive
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                    : 'text-gray-400 hover:bg-[#2a2a2a] hover:text-white border border-transparent'
+                }`}
+                title={`${tool.label} (${tool.shortcut})`}
+              >
+                <Icon size={16} />
+                <span className="hidden sm:inline">{tool.label}</span>
+              </button>
+            );
+          })}
         </div>
+
+        {/* Right side: Zoom controls */}
         <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 hidden sm:inline">Zoom: {Math.round(zoom * 100)}%</span>
           <button
             onClick={handleZoomOut}
             className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"

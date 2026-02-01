@@ -264,6 +264,9 @@ export class LocalMapStage extends PIXI.Container {
             this.setBackgroundImage(state.config.backgroundImage ?? null);
         }
 
+        // Update tile traversability (for hover visuals)
+        this.updateTileTraversability(state.tiles);
+
         // Update exits
         this.updateExits(state.exits);
 
@@ -275,6 +278,21 @@ export class LocalMapStage extends PIXI.Container {
 
         // Update entities
         this.updateEntities(state.entities);
+    }
+
+    /**
+     * Update tile traversability based on state
+     */
+    private updateTileTraversability(tileData: import('../../../../types/localMap').LocalMapTileData[][]): void {
+        for (let y = 0; y < tileData.length; y++) {
+            for (let x = 0; x < tileData[y].length; x++) {
+                const tile = this.getTile({ x, y });
+                const data = tileData[y][x];
+                if (tile && data) {
+                    tile.setTraversable(data.traversable, data.zoneType);
+                }
+            }
+        }
     }
 
     /**
@@ -470,7 +488,9 @@ export class LocalMapStage extends PIXI.Container {
             card.setShowHpBar(inCombat);
         }
 
-        // In combat, hide threat zones (no longer relevant)
+        // When ENTERING combat, hide threat zones (they're no longer relevant during combat)
+        // When EXITING combat, don't clear highlights - updateFromState() has already
+        // set the correct threat zones for any remaining hostile enemies
         if (inCombat && this.currentState) {
             for (const row of this.tiles) {
                 for (const tile of row) {
@@ -478,7 +498,7 @@ export class LocalMapStage extends PIXI.Container {
                     tile.setHighlight(highlight);
                 }
             }
-            // Keep player position highlighted
+            // Keep player position highlighted in combat
             this.updatePlayerPosition(this.currentState.playerPosition);
         }
     }

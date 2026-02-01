@@ -54,6 +54,9 @@ Before adding a dependency or writing new utility code, check if these already e
 | Sanitize HTML | `sanitizeHtml()` | `frontend/src/utils/contentUtils.ts` |
 | Create messages | `MessageUtils.createUserMessage()` | `frontend/src/utils/messageUtils.ts` |
 | Debounced save | `MessageUtils.createDebouncedSave()` | `frontend/src/utils/messageUtils.ts` |
+| Room layout default | `createDefaultRoomLayoutData()` | `frontend/src/types/localMap.ts` |
+| Find NPC spawn | `findSpawnForEntity()` | `frontend/src/types/localMap.ts` |
+| Get cell zone type | `getCellZoneType()` | `frontend/src/types/localMap.ts` |
 
 **Do NOT** add packages like `uuid`, `nanoid`, `lodash`, `sanitize-html`, or similar - we have lightweight implementations.
 
