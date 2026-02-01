@@ -5,7 +5,7 @@
  * and optionally injects NPC character context
  */
 
-import { CharacterCard } from '../types/schema';
+import { CharacterCard, isValidThinFrame } from '../types/schema';
 import { GridRoom } from './worldStateApi';
 
 /**
@@ -287,37 +287,71 @@ export function buildThinNPCContext(
     // Clone the NPC card to avoid mutating the original
     const modifiedCard: CharacterCard = JSON.parse(JSON.stringify(npcCard));
 
-    // Extract a brief personality snippet (first sentence or first 100 chars)
-    const fullPersonality = npcCard.data.personality || '';
-    let personalitySnippet = '';
-
-    if (fullPersonality) {
-        // Try to get first sentence
-        const firstSentenceMatch = fullPersonality.match(/^[^.!?]+[.!?]/);
-        if (firstSentenceMatch && firstSentenceMatch[0].length <= 150) {
-            personalitySnippet = firstSentenceMatch[0].trim();
-        } else {
-            // Fall back to first 100 chars with ellipsis
-            personalitySnippet = fullPersonality.length > 100
-                ? fullPersonality.substring(0, 100).trim() + '...'
-                : fullPersonality.trim();
-        }
-    }
-
     // Build thin context scenario
     const npcName = npcCard.data.name || 'an unknown person';
     const worldName = worldCard?.data?.name || 'this world';
     const roomName = currentRoom?.name || 'an unknown location';
 
+    // Check for pre-generated thin frame in extensions
+    const thinFrame = npcCard.data.extensions?.cardshark_thin_frame;
+
+    let personalitySnippet = '';
+    let descriptionSnippet = '';
+    let identityLine = '';
+
+    if (isValidThinFrame(thinFrame)) {
+        // Use pre-generated thin frame for richer, more stable context
+        personalitySnippet = thinFrame.key_traits.slice(0, 3).join(', ');
+        descriptionSnippet = thinFrame.appearance_hook;
+
+        // Build identity line from thin frame
+        // Example: "You are speaking with Grok, a gruff blacksmith. They are protective, skilled, and haunted by past."
+        identityLine = `You are speaking with ${npcName}, ${thinFrame.archetype}.`;
+        if (personalitySnippet) {
+            identityLine += ` They are ${personalitySnippet}.`;
+        }
+        if (thinFrame.speaking_style) {
+            identityLine += ` They speak in a ${thinFrame.speaking_style} manner.`;
+        }
+        if (thinFrame.motivation) {
+            identityLine += ` ${thinFrame.motivation}.`;
+        }
+    } else {
+        // Fallback: Extract brief snippets from full content (legacy behavior)
+        const fullPersonality = npcCard.data.personality || '';
+
+        if (fullPersonality) {
+            // Try to get first sentence
+            const firstSentenceMatch = fullPersonality.match(/^[^.!?]+[.!?]/);
+            if (firstSentenceMatch && firstSentenceMatch[0].length <= 150) {
+                personalitySnippet = firstSentenceMatch[0].trim();
+            } else {
+                // Fall back to first 100 chars with ellipsis
+                personalitySnippet = fullPersonality.length > 100
+                    ? fullPersonality.substring(0, 100).trim() + '...'
+                    : fullPersonality.trim();
+            }
+        }
+
+        // Build identity line from truncated content
+        if (personalitySnippet) {
+            identityLine = `You are speaking with ${npcName}, ${personalitySnippet.toLowerCase().startsWith(npcName.toLowerCase()) ? personalitySnippet : personalitySnippet}`;
+        } else {
+            identityLine = `You are speaking with ${npcName}.`;
+        }
+
+        // Extract description snippet (first sentence only)
+        if (npcCard.data.description) {
+            const descMatch = npcCard.data.description.match(/^[^.!?]+[.!?]/);
+            descriptionSnippet = descMatch ? descMatch[0].trim() : '';
+        }
+    }
+
     // Build the thin context string
     const contextParts: string[] = [];
 
     // Core identity line
-    if (personalitySnippet) {
-        contextParts.push(`You are speaking with ${npcName}, ${personalitySnippet.toLowerCase().startsWith(npcName.toLowerCase()) ? personalitySnippet : personalitySnippet}`);
-    } else {
-        contextParts.push(`You are speaking with ${npcName}.`);
-    }
+    contextParts.push(identityLine);
 
     // Location context
     contextParts.push(`You are in ${roomName} in the world of ${worldName}.`);
@@ -343,11 +377,8 @@ export function buildThinNPCContext(
     // Keep personality but make it brief
     modifiedCard.data.personality = personalitySnippet;
 
-    // Keep description but make it brief (first sentence only)
-    if (npcCard.data.description) {
-        const descSnippet = npcCard.data.description.match(/^[^.!?]+[.!?]/);
-        modifiedCard.data.description = descSnippet ? descSnippet[0].trim() : '';
-    }
+    // Keep description but make it brief
+    modifiedCard.data.description = descriptionSnippet;
 
     // Clear character book for thin context (no lore injection)
     modifiedCard.data.character_book = null as unknown as typeof modifiedCard.data.character_book;

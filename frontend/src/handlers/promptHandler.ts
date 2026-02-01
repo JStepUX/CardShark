@@ -1,3 +1,20 @@
+/**
+ * @file promptHandler.ts
+ * @description Handles prompt building, context management, and LLM API communication.
+ *
+ * @deprecated This file is being replaced by the Context Management V2 system.
+ * Migration path:
+ * - createMemoryContext -> Use ContextAssembler.assembleContextSnapshot() + ContextSerializer.serializeContext()
+ * - generateChatResponse -> Use chatService.generateResponse() directly
+ * - streamResponse -> Still usable, no replacement needed (utility function)
+ *
+ * New services:
+ * - ContextAssembler: services/context/ContextAssembler.ts
+ * - ContextSerializer: services/context/ContextSerializer.ts
+ * - useContextSnapshot hook: hooks/useContextSnapshot.ts
+ *
+ * This file will be removed after migration is complete and verified.
+ */
 // handlers/promptHandler.ts
 import { CharacterCard } from '../types/schema';
 import { templateService } from '../services/templateService';
@@ -12,6 +29,16 @@ import {
 
 // Debug flag - set to false to disable console.log statements
 const DEBUG = false;
+
+// Deprecation warning helper
+const warnDeprecation = (methodName: string, replacement: string) => {
+  if (typeof console !== 'undefined') {
+    console.warn(
+      `[DEPRECATED] PromptHandler.${methodName}() is deprecated. ` +
+      `Use ${replacement} instead. This method will be removed in a future version.`
+    );
+  }
+};
 
 // Compression constants
 const COMPRESSION_THRESHOLD = 20;  // don't compress below this
@@ -187,6 +214,15 @@ export class PromptHandler {
    * @param compressionLevel The current compression level (determines field expiration)
    * @param messageCount Current message count (determines if expiration threshold reached)
    * @returns Enhanced result with memory string and field breakdown
+   *
+   * @deprecated Use ContextAssembler.assembleContextSnapshot() + ContextSerializer.createMemoryContext() instead.
+   * Migration:
+   * ```typescript
+   * import { useContextSnapshot } from '../hooks/useContextSnapshot';
+   * const { getSerializedContext } = useContextSnapshot({ characterCard, ... });
+   * const serialized = getSerializedContext();
+   * // serialized.memoryContext contains the equivalent result
+   * ```
    */
   public static createMemoryContext(
     character: CharacterCard,
@@ -195,6 +231,7 @@ export class PromptHandler {
     compressionLevel: CompressionLevel = 'none',
     messageCount: number = 0
   ): MemoryContextResult {
+    warnDeprecation('createMemoryContext', 'ContextSerializer.createMemoryContext() or useContextSnapshot hook');
     if (DEBUG) console.log('Creating memory context with template:', template?.name || 'No template', 'User:', userName, 'Compression:', compressionLevel, 'Messages:', messageCount);
     const currentUser = userName || 'User'; // Fallback for user name
 
@@ -520,6 +557,22 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
   /**
    * Generates a chat response using the provided parameters.
    * Routes to the working /api/generate endpoint with proper payload structure.
+   *
+   * @deprecated Use chatService.generateResponse() directly with context from ContextSerializer.
+   * Migration:
+   * ```typescript
+   * import { useContextSnapshot } from '../hooks/useContextSnapshot';
+   * import { chatService } from '../services/chat/chatService';
+   *
+   * const { getSerializedContext } = useContextSnapshot({ ... });
+   * const serialized = getSerializedContext();
+   * const response = await chatService.generateResponse({
+   *   chatSessionUuid,
+   *   messages: serialized.formattedHistory,
+   *   apiConfig,
+   *   ...
+   * });
+   * ```
    */
   public static async generateChatResponse(
     chatSessionUuid: string, // For context tracking and save operations
@@ -534,6 +587,7 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
     onCompressionEnd?: () => void, // Optional: callback when compression ends
     onPayloadReady?: (payload: any) => void // Optional: callback with the payload before sending
   ): Promise<Response> {
+    warnDeprecation('generateChatResponse', 'chatService.generateResponse() with ContextSerializer');
     if (!chatSessionUuid) {
       throw new Error("chat_session_uuid is required for chat generation");
     }

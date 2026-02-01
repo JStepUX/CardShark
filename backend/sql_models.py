@@ -319,3 +319,38 @@ class WorldUserProgress(Base):
     last_played_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AdventureLogEntry(Base):
+    """
+    Stores room visit summaries for adventure continuity.
+    Each entry represents a visit to a room with an AI-generated or fallback summary.
+
+    Design Philosophy:
+    - No foreign key constraints (orphaned rows are harmless)
+    - JSON column for complex RoomSummary structure
+    - Keyed by (world_uuid, user_uuid, room_uuid, visited_at) for unique visits
+    """
+    __tablename__ = "adventure_log_entries"
+    __table_args__ = (
+        UniqueConstraint('world_uuid', 'user_uuid', 'room_uuid', 'visited_at', name='_adventure_log_entry_uc'),
+        {'extend_existing': True}
+    )
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    world_uuid = Column(String, nullable=False, index=True)
+    user_uuid = Column(String, nullable=False, index=True)
+    room_uuid = Column(String, nullable=False, index=True)
+    room_name = Column(String, nullable=False)
+
+    # Visit timing
+    visited_at = Column(Integer, nullable=False)  # Epoch milliseconds when entered room
+    departed_at = Column(Integer, nullable=True)  # Epoch milliseconds when left room
+    message_count = Column(Integer, default=0, nullable=False)
+
+    # Summary data (JSON blob of RoomSummary)
+    summary_json = Column(JSON, nullable=True)
+
+    # Metadata
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

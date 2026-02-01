@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Copy, Wrench, MoreHorizontal } from 'lucide-react';
+import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Copy, Wrench, MoreHorizontal, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
@@ -91,8 +91,8 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
     ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
     : primaryContext;
 
-  // Always get imageUrl and hasUnsavedChanges from primary context (not used in secondary/compare mode)
-  const { imageUrl, hasUnsavedChanges, setHasUnsavedChanges } = primaryContext;
+  // Always get imageUrl, hasUnsavedChanges, and isGeneratingThinFrame from primary context (not used in secondary/compare mode)
+  const { imageUrl, hasUnsavedChanges, setHasUnsavedChanges, isGeneratingThinFrame } = primaryContext;
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
   // Smart change tracking state - removed local hasUnsavedChanges, now using context
@@ -431,12 +431,26 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           {/* Save Changes button - only show when there are unsaved changes and not in secondary view */}
           {!isSecondary && hasUnsavedChanges && (
             <button
-              onClick={primaryContext.saveCharacter}
-              className="flex items-center gap-2 px-4 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
-              title="Save character changes to PNG"
+              onClick={() => primaryContext.saveCharacter()}
+              disabled={isGeneratingThinFrame}
+              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
+                isGeneratingThinFrame
+                  ? 'bg-green-800 cursor-wait'
+                  : 'bg-green-700 hover:bg-green-600'
+              }`}
+              title={isGeneratingThinFrame ? "Generating character profile..." : "Save character changes to PNG"}
             >
-              <Save className="w-4 h-4" />
-              Save Changes
+              {isGeneratingThinFrame ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating Profile...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </>
+              )}
             </button>
           )}
 

@@ -31,4 +31,5 @@ cardshark.sqlite
 *.sln
 *.sw?
 *.js
-context/
+# Ignore root context folder (build artifacts), but not src/services/context/
+/context/

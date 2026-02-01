@@ -181,6 +181,8 @@ export function RoomAsCharacterProvider({ children }: RoomAsCharacterProviderPro
         handleImageChange,
         hasUnsavedChanges,
         setHasUnsavedChanges,
+        isGeneratingThinFrame: false, // Room cards don't use thin frames
+        setContentSnapshot: () => {}, // No-op for room cards
     };
 
     return (

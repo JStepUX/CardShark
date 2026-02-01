@@ -1,12 +1,17 @@
 /**
  * @file CharacterContext.tsx
  * @description Global context for currently selected character data and state.
- * @dependencies characterService
+ * @dependencies characterService, thinFrameService
  * @consumers App wide
  */
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 import { CharacterCard, CharacterFile } from '../types/schema';
 import { generateUUID } from '../utils/uuidUtils';
+import {
+  generateThinFrame,
+  hasThinFrame,
+  mergeThinFrameIntoCard,
+} from '../services/thinFrameService';
 
 
 // Add character gallery cache interface
@@ -15,6 +20,12 @@ interface CharacterGalleryCache {
   directory: string;
   timestamp: number;
   isValid: boolean;
+}
+
+/** Snapshot of character content for change detection */
+interface CharacterContentSnapshot {
+  description: string;
+  personality: string;
 }
 
 interface CharacterContextType {
@@ -27,7 +38,7 @@ interface CharacterContextType {
   error: string | null;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   createNewCharacter: (name: string) => void;
-  saveCharacter: () => Promise<void>;
+  saveCharacter: (apiConfig?: Record<string, unknown>) => Promise<void>;
   handleImageChange: (newImageData: string | File) => Promise<void>;
   isNewlyCreated: boolean;
   setIsNewlyCreated: React.Dispatch<React.SetStateAction<boolean>>;
@@ -36,10 +47,16 @@ interface CharacterContextType {
   hasUnsavedChanges: boolean;
   setHasUnsavedChanges: React.Dispatch<React.SetStateAction<boolean>>;
 
+  // Thin frame generation state
+  isGeneratingThinFrame: boolean;
+
   // New gallery cache properties
   characterCache: CharacterGalleryCache | null;
   setCharacterCache: React.Dispatch<React.SetStateAction<CharacterGalleryCache | null>>;
   invalidateCharacterCache: () => void;
+
+  // Snapshot management for thin frame regeneration
+  setContentSnapshot: (snapshot: CharacterContentSnapshot) => void;
 }
 
 const CharacterContext = createContext<CharacterContextType | null>(null);
@@ -52,6 +69,15 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isNewlyCreated, setIsNewlyCreated] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [characterCache, setCharacterCache] = useState<CharacterGalleryCache | null>(null);
+  const [isGeneratingThinFrame, setIsGeneratingThinFrame] = useState(false);
+
+  // Snapshot of character content at load time for thin frame regeneration detection
+  const contentSnapshotRef = useRef<CharacterContentSnapshot>({ description: '', personality: '' });
+
+  const setContentSnapshot = useCallback((snapshot: CharacterContentSnapshot) => {
+    contentSnapshotRef.current = snapshot;
+  }, []);
+
   const createNewCharacter = (name: string) => {
     const newCharacter: CharacterCard = {
       name: "",
@@ -107,7 +133,8 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // Save character card to backend
-  const saveCharacter = async (): Promise<void> => {
+  // apiConfig is optional - if provided and content changed, will generate thin frame
+  const saveCharacter = async (apiConfig?: Record<string, unknown>): Promise<void> => {
     if (!characterData) {
       setError("No character data available to save");
       return;
@@ -116,6 +143,34 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       setIsLoading(true);
       setError(null);
+
+      // Check if description/personality changed for thin frame regeneration
+      const currentDesc = characterData.data?.description || '';
+      const currentPers = characterData.data?.personality || '';
+      const originalDesc = contentSnapshotRef.current.description;
+      const originalPers = contentSnapshotRef.current.personality;
+
+      const contentChanged = currentDesc !== originalDesc || currentPers !== originalPers;
+      const needsThinFrame = !hasThinFrame(characterData) || contentChanged;
+
+      // Generate thin frame if API config provided and content changed
+      let cardToSave = characterData;
+      if (apiConfig && needsThinFrame && (currentDesc || currentPers)) {
+        try {
+          setIsGeneratingThinFrame(true);
+          console.log('[ThinFrame] Generating thin frame for character:', characterData.data?.name);
+
+          const thinFrame = await generateThinFrame(characterData, apiConfig, { timeout: 30000 });
+          cardToSave = mergeThinFrameIntoCard(characterData, thinFrame);
+
+          console.log('[ThinFrame] Thin frame generated successfully');
+        } catch (thinFrameError) {
+          // Log but don't fail the save - thin frame is optional
+          console.warn('[ThinFrame] Failed to generate thin frame:', thinFrameError);
+        } finally {
+          setIsGeneratingThinFrame(false);
+        }
+      }
 
       // Prepare the file - use imageUrl from context
       let fileToSave: File | null = null;
@@ -140,7 +195,7 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Create form data
       const formData = new FormData();
       formData.append("file", fileToSave);
-      formData.append("metadata_json", JSON.stringify(characterData));
+      formData.append("metadata_json", JSON.stringify(cardToSave));
 
       // Save the file
       const saveResponse = await fetch("/api/characters/save-card", {
@@ -159,6 +214,12 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (saveResult.success) {
         console.log("Character saved successfully:", saveResult);
 
+        // Update local state with saved card (including thin frame)
+        setCharacterData(cardToSave);
+
+        // Update snapshot to current content
+        contentSnapshotRef.current = { description: currentDesc, personality: currentPers };
+
         // Reset unsaved changes flag
         setHasUnsavedChanges(false);
 
@@ -173,6 +234,7 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setError(error instanceof Error ? error.message : "Failed to save character");
     } finally {
       setIsLoading(false);
+      setIsGeneratingThinFrame(false);
     }
   };
 
@@ -257,9 +319,11 @@ export const CharacterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setIsNewlyCreated,
     hasUnsavedChanges,
     setHasUnsavedChanges,
+    isGeneratingThinFrame,
     characterCache,
     setCharacterCache,
-    invalidateCharacterCache
+    invalidateCharacterCache,
+    setContentSnapshot,
   };
 
   return (

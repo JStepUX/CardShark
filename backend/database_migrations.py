@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Current schema version - increment when making schema changes
 # When this changes, the old database will be deleted and rebuilt fresh
-CURRENT_SCHEMA_VERSION = "2.6.0"  # Added world_user_progress table for per-user world save slots
+CURRENT_SCHEMA_VERSION = "2.7.0"  # Added adventure_log_entries table for room visit summaries
 
 
 

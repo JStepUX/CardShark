@@ -60,6 +60,18 @@ import { deriveGridCombatStats } from '../types/combat';
 import { InventoryModal } from '../components/inventory';
 import type { CharacterInventory } from '../types/inventory';
 import { createDefaultInventory } from '../types/inventory';
+// Room transition state
+import type { TransitionState, ProgressStatus } from '../types/transition';
+import { createIdleTransitionState, TRANSITION_TIMEOUT_MS, THIN_FRAME_TIMEOUT_MS, SUMMARIZATION_TIMEOUT_MS } from '../types/transition';
+import { preloadRoomTextures } from '../utils/texturePreloader';
+import { LoadingScreen } from '../components/transition';
+// Thin frame service for NPC identity preservation
+import { generateThinFrame, mergeThinFrameIntoCard } from '../services/thinFrameService';
+// Adventure log for room summarization
+import { adventureLogApi } from '../api/adventureLogApi';
+import type { SummarizeMessage, SummarizeNPC, AdventureContext } from '../types/adventureLog';
+import { mergeAdventureLogWithNotes } from '../utils/adventureLogContext';
+import { isValidThinFrame } from '../types/schema';
 
 // Local map config (must match LocalMapView defaults)
 const LOCAL_MAP_CONFIG: LocalMapConfig = {
@@ -175,6 +187,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [inventoryTarget, setInventoryTarget] = useState<'player' | 'ally'>('player');
 
+  // Room transition state (Phase 1: loading screen + atomic state updates)
+  const [transitionState, setTransitionState] = useState<TransitionState>(createIdleTransitionState);
+
+  // Adventure context for narrative continuity (Phase 3)
+  const [adventureContext, setAdventureContext] = useState<AdventureContext | null>(null);
+
   // Ref for LocalMapView to trigger combat animations
   const localMapRef = useRef<LocalMapViewHandle | null>(null);
 
@@ -246,6 +264,80 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // ============================================
+  // ADVENTURE LOG CONTEXT INJECTION (Phase 3)
+  // ============================================
+  // Ref to track the base (user-entered) session notes separate from adventure log additions
+  const baseSessionNotesRef = useRef<string>('');
+
+  // When adventure context or current room changes, merge adventure log into session notes
+  useEffect(() => {
+    if (!adventureContext || adventureContext.entries.length === 0) {
+      return;
+    }
+
+    // Merge adventure log with base session notes (excluding current room from history)
+    const mergedNotes = mergeAdventureLogWithNotes(
+      baseSessionNotesRef.current,
+      adventureContext,
+      currentRoom?.id
+    );
+
+    // Only update if different (prevent infinite loops)
+    if (mergedNotes !== sessionNotes) {
+      setSessionNotes(mergedNotes);
+      console.log('[AdventureLog] Injected adventure log into session context');
+    }
+  }, [adventureContext, currentRoom?.id, sessionNotes, setSessionNotes]);
+
+  // When user manually edits session notes (via Journal), update the base ref
+  // This is handled by JournalModal - we capture the initial state here
+  useEffect(() => {
+    // Only capture as "base" if it doesn't look like it has adventure log merged in
+    if (sessionNotes && !sessionNotes.startsWith('[Your Recent Journey]')) {
+      baseSessionNotesRef.current = sessionNotes;
+    }
+  }, [sessionNotes]);
+
+  // ============================================
+  // ROOM TRANSITION HELPERS
+  // ============================================
+
+  /**
+   * Update transition progress for a specific operation.
+   * Note: Used for Phase 2/3 when progress callbacks are enabled.
+   */
+  const _updateTransitionProgress = useCallback((
+    key: keyof TransitionState['progress'],
+    status: ProgressStatus
+  ) => {
+    setTransitionState(prev => ({
+      ...prev,
+      progress: {
+        ...prev.progress,
+        [key]: status,
+      },
+    }));
+  }, []);
+
+  /**
+   * Check if transition has timed out.
+   * Note: Used for Phase 2/3 timeout handling.
+   */
+  const _isTransitionTimedOut = useCallback((startedAt: number | null): boolean => {
+    if (!startedAt) return false;
+    return Date.now() - startedAt > TRANSITION_TIMEOUT_MS;
+  }, []);
+
+  // Suppress unused variable warnings for future-use helpers
+  void _updateTransitionProgress;
+  void _isTransitionTimedOut;
+
+  /**
+   * Helper to check if currently transitioning (for gating UI).
+   */
+  const isTransitioning = transitionState.phase !== 'idle';
+
   // Load world data from API (V2) - LAZY LOADING
   // Only fetches world card + starting room (2 API calls instead of N+1)
   // Now also loads per-user progress from SQLite via new progress API
@@ -285,6 +377,16 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           console.log('[Progress] Loaded from database:', progress ? 'found' : 'not found');
         } catch (err) {
           console.warn('[Progress] Failed to load progress:', err);
+        }
+
+        // Load adventure context for narrative continuity (Phase 3)
+        try {
+          const loadedAdventureContext = await adventureLogApi.getAdventureContext(worldId, selectedUserUuid);
+          setAdventureContext(loadedAdventureContext);
+          console.log(`[AdventureLog] Loaded ${loadedAdventureContext.entries.length} room summaries`);
+        } catch (err) {
+          console.warn('[AdventureLog] Failed to load adventure context:', err);
+          // Non-fatal - continue without adventure log
         }
 
         // If no progress exists, check for embedded world_data progress to migrate
@@ -1550,12 +1652,37 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   // Extracted room transition logic - shared by direct navigate and Party Gather modal
   // LAZY LOADING: Fetches full room data if needed during navigation
   // entryDir: The direction the player is entering FROM (e.g., 'west' = player is entering from the west edge)
+  //
+  // PHASE 1 REFACTOR: Now uses transition state to prevent UI flicker:
+  // 1. Shows loading screen during async work
+  // 2. Preloads textures before revealing new room
+  // 3. Updates room + NPCs atomically at the end
   const performRoomTransition = useCallback(async (
     targetRoomStub: GridRoom,
     keepActiveNpc: boolean = false,
     entryDir: ExitDirection | null = null
   ) => {
     if (!worldState || !worldId || !worldCard) return;
+
+    // ========================================
+    // PHASE: INITIATING
+    // ========================================
+    const transitionStartTime = Date.now();
+    setTransitionState({
+      phase: 'initiating',
+      sourceRoomName: currentRoom?.name || null,
+      targetRoomName: targetRoomStub.name,
+      targetRoomId: targetRoomStub.id,
+      progress: {
+        summarization: { status: 'pending' },
+        assetPreload: { status: 'pending' },
+        thinFrameGeneration: { status: 'pending' },
+      },
+      error: null,
+      startedAt: transitionStartTime,
+    });
+
+    console.log(`[RoomTransition] Starting transition to: ${targetRoomStub.name}`);
 
     // Snapshot the CURRENT room's NPC states before we leave
     if (currentRoom) {
@@ -1583,6 +1710,90 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     setConversationTargetName('');
     setConversationTargetCard(null);
 
+    // ========================================
+    // PHASE: SUMMARIZING (Phase 3)
+    // ========================================
+    // Summarize the current room visit before moving to the new room
+    if (currentRoom && worldId && currentUser?.user_uuid && messages.length > 2) {
+      setTransitionState(prev => ({
+        ...prev,
+        phase: 'summarizing',
+        progress: {
+          ...prev.progress,
+          summarization: { status: 'in_progress', percent: 0 },
+        },
+      }));
+
+      try {
+        // Prepare messages for summarization (strip to role + content only)
+        const summarizeMessages: SummarizeMessage[] = messages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          }));
+
+        // Prepare NPC list for matching
+        const summarizeNpcs: SummarizeNPC[] = roomNpcs.map(npc => ({
+          id: npc.id,
+          name: npc.name,
+        }));
+
+        // Get visitedAt from room entry tracking (use transitionStartTime as approximation if not tracked)
+        // In a full implementation, this would be tracked when entering the room
+        const visitedAt = transitionStartTime - (messages.length * 30000); // Rough estimate: ~30s per message
+
+        console.log(`[RoomTransition] Summarizing ${summarizeMessages.length} messages from ${currentRoom.name}`);
+
+        // Call summarization API with timeout
+        const summarizationPromise = adventureLogApi.summarizeRoom({
+          worldUuid: worldId,
+          userUuid: currentUser.user_uuid,
+          roomUuid: currentRoom.id,
+          roomName: currentRoom.name,
+          visitedAt,
+          messages: summarizeMessages,
+          npcs: summarizeNpcs,
+        });
+
+        const timeoutPromise = new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('Summarization timeout')), SUMMARIZATION_TIMEOUT_MS)
+        );
+
+        const result = await Promise.race([summarizationPromise, timeoutPromise]);
+
+        if (result) {
+          console.log(`[RoomTransition] Summarization completed (${result.method}): ${result.summary.keyEvents.length} events`);
+          setTransitionState(prev => ({
+            ...prev,
+            progress: {
+              ...prev.progress,
+              summarization: { status: 'complete' },
+            },
+          }));
+        }
+      } catch (error) {
+        console.warn('[RoomTransition] Summarization failed or timed out:', error);
+        setTransitionState(prev => ({
+          ...prev,
+          progress: {
+            ...prev.progress,
+            summarization: { status: 'failed', error: 'Summarization failed' },
+          },
+        }));
+        // Continue with transition - summarization failure is non-blocking
+      }
+    } else {
+      // Skip summarization if no room, no user, or too few messages
+      setTransitionState(prev => ({
+        ...prev,
+        progress: {
+          ...prev.progress,
+          summarization: { status: 'complete' },
+        },
+      }));
+    }
+
     // PRUNE MESSAGES: Keep last 8 messages for continuity when traveling between rooms
     const MAX_MESSAGES_ON_TRAVEL = 8;
     if (messages.length > MAX_MESSAGES_ON_TRAVEL) {
@@ -1605,8 +1816,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     }
 
     // LAZY LOADING: Fetch full room data if this is just a stub
-    // We detect stubs by checking if introduction_text is empty AND description is brief
-    // (stubs have empty introduction_text because that's not cached in placements)
     let targetRoom = targetRoomStub;
     const worldData = worldCard.data.extensions.world_data;
     const placement = worldData.rooms.find(r => r.room_uuid === targetRoomStub.id);
@@ -1614,54 +1823,16 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     if (placement) {
       try {
         // Always fetch full room data for the destination
-        // This ensures we have introduction_text, description, lore, etc.
         const roomCard = await roomApi.getRoom(placement.room_uuid);
         targetRoom = roomCardToGridRoom(roomCard, { x: foundX, y: foundY }, placement);
-
-        // Update the grid with full room data for future reference
-        const newGrid = [...worldState.grid.map(row => [...row])];
-        if (foundY >= 0 && foundY < newGrid.length && foundX >= 0 && foundX < newGrid[0].length) {
-          newGrid[foundY][foundX] = targetRoom;
-        }
-
-        setWorldState(prev => prev ? {
-          ...prev,
-          grid: newGrid,
-          player_position: { x: foundX, y: foundY },
-        } : null);
-
-        console.log(`Lazy loaded room: ${targetRoom.name}`);
+        console.log(`[RoomTransition] Lazy loaded room data: ${targetRoom.name}`);
       } catch (err) {
-        console.error(`Failed to fetch room ${targetRoomStub.id}:`, err);
+        console.error(`[RoomTransition] Failed to fetch room ${targetRoomStub.id}:`, err);
         // Fall back to stub data
       }
     }
 
-    // Update local state
-    setCurrentRoom(targetRoom);
-
-    // Set player spawn position based on entry direction
-    // If entering via exit (entryDir passed), spawn at the corresponding edge
-    if (entryDir) {
-      const spawnPos = getSpawnPosition(entryDir, LOCAL_MAP_CONFIG);
-      setPlayerTilePosition(spawnPos);
-      console.log(`[RoomTransition] Spawning at ${entryDir} edge:`, spawnPos);
-    } else {
-      // Default spawn position when not entering via exit (e.g., world map navigation)
-      setPlayerTilePosition({ x: 2, y: 2 });
-      console.log('[RoomTransition] Default spawn position: center');
-    }
-    // Clear any stale entry direction state
-    setEntryDirection(null);
-
-    // Clear active NPC unless explicitly keeping them
-    if (!keepActiveNpc) {
-      setActiveNpcId(undefined);
-      setActiveNpcName('');
-      setActiveNpcCard(null);
-    }
-
-    // Resolve NPCs in the new room and merge with combat data
+    // Resolve NPCs in the new room BEFORE updating state
     const npcUuids = targetRoom.npcs.map(npc => npc.character_uuid);
     const resolvedNpcs = await resolveNpcDisplayData(npcUuids);
 
@@ -1689,7 +1860,216 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         });
       console.log('[RuntimeState] Applied saved room state for:', targetRoom.name);
     }
+
+    // ========================================
+    // PHASE: LOADING_ASSETS
+    // ========================================
+    setTransitionState(prev => ({
+      ...prev,
+      phase: 'loading_assets',
+      progress: {
+        ...prev.progress,
+        assetPreload: { status: 'in_progress', percent: 0 },
+      },
+    }));
+
+    // Preload textures for player, companion, and NPCs
+    // Use the same URL patterns as the LocalMapView rendering
+    const playerImgPath = currentUser?.filename
+      ? `/api/user-image/${encodeURIComponent(currentUser.filename)}`
+      : null;
+    const companionImgPath = keepActiveNpc && activeNpcId
+      ? `/api/character-image/${activeNpcId}.png`
+      : null;
+    const npcImageUrls = npcsWithCombatData.map(n => n.imageUrl).filter(Boolean) as string[];
+
+    console.log(`[RoomTransition] Preloading ${npcImageUrls.length + (playerImgPath ? 1 : 0) + (companionImgPath ? 1 : 0)} textures`);
+
+    const preloadResult = await preloadRoomTextures(
+      {
+        playerImagePath: playerImgPath,
+        companionImagePath: companionImgPath,
+        npcImageUrls,
+      },
+      {
+        timeout: TRANSITION_TIMEOUT_MS,
+        onProgress: (percent) => {
+          setTransitionState(prev => ({
+            ...prev,
+            progress: {
+              ...prev.progress,
+              assetPreload: { status: 'in_progress', percent },
+            },
+          }));
+        },
+      }
+    );
+
+    if (preloadResult.timedOut) {
+      console.warn('[RoomTransition] Texture preload timed out, continuing with fallbacks');
+      setTransitionState(prev => ({
+        ...prev,
+        progress: {
+          ...prev.progress,
+          assetPreload: { status: 'failed', error: 'Timed out' },
+        },
+      }));
+    } else if (preloadResult.failedCount > 0) {
+      console.warn(`[RoomTransition] ${preloadResult.failedCount} textures failed to load`);
+    }
+
+    // Mark asset preload complete
+    setTransitionState(prev => ({
+      ...prev,
+      progress: {
+        ...prev.progress,
+        assetPreload: preloadResult.success
+          ? { status: 'complete' }
+          : { status: 'failed', error: preloadResult.error || 'Some textures failed' },
+      },
+    }));
+
+    // ========================================
+    // PHASE: GENERATING_FRAMES - Generate thin frames for NPCs missing them
+    // ========================================
+    // Only proceed if we have API config and there are NPCs to process
+    if (apiConfig && npcsWithCombatData.length > 0) {
+      setTransitionState(prev => ({
+        ...prev,
+        phase: 'generating_frames',
+        progress: {
+          ...prev.progress,
+          thinFrameGeneration: { status: 'in_progress', percent: 0 },
+        },
+      }));
+
+      // Check which NPCs need thin frames
+      const npcsNeedingFrames: string[] = [];
+      for (const npc of npcsWithCombatData) {
+        try {
+          const npcCardResponse = await fetch(`/api/character/${npc.id}/metadata`);
+          if (npcCardResponse.ok) {
+            const npcCardData = await npcCardResponse.json();
+            const npcCard = npcCardData.data || npcCardData;
+            if (!isValidThinFrame(npcCard?.data?.extensions?.cardshark_thin_frame)) {
+              npcsNeedingFrames.push(npc.id);
+            }
+          }
+        } catch (err) {
+          console.warn(`[ThinFrame] Failed to check NPC ${npc.id} for thin frame:`, err);
+        }
+      }
+
+      if (npcsNeedingFrames.length > 0) {
+        console.log(`[ThinFrame] Generating thin frames for ${npcsNeedingFrames.length} NPCs`);
+
+        let generatedCount = 0;
+        for (const npcId of npcsNeedingFrames) {
+          try {
+            // Fetch full character data
+            const npcCardResponse = await fetch(`/api/character/${npcId}/metadata`);
+            if (!npcCardResponse.ok) continue;
+
+            const npcCardData = await npcCardResponse.json();
+            const npcCard = npcCardData.data || npcCardData as CharacterCard;
+
+            // Generate thin frame with timeout
+            const thinFrame = await generateThinFrame(npcCard, apiConfig, { timeout: THIN_FRAME_TIMEOUT_MS });
+
+            // Update the NPC card with thin frame and save
+            const updatedCard = mergeThinFrameIntoCard(npcCard, thinFrame);
+
+            // Fetch the image to save with metadata
+            const imageResponse = await fetch(`/api/character-image/${npcId}.png`);
+            if (imageResponse.ok) {
+              const imageBlob = await imageResponse.blob();
+              const formData = new FormData();
+              formData.append('file', new File([imageBlob], 'character.png', { type: 'image/png' }));
+              formData.append('metadata_json', JSON.stringify(updatedCard));
+
+              await fetch('/api/characters/save-card', {
+                method: 'POST',
+                body: formData,
+              });
+
+              console.log(`[ThinFrame] Generated and saved thin frame for NPC ${npcId}`);
+            }
+
+            generatedCount++;
+            setTransitionState(prev => ({
+              ...prev,
+              progress: {
+                ...prev.progress,
+                thinFrameGeneration: {
+                  status: 'in_progress',
+                  percent: Math.round((generatedCount / npcsNeedingFrames.length) * 100),
+                },
+              },
+            }));
+          } catch (err) {
+            console.warn(`[ThinFrame] Failed to generate thin frame for NPC ${npcId}:`, err);
+          }
+        }
+      }
+
+      // Mark thin frame generation complete
+      setTransitionState(prev => ({
+        ...prev,
+        progress: {
+          ...prev.progress,
+          thinFrameGeneration: { status: 'complete' },
+        },
+      }));
+    } else {
+      // No NPCs or no API config - skip thin frame generation
+      setTransitionState(prev => ({
+        ...prev,
+        progress: {
+          ...prev.progress,
+          thinFrameGeneration: { status: 'complete' },
+        },
+      }));
+    }
+
+    // ========================================
+    // PHASE: READY - Update all state atomically
+    // ========================================
+    setTransitionState(prev => ({
+      ...prev,
+      phase: 'ready',
+    }));
+
+    // Calculate spawn position
+    const spawnPos = entryDir
+      ? getSpawnPosition(entryDir, LOCAL_MAP_CONFIG)
+      : { x: 2, y: 2 };
+
+    console.log(`[RoomTransition] Spawning at ${entryDir || 'center'}:`, spawnPos);
+
+    // Update grid with full room data
+    const newGrid = [...worldState.grid.map(row => [...row])];
+    if (foundY >= 0 && foundY < newGrid.length && foundX >= 0 && foundX < newGrid[0].length) {
+      newGrid[foundY][foundX] = targetRoom;
+    }
+
+    // ATOMIC STATE UPDATES - these should batch in React 18
+    // All visible room state updates together
+    setWorldState(prev => prev ? {
+      ...prev,
+      grid: newGrid,
+      player_position: { x: foundX, y: foundY },
+    } : null);
+    setCurrentRoom(targetRoom);
     setRoomNpcs(npcsWithCombatData);
+    setPlayerTilePosition(spawnPos);
+    setEntryDirection(null);
+
+    // Clear active NPC unless explicitly keeping them
+    if (!keepActiveNpc) {
+      setActiveNpcId(undefined);
+      setActiveNpcName('');
+      setActiveNpcCard(null);
+    }
 
     // Persist position + full runtime state to backend (single API call)
     try {
@@ -1722,7 +2102,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           roomId: targetRoom.id
         }
       };
-
       addMessage(roomIntroMessage);
     }
 
@@ -1739,13 +2118,31 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           roomId: targetRoom.id
         }
       };
-
       addMessage(followMessage);
     }
 
     // Close map modal after navigation
     setShowMap(false);
-  }, [worldCard, worldState, worldId, messages, setMessages, addMessage, activeNpcName, activeNpcId, isInCombat, gridCombat, currentRoom, roomNpcs, playerProgression, timeState, npcRelationships, playerInventory, allyInventory]);
+
+    // Refresh adventure context after summarization (for next transition)
+    if (worldId && currentUser?.user_uuid) {
+      try {
+        const updatedContext = await adventureLogApi.getAdventureContext(worldId, currentUser.user_uuid);
+        setAdventureContext(updatedContext);
+        console.log(`[AdventureLog] Refreshed context: ${updatedContext.entries.length} entries`);
+      } catch (err) {
+        console.warn('[AdventureLog] Failed to refresh adventure context:', err);
+      }
+    }
+
+    // ========================================
+    // PHASE: IDLE - Transition complete
+    // ========================================
+    setTransitionState(createIdleTransitionState());
+
+    const transitionDuration = Date.now() - transitionStartTime;
+    console.log(`[RoomTransition] Completed in ${transitionDuration}ms`);
+  }, [worldCard, worldState, worldId, messages, setMessages, addMessage, activeNpcName, activeNpcId, activeNpcCard, isInCombat, gridCombat, currentRoom, roomNpcs, playerProgression, timeState, npcRelationships, playerInventory, allyInventory, currentUser]);
 
 
   // Handle room navigation - persists position to backend
@@ -2149,6 +2546,15 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
   return (
     <>
+      {/* Room Transition Loading Screen */}
+      <LoadingScreen
+        visible={isTransitioning}
+        sourceRoomName={transitionState.sourceRoomName}
+        targetRoomName={transitionState.targetRoomName}
+        phase={transitionState.phase}
+        progress={transitionState.progress}
+      />
+
       {/* Missing Rooms Warning Banner */}
       {showMissingRoomWarning && missingRoomCount > 0 && (
         <div className="absolute top-0 left-0 right-0 bg-amber-900/90 border-b border-amber-700 px-4 py-2 flex items-center justify-between z-50">
