@@ -61,6 +61,8 @@
   - `chat_service.py` - Chat session orchestration
   - `world_card_service.py` - World card business logic
   - `world_export_service.py` - World ZIP export/import
+  - `adventure_log_service.py` - Adventure log persistence (Context Management V2)
+  - `summarization_service.py` - LLM-based room summarization (Context Management V2)
 - `utils/` - Utility functions and helpers
   - `cross_drive_static_files.py` - Static file serving across drives
 - `models/` - Pydantic data models
@@ -118,6 +120,11 @@
 - `contexts/` - React Context providers for state management
 - `hooks/` - Custom React hooks for shared logic
   - `useGridCombat.ts` - Grid combat state management and AI turn execution
+  - `useWorldSession.ts` - World card loading, progress, runtime state
+  - `useRoomTransition.ts` - Room navigation state machine, asset preloading
+  - `useNPCInteraction.ts` - Conversation, bonding, multi-speaker parsing
+  - `useAdventureLog.ts` - Adventure context injection into session
+  - `useContextSnapshot.ts` - Context assembly and serialization
   - `useScrollToBottom.ts`, `useEmotionDetection.ts`, `useChatMessages.ts`, etc.
 - `services/combat/` - Combat engine and support services
   - `gridCombatEngine.ts` - Pure reducer-based grid combat engine
@@ -126,6 +133,19 @@
   - `combatMapSync.ts` - LocalMapState <-> GridCombatState synchronization
   - `postCombatNarrative.ts` - AI narrative generation after combat
   - `combatResultContext.ts` - Structured combat results for AI context
+- `services/context/` - Context Management V2 (layered architecture)
+  - `ContextAssembler.ts` - Pure functions for assembling context snapshots
+  - `ContextSerializer.ts` - Converts context to LLM-ready format
+  - `ContextCache.ts` - TTL-based caching with presets
+  - `sources/` - Data access layer for context components
+    - `CharacterSource.ts` - Character card caching
+    - `WorldSource.ts` - World card with progression
+    - `RoomSource.ts` - Room card with NPC instance state
+    - `SessionSource.ts` - Chat session state
+    - `LoreSource.ts` - Lore entries and triggered images
+    - `AdventureLogSource.ts` - Room summaries for narrative continuity
+    - `ThinFrameSource.ts` - NPC thin frame generation and caching
+- `services/thinFrameService.ts` - NPC thin frame generation with fallback
 - `utils/` - Utility modules
   - `pathfinding.ts` - A* pathfinding for grid movement
   - `gridCombatUtils.ts` - Distance, LOS, flanking calculations
@@ -144,6 +164,13 @@
   - `inventory.ts` - Item and equipment types
   - `worldCard.ts` - World card V2 types with progression extensions
   - `worldRuntime.ts` - Runtime types (affinity, time, player state)
+  - `context.ts` - Context Management V2 types (ContextSnapshot, ContextSource, ContextMode)
+  - `transition.ts` - Room transition state machine types
+  - `adventureLog.ts` - Adventure log and room summary types
+  - `schema.ts` - NPCThinFrame schema in PNG extensions
+- `components/transition/` - Room transition UI
+  - `LoadingScreen.tsx` - Full-screen loading overlay during transitions
+  - `TransitionProgress.tsx` - Progress bar for transition phases
 
 ### Build Configuration
 - `vite.config.ts` - Vite build configuration with aliases
@@ -172,3 +199,38 @@
 - **Database normalization** - SQLite for relational data (users, rooms, sessions)
 - **Combat state flow** - LocalMapState -> GridCombatState (during combat) -> sync back to LocalMapState
 - **Affinity flow** - Conversation sentiment + combat outcomes -> NPC relationship updates (daily capped)
+
+### Context Management V2 Architecture
+Layered architecture for LLM context assembly (see `.kiro/steering/context-management-v2.md` for full spec):
+
+```
+PRESENTATION LAYER
+  WorldPlayView, ChatView, LoadingScreen
+  (React components - UI only)
+           │
+           ▼
+ORCHESTRATION LAYER
+  useWorldSession, useRoomTransition, useNPCInteraction, useContextSnapshot
+  (Hooks that coordinate between services)
+           │
+           ▼
+CONTEXT ASSEMBLY LAYER
+  ContextAssembler, ContextSerializer
+  (Pure functions - builds context from sources)
+           │
+           ▼
+CONTEXT SOURCES LAYER
+  CharacterSource, WorldSource, RoomSource, SessionSource,
+  LoreSource, AdventureLogSource, ThinFrameSource
+  (Data access - fetches and caches raw data)
+           │
+           ▼
+PERSISTENCE LAYER
+  SQLite, PNG Metadata
+```
+
+**Key concepts:**
+- **ContextSnapshot** - Immutable object containing all context for an LLM call
+- **NPCThinFrame** - LLM-generated NPC summary stored in PNG extensions for identity preservation
+- **AdventureLog** - Room summaries for narrative continuity across transitions
+- **Transition state machine** - IDLE → INITIATING → SUMMARIZING → LOADING_ASSETS → GENERATING_FRAMES → READY
