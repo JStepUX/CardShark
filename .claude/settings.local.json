@@ -41,7 +41,12 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(gh api:*)",
       "Bash(powershell -Command \"[System.Text.Encoding]::UTF8.GetString\\([System.Convert]::FromBase64String\\(\\(Get-Content -Raw\\)\\)\\)\")",
-      "Bash(git clone:*)"
+      "Bash(git clone:*)",
+      "Bash(npm test:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)"
     ]
   }
 }
