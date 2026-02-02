@@ -46,7 +46,10 @@
       "Bash(python -m pytest:*)",
       "Bash(git check-ignore:*)",
       "Bash(git add:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(pytest:*)",
+      "Bash(npm ls:*)",
+      "Bash(grep:*)"
     ]
   }
 }

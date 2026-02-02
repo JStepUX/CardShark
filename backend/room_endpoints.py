@@ -40,7 +40,7 @@ def create_room_for_world(
         raise
     except Exception as e:
         logger.error(f"Error creating room for world {world_uuid}: {str(e)}")
-        handle_generic_error(e, "Failed to create room")
+        raise handle_generic_error(e, "Failed to create room")
 
 
 @router.get("/rooms/{room_id}", response_model=DataResponse[RoomRead])
@@ -59,7 +59,7 @@ def read_room(
         raise
     except Exception as e:
         logger.error(f"Error retrieving room {room_id}: {str(e)}")
-        handle_generic_error(e, "Failed to retrieve room")
+        raise handle_generic_error(e, "Failed to retrieve room")
 
 @router.get("/rooms/", response_model=ListResponse[RoomRead])
 def read_rooms(
@@ -80,7 +80,7 @@ def read_rooms(
         )
     except Exception as e:
         logger.error(f"Error retrieving rooms: {str(e)}")
-        handle_generic_error(e, "Failed to retrieve rooms")
+        raise handle_generic_error(e, "Failed to retrieve rooms")
 
 @router.put("/rooms/{room_id}", response_model=DataResponse[RoomRead])
 def update_existing_room(
@@ -99,7 +99,7 @@ def update_existing_room(
         raise
     except Exception as e:
         logger.error(f"Error updating room {room_id}: {str(e)}")
-        handle_generic_error(e, "Failed to update room")
+        raise handle_generic_error(e, "Failed to update room")
 
 @router.delete("/rooms/{room_id}", response_model=DataResponse[RoomRead])
 def delete_existing_room(
@@ -117,4 +117,4 @@ def delete_existing_room(
         raise
     except Exception as e:
         logger.error(f"Error deleting room {room_id}: {str(e)}")
-        handle_generic_error(e, "Failed to delete room")
+        raise handle_generic_error(e, "Failed to delete room")
