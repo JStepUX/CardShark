@@ -12,7 +12,8 @@ from backend.models.adventure_log import (
     SummarizeRoomResponse,
     AdventureContext,
     AdventureLogEntryComplete,
-    RoomSummary
+    RoomSummary,
+    create_empty_room_summary
 )
 from backend.services.adventure_log_service import AdventureLogService
 from backend.services.summarization_service import SummarizationService
@@ -151,7 +152,18 @@ async def summarize_room(
 
     except Exception as e:
         logger.log_error(f"Error summarizing room: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to summarize room: {str(e)}")
+        # Return fallback summary instead of 500 error to prevent room transition failures
+        fallback_summary = create_empty_room_summary(
+            data.room_uuid, data.room_name, data.visited_at
+        )
+        fallback_summary = RoomSummary(
+            **{**fallback_summary.model_dump(),
+               'key_events': ['Visit recorded (summarization unavailable)']}
+        )
+        return create_data_response({
+            "summary": fallback_summary.model_dump(),
+            "method": "error_fallback"
+        })
 
 
 @router.get(

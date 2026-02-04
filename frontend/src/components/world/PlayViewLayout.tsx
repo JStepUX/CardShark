@@ -20,7 +20,7 @@
  */
 
 import React, { ReactNode } from 'react';
-import { Star, Coins, UserPlus, X } from 'lucide-react';
+import { Star, Coins, UserPlus, X, ArrowLeft } from 'lucide-react';
 import dayNightCycleIcon from '../../assets/icons/daynightcycle.png';
 
 /** Player progression display data */
@@ -56,8 +56,8 @@ interface PlayViewLayoutProps {
     showJournalButton?: boolean;
     /** Journal button click handler */
     onJournalClick?: () => void;
-    /** Map button click handler (opens world map modal) */
-    onMapClick?: () => void;
+    /** Back button click handler (returns to world splash) */
+    onBackToWorld?: () => void;
     /** The local map component */
     localMapContent: ReactNode;
     /** The chat or combat log panel */
@@ -82,7 +82,7 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
     playerProgress,
     showJournalButton = true,
     onJournalClick,
-    onMapClick,
+    onBackToWorld,
     localMapContent,
     chatPanelContent,
     sideIcons,
@@ -116,10 +116,11 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                     {/* Breadcrumb */}
                     <div className="flex items-center gap-2 text-sm">
                         <button
-                            onClick={onMapClick}
-                            className="text-gray-400 hover:text-white transition-colors"
-                            title="Open World Map"
+                            onClick={onBackToWorld}
+                            className="flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors"
+                            title="Return to World"
                         >
+                            <ArrowLeft className="w-4 h-4" />
                             {worldName}
                         </button>
                         <span className="text-gray-600">→</span>

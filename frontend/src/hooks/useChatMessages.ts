@@ -39,6 +39,12 @@ import {
   DEFAULT_ASSISTANT_CHARACTER
 } from '../services/chat/chatUtils';
 
+// Import incomplete sentence removal utility
+import { removeIncompleteSentences } from '../utils/contentProcessing';
+
+// Import settings context for feature flags
+import { useSettings } from '../contexts/SettingsContext';
+
 // Import session management hook
 import { useEnhancedChatSession } from './chat/useEnhancedChatSession';
 
@@ -61,6 +67,13 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
   const isGenericAssistant = !characterData;
   const { apiConfig: globalApiConfig } = useAPIConfig();
   const { trackLoreImages } = useChat();
+  const { settings } = useSettings();
+
+  // Use ref to access settings in callbacks without stale closures
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
   // Phase 2: Initialize message state hook first (gradual migration)
   const [messageStateParams, setMessageStateParams] = useState<{
     chatSessionUuid: string | null;
@@ -226,16 +239,25 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
 
     // Prepare variations
     const sanitizedFinalContent = sanitizeMessageContent(finalContent);
+
+    // Apply incomplete sentence removal if enabled in settings
+    // This is the ONE place where cleanup happens - exactly when generation completes
+    // Not in useEffects that can't distinguish AI completion from user edits
+    let cleanedFinalContent = sanitizedFinalContent;
+    if (settingsRef.current?.remove_incomplete_sentences !== false) {
+      cleanedFinalContent = removeIncompleteSentences(sanitizedFinalContent);
+    }
+
     const currentVariations = currentMessage.variations?.map(sanitizeMessageContent) ||
       (originalContentForVariation ? [sanitizeMessageContent(originalContentForVariation)] :
         (currentMessage.content ? [sanitizeMessageContent(currentMessage.content)] : []));
-    const variations = [...currentVariations, sanitizedFinalContent];
+    const variations = [...currentVariations, cleanedFinalContent];
     const uniqueVariations = Array.from(new Set(variations));
     const newVariationIndex = uniqueVariations.length - 1;
 
     // Update the message with final content and variations
     messageStateHook.updateMessage(messageId, {
-      content: sanitizedFinalContent,
+      content: cleanedFinalContent,
       variations: uniqueVariations,
       currentVariation: newVariationIndex,
       status: 'complete'
@@ -246,7 +268,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     markDirty(messageStateHook.messages);
 
     // Update context window in legacy state
-    const finalContextWindow = { ...state.lastContextWindow, type: contextWindowType, finalResponse: sanitizedFinalContent, completionTime: new Date().toISOString(), totalChunks: receivedChunks };
+    const finalContextWindow = { ...state.lastContextWindow, type: contextWindowType, finalResponse: cleanedFinalContent, completionTime: new Date().toISOString(), totalChunks: receivedChunks };
     setState(prev => ({ ...prev, lastContextWindow: finalContextWindow }));
 
     streamProcessor.clearStreamTimeout();

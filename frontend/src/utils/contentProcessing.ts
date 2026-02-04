@@ -45,7 +45,9 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
   
   // If the text is empty after trimming, return it
   if (trimmedText.length === 0) {
-    console.log('[removeIncompleteSentences] Empty after trimming');
+    if (DEBUG_CONTENT_PROCESSING) {
+      console.debug('[removeIncompleteSentences] Empty after trimming');
+    }
     return trimmedText;
   }
   
@@ -53,7 +55,9 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
   // This prevents trimming valid markdown content at the end of a message
   // Allow *, **, and ) as valid endings
   const endsWithSentence = /(?:[.!?*)]+['"""'']?[)\]"'"""'\s]*|!?\[[^\]]*\]\([^)]*\)\s*)$/.test(trimmedText);
-  console.log('[removeIncompleteSentences] Already ends with sentence or markdown:', endsWithSentence);
+  if (DEBUG_CONTENT_PROCESSING) {
+    console.debug('[removeIncompleteSentences] Already ends with sentence or markdown:', endsWithSentence);
+  }
   if (endsWithSentence) {
     return trimmedText;
   }
@@ -69,13 +73,17 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
   while ((match = safeEndingsRegex.exec(trimmedText)) !== null) {
     lastIndex = match.index + match[0].length;
   }
-  
-  console.log('[removeIncompleteSentences] Last safe ending found at index:', lastIndex);
+
+  if (DEBUG_CONTENT_PROCESSING) {
+    console.debug('[removeIncompleteSentences] Last safe ending found at index:', lastIndex);
+  }
   
   // If we found a sentence ending, trim the text to that point
   if (lastIndex > 0) {
     const result = trimmedText.substring(0, lastIndex);
-    console.log('[removeIncompleteSentences] Trimmed result:', result);
+    if (DEBUG_CONTENT_PROCESSING) {
+      console.debug('[removeIncompleteSentences] Trimmed result:', result);
+    }
     return result;
   }
   
@@ -87,7 +95,9 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
     /\w$/.test(trimmedText); // Ends with a word character (not punctuation)
 
   if (isEntirelyIncomplete) {
-    console.log('[removeIncompleteSentences] Detected entire response as incomplete sentence, removing.');
+    if (DEBUG_CONTENT_PROCESSING) {
+      console.debug('[removeIncompleteSentences] Detected entire response as incomplete sentence, removing.');
+    }
     return '';
   }
 
@@ -100,12 +110,16 @@ const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
   ];
 
   if (cutoffIndicators.some(regex => regex.test(trimmedText))) {
-    console.log('[removeIncompleteSentences] Detected incomplete sentence fragment, removing.');
+    if (DEBUG_CONTENT_PROCESSING) {
+      console.debug('[removeIncompleteSentences] Detected incomplete sentence fragment, removing.');
+    }
     return '';
   }
 
   // Otherwise return the original text (might be a short answer like "Yes" or "Okay" without punctuation)
-  console.log('[removeIncompleteSentences] No sentence ending found but seems complete, returning original');
+  if (DEBUG_CONTENT_PROCESSING) {
+    console.debug('[removeIncompleteSentences] No sentence ending found but seems complete, returning original');
+  }
   return trimmedText;
 }
 

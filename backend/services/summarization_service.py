@@ -128,6 +128,18 @@ class SummarizationService:
             )
             return summary, "fallback"
 
+        # If no meaningful conversation (only room intros, no user messages), return pass-through summary
+        if not self._has_meaningful_content(messages):
+            self.logger.log_step(f"No conversation in {room_name}, creating pass-through summary")
+            summary = create_empty_room_summary(room_uuid, room_name, visited_at)
+            summary = RoomSummary(
+                **{**summary.model_dump(),
+                   'departed_at': departed_at,
+                   'message_count': message_count,
+                   'key_events': ['Passed through briefly']}
+            )
+            return summary, "passthrough"
+
         # Try LLM summarization if API config is available
         if api_config and api_config.get('url'):
             try:
@@ -377,6 +389,16 @@ class SummarizationService:
             unresolved_threads=[],
             mood_on_departure=mood
         )
+
+    def _has_meaningful_content(self, messages: List[SummarizeMessageInput]) -> bool:
+        """
+        Check if messages contain meaningful conversation content.
+
+        Returns False if messages are only room intros or system notifications
+        (i.e., no user messages present).
+        """
+        user_messages = [m for m in messages if m.role == 'user']
+        return len(user_messages) > 0
 
     def _strip_html(self, content: str) -> str:
         """Strip HTML tags from content."""

@@ -280,7 +280,12 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
     // ========================================
     // PHASE: SUMMARIZING
     // ========================================
-    if (currentRoom && worldId && currentUser?.user_uuid && messages.length > 2) {
+    // Only summarize if there's actual user conversation (not just room intros/companion follow messages)
+    const hasUserConversation = messages.some(m => m.role === 'user');
+    const shouldSummarize = currentRoom && worldId && currentUser?.user_uuid &&
+                            messages.length > 2 && hasUserConversation;
+
+    if (shouldSummarize) {
       setTransitionState(prev => ({
         ...prev,
         phase: 'summarizing',

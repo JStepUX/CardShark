@@ -35,7 +35,7 @@ import { createDefaultRelationship, updateRelationshipAffinity, resetDailyAffini
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
 import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
 import { calculateSentimentAffinity, updateSentimentHistory, resetSentimentAfterGain } from '../utils/sentimentAffinityCalculator';
-import { createDefaultTimeState, advanceTime } from '../utils/timeUtils';
+import { createDefaultTimeState, advanceTime, getTimeOfDayDescription } from '../utils/timeUtils';
 // Local Map imports for unified Play View
 import { LocalMapView, LocalMapViewHandle, soundManager } from '../components/world/pixi/local';
 import { PlayViewLayout } from '../components/world/PlayViewLayout';
@@ -2183,6 +2183,15 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     await performRoomTransition(targetRoom, false, entryDir);
   }, [worldState, worldId, performRoomTransition, activeNpcId, activeNpcName]);
 
+  // Navigate back to the World Launcher/Splash page
+  const handleBackToWorld = useCallback(() => {
+    if (worldId) {
+      navigate(`/world/${worldId}/launcher`);
+    }
+  }, [worldId, navigate]);
+
+  // NOTE: These handlers are kept for future use (e.g., travel depot, vehicle, etc.)
+  // The PixiMapModal is disconnected from the main UI but still renders if showMap is true.
   const handleOpenMap = useCallback(() => {
     setShowMap(true);
   }, []);
@@ -2190,6 +2199,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const handleCloseMap = useCallback(() => {
     setShowMap(false);
   }, []);
+
+  // Suppress unused variable warning - these will be reconnected for fast-travel feature
+  void handleOpenMap;
 
   // ============================================
   // INVENTORY HANDLERS
@@ -2432,9 +2444,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   // "Rendered more hooks than during the previous render" error
   // ==================================================
 
-  // Build time display
+  // Build time display with human-readable time of day
   const timeDisplay = timeConfig.enableDayNightCycle
-    ? `Day ${timeState.currentDay} - ${timeState.timeOfDay}`
+    ? `Day ${timeState.currentDay} - ${getTimeOfDayDescription(timeState.timeOfDay)}`
     : undefined;
 
   // Build player data for LocalMapView
@@ -2578,7 +2590,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         playerProgress={playerProgressForHUD}
         showJournalButton={true}
         onJournalClick={() => setShowJournal(true)}
-        onMapClick={handleOpenMap}
+        onBackToWorld={handleBackToWorld}
         inCombat={isInCombat}
         conversationState={{
           conversationTargetName: conversationTargetName || undefined,
@@ -2694,7 +2706,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
         }
       />
 
-      {/* World Map Modal (overlay) */}
+      {/* World Map Modal (overlay) - Currently disconnected from UI.
+          Kept for future fast-travel feature (travel depot, vehicle, etc.)
+          Navigation now happens via local map exits only. */}
       {showMap && worldState && currentRoom && (
         <PixiMapModal
           worldData={worldState}

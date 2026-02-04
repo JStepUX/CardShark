@@ -13,9 +13,7 @@ import {
 import { Message, UserProfile } from '../../types/messages';
 import RichTextEditor from '../RichTextEditor';
 import { formatUserName } from '../../utils/formatters';
-import { markdownToHtml, htmlToPlainText } from '../../utils/contentUtils';  // Import markdownToHtml and htmlToPlainText
-// removeIncompleteSentences removed
-import { useSettings } from '../../contexts/SettingsContext'; // Import the settings context hook
+import { markdownToHtml, htmlToPlainText } from '../../utils/contentUtils';
 
 interface ChatBubbleProps {
   message: Message;
@@ -62,7 +60,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   const [streamingStarted, setStreamingStarted] = useState(false);
   const hasReceivedContent = useRef(false);
   const generationStartTime = useRef<number | null>(null);
-  const { settings } = useSettings(); // Get settings from context
 
   // Fork dropdown state
   const [showForkDropdown, setShowForkDropdown] = useState(false);
@@ -76,48 +73,11 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       generationStartTime.current = null;
     }
   }, [isGenerating]);
-  // Process incomplete sentences when generation completes
+
+  // Track content changes (incomplete sentence removal is now handled in useChatMessages.setGenerationComplete)
   useEffect(() => {
-    // Only run this cleanup if:
-    // 1. Not currently generating
-    // 2. Not regenerating a greeting
-    // 3. The content has changed (to avoid loops)
-    // 4. Message status is not streaming (it's done)
-    // 5. It's an assistant message
-    // 6. Feature is enabled
-
-    // We disable this during active editing because we can't reliably distinguish between
-    // "AI finished generating" and "User is editing and paused typing".
-    // If the user edits the message, we assume they are taking control and we shouldn't
-    // interfere with their text, even if it looks incomplete.
-
-    if (!isGenerating &&
-      !isRegeneratingGreeting &&
-      previousContent.current !== message.content &&
-      message.status !== 'streaming' &&
-      message.role === 'assistant' &&
-      settings.remove_incomplete_sentences &&
-      message.content) {
-
-      // Commented out to prevent interfering with user edits.
-      // The cleanup of incomplete sentences should ideally happen only at the exact moment
-      // generation finishes, but doing it in this effect risks catching manual edits too.
-
-      /*
-      if (DEBUG_CHAT_PROCESSING) {
-        console.debug('[ChatBubble] Applying incomplete sentence removal to:', message.content);
-      }
-      const processedContent = removeIncompleteSentences(message.content);
-      if (DEBUG_CHAT_PROCESSING) {
-        console.debug('[ChatBubble] Processed content:', processedContent);
-      }
-      if (processedContent !== message.content) {
-        onContentChange(processedContent);
-      }
-      */
-    }
     previousContent.current = message.content;
-  }, [isGenerating, isRegeneratingGreeting, message.content, message.role, message.status, onContentChange, settings.remove_incomplete_sentences]);
+  }, [message.content]);
 
   // Track if component is mounted to prevent state updates after unmounting
   useEffect(() => {
@@ -237,52 +197,15 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     }
     if (characterName) {
       processedText = processedText.replace(/\{\{char\}\}/gi, characterName);
-    }    // Apply the removeIncompleteSentences feature when:
-    // 1. The message is from the assistant
-    // 2. The message is not currently generating
-    // 3. The feature is enabled in settings
-    // 4. The message status is 'complete' (not 'streaming')
-    // 5. IMPORTANT: We skip this for processed text derived from edits (handled elsewhere) or if we want to be more conservative
-    if (message.role === 'assistant' &&
-      !isGenerating &&
-      settings.remove_incomplete_sentences &&
-      message.status !== 'streaming') {
-      // Re-running this on every render can be problematic if it prunes content that was just edited.
-      // Ideally, incomplete sentence removal should only happen ONCE after generation finishes.
-      // However, processContent is called during render. 
-
-      // FIX: We should rely on the effect at lines 71-93 to update the message content permanently 
-      // rather than doing it on-the-fly here, which affects display but not the underlying message if not saved back.
-      // OR, we must ensure this doesn't fight with user edits.
-
-      // Current behavior: It modifies 'processedText' which is displayed.
-      // If the user edits the text, 'message.content' updates.
-      // Then this runs again on the NEW content. If the user just added a sentence but didn't finish it (e.g. typing), 
-      // this might visually clip it if it weren't for the fact that this is inside 'processContent'.
-      // But 'processContent' is called on render.
-
-      // If the user is editing, they are using RichTextEditor with 'htmlContent'.
-      // 'htmlContent' is initialized from 'processContent(message.content)'.
-      // When the user types, 'onChange' updates 'htmlContent' locally and calls 'onContentChange' debounced.
-      // 'onContentChange' updates the parent 'message.content'.
-      // When 'message.content' changes, 'processContent' runs again, creating a NEW 'htmlContent'.
-
-      // If 'removeIncompleteSentences' strips the end of the user's edit because they haven't typed the period yet,
-      // it will feel like the text is disappearing.
-
-      // To fix this, we should NOT apply removeIncompleteSentences inside processContent if we can avoid it,
-      // or at least be very careful.
-      // The Effect at line 71 handles the post-generation cleanup. 
-      // Doing it here as well seems redundant and dangerous for edits.
-
-      // Disabling this call here to prevent fighting with edits.
-      // processedText = removeIncompleteSentences(processedText);
     }
+
+    // Note: Incomplete sentence removal is now handled in useChatMessages.setGenerationComplete()
+    // This ensures it only runs once when generation finishes, not during user edits
 
     // Cache the result
     highlightCache.current.set(cacheKey, processedText);
     return processedText;
-  }, [currentUser, characterName, isGenerating, message.role, streamingStarted, trimLeadingNewlines, sanitizeChatOutput, settings.remove_incomplete_sentences]);  // Process the message content with variables replaced
+  }, [currentUser, characterName, isGenerating, message.role, streamingStarted, trimLeadingNewlines, sanitizeChatOutput]);  // Process the message content with variables replaced
   useEffect(() => {
     const processedContent = processContent(message.content);
 

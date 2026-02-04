@@ -17,6 +17,7 @@
  * - Modal management
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { getTimeOfDayDescription } from '../utils/timeUtils';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { useCharacter } from '../contexts/CharacterContext';
@@ -324,6 +325,15 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
     navigate(-1);
   }, [navigate]);
 
+  // Navigate back to the World Launcher/Splash page
+  const handleBackToWorld = useCallback(() => {
+    if (worldId) {
+      navigate(`/world/${worldId}/launcher`);
+    }
+  }, [worldId, navigate]);
+
+  // NOTE: These handlers are kept for future use (e.g., travel depot, vehicle, etc.)
+  // The PixiMapModal is disconnected from the main UI but still renders if showMap is true.
   const handleOpenMap = useCallback(() => {
     if (!isInCombat) setShowMap(true);
   }, [isInCombat]);
@@ -331,6 +341,9 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
   const handleCloseMap = useCallback(() => {
     setShowMap(false);
   }, []);
+
+  // Suppress unused variable warning - these will be reconnected for fast-travel feature
+  void handleOpenMap;
 
   const handleNavigate = useCallback(async (targetRoomId: string, entryDir?: ExitDirection | null) => {
     if (!worldState) return;
@@ -465,7 +478,7 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
   // ==========================================================================
 
   const timeDisplay = timeConfig.enableDayNightCycle
-    ? `Day ${timeState.currentDay} - ${timeState.timeOfDay}`
+    ? `Day ${timeState.currentDay} - ${getTimeOfDayDescription(timeState.timeOfDay)}`
     : undefined;
 
   const playerImagePath = currentUser?.filename
@@ -585,7 +598,7 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
         playerProgress={playerProgressForHUD}
         showJournalButton={true}
         onJournalClick={() => setShowJournal(true)}
-        onMapClick={handleOpenMap}
+        onBackToWorld={handleBackToWorld}
         inCombat={isInCombat}
         conversationState={{
           conversationTargetName: conversationTargetName || undefined,
@@ -686,6 +699,9 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
         }
       />
 
+      {/* World Map Modal (overlay) - Currently disconnected from UI.
+          Kept for future fast-travel feature (travel depot, vehicle, etc.)
+          Navigation now happens via local map exits only. */}
       {showMap && worldState && currentRoom && (
         <PixiMapModal
           worldData={worldState}
