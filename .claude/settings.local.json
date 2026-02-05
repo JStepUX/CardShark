@@ -50,7 +50,8 @@
       "Bash(pytest:*)",
       "Bash(npm ls:*)",
       "Bash(grep:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\world\\\\PartyGatherModal.tsx\")"
     ]
   }
 }

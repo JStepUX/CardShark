@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Plus, Trash2, Sparkles } from 'lucide-react'; // Icons
 import { useCharacter } from '../contexts/CharacterContext'; // Character data context
+import { useComparison } from '../contexts/ComparisonContext'; // Comparison context for secondary character
 import { useAPIConfig } from '../contexts/APIConfigContext'; // API configuration context
 import RichTextEditor from './RichTextEditor'; // Import the RichTextEditor
 import { ChatStorage } from '../services/chatStorage'; // Service to call backend
@@ -56,10 +57,22 @@ const MessageCard: React.FC<{
 ));
 MessageCard.displayName = 'MessageCard'; // For React DevTools
 
+// Props interface for MessagesView
+interface MessagesViewProps {
+  isSecondary?: boolean; // When true, use comparison context instead of primary
+}
+
 // --- Main MessagesView Component ---
-const MessagesView: React.FC = () => {
-  const { characterData, setCharacterData } = useCharacter();
+const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
+  // Get both contexts
+  const primaryContext = useCharacter();
+  const { secondaryCharacterData, setSecondaryCharacterData } = useComparison();
   const { apiConfig } = useAPIConfig(); // Get API config for generation
+
+  // Select the appropriate character data based on isSecondary prop
+  const { characterData, setCharacterData } = isSecondary
+    ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
+    : primaryContext;
 
   // Local state for managing the list of messages shown in the UI
   const [messages, setMessages] = useState<Message[]>([]);
@@ -119,7 +132,7 @@ const MessagesView: React.FC = () => {
     // Set mount flag after initial load is complete
     requestAnimationFrame(() => { isMounted.current = true; });
 
-  }, [characterData?.data?.name]); // Rerun when character name changes (good proxy for character change)
+  }, [characterData?.data?.name, isSecondary]); // Rerun when character name changes or panel mode switches
 
   // --- Message Management Handlers ---
 

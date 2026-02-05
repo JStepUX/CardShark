@@ -687,7 +687,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             <div className="h-8" /> {/* Bottom spacing */}
 
             {/* Render the MessagesView component for greeting management */}
-            <MessagesView />
+            <MessagesView isSecondary={isSecondary} />
           </div>
         </div>
       </div>

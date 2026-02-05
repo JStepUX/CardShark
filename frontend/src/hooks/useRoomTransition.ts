@@ -646,8 +646,7 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       return;
     }
 
-    // If bonded ally, defer to caller for party gather modal
-    // Otherwise, transition directly
+    // Automatically bring bonded ally along if present
     await performRoomTransition(foundRoom, !!activeNpcId, entryDir);
   }, [worldState, activeNpcId, performRoomTransition]);
 

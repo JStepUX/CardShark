@@ -12,7 +12,6 @@ import { useAPIConfig } from '../contexts/APIConfigContext';
 import { useOptionalSideNav } from '../contexts/SideNavContext';
 import ChatView from '../components/chat/ChatView';
 import { JournalModal } from '../components/SidePanel/JournalModal';
-import { PartyGatherModal } from '../components/world/PartyGatherModal';
 import { PixiMapModal } from '../components/world/pixi/PixiMapModal';
 import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
@@ -136,7 +135,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   const [currentRoom, setCurrentRoom] = useState<GridRoom | null>(null);
   const [roomNpcs, setRoomNpcs] = useState<CombatDisplayNPC[]>([]);
   const [activeNpcId, setActiveNpcId] = useState<string | undefined>(); // BONDED ally ID (follows player, full context)
-  const [activeNpcName, setActiveNpcName] = useState<string>(''); // Bonded ally name for PartyGatherModal display
+  const [activeNpcName, setActiveNpcName] = useState<string>(''); // Bonded ally display name
   const [activeNpcCard, setActiveNpcCard] = useState<CharacterCard | null>(null); // Bonded ally's full character card
 
   // Conversation target state (separate from bonded ally)
@@ -147,9 +146,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
   const [showMap, setShowMap] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
-  const [showPartyGatherModal, setShowPartyGatherModal] = useState(false);
-  const [pendingDestination, setPendingDestination] = useState<GridRoom | null>(null);
-  const [pendingEntryDirection, setPendingEntryDirection] = useState<ExitDirection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [missingRoomCount, setMissingRoomCount] = useState(0);
@@ -2178,16 +2174,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
 
     const targetRoom = foundRoom;
 
-    // Check if we have an active NPC - if so, show Party Gather modal
-    if (activeNpcId && activeNpcName) {
-      setPendingDestination(targetRoom);
-      setPendingEntryDirection(entryDir); // Store entry direction for modal flow
-      setShowPartyGatherModal(true);
-      return; // Don't navigate immediately, wait for user choice
-    }
-
-    // No active NPC - navigate immediately with entry direction
-    await performRoomTransition(targetRoom, false, entryDir);
+    // Navigate immediately - bring bonded ally along automatically if present
+    const keepAlly = !!(activeNpcId && activeNpcName);
+    await performRoomTransition(targetRoom, keepAlly, entryDir);
   }, [worldState, worldId, performRoomTransition, activeNpcId, activeNpcName]);
 
   // Navigate back to the World Launcher/Splash page
@@ -2387,52 +2376,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   // Callback to capture LocalMapState from LocalMapView
   const handleLocalMapStateChange = useCallback((mapState: LocalMapState) => {
     setLocalMapStateCache(mapState);
-  }, []);
-
-  // Party Gather Modal Handlers
-  const handleBringNpcAlong = useCallback(async () => {
-    if (!pendingDestination) return;
-
-    setShowPartyGatherModal(false);
-    // Pass the stored entry direction so player spawns at correct edge
-    await performRoomTransition(pendingDestination, true, pendingEntryDirection); // keepActiveNpc = true
-    setPendingDestination(null);
-    setPendingEntryDirection(null);
-  }, [pendingDestination, pendingEntryDirection, performRoomTransition]);
-
-  const handleLeaveNpcHere = useCallback(async () => {
-    if (!pendingDestination) return;
-
-    setShowPartyGatherModal(false);
-    // Add farewell message before transition
-    // NOTE: Do NOT clear activeNpcId here - performRoomTransition will handle it
-    // with keepActiveNpc=false. Clearing it prematurely causes the companion sprite
-    // to vanish from the local map before the room transition happens.
-    if (activeNpcName) {
-      const farewellMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: `*${activeNpcName} stays behind*`,
-        timestamp: Date.now(),
-        metadata: {
-          type: 'npc_farewell',
-          npcId: activeNpcId
-        }
-      };
-      addMessage(farewellMessage);
-    }
-
-    // performRoomTransition with keepActiveNpc=false will clear the active NPC state
-    // Pass the stored entry direction so player spawns at correct edge
-    await performRoomTransition(pendingDestination, false, pendingEntryDirection);
-    setPendingDestination(null);
-    setPendingEntryDirection(null);
-  }, [pendingDestination, pendingEntryDirection, activeNpcName, activeNpcId, addMessage, performRoomTransition]);
-
-  const handleClosePartyGatherModal = useCallback(() => {
-    setShowPartyGatherModal(false);
-    setPendingDestination(null);
-    setPendingEntryDirection(null);
   }, []);
 
   const handleBack = useCallback(() => {
@@ -2722,17 +2665,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           currentRoomId={currentRoom.id}
           onNavigate={handleNavigate}
           onClose={handleCloseMap}
-        />
-      )}
-
-      {/* Party Gather Modal */}
-      {showPartyGatherModal && pendingDestination && (
-        <PartyGatherModal
-          npcName={activeNpcName}
-          destinationRoomName={pendingDestination.name}
-          onBringAlong={handleBringNpcAlong}
-          onLeaveHere={handleLeaveNpcHere}
-          onClose={handleClosePartyGatherModal}
         />
       )}
 

@@ -24,7 +24,6 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import ChatView from '../components/chat/ChatView';
 import { JournalModal } from '../components/SidePanel/JournalModal';
-import { PartyGatherModal } from '../components/world/PartyGatherModal';
 import { PixiMapModal } from '../components/world/pixi/PixiMapModal';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
@@ -243,9 +242,6 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
 
   const [showMap, setShowMap] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
-  const [showPartyGatherModal, setShowPartyGatherModal] = useState(false);
-  const [pendingDestination, setPendingDestination] = useState<GridRoom | null>(null);
-  const [pendingEntryDirection, setPendingEntryDirection] = useState<ExitDirection | null>(null);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [inventoryTarget, setInventoryTarget] = useState<'player' | 'ally'>('player');
   const [localMapStateCache, setLocalMapStateCache] = useState<LocalMapState | null>(null);
@@ -361,62 +357,11 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
 
     if (!foundRoom) return;
 
-    // If bonded ally, show party gather modal
-    if (activeNpcId && activeNpcName) {
-      setPendingDestination(foundRoom);
-      setPendingEntryDirection(entryDir || null);
-      setShowPartyGatherModal(true);
-      setShowMap(false);
-      return;
-    }
-
     setShowMap(false);
-    await performRoomTransition(foundRoom, false, entryDir);
+    // Navigate immediately - bring bonded ally along automatically if present
+    const keepAlly = !!(activeNpcId && activeNpcName);
+    await performRoomTransition(foundRoom, keepAlly, entryDir);
   }, [worldState, activeNpcId, activeNpcName, performRoomTransition]);
-
-  const handleBringNpcAlong = useCallback(async () => {
-    if (!pendingDestination) return;
-    setShowPartyGatherModal(false);
-
-    if (activeNpcName) {
-      addMessage({
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: `*${activeNpcName} follows you into ${pendingDestination.name}*`,
-        timestamp: Date.now(),
-        metadata: { type: 'npc_follows', npcId: activeNpcId }
-      });
-    }
-
-    await performRoomTransition(pendingDestination, true, pendingEntryDirection);
-    setPendingDestination(null);
-    setPendingEntryDirection(null);
-  }, [pendingDestination, pendingEntryDirection, activeNpcName, activeNpcId, addMessage, performRoomTransition]);
-
-  const handleLeaveNpcHere = useCallback(async () => {
-    if (!pendingDestination) return;
-    setShowPartyGatherModal(false);
-
-    if (activeNpcName) {
-      addMessage({
-        id: crypto.randomUUID(),
-        role: 'assistant' as const,
-        content: `*${activeNpcName} stays behind*`,
-        timestamp: Date.now(),
-        metadata: { type: 'npc_stays', npcId: activeNpcId }
-      });
-    }
-
-    await performRoomTransition(pendingDestination, false, pendingEntryDirection);
-    setPendingDestination(null);
-    setPendingEntryDirection(null);
-  }, [pendingDestination, pendingEntryDirection, activeNpcName, activeNpcId, addMessage, performRoomTransition]);
-
-  const handleClosePartyGatherModal = useCallback(() => {
-    setShowPartyGatherModal(false);
-    setPendingDestination(null);
-    setPendingEntryDirection(null);
-  }, []);
 
   const handleLocalMapTileClick = useCallback(() => {
     // Non-combat tile clicks can be handled here
@@ -708,16 +653,6 @@ export function WorldPlayViewRefactored({ worldId: propWorldId }: WorldPlayViewP
           currentRoomId={currentRoom.id}
           onNavigate={handleNavigate}
           onClose={handleCloseMap}
-        />
-      )}
-
-      {showPartyGatherModal && pendingDestination && (
-        <PartyGatherModal
-          npcName={activeNpcName}
-          destinationRoomName={pendingDestination.name}
-          onBringAlong={handleBringNpcAlong}
-          onLeaveHere={handleLeaveNpcHere}
-          onClose={handleClosePartyGatherModal}
         />
       )}
 
