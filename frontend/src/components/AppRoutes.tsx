@@ -13,6 +13,7 @@ import { CharacterProvider } from '../contexts/CharacterContext';
 import { ChatProvider } from '../contexts/ChatContext';
 import { ImageHandlerProvider } from '../contexts/ImageHandlerContext';
 import { KoboldCPPProvider } from '../hooks/useKoboldCPP';
+import { SideNavProvider } from '../contexts/SideNavContext';
 import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
 
 // Lazily load route components
@@ -47,8 +48,9 @@ const AppRoutes: React.FC = () => (
       <APIConfigProvider>
         <TemplateProvider>
           <CharacterProvider>
-            <KoboldCPPProvider pollInterval={120000}>
-              <Routes>
+            <SideNavProvider>
+              <KoboldCPPProvider pollInterval={120000}>
+                <Routes>
                 <Route path="/" element={<Layout />}>
                   {/* Default view redirects to gallery */}
                   <Route index element={<Navigate to="/gallery" replace />} />
@@ -144,7 +146,8 @@ const AppRoutes: React.FC = () => (
                   <Route path="*" element={<Navigate to="/gallery" replace />} />
                 </Route>
               </Routes>
-            </KoboldCPPProvider>
+              </KoboldCPPProvider>
+            </SideNavProvider>
           </CharacterProvider>
         </TemplateProvider>
       </APIConfigProvider>

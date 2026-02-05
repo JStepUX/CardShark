@@ -601,8 +601,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               // Room cards navigate to Room Editor
               navigate(`/room/${character.character_uuid}/edit`);
             } else if (isWorldCard && character.character_uuid) {
-              // World cards navigate to World Play view
-              navigate(`/world/${character.character_uuid}/play`);
+              // World cards navigate to World Launcher (splash screen)
+              navigate(`/world/${character.character_uuid}/launcher`);
             } else if (character.is_incomplete) {
               // Incomplete characters go to info/setup
               navigate('/info');
@@ -625,7 +625,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // Handle character selection (Main Click)
   const handleCharacterClick = (character: CharacterFile) => {
     // Routing is now handled intelligently in selectCharacter:
-    // - World Cards -> /world/{uuid}/play (WorldPlayView with SidePanel in world mode)
+    // - World Cards -> /world/{uuid}/launcher (Splash screen)
     // - Regular Characters -> /chat (ChatView)
     selectCharacter(character);
   };
@@ -635,12 +635,11 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     event.stopPropagation();
 
     // Logic:
-    // World Card -> Launcher (Splash) - Load data first, then navigate
+    // World Card -> World Builder (edit view)
     // Character -> Info View
     if (character.extensions?.card_type === 'world' && character.character_uuid) {
-      // Load character data into context before navigating to launcher
-      // This ensures the World Launcher has access to the card metadata
-      await selectCharacter(character, `/world/${character.character_uuid}/launcher`, true);
+      // Load character data into context before navigating to builder
+      await selectCharacter(character, `/world/${character.character_uuid}/builder`, true);
     } else {
       selectCharacter(character, '/info', true);
     }
@@ -965,7 +964,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                      opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600
                      focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-stone-800`}
           aria-label={`Info for ${character.name}`}
-          title={isWorld ? "World Splash Screen" : isRoom ? "Room Editor" : "Basic Info & Greetings"}
+          title={isWorld ? "World Builder" : isRoom ? "Room Editor" : "Basic Info & Greetings"}
         >
           <Info size={16} />
         </button>

@@ -37,10 +37,10 @@ import { useSettings } from '../../../../contexts/SettingsContext';
 // Debug logging flag - set to true for development debugging
 const DEBUG = false;
 
-// Default configuration - increased for better visibility
+// Default configuration - 9x9 square grid with center point at (4,4)
 const DEFAULT_CONFIG: LocalMapConfig = {
-    gridWidth: 5,
-    gridHeight: 8,
+    gridWidth: 9,
+    gridHeight: 9,
     tileSize: 124,
 };
 

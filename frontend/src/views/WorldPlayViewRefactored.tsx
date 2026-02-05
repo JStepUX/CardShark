@@ -62,8 +62,8 @@ import { createDefaultInventory } from '../types/inventory';
 // =============================================================================
 
 const LOCAL_MAP_CONFIG: LocalMapConfig = {
-  gridWidth: 5,
-  gridHeight: 8,
+  gridWidth: 9,
+  gridHeight: 9,
   tileSize: 100,
 };
 

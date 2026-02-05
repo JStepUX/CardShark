@@ -309,7 +309,7 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
 
         const summarizationPromise = adventureLogApi.summarizeRoom({
           worldUuid: worldId,
-          userUuid: currentUser.user_uuid,
+          userUuid: currentUser.user_uuid!, // Checked in shouldSummarize condition
           roomUuid: currentRoom.id,
           roomName: currentRoom.name,
           visitedAt,

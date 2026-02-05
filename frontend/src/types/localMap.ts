@@ -235,8 +235,8 @@ export interface LayoutExit {
  */
 export interface RoomLayoutData {
     gridSize: {
-        cols: number;  // Default: 5 (matching LocalMapStage)
-        rows: number;  // Default: 8 (matching LocalMapStage)
+        cols: number;  // Default: 9 (matching LocalMapStage)
+        rows: number;  // Default: 9 (matching LocalMapStage)
     };
     spawns: SpawnPoint[];
     deadZones: Zone[];
@@ -248,8 +248,8 @@ export interface RoomLayoutData {
  * Default grid size matching LocalMapStage gameplay dimensions
  */
 export const DEFAULT_LAYOUT_GRID_SIZE = {
-    cols: 5,
-    rows: 8,
+    cols: 9,
+    rows: 9,
 };
 
 /**

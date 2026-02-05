@@ -9,6 +9,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
+import { useOptionalSideNav } from '../contexts/SideNavContext';
 import ChatView from '../components/chat/ChatView';
 import { JournalModal } from '../components/SidePanel/JournalModal';
 import { PartyGatherModal } from '../components/world/PartyGatherModal';
@@ -73,10 +74,10 @@ import type { SummarizeMessage, SummarizeNPC, AdventureContext } from '../types/
 import { mergeAdventureLogWithNotes } from '../utils/adventureLogContext';
 import { isValidThinFrame } from '../types/schema';
 
-// Local map config (must match LocalMapView defaults)
+// Local map config (must match LocalMapView defaults) - 9x9 square grid
 const LOCAL_MAP_CONFIG: LocalMapConfig = {
-  gridWidth: 5,
-  gridHeight: 8,
+  gridWidth: 9,
+  gridHeight: 9,
   tileSize: 100,
 };
 
@@ -116,6 +117,12 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   } = useChat();
   const { characterData } = useCharacter();
   const { apiConfig } = useAPIConfig();
+  const sideNav = useOptionalSideNav();
+
+  // Collapse side navigation when entering world play for more map space
+  useEffect(() => {
+    sideNav?.collapse();
+  }, [sideNav]);
 
   const worldId = propWorldId || uuid || '';
 

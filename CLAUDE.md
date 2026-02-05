@@ -184,7 +184,7 @@ Worlds and rooms are stored as PNG cards (V2 Character Card format with extensio
 
 ### Grid Combat System
 
-Tile-based tactical combat replacing the older slot-based system. Combat takes place on the local map (5x8 grid).
+Tile-based tactical combat replacing the older slot-based system. Combat takes place on the local map (9x9 grid with center at 4,4).
 
 **Architecture:**
 - **Engine:** `gridCombatEngine.ts` - Pure reducer: `gridCombatReducer(state, action) => { state, events }`
@@ -208,7 +208,7 @@ Tile-based tactical combat replacing the older slot-based system. Combat takes p
 
 PixiJS-rendered tile grid for room-level exploration and combat.
 
-- **Grid:** 5 columns x 8 rows, each tile has terrain type, traversability, highlights
+- **Grid:** 9 columns x 9 rows (square with center at 4,4), each tile has terrain type, traversability, highlights
 - **Entities:** Player, NPCs, allies rendered as portrait card sprites with allegiance-colored frames
 - **Exits:** Edge tiles with directional arrows for room transitions
 - **Pathfinding:** A* algorithm in `pathfinding.ts` with terrain cost support
@@ -224,7 +224,7 @@ World Builder tool for configuring spatial elements within rooms, accessed via t
 **Data Model (`RoomLayoutData`):**
 ```typescript
 interface RoomLayoutData {
-  gridSize: { cols: number; rows: number };  // Matches local map grid (5x8)
+  gridSize: { cols: number; rows: number };  // Matches local map grid (9x9)
   spawns: SpawnPoint[];                       // NPC initial positions
   deadZones: Zone[];                          // Water, walls, hazards, no-spawn areas
 }

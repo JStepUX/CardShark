@@ -31,9 +31,9 @@ import { LocalMapTile } from './LocalMapTile';
 import { EntityCardSprite } from './EntityCardSprite';
 import { CombatParticleSystem, EFFECT_COLORS, PROJECTILE_PRESETS } from './CombatParticleSystem';
 
-// Default grid configuration (5x8 portrait for side-by-side layout)
-const DEFAULT_GRID_WIDTH = 5;
-const DEFAULT_GRID_HEIGHT = 8;
+// Default grid configuration (9x9 square with true center point at 4,4)
+const DEFAULT_GRID_WIDTH = 9;
+const DEFAULT_GRID_HEIGHT = 9;
 const DEFAULT_TILE_SIZE = 80;
 const TILE_GAP = 2;
 

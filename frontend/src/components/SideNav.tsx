@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom'; // Import NavLink and useNavigate
 import {
   ImagePlus,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useOptionalChat } from '../hooks/useOptionalProviders';
 import { useCharacter } from '../contexts/CharacterContext';
+import { useSideNav } from '../contexts/SideNavContext';
 import DropdownMenu from './DropDownMenu';
 import SelectedCharacterChip from './SelectedCharacterChip';
 import usePrefetchRoute from '../hooks/usePrefetchRoute';
@@ -65,7 +66,7 @@ const SideNav: React.FC<SideNavProps> = ({
   const { characterData, imageUrl: characterImageUrl, setCharacterData, setImageUrl, handleImageChange } = useCharacter();
   const chatContext = useOptionalChat();
   const navigate = useNavigate();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isCollapsed, toggle: toggleCollapsed } = useSideNav();
 
   // Get available preview images for the chip display
   const availablePreviewImages = chatContext?.availablePreviewImages;
@@ -82,7 +83,7 @@ const SideNav: React.FC<SideNavProps> = ({
 
   // Handle collapse/expand - smooth transition relies on CSS w-80/w-20 updates
   const handleToggle = () => {
-    setIsCollapsed(!isCollapsed);
+    toggleCollapsed();
   };
 
   return (
