@@ -272,6 +272,14 @@ def main():
     clean_pycache(backend_dir)
     print("Cache cleaning complete.")
 
+    # Update gallery manifest
+    print("Updating gallery manifest...")
+    try:
+        from build import discover_gallery_images
+        discover_gallery_images()
+    except Exception as e:
+        print(f"Failed to update gallery manifest: {e}")
+
     # Check and launch KoboldCPP using the new manager
     try:
         # Add the backend directory to Python path for imports
