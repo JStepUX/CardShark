@@ -259,7 +259,13 @@ export type CombatEventType =
   | 'ally_revived'     // Incapacitated ally revived after victory
   | 'player_revived'   // Player revived by ally after they carried the fight
   | 'combat_victory'
-  | 'combat_defeat';
+  | 'combat_defeat'
+  | 'item_used'        // Consumable item used (heal/buff)
+  | 'aoe_resolved'     // AoE attack resolved (bomb/magic)
+  | 'buff_applied'     // Buff applied to combatant
+  | 'buff_expired'     // Buff expired at start of turn
+  | 'cleave_triggered' // Cleave triggered on kill (heavy melee)
+  | 'loot_dropped';    // Item dropped from defeated enemy
 
 export interface CombatEvent {
   type: CombatEventType;
@@ -362,7 +368,7 @@ export interface CombatState {
     rewards?: {
       xp: number;
       gold: number;
-      items: string[];
+      items: InventoryItem[];
     };
     survivingAllies: string[];
     defeatedEnemies: string[];
@@ -405,6 +411,8 @@ export interface CombatInitData {
 // =============================================================================
 
 import { TilePosition } from './localMap';
+import type { ActiveBuffs, InventoryItem, WeaponSubtype } from './inventory';
+import { createEmptyBuffs } from './inventory';
 
 /**
  * Extended combatant with grid position for local map combat.
@@ -421,18 +429,34 @@ export interface GridCombatant extends Combatant {
   threatRange: number;
   /** Facing direction for backstab/flanking visuals */
   facing?: 'north' | 'south' | 'east' | 'west';
+
+  // --- V2 Extended Fields ---
+  /** Active temporary buffs (attack/damage/defense bonuses with turn counters) */
+  activeBuffs: ActiveBuffs;
+  /** Equipped weapon reference (determines AP cost, endsTurn, special behavior) */
+  equippedWeapon: InventoryItem | null;
+  /** Weapon subtype for quick access (derived from equippedWeapon) */
+  weaponSubtype: WeaponSubtype | undefined;
+  /** Number of light attacks performed this turn (cap: MAX_LIGHT_ATTACKS_PER_TURN) */
+  lightAttacksThisTurn: number;
+  /** Crossbow reload state: true = next shot is a reload shot (costs 2 AP) */
+  needsReload: boolean;
+  /** Inventory items available in combat (consumables only) */
+  combatItems: InventoryItem[];
 }
 
 /**
  * Grid-based combat actions
  */
 export type GridActionType =
-  | 'grid_move'       // Move along a path
-  | 'grid_attack'     // Attack a target at range
-  | 'grid_defend'     // Defend (reduces incoming damage)
-  | 'grid_overwatch'  // Watch an area, attack enemies entering
-  | 'grid_flee'       // Attempt to flee combat
-  | 'grid_end_turn';  // End turn early
+  | 'grid_move'        // Move along a path
+  | 'grid_attack'      // Attack a target at range
+  | 'grid_defend'      // Defend (reduces incoming damage)
+  | 'grid_overwatch'   // Watch an area, attack enemies entering
+  | 'grid_flee'        // Attempt to flee combat
+  | 'grid_end_turn'    // End turn early
+  | 'grid_use_item'    // Use a consumable item (2 AP, does NOT end turn)
+  | 'grid_aoe_attack'; // AoE attack on a tile (3 AP, ends turn)
 
 export interface GridMoveAction {
   type: 'grid_move';
@@ -468,13 +492,31 @@ export interface GridFleeAction {
   actorId: string;
 }
 
+/** Use a consumable item (med/buff) on self or adjacent ally */
+export interface GridUseItemAction {
+  type: 'grid_use_item';
+  actorId: string;
+  itemId: string;
+  targetId?: string;  // Self or adjacent ally (defaults to self in engine)
+}
+
+/** AoE attack targeting a tile (bomb or magic AoE weapon) */
+export interface GridAoEAttackAction {
+  type: 'grid_aoe_attack';
+  actorId: string;
+  targetPosition: TilePosition;
+  itemId?: string;  // Bomb item ID (for consumable bombs)
+}
+
 export type GridCombatAction =
   | GridMoveAction
   | GridAttackAction
   | GridDefendAction
   | GridOverwatchAction
   | GridFleeAction
-  | GridEndTurnAction;
+  | GridEndTurnAction
+  | GridUseItemAction
+  | GridAoEAttackAction;
 
 /**
  * Grid combat state extends base combat state with map integration
@@ -520,7 +562,7 @@ export interface GridCombatState {
     rewards?: {
       xp: number;
       gold: number;
-      items: string[];
+      items: InventoryItem[];
     };
     survivingAllies: string[];
     defeatedEnemies: string[];
@@ -569,6 +611,10 @@ export function deriveGridCombatStats(
 
 /**
  * Create a grid combatant from NPC/player data.
+ *
+ * @param equippedWeapon - Weapon item (determines subtype, AP cost, special behavior).
+ *   Pass null for unarmed / enemies using stat-derived weapon type.
+ * @param combatItems - Consumable items available in combat (meds, buffs).
  */
 export function createGridCombatant(
   id: string,
@@ -578,7 +624,9 @@ export function createGridCombatant(
   isPlayerControlled: boolean,
   isPlayer: boolean,
   position: TilePosition,
-  weaponType: 'melee' | 'ranged' = 'melee'
+  weaponType: 'melee' | 'ranged' = 'melee',
+  equippedWeapon: InventoryItem | null = null,
+  combatItems: InventoryItem[] = []
 ): GridCombatant {
   const stats = deriveGridCombatStats(level, weaponType);
 
@@ -597,7 +645,7 @@ export function createGridCombatant(
     armor: stats.armor,
     weaponType: stats.weaponType,
     slotPosition: 0, // Legacy field, not used in grid combat
-    apRemaining: 2,  // Grid combat uses 2 AP per turn
+    apRemaining: getAPForLevel(level),
     isDefending: false,
     isOverwatching: false,
     hasAimedShot: false,
@@ -609,10 +657,36 @@ export function createGridCombatant(
     // Grid-specific
     position,
     movementRange: stats.movementRange,
-    attackRange: stats.attackRange,
+    attackRange: equippedWeapon?.attackRange ?? stats.attackRange,
     threatRange: stats.threatRange,
-    facing: 'south', // Default facing
+    facing: 'south',
+    // V2 Extended Fields
+    activeBuffs: createEmptyBuffs(),
+    equippedWeapon,
+    weaponSubtype: equippedWeapon?.subtype,
+    lightAttacksThisTurn: 0,
+    needsReload: false,
+    combatItems,
   };
+}
+
+/**
+ * Calculate AP for a given level.
+ * Base AP: 2, scaling: +1 per 10 levels.
+ *
+ * | Level | AP |
+ * |-------|----|
+ * | 1-9   | 2  |
+ * | 10-19 | 3  |
+ * | 20-29 | 4  |
+ * | 30-39 | 5  |
+ * | 40-49 | 6  |
+ * | 50-59 | 7  |
+ * | 60    | 8  |
+ */
+export function getAPForLevel(level: number): number {
+  const clamped = Math.max(1, Math.min(60, level));
+  return 2 + Math.floor(clamped / 10);
 }
 
 /**
@@ -620,8 +694,14 @@ export function createGridCombatant(
  */
 export const GRID_AP_COSTS = {
   move: 1,           // Per tile moved
-  attack: 2,         // Basic attack
+  attack: 2,         // Basic attack (heavy/gun/magic direct)
+  lightAttack: 1,    // Light weapon attack (melee/ranged)
   defend: 1,         // Enter defend stance
   overwatch: 2,      // Set up overwatch
-  aimedShot: 3,      // Careful aimed shot (ranged only)
+  aimedShot: 3,      // Careful aimed shot (ranged heavy only)
+  aoeAttack: 3,      // AoE attack (bomb/magic AoE)
+  useItem: 2,        // Use consumable item
 } as const;
+
+/** Maximum light attacks per turn (regardless of available AP) */
+export const MAX_LIGHT_ATTACKS_PER_TURN = 2;

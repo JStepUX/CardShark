@@ -23,10 +23,11 @@ import {
     GridCombatState,
     CombatPhase,
     createGridCombatant,
+    getAPForLevel,
 } from '../../types/combat';
 import { toCombatAllegiance, CombatAllegiance } from '../../utils/gridCombatUtils';
-import type { CharacterInventory } from '../../types/inventory';
-import { getEquippedWeaponType, getEquippedWeaponDamage } from '../../types/inventory';
+import type { CharacterInventory, InventoryItem } from '../../types/inventory';
+import { getEquippedWeaponType, getEquippedWeaponDamage, getWeaponAttackRange, isUsableInCombat, isBombItem } from '../../types/inventory';
 
 // =============================================================================
 // Types
@@ -109,11 +110,19 @@ export function entityToCombatant(
     // Determine weapon type from inventory if available, otherwise use heuristic
     let weaponType: 'melee' | 'ranged';
     let bonusDamage = 0;
+    let equippedWeapon: InventoryItem | null = null;
+    let combatItems: InventoryItem[] = [];
 
     if (inventory) {
         // Use equipped weapon from inventory
         weaponType = getEquippedWeaponType(inventory);
         bonusDamage = getEquippedWeaponDamage(inventory);
+        equippedWeapon = inventory.equippedWeapon;
+
+        // Gather usable combat items (meds, buffs, bombs)
+        combatItems = inventory.items.filter(
+            item => isUsableInCombat(item) || isBombItem(item)
+        );
     } else {
         // Fallback: higher level enemies more likely to be ranged
         weaponType = entity.level > 20 && Math.random() > 0.7 ? 'ranged' : 'melee';
@@ -128,15 +137,22 @@ export function entityToCombatant(
         entity.name,
         entity.level,
         entity.imagePath,
-        isOnPlayerTeam, // isPlayerControlled = on player's team
+        isOnPlayerTeam,
         isPlayer,
         entity.position,
-        weaponType
+        weaponType,
+        equippedWeapon,
+        combatItems
     );
 
     // Apply bonus damage from equipped weapon
     if (bonusDamage > 0) {
         combatant.damage += bonusDamage;
+    }
+
+    // Override attack range from weapon if available
+    if (equippedWeapon) {
+        combatant.attackRange = getWeaponAttackRange(equippedWeapon, entity.level);
     }
 
     return combatant;
@@ -507,7 +523,7 @@ export function advanceTurn(state: GridCombatState): GridCombatState {
             ...state.combatants,
             [nextCombatantId]: {
                 ...nextCombatant,
-                apRemaining: 4, // Reset AP
+                apRemaining: getAPForLevel(nextCombatant.level),
                 isDefending: false, // Clear defend at turn start
             },
         } : state.combatants,

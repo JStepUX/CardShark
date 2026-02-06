@@ -17,7 +17,7 @@ import { TilePosition } from '../../types/localMap';
 // Types
 // =============================================================================
 
-export type AnimationType = 'move' | 'attack' | 'damage' | 'heal' | 'death' | 'defend';
+export type AnimationType = 'move' | 'attack' | 'damage' | 'heal' | 'death' | 'defend' | 'aoe_blast' | 'buff_apply';
 
 export interface CombatAnimation {
     id: string;
@@ -33,7 +33,9 @@ export type AnimationData =
     | AttackAnimationData
     | DamageAnimationData
     | DeathAnimationData
-    | DefendAnimationData;
+    | DefendAnimationData
+    | AoEBlastAnimationData
+    | BuffApplyAnimationData;
 
 export interface MoveAnimationData {
     type: 'move';
@@ -62,6 +64,24 @@ export interface DeathAnimationData {
 export interface DefendAnimationData {
     type: 'defend';
     position: TilePosition;
+}
+
+export interface AoEBlastAnimationData {
+    type: 'aoe_blast';
+    /** Center of the blast */
+    centerPosition: TilePosition;
+    /** All affected tile positions */
+    affectedTiles: TilePosition[];
+    /** Whether this is a bomb (fire) or magic (arcane) blast */
+    blastStyle: 'fire' | 'arcane';
+}
+
+export interface BuffApplyAnimationData {
+    type: 'buff_apply';
+    /** Position of the buffed entity */
+    position: TilePosition;
+    /** Type of buff applied */
+    buffType: 'attack' | 'damage' | 'defense';
 }
 
 // =============================================================================
@@ -176,6 +196,8 @@ export const ANIMATION_DURATIONS = {
     damage: 400,        // Damage number float
     death: 600,         // Death fade
     defend: 200,        // Shield raise
+    aoeBlast: 500,      // AoE blast expansion
+    buffApply: 350,     // Buff application glow
 } as const;
 
 // =============================================================================
@@ -285,6 +307,61 @@ export function createDefendAnimation(
             position,
         },
         duration: ANIMATION_DURATIONS.defend,
+        startTime: 0,
+    };
+}
+
+/**
+ * Create AoE blast animation.
+ *
+ * @param entityId - ID of the entity that triggered the AoE (attacker)
+ * @param centerPosition - Center tile of the blast
+ * @param affectedTiles - All tiles affected by the blast
+ * @param blastStyle - 'fire' for bombs, 'arcane' for magic AoE
+ */
+export function createAoEBlastAnimation(
+    entityId: string,
+    centerPosition: TilePosition,
+    affectedTiles: TilePosition[],
+    blastStyle: 'fire' | 'arcane' = 'fire'
+): CombatAnimation {
+    return {
+        id: '',
+        type: 'aoe_blast',
+        entityId,
+        data: {
+            type: 'aoe_blast',
+            centerPosition,
+            affectedTiles,
+            blastStyle,
+        },
+        duration: ANIMATION_DURATIONS.aoeBlast,
+        startTime: 0,
+    };
+}
+
+/**
+ * Create buff application animation.
+ *
+ * @param entityId - ID of the buffed entity
+ * @param position - Tile position of the entity
+ * @param buffType - Which buff was applied
+ */
+export function createBuffApplyAnimation(
+    entityId: string,
+    position: TilePosition,
+    buffType: 'attack' | 'damage' | 'defense'
+): CombatAnimation {
+    return {
+        id: '',
+        type: 'buff_apply',
+        entityId,
+        data: {
+            type: 'buff_apply',
+            position,
+            buffType,
+        },
+        duration: ANIMATION_DURATIONS.buffApply,
         startTime: 0,
     };
 }
@@ -406,5 +483,61 @@ export function getDefendEffects(progress: number): { scale: number; glow: numbe
     return {
         scale: 1 + 0.1 * pulse,
         glow: pulse,
+    };
+}
+
+/**
+ * Get AoE blast animation effects.
+ * Blast expands from center with a flash, then fades.
+ *
+ * @param progress - Animation progress (0-1)
+ * @param tileIndex - Index of the tile in the affected array (for stagger)
+ * @param totalTiles - Total number of affected tiles
+ * @returns Visual effects for this tile at this point in the animation
+ */
+export function getAoEBlastEffects(
+    progress: number,
+    tileIndex: number,
+    totalTiles: number,
+): { alpha: number; scale: number; tint: number } {
+    // Stagger: tiles further from center start their animation slightly later
+    const staggerDelay = (tileIndex / Math.max(1, totalTiles)) * 0.3;
+    const adjustedProgress = Math.max(0, Math.min(1, (progress - staggerDelay) / (1 - staggerDelay)));
+
+    // Flash in, hold, fade out
+    const flashIn = Math.min(1, adjustedProgress * 4); // Quick flash (0-0.25)
+    const fadeOut = adjustedProgress > 0.5 ? (adjustedProgress - 0.5) * 2 : 0; // Fade (0.5-1.0)
+
+    return {
+        alpha: flashIn * (1 - fadeOut) * 0.7,
+        scale: 0.5 + Easing.easeOutQuad(flashIn) * 0.5,
+        // Fire = orange/red, Arcane = blue/purple (tint applied by renderer)
+        tint: 0xFFFFFF,
+    };
+}
+
+/**
+ * Get buff application animation effects.
+ * Upward sparkle/glow that fades.
+ */
+export function getBuffApplyEffects(
+    progress: number,
+    buffType: 'attack' | 'damage' | 'defense'
+): { alpha: number; yOffset: number; scale: number; color: number } {
+    const rise = Easing.easeOutQuad(progress);
+    const fade = progress > 0.6 ? (progress - 0.6) / 0.4 : 0;
+
+    // Color by buff type
+    const colors: Record<string, number> = {
+        attack: 0xFF6B35,  // Orange for attack
+        damage: 0xEF4444,  // Red for damage
+        defense: 0x3B82F6, // Blue for defense
+    };
+
+    return {
+        alpha: (1 - fade) * 0.8,
+        yOffset: -20 * rise,
+        scale: 0.8 + 0.4 * Math.sin(progress * Math.PI),
+        color: colors[buffType] ?? 0xFFFFFF,
     };
 }

@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { Skull, Coins, Star, Heart, LogOut, TrendingUp, Zap, Shield, Swords } from 'lucide-react';
+import { Skull, Coins, Star, Heart, LogOut, TrendingUp, Zap, Shield, Swords, Package } from 'lucide-react';
 import type { GridCombatState, GridCombatant } from '../../types/combat';
 import type { LevelUpInfo } from '../../utils/progressionUtils';
 import { soundManager } from './pixi/SoundManager';
@@ -294,6 +294,30 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                                 </div>
                             </div>
                         </div>
+
+                        {/* Loot Items */}
+                        {result.rewards.items && result.rewards.items.length > 0 && (
+                            <div className="bg-gradient-to-b from-amber-900/30 to-amber-950/30 rounded-lg p-4 border border-amber-500/20">
+                                <h3 className="text-sm font-semibold text-amber-400/80 uppercase tracking-wider mb-3">
+                                    Items Found
+                                </h3>
+                                <div className="flex flex-wrap justify-center gap-2">
+                                    {result.rewards.items.map((item, index) => (
+                                        <div
+                                            key={`${item.id}-${index}`}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-900/30 rounded border border-amber-700/30"
+                                            title={item.description || item.name}
+                                        >
+                                            <Package className="w-3.5 h-3.5 text-amber-400" />
+                                            <span className="text-sm text-amber-200">{item.name}</span>
+                                            {(item.stackCount ?? 1) > 1 && (
+                                                <span className="text-xs text-amber-400/70">x{item.stackCount}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Revived Allies (show next - good news!) */}
                         {revivedAllyNames.length > 0 && (

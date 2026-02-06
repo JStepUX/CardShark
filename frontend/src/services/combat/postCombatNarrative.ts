@@ -17,6 +17,7 @@ import type {
     GridCombatant,
     CombatLogEntry,
 } from '../../types/combat';
+import type { WeaponSubtype } from '../../types/inventory';
 
 // =============================================================================
 // Types
@@ -73,6 +74,41 @@ export interface CombatNarrativeSummary {
         xp: number;
         gold: number;
     };
+
+    /** Weapon-specific narrative flavor for the player's fighting style */
+    weaponFlavor?: string;
+}
+
+// =============================================================================
+// Weapon Flavor Text
+// =============================================================================
+
+/**
+ * Get narrative flavor text for a weapon subtype.
+ * Used to add weapon-specific color to post-combat narration.
+ */
+function getWeaponFlavorText(subtype: WeaponSubtype | undefined, weaponName?: string): string {
+    const name = weaponName || 'weapon';
+    switch (subtype) {
+        case 'heavy_melee':
+            return `wielding their ${name} with powerful, sweeping strikes`;
+        case 'light_melee':
+            return `darting in with quick, precise strikes from their ${name}`;
+        case 'heavy_ranged':
+            return `loosing carefully aimed arrows from their ${name}`;
+        case 'light_ranged':
+            return `firing rapid bolts from their ${name}`;
+        case 'gun':
+            return `cracking shots from their ${name} that punched through armor`;
+        case 'magic_direct':
+            return `channeling arcane bolts through their ${name}`;
+        case 'magic_aoe':
+            return `unleashing devastating area spells from their ${name}`;
+        case 'bomb':
+            return `hurling explosive devices with devastating effect`;
+        default:
+            return `fighting with determination`;
+    }
 }
 
 // =============================================================================
@@ -147,6 +183,14 @@ export function buildCombatNarrativeSummary(
     // Extract notable moments from combat log
     const notableMoments = extractNotableMoments(combatState.log);
 
+    // Get weapon flavor from player's equipped weapon
+    const weaponFlavor = playerCombatant
+        ? getWeaponFlavorText(
+            playerCombatant.weaponSubtype,
+            playerCombatant.equippedWeapon?.name
+        )
+        : undefined;
+
     return {
         outcome,
         turnsTotal: combatState.turn,
@@ -155,6 +199,7 @@ export function buildCombatNarrativeSummary(
         enemies,
         notableMoments,
         rewards: combatState.result?.rewards,
+        weaponFlavor,
     };
 }
 
@@ -216,10 +261,20 @@ function extractNotableMoments(log: CombatLogEntry[]): string[] {
         if (entry.result.hit && entry.result.damage && entry.result.damage >= 15 && entry.result.hitQuality !== 'crushing') {
             moments.push(`${entry.actorName} dealt ${entry.result.damage} damage to ${entry.targetName}.`);
         }
+
+        // Cleave events (weapon-specific): detected by mechanical text
+        if (entry.mechanicalText && entry.mechanicalText.includes('cleave')) {
+            moments.push(`${entry.actorName}'s blade cleaved into ${entry.targetName} after a killing blow!`);
+        }
+
+        // Item usage moments
+        if (entry.actionType === 'item' && entry.mechanicalText) {
+            moments.push(`${entry.actorName} ${entry.mechanicalText}.`);
+        }
     }
 
     // Limit to most impactful moments
-    return moments.slice(0, 5);
+    return moments.slice(0, 7);
 }
 
 // =============================================================================
@@ -244,6 +299,11 @@ export function buildPostCombatPrompt(
 
     if (summary.outcome === 'victory') {
         combatDescription += ` The fight lasted ${summary.turnsTotal} turn${summary.turnsTotal !== 1 ? 's' : ''}.`;
+
+        // Add weapon-specific flavor
+        if (summary.weaponFlavor) {
+            combatDescription += ` The player fought ${summary.weaponFlavor}.`;
+        }
 
         // IMPORTANT: Track if player was knocked out and ally saved them
         if (summary.player.wasRevived && summary.ally?.carriedTheFight) {

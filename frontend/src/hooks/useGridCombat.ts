@@ -16,9 +16,12 @@ import {
     GridCombatAction,
     GridMoveAction,
     GridAttackAction,
+    GridUseItemAction,
+    GridAoEAttackAction,
     CombatEvent,
 } from '../types/combat';
 import { LocalMapState, TilePosition } from '../types/localMap';
+import type { InventoryItem } from '../types/inventory';
 import { gridCombatReducer, getCurrentCombatant, getEnemies } from '../services/combat/gridCombatEngine';
 import { initializeCombatFromMap, syncPositionsToMap, cleanupDefeatedEntities, CombatInitOptions } from '../services/combat/combatMapSync';
 import { executeAITurn } from '../services/combat/gridEnemyAI';
@@ -34,7 +37,7 @@ const DEBUG = false;
 // Types
 // =============================================================================
 
-export type TargetingMode = 'none' | 'move' | 'attack';
+export type TargetingMode = 'none' | 'move' | 'attack' | 'item' | 'aoe';
 
 export interface UseGridCombatOptions {
     /** Called when combat ends - receives full state to avoid stale closure issues */
@@ -76,6 +79,14 @@ export interface UseGridCombatReturn {
     endTurn: () => void;
     /** Attempt to flee from combat */
     attemptFlee: () => void;
+    /** Use an item on self or target */
+    executeUseItem: (itemId: string, targetId?: string) => void;
+    /** Execute an AoE attack at a target tile */
+    executeAoEAttack: (targetPosition: TilePosition, itemId?: string) => void;
+    /** Selected item for use/AoE targeting */
+    selectedItem: InventoryItem | null;
+    /** Set selected item for targeting */
+    setSelectedItem: (item: InventoryItem | null) => void;
     /** Handle tile click (delegates based on targeting mode) */
     handleTileClick: (position: TilePosition) => void;
     /** Handle entity click (delegates based on targeting mode) */
@@ -100,6 +111,7 @@ export function useGridCombat(
     // Combat state
     const [combatState, setCombatState] = useState<GridCombatState | null>(null);
     const [targetingMode, setTargetingMode] = useState<TargetingMode>('none');
+    const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
 
     // Track if AI is currently acting
     const aiActingRef = useRef(false);
@@ -314,6 +326,17 @@ export function useGridCombat(
                             });
                         }, 600); // Slightly longer delay so revivals are staggered
                     }
+                }
+
+                // Trigger AoE resolved animation
+                if (event.type === 'aoe_resolved' && mapRef?.current) {
+                    // AoE events don't need special animation yet - damage numbers are shown per-target
+                    // Future: could show blast radius overlay
+                }
+
+                // Trigger item used feedback
+                if (event.type === 'item_used' && mapRef?.current) {
+                    // Future: show item use effect (heal particles, buff glow)
                 }
             }
 
@@ -543,6 +566,42 @@ export function useGridCombat(
         });
     }, [combatState, dispatchAction]);
 
+    // Execute item usage
+    const executeUseItem = useCallback((itemId: string, targetId?: string) => {
+        if (!combatState) return;
+        const current = getCurrentCombatant(combatState);
+        if (!current || !current.isPlayer) return;
+
+        const action: GridUseItemAction = {
+            type: 'grid_use_item',
+            actorId: current.id,
+            itemId,
+            targetId,
+        };
+
+        dispatchAction(action);
+        setSelectedItem(null);
+        setTargetingMode('none');
+    }, [combatState, dispatchAction]);
+
+    // Execute AoE attack
+    const executeAoEAttack = useCallback((targetPosition: TilePosition, itemId?: string) => {
+        if (!combatState) return;
+        const current = getCurrentCombatant(combatState);
+        if (!current || !current.isPlayer) return;
+
+        const action: GridAoEAttackAction = {
+            type: 'grid_aoe_attack',
+            actorId: current.id,
+            targetPosition,
+            itemId,
+        };
+
+        dispatchAction(action);
+        setSelectedItem(null);
+        setTargetingMode('none');
+    }, [combatState, dispatchAction]);
+
     // Handle tile click
     const handleTileClick = useCallback((position: TilePosition) => {
         if (targetingMode === 'move') {
@@ -557,8 +616,11 @@ export function useGridCombat(
             if (targetAtTile) {
                 executeAttack(targetAtTile.id);
             }
+        } else if (targetingMode === 'aoe') {
+            // AoE targeting - click tile to place AoE
+            executeAoEAttack(position, selectedItem?.id);
         }
-    }, [targetingMode, validMoveTargets, validAttackTargets, executeMove, executeAttack]);
+    }, [targetingMode, validMoveTargets, validAttackTargets, executeMove, executeAttack, executeAoEAttack, selectedItem]);
 
     // Handle entity click
     const handleEntityClick = useCallback((entityId: string) => {
@@ -597,6 +659,9 @@ export function useGridCombat(
                 console.trace('[GridCombat] Stack trace for targeting mode reset to none');
             }
         }
+        if (mode === 'none') {
+            setSelectedItem(null);
+        }
         setTargetingMode(mode);
     }, []);
 
@@ -615,6 +680,10 @@ export function useGridCombat(
         executeDefend,
         endTurn,
         attemptFlee,
+        executeUseItem,
+        executeAoEAttack,
+        selectedItem,
+        setSelectedItem,
         handleTileClick,
         handleEntityClick,
     };

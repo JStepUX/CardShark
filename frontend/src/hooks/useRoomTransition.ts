@@ -1,232 +1,162 @@
 /**
  * @file useRoomTransition.ts
- * @description Hook for managing room transitions in world play.
+ * @description Manages room transition logic for world navigation.
+ * Extracted from WorldPlayView.tsx to reduce complexity and improve testability.
  *
- * Extracted from WorldPlayView to separate concerns:
- * - Transition state machine (initiating -> summarizing -> loading -> generating -> ready)
- * - Room loading and NPC resolution
- * - Asset preloading (textures)
- * - Thin frame generation
- * - Message pruning on travel
- *
- * This hook manages the complex multi-phase process of moving between rooms.
+ * Handles:
+ * - Transition state machine (initiating -> summarizing -> loading_assets -> generating_frames -> ready -> idle)
+ * - Room summarization via adventure log API
+ * - Asset preloading (textures for player, companion, NPCs)
+ * - Thin frame generation for NPCs missing identity context
+ * - Room state persistence (NPC dead/incapacitated status)
+ * - Player spawn position calculation based on entry direction
+ * - Message pruning on travel (keeps last 8 messages)
+ * - Combat cleanup on room exit (flee behavior)
+ * - Adventure context refresh after summarization
  */
-
 import { useState, useCallback } from 'react';
+import { worldApi } from '../api/worldApi';
 import { roomApi } from '../api/roomApi';
 import { adventureLogApi } from '../api/adventureLogApi';
-import { worldApi } from '../api/worldApi';
 import type { WorldCard, RoomInstanceState } from '../types/worldCard';
-import type { GridWorldState, GridRoom } from '../types/worldGrid';
-import type { ExitDirection, LocalMapConfig, TilePosition } from '../types/localMap';
-import type { TransitionState } from '../types/transition';
-import type { CharacterCard } from '../types/schema';
+import type { GridWorldState, GridRoom, CombatDisplayNPC } from '../types/worldGrid';
+import type { ExitDirection, TilePosition, LocalMapConfig, LocalMapState } from '../types/localMap';
+import type { TransitionState, ProgressStatus } from '../types/transition';
+import { createIdleTransitionState, TRANSITION_TIMEOUT_MS, THIN_FRAME_TIMEOUT_MS, SUMMARIZATION_TIMEOUT_MS } from '../types/transition';
 import type { NPCRelationship, TimeState } from '../types/worldRuntime';
 import type { CharacterInventory } from '../types/inventory';
-import type { SummarizeMessage, SummarizeNPC } from '../types/adventureLog';
-import type { PlayerProgression } from '../utils/progressionUtils';
-import type { Message } from '../services/chat/chatTypes';
-import { createIdleTransitionState, TRANSITION_TIMEOUT_MS, THIN_FRAME_TIMEOUT_MS, SUMMARIZATION_TIMEOUT_MS } from '../types/transition';
-import { roomCardToGridRoom, placementToGridRoomStub } from '../utils/roomCardAdapter';
-import { resolveNpcDisplayData } from '../utils/worldStateApi';
-import { preloadRoomTextures } from '../utils/texturePreloader';
-import { getSpawnPosition } from '../utils/localMapUtils';
-import { generateThinFrame, mergeThinFrameIntoCard } from '../services/thinFrameService';
+import type { CharacterCard } from '../types/schema';
 import { isValidThinFrame } from '../types/schema';
+import type { SummarizeMessage, SummarizeNPC, AdventureContext } from '../types/adventureLog';
+import type { PlayerProgression } from '../utils/progressionUtils';
+import { resolveNpcDisplayData } from '../utils/worldStateApi';
+import { roomCardToGridRoom } from '../utils/roomCardAdapter';
+import { getSpawnPosition } from '../utils/localMapUtils';
+import { preloadRoomTextures } from '../utils/texturePreloader';
+import { generateThinFrame, mergeThinFrameIntoCard } from '../services/thinFrameService';
 
-// =============================================================================
-// Types
-// =============================================================================
+const LOCAL_MAP_CONFIG: LocalMapConfig = { gridWidth: 9, gridHeight: 9, tileSize: 100 };
 
-/** Extended DisplayNPC with combat info */
-export interface CombatDisplayNPC {
-  id: string;
-  name: string;
-  imageUrl: string;
-  personality?: string;
-  hostile?: boolean;
-  monster_level?: number;
-  isIncapacitated?: boolean;
-  isDead?: boolean;
-}
 
-export interface RoomTransitionState {
-  transitionState: TransitionState;
-  currentRoom: GridRoom | null;
-  roomNpcs: CombatDisplayNPC[];
-  playerTilePosition: TilePosition;
-  entryDirection: ExitDirection | null;
-}
-
-export interface RoomTransitionDependencies {
-  // World session data
-  worldId: string;
-  userUuid: string | undefined;
+interface UseRoomTransitionOptions {
   worldCard: WorldCard | null;
   worldState: GridWorldState | null;
-  setWorldState: React.Dispatch<React.SetStateAction<GridWorldState | null>>;
-
-  // Room state ref
+  worldId: string | undefined;
+  currentRoom: GridRoom | null;
+  setCurrentRoom: (room: GridRoom | null) => void;
+  roomNpcs: CombatDisplayNPC[];
+  setRoomNpcs: (npcs: CombatDisplayNPC[]) => void;
   roomStatesRef: React.MutableRefObject<Record<string, RoomInstanceState>>;
-
-  // Runtime state for saving
+  messages: any[];
+  setMessages: (messages: any) => void;
+  addMessage: (message: any) => void;
+  activeNpcId: string | undefined;
+  activeNpcName: string;
+  activeNpcCard: CharacterCard | null;
+  clearConversationTarget: () => void;
+  setActiveNpcId: (id: string | undefined) => void;
+  setActiveNpcName: (name: string) => void;
+  setActiveNpcCard: (card: CharacterCard | null) => void;
+  isInCombat: boolean;
+  setIsInCombat: (inCombat: boolean) => void;
+  gridCombat: { endCombat: () => void };
+  setLocalMapStateCache: (state: LocalMapState | null) => void;
+  setPlayerTilePosition: (position: TilePosition) => void;
+  setWorldState: (state: GridWorldState | null | ((prev: GridWorldState | null) => GridWorldState | null)) => void;
+  setAdventureContext: (context: AdventureContext) => void;
   playerProgression: PlayerProgression;
   timeState: TimeState;
   npcRelationships: Record<string, NPCRelationship>;
   playerInventory: CharacterInventory;
   allyInventory: CharacterInventory | null;
-
-  // Active NPC state
-  activeNpcId: string | undefined;
-  activeNpcName: string;
-
-  // User info
-  currentUser: { id?: string; name?: string; filename?: string; user_uuid?: string } | null;
-
-  // API config for thin frame generation
-  apiConfig: Record<string, unknown> | null;
-
-  // Message management
-  messages: Message[];
-  setMessages: (messages: Message[]) => void;
-  addMessage: (message: Message) => void;
-
-  // Combat cleanup
-  isInCombat: boolean;
-  endCombat: () => void;
-  setIsInCombat: (value: boolean) => void;
-
-  // Conversation cleanup
-  clearConversationTarget: () => void;
-
-  // Local map config
-  localMapConfig: LocalMapConfig;
+  currentUser: { id?: string; name?: string; user_uuid?: string; filename?: string } | null;
+  apiConfig: any;
+  setShowMap: (show: boolean) => void;
 }
 
-export interface UseRoomTransitionResult {
-  // State
+interface UseRoomTransitionReturn {
   transitionState: TransitionState;
-  currentRoom: GridRoom | null;
-  roomNpcs: CombatDisplayNPC[];
-  playerTilePosition: TilePosition;
-  entryDirection: ExitDirection | null;
   isTransitioning: boolean;
-
-  // Setters (for external updates like combat)
-  setCurrentRoom: React.Dispatch<React.SetStateAction<GridRoom | null>>;
-  setRoomNpcs: React.Dispatch<React.SetStateAction<CombatDisplayNPC[]>>;
-  setPlayerTilePosition: React.Dispatch<React.SetStateAction<TilePosition>>;
-  setEntryDirection: React.Dispatch<React.SetStateAction<ExitDirection | null>>;
-
-  // Actions
-  performRoomTransition: (
-    targetRoomStub: GridRoom,
-    keepActiveNpc?: boolean,
-    entryDir?: ExitDirection | null
-  ) => Promise<void>;
-  handleNavigate: (targetRoomId: string, entryDir?: ExitDirection | null) => Promise<void>;
-  loadInitialRoom: (placement: { room_uuid: string; grid_position: { x: number; y: number }; instance_name?: string; instance_npcs?: unknown[] }, gridSize: { width: number; height: number }) => Promise<GridRoom | null>;
+  entryDirection: ExitDirection | null;
+  handleNavigate: (roomId: string, entryDir?: ExitDirection | null) => Promise<void>;
+  handleLocalMapExitClick: (exit: { direction: ExitDirection; targetRoomId: string }) => Promise<void>;
+  performRoomTransition: (targetRoomStub: GridRoom, keepActiveNpc?: boolean, entryDir?: ExitDirection | null) => Promise<void>;
 }
 
-// =============================================================================
-// Hook Implementation
-// =============================================================================
-
-export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTransitionResult {
+export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTransitionReturn {
   const {
-    worldId,
-    userUuid: _userUuid,
     worldCard,
     worldState,
-    setWorldState,
+    worldId,
+    currentRoom,
+    setCurrentRoom,
+    roomNpcs,
+    setRoomNpcs,
     roomStatesRef,
+    messages,
+    setMessages,
+    addMessage,
+    activeNpcId,
+    activeNpcName,
+    activeNpcCard,
+    clearConversationTarget,
+    setActiveNpcId,
+    setActiveNpcName,
+    setActiveNpcCard,
+    isInCombat,
+    setIsInCombat,
+    gridCombat,
+    setLocalMapStateCache,
+    setPlayerTilePosition,
+    setWorldState,
+    setAdventureContext,
     playerProgression,
     timeState,
     npcRelationships,
     playerInventory,
     allyInventory,
-    activeNpcId,
-    activeNpcName,
     currentUser,
     apiConfig,
-    messages,
-    setMessages,
-    addMessage,
-    isInCombat,
-    endCombat,
-    setIsInCombat,
-    clearConversationTarget,
-    localMapConfig,
-  } = deps;
+    setShowMap,
+  } = options;
 
-  // Room transition state
-  const [transitionState, setTransitionState] = useState<TransitionState>(createIdleTransitionState);
-  const [currentRoom, setCurrentRoom] = useState<GridRoom | null>(null);
-  const [roomNpcs, setRoomNpcs] = useState<CombatDisplayNPC[]>([]);
-  const [playerTilePosition, setPlayerTilePosition] = useState<TilePosition>({ x: 2, y: 2 });
+  const [transitionState, setTransitionState] = useState<TransitionState>(createIdleTransitionState());
   const [entryDirection, setEntryDirection] = useState<ExitDirection | null>(null);
 
-  // Computed
-  const isTransitioning = transitionState.phase !== 'idle';
-
-  // ==========================================================================
-  // Room Loading Helper
-  // ==========================================================================
+  /**
+   * Update transition progress for a specific operation.
+   * Note: Used for Phase 2/3 when progress callbacks are enabled.
+   */
+  const _updateTransitionProgress = useCallback((
+    key: keyof TransitionState['progress'],
+    status: ProgressStatus
+  ) => {
+    setTransitionState(prev => ({
+      ...prev,
+      progress: {
+        ...prev.progress,
+        [key]: status,
+      },
+    }));
+  }, []);
 
   /**
-   * Load the initial room when the world first loads.
+   * Check if transition has timed out.
+   * Note: Used for Phase 2/3 timeout handling.
    */
-  const loadInitialRoom = useCallback(async (
-    placement: { room_uuid: string; grid_position: { x: number; y: number }; instance_name?: string; instance_npcs?: unknown[] },
-    _gridSize: { width: number; height: number }
-  ): Promise<GridRoom | null> => {
-    try {
-      const roomCard = await roomApi.getRoom(placement.room_uuid);
-      const fullRoom = roomCardToGridRoom(roomCard, placement.grid_position, placement as any);
+  const _isTransitionTimedOut = useCallback((startedAt: number | null): boolean => {
+    if (!startedAt) return false;
+    return Date.now() - startedAt > TRANSITION_TIMEOUT_MS;
+  }, []);
 
-      // Resolve NPCs
-      const npcUuids = fullRoom.npcs.map(npc => npc.character_uuid);
-      const resolvedNpcs = await resolveNpcDisplayData(npcUuids);
+  // Suppress unused variable warnings for future-use helpers
+  void _updateTransitionProgress;
+  void _isTransitionTimedOut;
 
-      // Merge with combat data
-      let npcsWithCombatData: CombatDisplayNPC[] = resolvedNpcs.map(npc => {
-        const roomNpc = fullRoom.npcs.find(rn => rn.character_uuid === npc.id);
-        return {
-          ...npc,
-          hostile: roomNpc?.hostile,
-          monster_level: roomNpc?.monster_level,
-        };
-      });
-
-      // Apply saved room state
-      const savedRoomState = roomStatesRef.current[fullRoom.id];
-      if (savedRoomState?.npc_states) {
-        npcsWithCombatData = npcsWithCombatData
-          .filter(npc => savedRoomState.npc_states[npc.id]?.status !== 'dead')
-          .map(npc => {
-            const npcState = savedRoomState.npc_states[npc.id];
-            if (npcState?.status === 'incapacitated') {
-              return { ...npc, isIncapacitated: true };
-            }
-            return npc;
-          });
-      }
-
-      setCurrentRoom(fullRoom);
-      setRoomNpcs(npcsWithCombatData);
-
-      return fullRoom;
-    } catch (err) {
-      console.error(`[useRoomTransition] Failed to load room ${placement.room_uuid}:`, err);
-      const stubRoom = placementToGridRoomStub(placement as any);
-      setCurrentRoom(stubRoom);
-      return stubRoom;
-    }
-  }, [roomStatesRef]);
-
-  // ==========================================================================
-  // Room Transition
-  // ==========================================================================
+  /**
+   * Helper to check if currently transitioning (for gating UI).
+   */
+  const isTransitioning = transitionState.phase !== 'idle';
 
   const performRoomTransition = useCallback(async (
     targetRoomStub: GridRoom,
@@ -253,9 +183,9 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       startedAt: transitionStartTime,
     });
 
-    console.log(`[useRoomTransition] Starting transition to: ${targetRoomStub.name}`);
+    console.log(`[RoomTransition] Starting transition to: ${targetRoomStub.name}`);
 
-    // Snapshot departing room's NPC states
+    // Snapshot the CURRENT room's NPC states before we leave
     if (currentRoom) {
       const departingRoomState: RoomInstanceState = { npc_states: {} };
       for (const npc of roomNpcs) {
@@ -268,24 +198,22 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       roomStatesRef.current[currentRoom.id] = departingRoomState;
     }
 
-    // End combat if active
+    // End any active combat (flee)
     if (isInCombat) {
-      endCombat();
+      gridCombat.endCombat();
       setIsInCombat(false);
+      setLocalMapStateCache(null);
     }
 
-    // Clear conversation target
+    // Always clear conversation target when leaving a room
+    // (Conversations with non-bonded NPCs don't persist across rooms)
     clearConversationTarget();
 
     // ========================================
-    // PHASE: SUMMARIZING
+    // PHASE: SUMMARIZING (Phase 3)
     // ========================================
-    // Only summarize if there's actual user conversation (not just room intros/companion follow messages)
-    const hasUserConversation = messages.some(m => m.role === 'user');
-    const shouldSummarize = currentRoom && worldId && currentUser?.user_uuid &&
-                            messages.length > 2 && hasUserConversation;
-
-    if (shouldSummarize) {
+    // Summarize the current room visit before moving to the new room
+    if (currentRoom && worldId && currentUser?.user_uuid && messages.length > 2) {
       setTransitionState(prev => ({
         ...prev,
         phase: 'summarizing',
@@ -296,20 +224,30 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       }));
 
       try {
+        // Prepare messages for summarization (strip to role + content only)
         const summarizeMessages: SummarizeMessage[] = messages
           .filter(m => m.role === 'user' || m.role === 'assistant')
-          .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+          .map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          }));
 
+        // Prepare NPC list for matching
         const summarizeNpcs: SummarizeNPC[] = roomNpcs.map(npc => ({
           id: npc.id,
           name: npc.name,
         }));
 
-        const visitedAt = transitionStartTime - (messages.length * 30000);
+        // Get visitedAt from room entry tracking (use transitionStartTime as approximation if not tracked)
+        // In a full implementation, this would be tracked when entering the room
+        const visitedAt = transitionStartTime - (messages.length * 30000); // Rough estimate: ~30s per message
 
+        console.log(`[RoomTransition] Summarizing ${summarizeMessages.length} messages from ${currentRoom.name}`);
+
+        // Call summarization API with timeout
         const summarizationPromise = adventureLogApi.summarizeRoom({
           worldUuid: worldId,
-          userUuid: currentUser.user_uuid!, // Checked in shouldSummarize condition
+          userUuid: currentUser.user_uuid,
           roomUuid: currentRoom.id,
           roomName: currentRoom.name,
           visitedAt,
@@ -324,18 +262,17 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
         const result = await Promise.race([summarizationPromise, timeoutPromise]);
 
         if (result) {
-          console.log(`[useRoomTransition] Summarization completed: ${result.summary.keyEvents.length} events`);
+          console.log(`[RoomTransition] Summarization completed (${result.method}): ${result.summary.keyEvents.length} events`);
+          setTransitionState(prev => ({
+            ...prev,
+            progress: {
+              ...prev.progress,
+              summarization: { status: 'complete' },
+            },
+          }));
         }
-
-        setTransitionState(prev => ({
-          ...prev,
-          progress: {
-            ...prev.progress,
-            summarization: { status: 'complete' },
-          },
-        }));
       } catch (error) {
-        console.warn('[useRoomTransition] Summarization failed:', error);
+        console.warn('[RoomTransition] Summarization failed or timed out:', error);
         setTransitionState(prev => ({
           ...prev,
           progress: {
@@ -343,8 +280,10 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
             summarization: { status: 'failed', error: 'Summarization failed' },
           },
         }));
+        // Continue with transition - summarization failure is non-blocking
       }
     } else {
+      // Skip summarization if no room, no user, or too few messages
       setTransitionState(prev => ({
         ...prev,
         progress: {
@@ -354,14 +293,15 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       }));
     }
 
-    // Prune messages
+    // PRUNE MESSAGES: Keep last 8 messages for continuity when traveling between rooms
     const MAX_MESSAGES_ON_TRAVEL = 8;
     if (messages.length > MAX_MESSAGES_ON_TRAVEL) {
       const recentMessages = messages.slice(-MAX_MESSAGES_ON_TRAVEL);
       setMessages(recentMessages);
+      console.log(`[Travel] Pruned messages: kept last ${recentMessages.length} of ${messages.length}`);
     }
 
-    // Find target room coordinates
+    // Find coordinates for the target room
     let foundY = 0;
     let foundX = 0;
     for (let y = 0; y < worldState.grid.length; y++) {
@@ -374,24 +314,28 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       }
     }
 
-    // Fetch full room data
+    // LAZY LOADING: Fetch full room data if this is just a stub
     let targetRoom = targetRoomStub;
     const worldData = worldCard.data.extensions.world_data;
     const placement = worldData.rooms.find(r => r.room_uuid === targetRoomStub.id);
 
     if (placement) {
       try {
+        // Always fetch full room data for the destination
         const roomCard = await roomApi.getRoom(placement.room_uuid);
         targetRoom = roomCardToGridRoom(roomCard, { x: foundX, y: foundY }, placement);
+        console.log(`[RoomTransition] Lazy loaded room data: ${targetRoom.name}`);
       } catch (err) {
-        console.error(`[useRoomTransition] Failed to fetch room:`, err);
+        console.error(`[RoomTransition] Failed to fetch room ${targetRoomStub.id}:`, err);
+        // Fall back to stub data
       }
     }
 
-    // Resolve NPCs
+    // Resolve NPCs in the new room BEFORE updating state
     const npcUuids = targetRoom.npcs.map(npc => npc.character_uuid);
     const resolvedNpcs = await resolveNpcDisplayData(npcUuids);
 
+    // Merge hostile/monster_level from room NPCs
     let npcsWithCombatData: CombatDisplayNPC[] = resolvedNpcs.map(npc => {
       const roomNpc = targetRoom.npcs.find(rn => rn.character_uuid === npc.id);
       return {
@@ -401,7 +345,7 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       };
     });
 
-    // Apply saved room state
+    // Apply persisted room state: filter dead NPCs, mark incapacitated
     const targetRoomState = roomStatesRef.current[targetRoom.id];
     if (targetRoomState?.npc_states) {
       npcsWithCombatData = npcsWithCombatData
@@ -413,6 +357,7 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
           }
           return npc;
         });
+      console.log('[RuntimeState] Applied saved room state for:', targetRoom.name);
     }
 
     // ========================================
@@ -427,6 +372,8 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       },
     }));
 
+    // Preload textures for player, companion, and NPCs
+    // Use the same URL patterns as the LocalMapView rendering
     const playerImgPath = currentUser?.filename
       ? `/api/user-image/${encodeURIComponent(currentUser.filename)}`
       : null;
@@ -434,6 +381,8 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       ? `/api/character-image/${activeNpcId}.png`
       : null;
     const npcImageUrls = npcsWithCombatData.map(n => n.imageUrl).filter(Boolean) as string[];
+
+    console.log(`[RoomTransition] Preloading ${npcImageUrls.length + (playerImgPath ? 1 : 0) + (companionImgPath ? 1 : 0)} textures`);
 
     const preloadResult = await preloadRoomTextures(
       {
@@ -455,6 +404,20 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
       }
     );
 
+    if (preloadResult.timedOut) {
+      console.warn('[RoomTransition] Texture preload timed out, continuing with fallbacks');
+      setTransitionState(prev => ({
+        ...prev,
+        progress: {
+          ...prev.progress,
+          assetPreload: { status: 'failed', error: 'Timed out' },
+        },
+      }));
+    } else if (preloadResult.failedCount > 0) {
+      console.warn(`[RoomTransition] ${preloadResult.failedCount} textures failed to load`);
+    }
+
+    // Mark asset preload complete
     setTransitionState(prev => ({
       ...prev,
       progress: {
@@ -466,8 +429,9 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
     }));
 
     // ========================================
-    // PHASE: GENERATING_FRAMES
+    // PHASE: GENERATING_FRAMES - Generate thin frames for NPCs missing them
     // ========================================
+    // Only proceed if we have API config and there are NPCs to process
     if (apiConfig && npcsWithCombatData.length > 0) {
       setTransitionState(prev => ({
         ...prev,
@@ -478,6 +442,7 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
         },
       }));
 
+      // Check which NPCs need thin frames
       const npcsNeedingFrames: string[] = [];
       for (const npc of npcsWithCombatData) {
         try {
@@ -490,23 +455,30 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
             }
           }
         } catch (err) {
-          console.warn(`[useRoomTransition] Failed to check NPC ${npc.id}:`, err);
+          console.warn(`[ThinFrame] Failed to check NPC ${npc.id} for thin frame:`, err);
         }
       }
 
       if (npcsNeedingFrames.length > 0) {
+        console.log(`[ThinFrame] Generating thin frames for ${npcsNeedingFrames.length} NPCs`);
+
         let generatedCount = 0;
         for (const npcId of npcsNeedingFrames) {
           try {
+            // Fetch full character data
             const npcCardResponse = await fetch(`/api/character/${npcId}/metadata`);
             if (!npcCardResponse.ok) continue;
 
             const npcCardData = await npcCardResponse.json();
             const npcCard = npcCardData.data || npcCardData as CharacterCard;
 
+            // Generate thin frame with timeout
             const thinFrame = await generateThinFrame(npcCard, apiConfig, { timeout: THIN_FRAME_TIMEOUT_MS });
+
+            // Update the NPC card with thin frame and save
             const updatedCard = mergeThinFrameIntoCard(npcCard, thinFrame);
 
+            // Fetch the image to save with metadata
             const imageResponse = await fetch(`/api/character-image/${npcId}.png`);
             if (imageResponse.ok) {
               const imageBlob = await imageResponse.blob();
@@ -518,6 +490,8 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
                 method: 'POST',
                 body: formData,
               });
+
+              console.log(`[ThinFrame] Generated and saved thin frame for NPC ${npcId}`);
             }
 
             generatedCount++;
@@ -532,11 +506,12 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
               },
             }));
           } catch (err) {
-            console.warn(`[useRoomTransition] Failed to generate thin frame:`, err);
+            console.warn(`[ThinFrame] Failed to generate thin frame for NPC ${npcId}:`, err);
           }
         }
       }
 
+      // Mark thin frame generation complete
       setTransitionState(prev => ({
         ...prev,
         progress: {
@@ -545,6 +520,7 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
         },
       }));
     } else {
+      // No NPCs or no API config - skip thin frame generation
       setTransitionState(prev => ({
         ...prev,
         progress: {
@@ -555,20 +531,28 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
     }
 
     // ========================================
-    // PHASE: READY - Atomic state updates
+    // PHASE: READY - Update all state atomically
     // ========================================
-    setTransitionState(prev => ({ ...prev, phase: 'ready' }));
+    setTransitionState(prev => ({
+      ...prev,
+      phase: 'ready',
+    }));
 
+    // Calculate spawn position
     const spawnPos = entryDir
-      ? getSpawnPosition(entryDir, localMapConfig)
+      ? getSpawnPosition(entryDir, LOCAL_MAP_CONFIG)
       : { x: 2, y: 2 };
 
+    console.log(`[RoomTransition] Spawning at ${entryDir || 'center'}:`, spawnPos);
+
+    // Update grid with full room data
     const newGrid = [...worldState.grid.map(row => [...row])];
     if (foundY >= 0 && foundY < newGrid.length && foundX >= 0 && foundX < newGrid[0].length) {
       newGrid[foundY][foundX] = targetRoom;
     }
 
-    // Atomic updates
+    // ATOMIC STATE UPDATES - these should batch in React 18
+    // All visible room state updates together
     setWorldState(prev => prev ? {
       ...prev,
       grid: newGrid,
@@ -579,7 +563,14 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
     setPlayerTilePosition(spawnPos);
     setEntryDirection(null);
 
-    // Persist to backend
+    // Clear active NPC unless explicitly keeping them
+    if (!keepActiveNpc) {
+      setActiveNpcId(undefined);
+      setActiveNpcName('');
+      setActiveNpcCard(null);
+    }
+
+    // Persist position + full runtime state to backend (single API call)
     try {
       await worldApi.updateWorld(worldId, {
         player_position: { x: foundX, y: foundY },
@@ -593,47 +584,78 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
         ally_inventory: (keepActiveNpc ? allyInventory : null) ?? undefined,
         room_states: roomStatesRef.current,
       });
+      console.log('[RuntimeState] Saved on room transition');
     } catch (err) {
-      console.error('[useRoomTransition] Failed to save:', err);
+      console.error('[RuntimeState] Failed to save on room transition:', err);
     }
 
-    // Add room introduction
+    // Add room introduction as assistant message
     if (targetRoom.introduction_text) {
-      addMessage({
+      const roomIntroMessage = {
         id: crypto.randomUUID(),
         role: 'assistant' as const,
         content: targetRoom.introduction_text,
         timestamp: Date.now(),
         metadata: {
           type: 'room_introduction',
-          roomId: targetRoom.id,
-        },
-      });
+          roomId: targetRoom.id
+        }
+      };
+      addMessage(roomIntroMessage);
     }
 
-    // Reset transition state after short delay
-    setTimeout(() => {
-      setTransitionState(createIdleTransitionState);
-    }, 500);
-  }, [
-    worldState, worldId, worldCard, currentRoom, roomNpcs, roomStatesRef,
-    isInCombat, endCombat, setIsInCombat, clearConversationTarget,
-    messages, setMessages, addMessage, currentUser, apiConfig,
-    activeNpcId, activeNpcName, playerProgression, timeState,
-    npcRelationships, playerInventory, allyInventory, setWorldState, localMapConfig
-  ]);
+    // If keeping NPC, add a message about them following
+    if (keepActiveNpc && activeNpcName) {
+      const followMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        content: `*${activeNpcName} follows you into ${targetRoom.name}*`,
+        timestamp: Date.now(),
+        metadata: {
+          type: 'npc_travel',
+          npcId: activeNpcId,
+          roomId: targetRoom.id
+        }
+      };
+      addMessage(followMessage);
+    }
 
-  // ==========================================================================
-  // Navigation Handler
-  // ==========================================================================
+    // Close map modal after navigation
+    setShowMap(false);
 
-  const handleNavigate = useCallback(async (targetRoomId: string, entryDir: ExitDirection | null = null) => {
-    if (!worldState) return;
+    // Refresh adventure context after summarization (for next transition)
+    if (worldId && currentUser?.user_uuid) {
+      try {
+        const updatedContext = await adventureLogApi.getAdventureContext(worldId, currentUser.user_uuid);
+        setAdventureContext(updatedContext);
+        console.log(`[AdventureLog] Refreshed context: ${updatedContext.entries.length} entries`);
+      } catch (err) {
+        console.warn('[AdventureLog] Failed to refresh adventure context:', err);
+      }
+    }
 
+    // ========================================
+    // PHASE: IDLE - Transition complete
+    // ========================================
+    setTransitionState(createIdleTransitionState());
+
+    const transitionDuration = Date.now() - transitionStartTime;
+    console.log(`[RoomTransition] Completed in ${transitionDuration}ms`);
+  }, [worldCard, worldState, worldId, messages, setMessages, addMessage, activeNpcName, activeNpcId, activeNpcCard, isInCombat, gridCombat, currentRoom, roomNpcs, playerProgression, timeState, npcRelationships, playerInventory, allyInventory, currentUser, apiConfig, setShowMap, clearConversationTarget, setActiveNpcCard, setActiveNpcId, setActiveNpcName, setCurrentRoom, setEntryDirection, setIsInCombat, setLocalMapStateCache, setPlayerTilePosition, setRoomNpcs, setWorldState, roomStatesRef, setAdventureContext]);
+
+
+  // Handle room navigation - persists position to backend
+  // entryDir: The direction the player is entering FROM (passed from exit click)
+  const handleNavigate = useCallback(async (roomId: string, entryDir: ExitDirection | null = null) => {
+    if (!worldState || !worldId) return;
+
+    // Find the target room in the grid
     let foundRoom: GridRoom | undefined;
-    for (const row of worldState.grid) {
-      for (const room of row) {
-        if (room?.id === targetRoomId) {
+
+    for (let y = 0; y < worldState.grid.length; y++) {
+      for (let x = 0; x < worldState.grid[y].length; x++) {
+        const room = worldState.grid[y][x];
+        if (room?.id === roomId) {
           foundRoom = room;
           break;
         }
@@ -642,31 +664,60 @@ export function useRoomTransition(deps: RoomTransitionDependencies): UseRoomTran
     }
 
     if (!foundRoom) {
-      console.error('[useRoomTransition] Target room not found:', targetRoomId);
+      console.error(`Room not found: ${roomId}`);
       return;
     }
 
-    // Automatically bring bonded ally along if present
-    await performRoomTransition(foundRoom, !!activeNpcId, entryDir);
-  }, [worldState, activeNpcId, performRoomTransition]);
+    const targetRoom = foundRoom;
 
-  // ==========================================================================
-  // Return
-  // ==========================================================================
+    // Navigate immediately - bring bonded ally along automatically if present
+    const keepAlly = !!(activeNpcId && activeNpcName);
+    await performRoomTransition(targetRoom, keepAlly, entryDir);
+  }, [worldState, worldId, performRoomTransition, activeNpcId, activeNpcName]);
+
+  const handleLocalMapExitClick = useCallback(async (exit: { direction: ExitDirection; targetRoomId: string }) => {
+    console.log('Local map exit clicked:', exit);
+
+    // Find the target room
+    if (!worldState) return;
+
+    let foundRoom: GridRoom | undefined;
+    for (const row of worldState.grid) {
+      for (const room of row) {
+        if (room?.id === exit.targetRoomId) {
+          foundRoom = room;
+          break;
+        }
+      }
+      if (foundRoom) break;
+    }
+
+    if (!foundRoom) {
+      console.error('Target room not found:', exit.targetRoomId);
+      return;
+    }
+
+    // Calculate entry direction (opposite of exit direction)
+    // If you exit via east (>|), you enter the next room from the west (|<)
+    const oppositeDirections: Record<ExitDirection, ExitDirection> = {
+      north: 'south',
+      south: 'north',
+      east: 'west',
+      west: 'east',
+    };
+    const entryDir = oppositeDirections[exit.direction];
+    console.log(`[Exit] Exiting ${exit.direction}, will enter from ${entryDir}`);
+
+    // Pass entry direction directly to avoid stale closure issues
+    await handleNavigate(exit.targetRoomId, entryDir);
+  }, [worldState, handleNavigate]);
 
   return {
     transitionState,
-    currentRoom,
-    roomNpcs,
-    playerTilePosition,
-    entryDirection,
     isTransitioning,
-    setCurrentRoom,
-    setRoomNpcs,
-    setPlayerTilePosition,
-    setEntryDirection,
-    performRoomTransition,
+    entryDirection,
     handleNavigate,
-    loadInitialRoom,
+    handleLocalMapExitClick,
+    performRoomTransition,
   };
 }

@@ -51,7 +51,11 @@
       "Bash(npm ls:*)",
       "Bash(grep:*)",
       "Bash(git log:*)",
-      "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\world\\\\PartyGatherModal.tsx\")"
+      "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\world\\\\PartyGatherModal.tsx\")",
+      "Bash(D:)",
+      "Bash(cmd /c \"cd /d D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit 2>&1\")",
+      "Bash(cmd /c \"cd /d D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit\")",
+      "Bash(cmd /c \"D: && cd D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit 2>&1 && echo TSC_OK || echo TSC_FAILED\")"
     ]
   }
 }

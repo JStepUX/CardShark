@@ -56,3 +56,11 @@ export interface DisplayNPC {
     imageUrl: string;
     personality?: string;
 }
+
+/** DisplayNPC extended with combat-related fields from RoomNPC data. */
+export interface CombatDisplayNPC extends DisplayNPC {
+    hostile?: boolean;
+    monster_level?: number;
+    isIncapacitated?: boolean;
+    isDead?: boolean;
+}

@@ -18,6 +18,8 @@ import {
     Heart,
     Zap,
     LogOut,
+    FlaskConical,
+    Crosshair,
 } from 'lucide-react';
 import {
     GridCombatState,
@@ -25,6 +27,8 @@ import {
     CombatLogEntry,
     GRID_AP_COSTS,
 } from '../../types/combat';
+import type { InventoryItem } from '../../types/inventory';
+import { isUsableInCombat, isBombItem, isAoEWeapon, isLightWeapon, getWeaponAPCost } from '../../types/inventory';
 
 // =============================================================================
 // Types
@@ -36,13 +40,17 @@ interface GridCombatHUDProps {
     /** Whether it's the player's turn */
     isPlayerTurn: boolean;
     /** Current targeting mode */
-    targetingMode: 'none' | 'move' | 'attack';
+    targetingMode: 'none' | 'move' | 'attack' | 'item' | 'aoe';
     /** Callback when action button clicked */
     onActionClick: (action: 'attack' | 'defend' | 'end_turn' | 'flee') => void;
     /** Callback to enter targeting mode */
-    onStartTargeting: (mode: 'move' | 'attack') => void;
+    onStartTargeting: (mode: 'move' | 'attack' | 'aoe') => void;
     /** Callback to cancel targeting */
     onCancelTargeting: () => void;
+    /** Called when player selects an item to use */
+    onUseItem?: (itemId: string) => void;
+    /** Called when player selects AoE targeting with an item */
+    onStartAoETargeting?: (item: InventoryItem) => void;
 }
 
 // =============================================================================
@@ -152,6 +160,8 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
     onActionClick,
     onStartTargeting,
     onCancelTargeting,
+    onUseItem,
+    onStartAoETargeting,
 }) => {
     // Get current combatant
     const currentCombatant = useMemo(() => {
@@ -172,8 +182,28 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
     // AP available
     const currentAP = currentCombatant?.apRemaining ?? 0;
 
+    // Get player's combat items
+    const playerItems = useMemo(() => {
+        if (!currentCombatant) return [];
+        return currentCombatant.combatItems?.filter(
+            item => (isUsableInCombat(item) || isBombItem(item)) && (item.stackCount ?? 0) > 0
+        ) ?? [];
+    }, [currentCombatant]);
+
+    // Check weapon-specific AP cost for attack button
+    const attackAPCost = useMemo(() => {
+        if (!currentCombatant?.equippedWeapon) return GRID_AP_COSTS.attack;
+        return getWeaponAPCost(currentCombatant.equippedWeapon);
+    }, [currentCombatant]);
+
+    const canAttack = isPlayerTurn && currentAP >= attackAPCost;
+    const canUseItem = isPlayerTurn && currentAP >= GRID_AP_COSTS.useItem && playerItems.length > 0;
+
+    // Check if equipped weapon is AoE
+    const hasAoEWeapon = currentCombatant?.equippedWeapon && isAoEWeapon(currentCombatant.equippedWeapon.subtype);
+    const canAoE = isPlayerTurn && currentAP >= GRID_AP_COSTS.aoeAttack && hasAoEWeapon;
+
     // Check what actions are available
-    const canAttack = isPlayerTurn && currentAP >= GRID_AP_COSTS.attack;
     const canDefend = isPlayerTurn && currentAP >= GRID_AP_COSTS.defend && !currentCombatant?.isDefending;
     const canMove = isPlayerTurn && currentAP >= 1;
 
@@ -238,6 +268,26 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
                             <Shield className="w-3 h-3" /> Defending
                         </div>
                     )}
+                    {/* Active buffs */}
+                    {currentCombatant.activeBuffs && (
+                        <div className="flex gap-1 mt-1">
+                            {currentCombatant.activeBuffs.attackBonus > 0 && (
+                                <span className="text-[10px] px-1 bg-red-900/50 text-red-300 rounded" title={`+${currentCombatant.activeBuffs.attackBonus} attack (${currentCombatant.activeBuffs.attackTurnsLeft} turns)`}>
+                                    ATK+{currentCombatant.activeBuffs.attackBonus}
+                                </span>
+                            )}
+                            {currentCombatant.activeBuffs.damageBonus > 0 && (
+                                <span className="text-[10px] px-1 bg-orange-900/50 text-orange-300 rounded" title={`+${currentCombatant.activeBuffs.damageBonus} damage (${currentCombatant.activeBuffs.damageTurnsLeft} turns)`}>
+                                    DMG+{currentCombatant.activeBuffs.damageBonus}
+                                </span>
+                            )}
+                            {currentCombatant.activeBuffs.defenseBonus > 0 && (
+                                <span className="text-[10px] px-1 bg-blue-900/50 text-blue-300 rounded" title={`+${currentCombatant.activeBuffs.defenseBonus} defense (${currentCombatant.activeBuffs.defenseTurnsLeft} turns)`}>
+                                    DEF+{currentCombatant.activeBuffs.defenseBonus}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -268,8 +318,8 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
                         {/* Attack button */}
                         <ActionButton
                             icon={<Swords className="w-5 h-5" />}
-                            label="Attack"
-                            apCost={GRID_AP_COSTS.attack}
+                            label={isLightWeapon(currentCombatant?.equippedWeapon?.subtype) ? "Quick Atk" : "Attack"}
+                            apCost={attackAPCost}
                             disabled={!canAttack}
                             active={targetingMode === 'attack'}
                             onClick={() => onStartTargeting('attack')}
@@ -283,6 +333,51 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
                             disabled={!canDefend}
                             onClick={() => onActionClick('defend')}
                         />
+
+                        {/* Use Item button */}
+                        {playerItems.length > 0 && (
+                            <div className="relative group">
+                                <ActionButton
+                                    icon={<FlaskConical className="w-5 h-5" />}
+                                    label="Item"
+                                    apCost={GRID_AP_COSTS.useItem}
+                                    disabled={!canUseItem}
+                                    active={targetingMode === 'item'}
+                                    onClick={() => {
+                                        // Use first available med/buff item immediately
+                                        const usableItem = playerItems.find(i => i.consumableSubtype === 'med' || i.consumableSubtype === 'buff');
+                                        if (usableItem && onUseItem) {
+                                            onUseItem(usableItem.id);
+                                        }
+                                    }}
+                                />
+                                {/* Item count badge */}
+                                <div className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                                    {playerItems.filter(i => i.consumableSubtype !== 'bomb').length}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* AoE button - for equipped AoE weapon or bomb items */}
+                        {(hasAoEWeapon || playerItems.some(i => isBombItem(i))) && (
+                            <ActionButton
+                                icon={<Crosshair className="w-5 h-5" />}
+                                label="AoE"
+                                apCost={GRID_AP_COSTS.aoeAttack}
+                                disabled={!canAoE && !playerItems.some(i => isBombItem(i) && currentAP >= (i.apCost ?? 3))}
+                                active={targetingMode === 'aoe'}
+                                onClick={() => {
+                                    if (hasAoEWeapon) {
+                                        onStartTargeting('aoe');
+                                    } else {
+                                        const bomb = playerItems.find(i => isBombItem(i));
+                                        if (bomb && onStartAoETargeting) {
+                                            onStartAoETargeting(bomb);
+                                        }
+                                    }
+                                }}
+                            />
+                        )}
 
                         <div className="w-px h-10 bg-gray-700 mx-2" />
 
@@ -310,7 +405,10 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
                     {/* Targeting mode hint */}
                     {targetingMode !== 'none' && (
                         <div className="text-center mt-2 text-sm text-yellow-400 bg-gray-900/80 rounded px-3 py-1">
-                            {targetingMode === 'move' ? 'Click a tile to move' : 'Click an enemy to attack'}
+                            {targetingMode === 'move' && 'Click a tile to move'}
+                            {targetingMode === 'attack' && 'Click an enemy to attack'}
+                            {targetingMode === 'aoe' && 'Click a tile to target AoE'}
+                            {targetingMode === 'item' && 'Select an item to use'}
                             <button
                                 onClick={onCancelTargeting}
                                 className="ml-2 text-gray-400 hover:text-white underline"

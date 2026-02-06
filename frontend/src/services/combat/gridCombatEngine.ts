@@ -2,22 +2,24 @@
  * @file gridCombatEngine.ts
  * @description Grid-based tactical combat engine for card-avatar RPG.
  *
- * This is the combat engine. Combatants move on a tile grid, use AP for actions,
- * and fight using range/LOS mechanics.
- *
  * ## Core Loop
  * 1. Combat starts from LocalMapState when player enters threat zone
  * 2. Entities become GridCombatants with positions preserved
- * 3. Turn-based: initiative order, 4 AP per turn
- * 4. Actions: move (1 AP/tile), attack (2 AP), defend (1 AP), end turn
+ * 3. Turn-based: initiative order, AP scales with level (2 + floor(level/10))
+ * 4. Actions: move, attack (weapon-specific), defend, use item, AoE, end turn, flee
  * 5. Victory when all enemies defeated, defeat when player KO'd
  *
- * ## AP Economy
- * - 4 AP per turn
+ * ## AP Economy (level-scaled)
+ * - Level 1-9: 2 AP | Level 10-19: 3 AP | Level 20-29: 4 AP | ... | Level 60: 8 AP
  * - Move: 1 AP per tile (2 AP for difficult terrain)
- * - Attack: 2 AP
- * - Defend: 1 AP (reduces incoming damage)
- * - End Turn: 0 AP (pass remaining AP)
+ * - Heavy attack: 2 AP, ends turn (cleave on kill for heavy melee)
+ * - Light attack: 1 AP, does NOT end turn (max 2/turn)
+ * - Gun attack: 2 AP, ends turn (50% armor pen)
+ * - Magic direct: 2 AP, ends turn (no LOS)
+ * - AoE attack: 3 AP, ends turn (bomb 3x3 or magic cross)
+ * - Defend: 1 AP, ends turn
+ * - Use item: 2 AP, does NOT end turn
+ * - Flee: full turn action
  */
 
 import {
@@ -28,12 +30,16 @@ import {
     GridAttackAction,
     GridDefendAction,
     GridFleeAction,
+    GridUseItemAction,
+    GridAoEAttackAction,
     CombatEvent,
     CombatEventType,
     CombatLogEntry,
     HitQuality,
     calculateHitQuality,
     GRID_AP_COSTS,
+    MAX_LIGHT_ATTACKS_PER_TURN,
+    getAPForLevel,
 } from '../../types/combat';
 import { TilePosition } from '../../types/localMap';
 import { generateUUID } from '../../utils/generateUUID';
@@ -43,7 +49,21 @@ import {
     checkFlanking,
     CombatGrid,
     CombatEntity,
+    getBlastPattern,
+    getAdjacentEnemies,
+    getCombatantsOnTiles,
+    areAdjacent,
 } from '../../utils/gridCombatUtils';
+import {
+    isLightWeapon,
+    isAoEWeapon,
+    getWeaponAPCost,
+    doesWeaponEndTurn,
+    weaponRequiresLOS,
+    tickBuffs,
+    applyBuff,
+} from '../../types/inventory';
+import type { InventoryItem } from '../../types/inventory';
 
 // =============================================================================
 // Random Utilities
@@ -60,12 +80,9 @@ function rollDamageVariance(): number {
 /**
  * Determine whether a defeated enemy is killed or incapacitated.
  * Incapacitation is MORE LIKELY than death (70% vs 30%).
- *
- * @returns 'incapacitated' or 'dead'
  */
 export function rollDeathOrIncapacitation(): 'incapacitated' | 'dead' {
     const roll = Math.random() * 100;
-    // 70% chance of incapacitation, 30% chance of death
     return roll < 70 ? 'incapacitated' : 'dead';
 }
 
@@ -108,6 +125,12 @@ export function gridCombatReducer(
         case 'grid_flee':
             newState = executeGridFlee(state, action as GridFleeAction);
             break;
+        case 'grid_use_item':
+            newState = executeGridUseItem(state, action as GridUseItemAction);
+            break;
+        case 'grid_aoe_attack':
+            newState = executeGridAoEAttack(state, action as GridAoEAttackAction, grid);
+            break;
         case 'grid_end_turn':
             newState = executeEndTurn(state);
             break;
@@ -141,13 +164,11 @@ function executeGridMove(
     const { path } = action;
     if (path.length < 2) return state;
 
-    // Validate path starts at actor position
     const start = path[0];
     if (start.x !== actor.position.x || start.y !== actor.position.y) {
         return state;
     }
 
-    // Calculate path cost
     let totalCost = 0;
     for (let i = 1; i < path.length; i++) {
         const tile = grid.tiles[path[i].y]?.[path[i].x];
@@ -155,16 +176,13 @@ function executeGridMove(
         totalCost += tileCost;
     }
 
-    // Check AP
     if (totalCost > actor.apRemaining) return state;
 
-    // Execute move
     const destination = path[path.length - 1];
     const updatedActor: GridCombatant = {
         ...actor,
         position: destination,
         apRemaining: actor.apRemaining - totalCost,
-        // Update facing based on movement direction
         facing: getFacing(path[path.length - 2], destination),
     };
 
@@ -182,24 +200,16 @@ function executeGridMove(
         type: 'move_completed',
         turn: state.turn,
         actorId: actor.id,
-        data: {
-            actorName: actor.name,
-            path,
-            apSpent: totalCost,
-        },
+        data: { actorName: actor.name, path, apSpent: totalCost },
     };
 
     let newState: GridCombatState = {
         ...state,
-        combatants: {
-            ...state.combatants,
-            [actor.id]: updatedActor,
-        },
+        combatants: { ...state.combatants, [actor.id]: updatedActor },
         log: [...state.log, logEntry],
         pendingEvents: [...state.pendingEvents, moveEvent],
     };
 
-    // Check if AP exhausted - auto end turn
     if (updatedActor.apRemaining === 0) {
         newState = advanceToNextTurn(newState);
     }
@@ -209,7 +219,11 @@ function executeGridMove(
 
 /**
  * Execute grid attack on target.
- * Cost: 2 AP, ends turn
+ * AP cost and behavior depend on equipped weapon subtype:
+ * - Heavy melee/ranged: 2 AP, ends turn, cleave on kill (melee)
+ * - Light melee/ranged: 1 AP, does NOT end turn (max 2/turn)
+ * - Gun: 2 AP, ends turn, 50% armor penetration
+ * - Magic direct: 2 AP, ends turn, no LOS required
  */
 function executeGridAttack(
     state: GridCombatState,
@@ -223,52 +237,64 @@ function executeGridAttack(
         return state;
     }
 
-    if (actor.apRemaining < GRID_AP_COSTS.attack) {
-        return state;
+    const weapon = actor.equippedWeapon;
+    const weaponSubtype = actor.weaponSubtype;
+    const isLight = isLightWeapon(weaponSubtype);
+    const apCost = getWeaponAPCost(weapon);
+
+    // AP check
+    if (actor.apRemaining < apCost) return state;
+
+    // Light weapon attack cap
+    if (isLight && actor.lightAttacksThisTurn >= MAX_LIGHT_ATTACKS_PER_TURN) return state;
+
+    // Reload check for light ranged (crossbow): every other shot costs 2 AP
+    let effectiveAPCost = apCost;
+    if (weaponSubtype === 'light_ranged' && weapon?.weaponProperties?.reload && actor.needsReload) {
+        effectiveAPCost = 2;
+        if (actor.apRemaining < effectiveAPCost) return state;
     }
 
     // Validate range
     const distance = calculateDistance(actor.position, target.position);
-    if (distance > actor.attackRange) {
-        return state;
-    }
+    if (distance > actor.attackRange) return state;
 
-    // Validate LOS for ranged attacks
-    if (actor.attackRange > 1 && !hasLineOfSight(actor.position, target.position, grid)) {
+    // LOS check (magic direct doesn't need it, melee doesn't need it)
+    const needsLOS = weaponRequiresLOS(weapon);
+    if (needsLOS && !hasLineOfSight(actor.position, target.position, grid)) {
         return state;
     }
 
     // Roll to hit
     const attackRoll = rollD20();
     const attackBonus = Math.floor(actor.level / 2);
+    const buffAttackBonus = actor.activeBuffs.attackBonus;
 
     // Flanking bonus
     const allies = Object.values(state.combatants).filter(
         c => c.isPlayerControlled === actor.isPlayerControlled && !c.isKnockedOut
     );
     const combatEntities: CombatEntity[] = allies.map(c => ({
-        id: c.id,
-        position: c.position,
-        allegiance: c.isPlayerControlled ? 'player' : 'enemy',
+        id: c.id, position: c.position,
+        allegiance: c.isPlayerControlled ? 'player' as const : 'enemy' as const,
         isKnockedOut: c.isKnockedOut,
     }));
     const targetEntity: CombatEntity = {
-        id: target.id,
-        position: target.position,
+        id: target.id, position: target.position,
         allegiance: target.isPlayerControlled ? 'player' : 'enemy',
         isKnockedOut: target.isKnockedOut,
     };
     const actorEntity: CombatEntity = {
-        id: actor.id,
-        position: actor.position,
+        id: actor.id, position: actor.position,
         allegiance: actor.isPlayerControlled ? 'player' : 'enemy',
         isKnockedOut: actor.isKnockedOut,
     };
 
     const flankingBonus = checkFlanking(actorEntity, targetEntity, combatEntities) ? 2 : 0;
 
-    const totalAttack = attackRoll + attackBonus + flankingBonus;
-    const targetDefense = target.defense + (target.isDefending ? 3 : 0);
+    const totalAttack = attackRoll + attackBonus + flankingBonus + buffAttackBonus;
+    const targetDefenseBuffBonus = target.activeBuffs.defenseBonus;
+    const targetDefense = target.defense + (target.isDefending ? 3 : 0) + targetDefenseBuffBonus;
     const hit = totalAttack >= targetDefense;
 
     // Calculate damage
@@ -278,8 +304,16 @@ function executeGridAttack(
 
     if (hit) {
         const variance = rollDamageVariance();
-        rawDamage = Math.max(1, actor.damage + variance);
-        finalDamage = Math.max(1, rawDamage - target.armor);
+        const weaponBonusDmg = weapon?.stats?.damage ?? 0;
+        const buffDmgBonus = actor.activeBuffs.damageBonus;
+        const baseDamage = Math.max(1, actor.damage + buffDmgBonus + weaponBonusDmg + variance);
+
+        // Armor penetration (gun: 50%)
+        const armorPenPercent = weapon?.weaponProperties?.armorPenPercent ?? 0;
+        const effectiveArmor = Math.floor(target.armor * (1 - armorPenPercent));
+
+        rawDamage = baseDamage;
+        finalDamage = Math.max(1, baseDamage - effectiveArmor);
         hitQuality = calculateHitQuality(totalAttack, targetDefense, rawDamage, finalDamage);
     }
 
@@ -287,24 +321,21 @@ function executeGridAttack(
     const newTargetHp = Math.max(0, target.currentHp - finalDamage);
     const isKillingBlow = hit && newTargetHp === 0;
 
-    // Determine death vs incapacitation for defeated combatants
-    // Allies (isPlayerControlled=true) ALWAYS get incapacitated, never killed
-    // Enemies roll for death vs incapacitation (70% incap, 30% death)
     let deathOutcome: 'incapacitated' | 'dead' | null = null;
     if (isKillingBlow) {
-        if (target.isPlayerControlled) {
-            // Bonded allies cannot permanently die - always incapacitate
-            deathOutcome = 'incapacitated';
-        } else {
-            // Roll for death vs incapacitation (70% incapacitated, 30% dead)
-            deathOutcome = rollDeathOrIncapacitation();
-        }
+        deathOutcome = target.isPlayerControlled ? 'incapacitated' : rollDeathOrIncapacitation();
     }
+
+    const endsTurn = doesWeaponEndTurn(weapon);
 
     const updatedActor: GridCombatant = {
         ...actor,
-        apRemaining: 0, // Attack ends turn
+        apRemaining: endsTurn ? 0 : actor.apRemaining - effectiveAPCost,
         facing: getFacing(actor.position, target.position),
+        lightAttacksThisTurn: isLight ? actor.lightAttacksThisTurn + 1 : actor.lightAttacksThisTurn,
+        needsReload: weaponSubtype === 'light_ranged' && weapon?.weaponProperties?.reload
+            ? !actor.needsReload  // Toggle reload state
+            : actor.needsReload,
     };
 
     const updatedTarget: GridCombatant = {
@@ -316,9 +347,11 @@ function executeGridAttack(
         recentDamage: hit ? finalDamage : null,
     };
 
-    // Log and events
+    // Determine attack verb based on weapon
+    const attackVerb = getAttackVerb(weaponSubtype);
+
     const mechanicalText = hit
-        ? `${actor.name} ${actor.attackRange > 1 ? 'shoots' : 'strikes'} ${target.name} for ${finalDamage} damage!`
+        ? `${actor.name} ${attackVerb} ${target.name} for ${finalDamage} damage!`
         : `${actor.name}'s attack misses ${target.name}!`;
 
     const logEntry: CombatLogEntry = {
@@ -330,33 +363,24 @@ function executeGridAttack(
         targetId: target.id,
         targetName: target.name,
         result: {
-            hit,
-            damage: finalDamage,
-            hitQuality,
+            hit, damage: finalDamage, hitQuality,
             special: isKillingBlow ? 'killing_blow' : undefined,
         },
         mechanicalText,
     };
 
-    const events: CombatEvent[] = [
-        {
-            type: 'attack_resolved',
-            turn: state.turn,
-            actorId: actor.id,
-            targetId: target.id,
-            data: {
-                attackRoll: totalAttack,
-                targetDefense,
-                rawDamage,
-                finalDamage,
-                hitQuality,
-                isKillingBlow,
-                flanking: flankingBonus > 0,
-                actorName: actor.name,
-                targetName: target.name,
-            },
+    const events: CombatEvent[] = [{
+        type: 'attack_resolved',
+        turn: state.turn,
+        actorId: actor.id,
+        targetId: target.id,
+        data: {
+            attackRoll: totalAttack, targetDefense, rawDamage, finalDamage,
+            hitQuality, isKillingBlow, flanking: flankingBonus > 0,
+            actorName: actor.name, targetName: target.name,
+            weaponSubtype,
         },
-    ];
+    }];
 
     if (isKillingBlow) {
         events.push({
@@ -368,7 +392,7 @@ function executeGridAttack(
                 defeatedName: target.name,
                 defeatedIsEnemy: !target.isPlayerControlled,
                 killerName: actor.name,
-                deathOutcome: deathOutcome, // 'incapacitated' or 'dead' for enemies
+                deathOutcome,
             },
         });
     }
@@ -384,19 +408,437 @@ function executeGridAttack(
         pendingEvents: [...state.pendingEvents, ...events],
     };
 
-    // Check victory/defeat
-    const endResult = checkCombatEnd(newState);
-    if (endResult) {
-        return endResult;
+    // Cleave: on kill with heavy melee, free attack on 1 adjacent enemy
+    if (isKillingBlow && weapon?.weaponProperties?.cleave) {
+        newState = executeCleave(newState, updatedActor, target.position, grid);
     }
 
-    // Advance turn (attack ends turn)
+    // Check victory/defeat
+    const endResult = checkCombatEnd(newState);
+    if (endResult) return endResult;
+
+    // End turn or continue (light weapons don't end turn)
+    if (endsTurn || updatedActor.apRemaining <= 0) {
+        return advanceToNextTurn(newState);
+    }
+
+    return newState;
+}
+
+/**
+ * Execute cleave: free attack on 1 adjacent enemy after a kill (heavy melee).
+ * Max 1 cleave per attack.
+ */
+function executeCleave(
+    state: GridCombatState,
+    actor: GridCombatant,
+    killPosition: TilePosition,
+    _grid: CombatGrid
+): GridCombatState {
+    const adjacentEnemyIds = getAdjacentEnemies(
+        killPosition, state.combatants, actor.id, actor.isPlayerControlled
+    );
+
+    if (adjacentEnemyIds.length === 0) return state;
+
+    // Pick first adjacent enemy (could prioritize lowest HP in future)
+    const cleaveTargetId = adjacentEnemyIds[0];
+    const cleaveTarget = state.combatants[cleaveTargetId];
+    if (!cleaveTarget || cleaveTarget.isKnockedOut) return state;
+
+    // Simplified cleave attack: same stats, no flanking recalc
+    const attackRoll = rollD20();
+    const totalAttack = attackRoll + Math.floor(actor.level / 2) + actor.activeBuffs.attackBonus;
+    const targetDefense = cleaveTarget.defense + (cleaveTarget.isDefending ? 3 : 0) + cleaveTarget.activeBuffs.defenseBonus;
+    const hit = totalAttack >= targetDefense;
+
+    let finalDamage = 0;
+    let hitQuality: HitQuality = 'miss';
+
+    if (hit) {
+        const variance = rollDamageVariance();
+        const weaponBonusDmg = actor.equippedWeapon?.stats?.damage ?? 0;
+        const baseDamage = Math.max(1, actor.damage + actor.activeBuffs.damageBonus + weaponBonusDmg + variance);
+        finalDamage = Math.max(1, baseDamage - cleaveTarget.armor);
+        hitQuality = calculateHitQuality(totalAttack, targetDefense, baseDamage, finalDamage);
+    }
+
+    const newTargetHp = Math.max(0, cleaveTarget.currentHp - finalDamage);
+    const isKillingBlow = hit && newTargetHp === 0;
+    let deathOutcome: 'incapacitated' | 'dead' | null = null;
+    if (isKillingBlow) {
+        deathOutcome = cleaveTarget.isPlayerControlled ? 'incapacitated' : rollDeathOrIncapacitation();
+    }
+
+    const updatedTarget: GridCombatant = {
+        ...cleaveTarget,
+        currentHp: newTargetHp,
+        isKnockedOut: newTargetHp === 0,
+        isIncapacitated: deathOutcome === 'incapacitated',
+        isDead: deathOutcome === 'dead',
+        recentDamage: hit ? finalDamage : null,
+    };
+
+    const cleaveMechanical = hit
+        ? `${actor.name} cleaves into ${cleaveTarget.name} for ${finalDamage} damage!`
+        : `${actor.name}'s cleave misses ${cleaveTarget.name}!`;
+
+    const logEntry: CombatLogEntry = {
+        id: generateUUID(),
+        turn: state.turn,
+        actorId: actor.id,
+        actorName: actor.name,
+        actionType: 'attack',
+        targetId: cleaveTarget.id,
+        targetName: cleaveTarget.name,
+        result: { hit, damage: finalDamage, hitQuality, special: isKillingBlow ? 'killing_blow' : undefined },
+        mechanicalText: cleaveMechanical,
+    };
+
+    const cleaveEvent: CombatEvent = {
+        type: 'cleave_triggered' as CombatEventType,
+        turn: state.turn,
+        actorId: actor.id,
+        targetId: cleaveTarget.id,
+        data: { actorName: actor.name, targetName: cleaveTarget.name, damage: finalDamage, hit },
+    };
+
+    return {
+        ...state,
+        combatants: { ...state.combatants, [cleaveTarget.id]: updatedTarget },
+        log: [...state.log, logEntry],
+        pendingEvents: [...state.pendingEvents, cleaveEvent],
+    };
+}
+
+/**
+ * Execute AoE attack (bomb or magic AoE weapon).
+ * Cost: 3 AP, ends turn.
+ * Bomb: 3x3 blast, friendly fire (allies take 50% damage).
+ * Magic AoE: Cross pattern, no friendly fire.
+ */
+function executeGridAoEAttack(
+    state: GridCombatState,
+    action: GridAoEAttackAction,
+    grid: CombatGrid
+): GridCombatState {
+    const actor = state.combatants[action.actorId];
+    if (!actor || actor.isKnockedOut) return state;
+
+    // Determine AoE source: bomb item or AoE weapon
+    let aoeItem: InventoryItem | undefined;
+    let blastPattern: 'radius_3x3' | 'cross' = 'radius_3x3';
+    let aoeDamage = 0;
+    let friendlyFire = false;
+    let friendlyFireMultiplier = 0.5;
+    let apCost: number = GRID_AP_COSTS.aoeAttack;
+
+    if (action.itemId) {
+        // Bomb consumable
+        aoeItem = actor.combatItems.find(i => i.id === action.itemId);
+        if (!aoeItem) return state;
+        blastPattern = aoeItem.weaponProperties?.blastPattern ?? 'radius_3x3';
+        aoeDamage = aoeItem.stats?.aoeDamage ?? 8;
+        friendlyFire = aoeItem.weaponProperties?.friendlyFire ?? true;
+        friendlyFireMultiplier = aoeItem.weaponProperties?.friendlyFireMultiplier ?? 0.5;
+        apCost = aoeItem.apCost ?? GRID_AP_COSTS.aoeAttack;
+    } else if (actor.equippedWeapon && isAoEWeapon(actor.weaponSubtype)) {
+        // AoE weapon
+        blastPattern = actor.equippedWeapon.weaponProperties?.blastPattern ?? 'cross';
+        aoeDamage = actor.damage + (actor.equippedWeapon.stats?.damage ?? 0) + actor.activeBuffs.damageBonus;
+        friendlyFire = actor.equippedWeapon.weaponProperties?.friendlyFire ?? false;
+        friendlyFireMultiplier = actor.equippedWeapon.weaponProperties?.friendlyFireMultiplier ?? 0.5;
+        apCost = getWeaponAPCost(actor.equippedWeapon);
+    } else {
+        return state; // No AoE capability
+    }
+
+    if (actor.apRemaining < apCost) return state;
+
+    // Range check
+    const distance = calculateDistance(actor.position, action.targetPosition);
+    const maxRange = aoeItem?.attackRange ?? actor.equippedWeapon?.attackRange ?? 5;
+    if (distance > maxRange) return state;
+
+    // LOS check for bombs (magic AoE doesn't need LOS)
+    if (aoeItem && !hasLineOfSight(actor.position, action.targetPosition, grid)) {
+        return state;
+    }
+
+    // Get affected tiles
+    const affectedTiles = getBlastPattern(action.targetPosition, blastPattern, grid);
+
+    // Get combatants on affected tiles
+    const affectedIds = getCombatantsOnTiles(affectedTiles, state.combatants);
+
+    // Resolve hits on each affected combatant
+    const updatedCombatants = { ...state.combatants };
+    const events: CombatEvent[] = [];
+    const logEntries: CombatLogEntry[] = [];
+    let totalHits = 0;
+
+    for (const targetId of affectedIds) {
+        if (targetId === actor.id) continue; // Don't hit self
+
+        const aoeTarget = updatedCombatants[targetId];
+        if (!aoeTarget || aoeTarget.isKnockedOut) continue;
+
+        // Friendly fire check
+        const isAlly = aoeTarget.isPlayerControlled === actor.isPlayerControlled;
+        if (isAlly && !friendlyFire) continue;
+
+        // Individual hit roll
+        const attackRoll = rollD20();
+        const totalAttack = attackRoll + Math.floor(actor.level / 2) + actor.activeBuffs.attackBonus;
+        const targetDefense = aoeTarget.defense + (aoeTarget.isDefending ? 3 : 0) + aoeTarget.activeBuffs.defenseBonus;
+        const hit = totalAttack >= targetDefense;
+
+        let finalDamage = 0;
+        if (hit) {
+            // AoE: no variance (consistent damage)
+            finalDamage = Math.max(1, aoeDamage - aoeTarget.armor);
+            if (isAlly) {
+                finalDamage = Math.max(1, Math.floor(finalDamage * friendlyFireMultiplier));
+            }
+            totalHits++;
+        }
+
+        const newHp = Math.max(0, aoeTarget.currentHp - finalDamage);
+        const isKillingBlow = hit && newHp === 0;
+        let deathOutcome: 'incapacitated' | 'dead' | null = null;
+        if (isKillingBlow) {
+            deathOutcome = aoeTarget.isPlayerControlled ? 'incapacitated' : rollDeathOrIncapacitation();
+        }
+
+        updatedCombatants[targetId] = {
+            ...aoeTarget,
+            currentHp: newHp,
+            isKnockedOut: newHp === 0,
+            isIncapacitated: deathOutcome === 'incapacitated',
+            isDead: deathOutcome === 'dead',
+            recentDamage: hit ? finalDamage : null,
+        };
+
+        if (hit) {
+            logEntries.push({
+                id: generateUUID(),
+                turn: state.turn,
+                actorId: actor.id,
+                actorName: actor.name,
+                actionType: 'attack',
+                targetId: aoeTarget.id,
+                targetName: aoeTarget.name,
+                result: { hit: true, damage: finalDamage, special: isKillingBlow ? 'killing_blow' : undefined },
+                mechanicalText: `${aoeTarget.name} takes ${finalDamage} ${blastPattern === 'radius_3x3' ? 'blast' : 'magic'} damage!`,
+            });
+        }
+
+        if (isKillingBlow) {
+            events.push({
+                type: 'character_defeated',
+                turn: state.turn,
+                actorId: actor.id,
+                targetId: aoeTarget.id,
+                data: { defeatedName: aoeTarget.name, defeatedIsEnemy: !aoeTarget.isPlayerControlled, killerName: actor.name, deathOutcome },
+            });
+        }
+    }
+
+    // Consume bomb if applicable
+    let updatedCombatItems = actor.combatItems;
+    if (aoeItem) {
+        updatedCombatItems = actor.combatItems.map(item => {
+            if (item.id !== aoeItem!.id) return item;
+            const newCount = (item.stackCount ?? 1) - 1;
+            return newCount > 0 ? { ...item, stackCount: newCount } : item;
+        }).filter(item => (item.stackCount ?? 1) > 0);
+    }
+
+    const updatedActor: GridCombatant = {
+        ...actor,
+        apRemaining: 0, // AoE always ends turn
+        combatItems: updatedCombatItems,
+    };
+    updatedCombatants[actor.id] = updatedActor;
+
+    const aoeLogEntry: CombatLogEntry = {
+        id: generateUUID(),
+        turn: state.turn,
+        actorId: actor.id,
+        actorName: actor.name,
+        actionType: 'attack',
+        result: {},
+        mechanicalText: `${actor.name} unleashes ${blastPattern === 'radius_3x3' ? 'a 3x3 blast' : 'a cross-pattern attack'}! ${totalHits} targets hit.`,
+    };
+
+    events.unshift({
+        type: 'aoe_resolved' as CombatEventType,
+        turn: state.turn,
+        actorId: actor.id,
+        data: {
+            actorName: actor.name,
+            targetPosition: action.targetPosition,
+            blastPattern,
+            affectedTiles,
+            totalHits,
+            isBomb: !!aoeItem,
+        },
+    });
+
+    let newState: GridCombatState = {
+        ...state,
+        combatants: updatedCombatants,
+        log: [...state.log, aoeLogEntry, ...logEntries],
+        pendingEvents: [...state.pendingEvents, ...events],
+    };
+
+    const endResult = checkCombatEnd(newState);
+    if (endResult) return endResult;
+
     return advanceToNextTurn(newState);
 }
 
 /**
+ * Execute item usage in combat.
+ * Cost: 2 AP, does NOT end turn.
+ * Meds: Heal self or adjacent ally.
+ * Buffs: Apply temporary stat boost.
+ */
+function executeGridUseItem(
+    state: GridCombatState,
+    action: GridUseItemAction
+): GridCombatState {
+    const actor = state.combatants[action.actorId];
+    if (!actor || actor.isKnockedOut) return state;
+
+    if (actor.apRemaining < GRID_AP_COSTS.useItem) return state;
+
+    // Find item
+    const item = actor.combatItems.find(i => i.id === action.itemId);
+    if (!item) return state;
+    if (item.type !== 'consumable') return state;
+    if (!item.stackCount || item.stackCount <= 0) return state;
+
+    // Validate target (self or adjacent ally, defaults to self)
+    const targetId = action.targetId ?? action.actorId;
+    const target = state.combatants[targetId];
+    if (!target || target.isKnockedOut) return state;
+    if (target.isPlayerControlled !== actor.isPlayerControlled) return state; // Must target same side
+    if (target.id !== actor.id && !areAdjacent(actor.position, target.position)) return state;
+
+    const events: CombatEvent[] = [];
+    let updatedTarget = { ...target };
+    let mechanicalText = '';
+
+    if (item.consumableSubtype === 'med') {
+        // Healing
+        const healPercent = item.stats?.healPercent ?? 0.25;
+        const healMin = item.stats?.healMin ?? 0;
+        const healAmount = Math.max(healMin, Math.floor(target.maxHp * healPercent));
+        const actualHeal = Math.min(healAmount, target.maxHp - target.currentHp);
+
+        updatedTarget = {
+            ...updatedTarget,
+            currentHp: Math.min(target.maxHp, target.currentHp + actualHeal),
+            recentHeal: actualHeal,
+        };
+
+        mechanicalText = target.id === actor.id
+            ? `${actor.name} uses ${item.name}, restoring ${actualHeal} HP!`
+            : `${actor.name} uses ${item.name} on ${target.name}, restoring ${actualHeal} HP!`;
+
+        events.push({
+            type: 'item_used' as CombatEventType,
+            turn: state.turn,
+            actorId: actor.id,
+            targetId: target.id,
+            data: { itemName: item.name, itemSubtype: 'med', healAmount: actualHeal, targetName: target.name },
+        });
+    } else if (item.consumableSubtype === 'buff') {
+        // Apply buff
+        updatedTarget = {
+            ...updatedTarget,
+            activeBuffs: applyBuff(target.activeBuffs, item),
+        };
+
+        const buffDesc = [];
+        if (item.stats?.attackBonus) buffDesc.push(`+${item.stats.attackBonus} attack`);
+        if (item.stats?.damageBonus) buffDesc.push(`+${item.stats.damageBonus} damage`);
+        if (item.stats?.defenseBonus) buffDesc.push(`+${item.stats.defenseBonus} defense`);
+
+        mechanicalText = target.id === actor.id
+            ? `${actor.name} uses ${item.name} (${buffDesc.join(', ')} for ${item.stats?.buffDuration ?? 3} turns)!`
+            : `${actor.name} uses ${item.name} on ${target.name} (${buffDesc.join(', ')} for ${item.stats?.buffDuration ?? 3} turns)!`;
+
+        events.push({
+            type: 'buff_applied' as CombatEventType,
+            turn: state.turn,
+            actorId: actor.id,
+            targetId: target.id,
+            data: { itemName: item.name, buffs: item.stats, targetName: target.name },
+        });
+    } else {
+        return state; // Unsupported consumable subtype in combat
+    }
+
+    // Consume item (decrease stack)
+    const updatedCombatItems = actor.combatItems.map(i => {
+        if (i.id !== item.id) return i;
+        const newCount = (i.stackCount ?? 1) - 1;
+        return newCount > 0 ? { ...i, stackCount: newCount } : i;
+    }).filter(i => (i.stackCount ?? 1) > 0);
+
+    const updatedActor: GridCombatant = {
+        ...actor,
+        apRemaining: actor.apRemaining - GRID_AP_COSTS.useItem,
+        combatItems: updatedCombatItems,
+    };
+
+    // If actor used item on self, merge both updates
+    const combatants = { ...state.combatants };
+    if (actor.id === target.id) {
+        combatants[actor.id] = {
+            ...updatedActor,
+            currentHp: updatedTarget.currentHp,
+            recentHeal: updatedTarget.recentHeal,
+            activeBuffs: updatedTarget.activeBuffs,
+        };
+    } else {
+        combatants[actor.id] = updatedActor;
+        combatants[target.id] = updatedTarget;
+    }
+
+    const logEntry: CombatLogEntry = {
+        id: generateUUID(),
+        turn: state.turn,
+        actorId: actor.id,
+        actorName: actor.name,
+        actionType: 'item',
+        targetId: target.id,
+        targetName: target.name,
+        result: {},
+        mechanicalText,
+    };
+
+    let newState: GridCombatState = {
+        ...state,
+        combatants,
+        log: [...state.log, logEntry],
+        pendingEvents: [...state.pendingEvents, ...events],
+    };
+
+    // Item usage does NOT end turn, but check if AP exhausted
+    const finalActor = newState.combatants[actor.id];
+    if (finalActor.apRemaining <= 0) {
+        newState = advanceToNextTurn(newState);
+    }
+
+    return newState;
+}
+
+/**
  * Execute defend action.
- * Cost: 1 AP, grants +3 defense until next turn
+ * Cost: 1 AP, grants +3 defense until next turn. Always ends turn.
  */
 function executeGridDefend(
     state: GridCombatState,
@@ -405,13 +847,11 @@ function executeGridDefend(
     const actor = state.combatants[action.actorId];
     if (!actor || actor.isKnockedOut) return state;
 
-    if (actor.apRemaining < GRID_AP_COSTS.defend) {
-        return state;
-    }
+    if (actor.apRemaining < GRID_AP_COSTS.defend) return state;
 
     const updatedActor: GridCombatant = {
         ...actor,
-        apRemaining: actor.apRemaining - GRID_AP_COSTS.defend,
+        apRemaining: 0, // Defend always ends turn
         isDefending: true,
     };
 
@@ -434,28 +874,17 @@ function executeGridDefend(
 
     let newState: GridCombatState = {
         ...state,
-        combatants: {
-            ...state.combatants,
-            [actor.id]: {
-                ...updatedActor,
-                apRemaining: 0, // Defend always ends turn - no banked AP
-            },
-        },
+        combatants: { ...state.combatants, [actor.id]: updatedActor },
         log: [...state.log, logEntry],
         pendingEvents: [...state.pendingEvents, event],
     };
 
-    // Defend always ends the turn
-    newState = advanceToNextTurn(newState);
-
-    return newState;
+    return advanceToNextTurn(newState);
 }
 
 /**
  * Attempt to flee from combat.
  * Roll: d20 + floor(speed / 5) >= 12 for success
- * On fail: lose turn, log message
- * On success: end combat with 'fled' outcome
  */
 function executeGridFlee(
     state: GridCombatState,
@@ -463,27 +892,21 @@ function executeGridFlee(
 ): GridCombatState {
     const actor = state.combatants[action.actorId];
     if (!actor || actor.isKnockedOut) return state;
-
-    // Only player can flee
     if (!actor.isPlayer) return state;
 
-    // Roll for flee: d20 + floor(speed / 5) >= 12
     const fleeRoll = rollD20();
     const speedBonus = Math.floor(actor.speed / 5);
     const totalRoll = fleeRoll + speedBonus;
     const success = totalRoll >= 12;
 
     if (success) {
-        // Successful flee - end combat
         const logEntry: CombatLogEntry = {
             id: generateUUID(),
             turn: state.turn,
             actorId: actor.id,
             actorName: actor.name,
             actionType: 'flee',
-            result: {
-                special: 'fled',
-            },
+            result: { special: 'fled' },
             mechanicalText: `${actor.name} successfully flees from combat! (rolled ${fleeRoll} + ${speedBonus} = ${totalRoll} vs DC 12)`,
         };
 
@@ -491,43 +914,28 @@ function executeGridFlee(
             type: 'flee_attempted',
             turn: state.turn,
             actorId: actor.id,
-            data: {
-                actorName: actor.name,
-                success: true,
-                roll: fleeRoll,
-                speedBonus,
-                total: totalRoll,
-            },
+            data: { actorName: actor.name, success: true, roll: fleeRoll, speedBonus, total: totalRoll },
         };
 
-        // Get surviving allies for the result
         const survivingAllies = Object.values(state.combatants)
             .filter(c => c.isPlayerControlled && !c.isKnockedOut)
             .map(c => c.id);
 
         return {
             ...state,
-            phase: 'victory', // Use victory phase for fled (shows end screen)
+            phase: 'victory',
             log: [...state.log, logEntry],
             pendingEvents: [...state.pendingEvents, fleeEvent],
-            result: {
-                outcome: 'fled',
-                survivingAllies,
-                defeatedEnemies: [],
-                // No rewards for fleeing
-            },
+            result: { outcome: 'fled', survivingAllies, defeatedEnemies: [] },
         };
     } else {
-        // Failed flee - lose turn
         const logEntry: CombatLogEntry = {
             id: generateUUID(),
             turn: state.turn,
             actorId: actor.id,
             actorName: actor.name,
             actionType: 'flee',
-            result: {
-                special: 'fled_failed',
-            },
+            result: { special: 'fled_failed' },
             mechanicalText: `${actor.name} fails to flee! (rolled ${fleeRoll} + ${speedBonus} = ${totalRoll} vs DC 12)`,
         };
 
@@ -535,27 +943,14 @@ function executeGridFlee(
             type: 'flee_attempted',
             turn: state.turn,
             actorId: actor.id,
-            data: {
-                actorName: actor.name,
-                success: false,
-                roll: fleeRoll,
-                speedBonus,
-                total: totalRoll,
-            },
+            data: { actorName: actor.name, success: false, roll: fleeRoll, speedBonus, total: totalRoll },
         };
 
-        // Set AP to 0 and advance turn
-        const updatedActor: GridCombatant = {
-            ...actor,
-            apRemaining: 0,
-        };
+        const updatedActor: GridCombatant = { ...actor, apRemaining: 0 };
 
         let newState: GridCombatState = {
             ...state,
-            combatants: {
-                ...state.combatants,
-                [actor.id]: updatedActor,
-            },
+            combatants: { ...state.combatants, [actor.id]: updatedActor },
             log: [...state.log, logEntry],
             pendingEvents: [...state.pendingEvents, fleeEvent],
         };
@@ -577,48 +972,72 @@ function executeEndTurn(state: GridCombatState): GridCombatState {
 
 /**
  * Advance to the next combatant's turn.
+ * Handles: AP reset, buff tick, light attack counter reset, defend clear.
  */
 function advanceToNextTurn(state: GridCombatState): GridCombatState {
     let nextIndex = state.currentTurnIndex + 1;
     let nextTurn = state.turn;
 
-    // Wrap to next round
     if (nextIndex >= state.initiativeOrder.length) {
         nextIndex = 0;
         nextTurn = state.turn + 1;
     }
 
-    // Find next non-KO'd combatant
     let attempts = 0;
     while (attempts < state.initiativeOrder.length) {
         const nextId = state.initiativeOrder[nextIndex];
         const nextCombatant = state.combatants[nextId];
 
-        if (nextCombatant && !nextCombatant.isKnockedOut) {
-            break;
-        }
+        if (nextCombatant && !nextCombatant.isKnockedOut) break;
 
         nextIndex = (nextIndex + 1) % state.initiativeOrder.length;
-        if (nextIndex === 0) {
-            nextTurn++;
-        }
+        if (nextIndex === 0) nextTurn++;
         attempts++;
     }
 
     const nextId = state.initiativeOrder[nextIndex];
     const nextCombatant = state.combatants[nextId];
 
-    if (!nextCombatant) {
-        return state;
+    if (!nextCombatant) return state;
+
+    // Tick buffs (decrement durations, clear expired)
+    const tickedBuffs = tickBuffs(nextCombatant.activeBuffs);
+    const buffExpiredEvents: CombatEvent[] = [];
+
+    // Check if any buffs just expired
+    if (nextCombatant.activeBuffs.attackBonus > 0 && tickedBuffs.attackBonus === 0) {
+        buffExpiredEvents.push({
+            type: 'buff_expired' as CombatEventType,
+            turn: nextTurn,
+            actorId: nextId,
+            data: { actorName: nextCombatant.name, buffType: 'attack' },
+        });
+    }
+    if (nextCombatant.activeBuffs.damageBonus > 0 && tickedBuffs.damageBonus === 0) {
+        buffExpiredEvents.push({
+            type: 'buff_expired' as CombatEventType,
+            turn: nextTurn,
+            actorId: nextId,
+            data: { actorName: nextCombatant.name, buffType: 'damage' },
+        });
+    }
+    if (nextCombatant.activeBuffs.defenseBonus > 0 && tickedBuffs.defenseBonus === 0) {
+        buffExpiredEvents.push({
+            type: 'buff_expired' as CombatEventType,
+            turn: nextTurn,
+            actorId: nextId,
+            data: { actorName: nextCombatant.name, buffType: 'defense' },
+        });
     }
 
-    // Reset AP and clear defend for next combatant
     const updatedCombatant: GridCombatant = {
         ...nextCombatant,
-        apRemaining: 4,
+        apRemaining: getAPForLevel(nextCombatant.level),
         isDefending: false,
         recentDamage: null,
         recentHeal: null,
+        lightAttacksThisTurn: 0,
+        activeBuffs: tickedBuffs,
     };
 
     const turnEvent: CombatEvent = {
@@ -636,11 +1055,8 @@ function advanceToNextTurn(state: GridCombatState): GridCombatState {
         turn: nextTurn,
         currentTurnIndex: nextIndex,
         phase: nextCombatant.isPlayerControlled ? 'awaiting_input' : 'resolving',
-        combatants: {
-            ...state.combatants,
-            [nextId]: updatedCombatant,
-        },
-        pendingEvents: [...state.pendingEvents, turnEvent],
+        combatants: { ...state.combatants, [nextId]: updatedCombatant },
+        pendingEvents: [...state.pendingEvents, ...buffExpiredEvents, turnEvent],
     };
 }
 
@@ -657,44 +1073,31 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
     );
 
     if (!enemySideAlive) {
-        // Victory - revive incapacitated allies at 25% HP
         const enemies = Object.values(state.combatants).filter(c => !c.isPlayerControlled);
 
-        // Calculate XP: killed enemies give level * 10, incapacitated give level * 5
         const xpReward = enemies.reduce((sum, e) => {
-            if (e.isDead) {
-                return sum + e.level * 10;  // Full XP for kills
-            } else {
-                return sum + e.level * 5;   // Half XP for incapacitation
-            }
+            return sum + (e.isDead ? e.level * 10 : e.level * 5);
         }, 0);
 
-        // Calculate gold: level * 5 per enemy
         const goldReward = enemies.reduce((sum, e) => sum + e.level * 5, 0);
 
-        // Find incapacitated player-side combatants to revive (includes THE player)
         const incapacitatedPlayerSide = Object.values(state.combatants).filter(
             c => c.isPlayerControlled && c.isKnockedOut && c.isIncapacitated
         );
 
-        // Find the player specifically and allies separately
         const incapacitatedPlayer = incapacitatedPlayerSide.find(c => c.isPlayer);
         const incapacitatedAllies = incapacitatedPlayerSide.filter(c => !c.isPlayer);
 
-        // Find the ally who "carried" the fight (last ally standing who will revive the player)
-        // This is the ally who was NOT knocked out when victory triggered
         const carryingAlly = Object.values(state.combatants).find(
             c => c.isPlayerControlled && !c.isPlayer && !c.isKnockedOut
         );
 
-        // Revive all incapacitated player-side combatants - restore to 25% HP
         const revivedCombatants = { ...state.combatants };
         const revivedAllyIds: string[] = [];
         const revivalEvents: CombatEvent[] = [];
         let revivedPlayer = false;
         let revivedByAllyId: string | undefined = undefined;
 
-        // Revive the player first if they were knocked out
         if (incapacitatedPlayer) {
             const revivedHp = Math.max(1, Math.floor(incapacitatedPlayer.maxHp * 0.25));
             revivedCombatants[incapacitatedPlayer.id] = {
@@ -706,7 +1109,6 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
             revivedPlayer = true;
             revivedByAllyId = carryingAlly?.id;
 
-            // Add player revival event
             revivalEvents.push({
                 type: 'player_revived' as CombatEventType,
                 turn: state.turn,
@@ -721,7 +1123,6 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
             });
         }
 
-        // Revive allies
         for (const ally of incapacitatedAllies) {
             const revivedHp = Math.max(1, Math.floor(ally.maxHp * 0.25));
             revivedCombatants[ally.id] = {
@@ -732,20 +1133,14 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
             };
             revivedAllyIds.push(ally.id);
 
-            // Add revival event
             revivalEvents.push({
                 type: 'ally_revived' as CombatEventType,
                 turn: state.turn,
                 actorId: ally.id,
-                data: {
-                    allyName: ally.name,
-                    revivedHp,
-                    maxHp: ally.maxHp,
-                },
+                data: { allyName: ally.name, revivedHp, maxHp: ally.maxHp },
             });
         }
 
-        // Surviving allies = those never knocked out + revived ones
         const survivingAllies = Object.values(revivedCombatants)
             .filter(c => c.isPlayerControlled && !c.isKnockedOut)
             .map(c => c.id);
@@ -759,9 +1154,9 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
                 rewards: { xp: xpReward, gold: goldReward, items: [] },
                 survivingAllies,
                 defeatedEnemies: enemies.map(e => e.id),
-                revivedAllies: revivedAllyIds, // Track which allies were revived
-                revivedPlayer,                 // Track if THE player was revived by ally
-                revivedByAllyId,               // Track which ally revived the player
+                revivedAllies: revivedAllyIds,
+                revivedPlayer,
+                revivedByAllyId,
             },
             pendingEvents: [
                 ...state.pendingEvents,
@@ -769,20 +1164,13 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
                 {
                     type: 'combat_victory',
                     turn: state.turn,
-                    data: {
-                        turnsTotal: state.turn,
-                        xpReward,
-                        revivedAllies: revivedAllyIds,
-                        revivedPlayer,
-                        revivedByAllyId,
-                    },
+                    data: { turnsTotal: state.turn, xpReward, revivedAllies: revivedAllyIds, revivedPlayer, revivedByAllyId },
                 },
             ],
         };
     }
 
     if (!playerSideAlive) {
-        // Defeat
         return {
             ...state,
             phase: 'defeat',
@@ -795,11 +1183,7 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
             },
             pendingEvents: [
                 ...state.pendingEvents,
-                {
-                    type: 'combat_defeat',
-                    turn: state.turn,
-                    data: { turnsTotal: state.turn },
-                },
+                { type: 'combat_defeat', turn: state.turn, data: { turnsTotal: state.turn } },
             ],
         };
     }
@@ -811,26 +1195,30 @@ function checkCombatEnd(state: GridCombatState): GridCombatState | null {
 // Helpers
 // =============================================================================
 
-/**
- * Get facing direction from movement.
- */
 function getFacing(from: TilePosition, to: TilePosition): 'north' | 'south' | 'east' | 'west' {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-        return dx > 0 ? 'east' : 'west';
-    }
+    if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 'east' : 'west';
     return dy > 0 ? 'south' : 'north';
+}
+
+function getAttackVerb(subtype: import('../../types/inventory').WeaponSubtype | undefined): string {
+    switch (subtype) {
+        case 'heavy_melee': return 'cleaves';
+        case 'light_melee': return 'slashes';
+        case 'heavy_ranged': return 'shoots';
+        case 'light_ranged': return 'fires at';
+        case 'gun': return 'shoots';
+        case 'magic_direct': return 'blasts';
+        case 'magic_aoe': return 'unleashes magic on';
+        default: return 'strikes';
+    }
 }
 
 // =============================================================================
 // Query Helpers
 // =============================================================================
 
-/**
- * Get the current turn combatant.
- */
 export function getCurrentCombatant(state: GridCombatState): GridCombatant | null {
     const id = state.initiativeOrder[state.currentTurnIndex];
     return state.combatants[id] ?? null;
@@ -849,10 +1237,28 @@ export function canPerformAction(
     switch (actionType) {
         case 'grid_move':
             return actor.apRemaining >= 1;
-        case 'grid_attack':
-            return actor.apRemaining >= GRID_AP_COSTS.attack;
+        case 'grid_attack': {
+            const apCost = getWeaponAPCost(actor.equippedWeapon);
+            const isLight = isLightWeapon(actor.weaponSubtype);
+            if (isLight && actor.lightAttacksThisTurn >= MAX_LIGHT_ATTACKS_PER_TURN) return false;
+            // Reload cost for light ranged
+            if (actor.weaponSubtype === 'light_ranged' && actor.equippedWeapon?.weaponProperties?.reload && actor.needsReload) {
+                return actor.apRemaining >= 2;
+            }
+            return actor.apRemaining >= apCost;
+        }
         case 'grid_defend':
             return actor.apRemaining >= GRID_AP_COSTS.defend && !actor.isDefending;
+        case 'grid_use_item':
+            return actor.apRemaining >= GRID_AP_COSTS.useItem && actor.combatItems.length > 0;
+        case 'grid_aoe_attack': {
+            const aoeApCost = GRID_AP_COSTS.aoeAttack;
+            const hasAoEWeapon = isAoEWeapon(actor.weaponSubtype);
+            const hasBombs = actor.combatItems.some(i => i.consumableSubtype === 'bomb' && (i.stackCount ?? 0) > 0);
+            return actor.apRemaining >= aoeApCost && (hasAoEWeapon || hasBombs);
+        }
+        case 'grid_flee':
+            return actor.isPlayer;
         case 'grid_end_turn':
             return true;
         default:
@@ -860,25 +1266,17 @@ export function canPerformAction(
     }
 }
 
-/**
- * Get enemies of a combatant.
- */
 export function getEnemies(state: GridCombatState, combatantId: string): GridCombatant[] {
     const combatant = state.combatants[combatantId];
     if (!combatant) return [];
-
     return Object.values(state.combatants).filter(
         c => c.isPlayerControlled !== combatant.isPlayerControlled && !c.isKnockedOut
     );
 }
 
-/**
- * Get allies of a combatant (including self).
- */
 export function getAllies(state: GridCombatState, combatantId: string): GridCombatant[] {
     const combatant = state.combatants[combatantId];
     if (!combatant) return [];
-
     return Object.values(state.combatants).filter(
         c => c.isPlayerControlled === combatant.isPlayerControlled && !c.isKnockedOut
     );

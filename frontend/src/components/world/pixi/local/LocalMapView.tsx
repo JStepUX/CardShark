@@ -19,6 +19,8 @@ import {
     LocalMapConfig,
 } from '../../../../types/localMap';
 import { GridCombatant } from '../../../../types/combat';
+import type { BlastPattern } from '../../../../types/inventory';
+import { getBlastPattern, CombatGrid } from '../../../../utils/gridCombatUtils';
 import { GridWorldState, GridRoom, DisplayNPC } from '../../../../types/worldGrid';
 import {
     deriveExitsFromWorld,
@@ -124,7 +126,9 @@ interface LocalMapViewProps {
     /** Valid attack targets to highlight (from combat system) */
     validAttackTargets?: GridCombatant[];
     /** Current targeting mode for combat */
-    targetingMode?: 'none' | 'move' | 'attack';
+    targetingMode?: 'none' | 'move' | 'attack' | 'item' | 'aoe';
+    /** AoE blast pattern type for preview overlay (when targetingMode is 'aoe') */
+    aoeBlastPattern?: BlastPattern;
     /** Combat map state (used to sync entity positions during combat) */
     combatMapState?: LocalMapState | null;
     /** Configuration overrides */
@@ -153,6 +157,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     validMoveTargets,
     validAttackTargets,
     targetingMode = 'none',
+    aoeBlastPattern,
     combatMapState,
     config: configOverrides,
     className,
@@ -208,6 +213,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     // Refs to always get latest handlers (avoids stale closure in Pixi event)
     const handleTileClickRef = useRef<(position: TilePosition) => void>(() => { });
     const onEntityClickRef = useRef<((entityId: string) => void) | undefined>();
+    const tileHoverRef = useRef<((position: TilePosition) => void) | null>(null);
 
     // Keep ref in sync with state
     useEffect(() => {
@@ -1066,6 +1072,12 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 }
             });
 
+            stage.on('tileHovered', (position: TilePosition) => {
+                if (tileHoverRef.current) {
+                    tileHoverRef.current(position);
+                }
+            });
+
             // Set up ticker for animations
             app.ticker.add((ticker) => {
                 stage.updateAnimations(ticker.deltaTime / 60);
@@ -1437,6 +1449,36 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             }
         };
     }, [inCombat, targetingMode, validMoveTargets, validAttackTargets]);
+
+    // AoE blast pattern preview: update on tile hover when in 'aoe' targeting mode
+    useEffect(() => {
+        if (!inCombat || targetingMode !== 'aoe' || !aoeBlastPattern) {
+            tileHoverRef.current = null;
+            return;
+        }
+
+        tileHoverRef.current = (position: TilePosition) => {
+            if (!stageRef.current) return;
+            // Clear previous AoE preview highlights
+            stageRef.current.clearActionHighlights();
+            // Compute blast pattern tiles
+            const grid: CombatGrid = {
+                width: config.gridWidth,
+                height: config.gridHeight,
+                tiles: [], // getBlastPattern only uses width/height for bounds checking
+            };
+            const blastTiles = getBlastPattern(position, aoeBlastPattern, grid);
+            stageRef.current.showAoEPreview(blastTiles);
+        };
+
+        return () => {
+            tileHoverRef.current = null;
+            // Clear AoE preview on cleanup
+            if (stageRef.current) {
+                stageRef.current.clearActionHighlights();
+            }
+        };
+    }, [inCombat, targetingMode, aoeBlastPattern, config.gridWidth, config.gridHeight]);
 
     // Always render the container div so the ref is attached for Pixi initialization
     // Show loading overlay on top while textures preload

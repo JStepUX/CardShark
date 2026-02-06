@@ -258,6 +258,11 @@ export class LocalMapStage extends PIXI.Container {
                     this.emit('tileClicked', { x, y });
                 });
 
+                // Set up hover handler for AoE preview
+                tile.on('pointerover', () => {
+                    this.emit('tileHovered', { x, y });
+                });
+
                 row.push(tile);
                 this.gridLayer.addChild(tile);
             }
@@ -501,6 +506,18 @@ export class LocalMapStage extends PIXI.Container {
         this.updateThreatZones(this.currentState.threatZones);
         this.updatePlayerPosition(this.currentState.playerPosition);
         this.updateExits(this.currentState.exits);
+    }
+
+    /**
+     * Show AoE blast pattern preview on tiles (orange overlay)
+     */
+    showAoEPreview(positions: TilePosition[]): void {
+        for (const pos of positions) {
+            const tile = this.getTile(pos);
+            if (tile) {
+                tile.setHighlight('aoe_preview');
+            }
+        }
     }
 
     /**

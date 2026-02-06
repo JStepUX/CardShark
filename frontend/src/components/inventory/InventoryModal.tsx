@@ -5,23 +5,68 @@
  * Features:
  * - Character portrait and stats display (HP, Gold)
  * - Equipment slots (weapon, armor)
- * - General inventory grid (5x2)
+ * - General inventory grid (5x2) with stack count badges
  * - Drag-and-drop item management
+ * - "Use" button for consumable meds outside combat
+ * - Weapon subtype-aware item icons
  * - Dismiss ally button (for bonded allies)
  * - Disabled during combat
  */
 
 import React, { useState, useCallback } from 'react';
-import { X, Swords, Shield, Package, UserMinus } from 'lucide-react';
+import { X, Swords, Shield, Package, UserMinus, FlaskConical } from 'lucide-react';
 import type {
   CharacterInventory,
   InventoryItem,
+  WeaponSubtype,
 } from '../../types/inventory';
 import {
   equipWeapon,
   unequipWeapon,
   isEquippableWeapon,
+  useConsumableFromInventory,
 } from '../../types/inventory';
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Get an emoji icon for an item based on its type and subtype.
+ */
+function getItemIcon(item: InventoryItem): string {
+  if (item.type === 'weapon') {
+    const subtype = item.subtype as WeaponSubtype | undefined;
+    switch (subtype) {
+      case 'heavy_melee':
+      case 'melee':
+        return '\u2694\uFE0F'; // crossed swords
+      case 'light_melee':
+        return '\uD83D\uDDE1\uFE0F'; // dagger
+      case 'heavy_ranged':
+      case 'light_ranged':
+      case 'ranged':
+        return '\uD83C\uDFF9'; // bow
+      case 'gun':
+        return '\uD83D\uDD2B'; // pistol
+      case 'magic_direct':
+      case 'magic_aoe':
+        return '\uD83E\uDE84'; // wand
+      case 'bomb':
+        return '\uD83D\uDCA3'; // bomb
+      default:
+        return '\u2694\uFE0F'; // default sword
+    }
+  }
+  if (item.type === 'armor') return '\uD83D\uDEE1\uFE0F';
+  if (item.type === 'consumable') {
+    if (item.consumableSubtype === 'bomb') return '\uD83D\uDCA3';
+    if (item.consumableSubtype === 'buff') return '\u2728';
+    return '\uD83E\uDDEA'; // test tube for meds
+  }
+  if (item.type === 'loot') return '\uD83D\uDC8E';
+  return '\uD83D\uDCE6'; // package fallback
+}
 
 // =============================================================================
 // Types
@@ -44,12 +89,16 @@ interface InventoryModalProps {
   inventory: CharacterInventory;
   /** Is this an ally (shows dismiss button) */
   isAlly: boolean;
+  /** Whether combat is active (disables consumable usage) */
+  inCombat?: boolean;
   /** Close modal callback */
   onClose: () => void;
   /** Called when inventory changes */
   onInventoryChange: (newInventory: CharacterInventory) => void;
   /** Called when ally is dismissed (only for allies) */
   onDismissAlly?: () => void;
+  /** Called when a consumable is used outside combat */
+  onUseConsumable?: (itemId: string, usedItem: InventoryItem) => void;
 }
 
 interface DragState {
@@ -72,6 +121,8 @@ interface ItemSlotProps {
   onDrop: (slotType: 'weapon' | 'armor' | 'inventory', slotIndex?: number) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
+  onUseItem?: (item: InventoryItem) => void;
+  canUseItem?: boolean;
   placeholder?: string;
 }
 
@@ -85,6 +136,8 @@ function ItemSlot({
   onDrop,
   onDragOver,
   onDragLeave,
+  onUseItem,
+  canUseItem,
   placeholder,
 }: ItemSlotProps) {
   const handleDragStart = (e: React.DragEvent) => {
@@ -99,11 +152,14 @@ function ItemSlot({
   };
 
   const isEquipmentSlot = slotType === 'weapon' || slotType === 'armor';
+  const showStackBadge = item && (item.stackCount ?? 0) > 1;
+  const showUseButton = item && canUseItem && onUseItem &&
+    item.type === 'consumable' && item.consumableSubtype === 'med';
 
   return (
     <div
       className={`
-        relative flex items-center justify-center
+        relative flex items-center justify-center group
         border-2 rounded-lg transition-all duration-150
         ${isEquipmentSlot ? 'w-20 h-20' : 'w-16 h-16'}
         ${isDragOver ? 'border-blue-400 bg-blue-500/20' : 'border-gray-600 bg-gray-800/50'}
@@ -115,16 +171,13 @@ function ItemSlot({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={handleDrop}
+      title={item?.description || item?.name || undefined}
     >
       {item ? (
         <div className="flex flex-col items-center justify-center p-1 text-center">
-          {/* Item icon placeholder - could be replaced with actual images */}
+          {/* Item icon */}
           <div className="text-2xl mb-0.5">
-            {item.type === 'weapon' && item.subtype === 'melee' && '⚔️'}
-            {item.type === 'weapon' && item.subtype === 'ranged' && '🏹'}
-            {item.type === 'armor' && '🛡️'}
-            {item.type === 'consumable' && '🧪'}
-            {item.type === 'loot' && '💎'}
+            {getItemIcon(item)}
           </div>
           <span className="text-xs text-gray-300 truncate max-w-full leading-tight">
             {item.name}
@@ -139,12 +192,38 @@ function ItemSlot({
         </span>
       )}
 
+      {/* Stack count badge */}
+      {showStackBadge && (
+        <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 bg-gray-900/90 border border-amber-600/50
+                        rounded-full text-xs font-bold text-amber-400 min-w-[1.25rem] text-center leading-none">
+          x{item.stackCount}
+        </div>
+      )}
+
       {/* Slot type indicator for equipment slots */}
       {isEquipmentSlot && (
         <div className="absolute -top-2 -left-2 w-5 h-5 bg-gray-700 rounded-full flex items-center justify-center border border-gray-600">
           {slotType === 'weapon' && <Swords className="w-3 h-3 text-red-400" />}
           {slotType === 'armor' && <Shield className="w-3 h-3 text-blue-400" />}
         </div>
+      )}
+
+      {/* Use button for consumable meds (hover reveal) */}
+      {showUseButton && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onUseItem!(item);
+          }}
+          className="absolute -bottom-1 left-1/2 -translate-x-1/2 translate-y-full
+                     opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                     px-2 py-0.5 bg-green-700 hover:bg-green-600 border border-green-500/50
+                     text-xs font-medium text-green-100 rounded whitespace-nowrap z-10"
+        >
+          <FlaskConical className="w-3 h-3 inline mr-0.5" />
+          Use
+        </button>
       )}
     </div>
   );
@@ -162,9 +241,11 @@ export function InventoryModal({
   gold,
   inventory,
   isAlly,
+  inCombat = false,
   onClose,
   onInventoryChange,
   onDismissAlly,
+  onUseConsumable,
 }: InventoryModalProps) {
   // Drag state
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -244,6 +325,18 @@ export function InventoryModal({
     setDragOverTarget(null);
   }, [dragState, inventory, onInventoryChange]);
 
+  // Handle using a consumable item outside combat
+  const handleUseItem = useCallback((item: InventoryItem) => {
+    if (inCombat) return;
+    if (item.type !== 'consumable' || item.consumableSubtype !== 'med') return;
+
+    const { inventory: newInventory, usedItem } = useConsumableFromInventory(inventory, item.id);
+    if (usedItem) {
+      onInventoryChange(newInventory);
+      onUseConsumable?.(item.id, usedItem);
+    }
+  }, [inCombat, inventory, onInventoryChange, onUseConsumable]);
+
   // Close on escape
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -318,7 +411,7 @@ export function InventoryModal({
 
               {/* Gold */}
               <div className="flex items-center gap-2">
-                <span className="text-yellow-400 text-lg">🪙</span>
+                <span className="text-yellow-400 text-lg">{'\uD83E\uDE99'}</span>
                 <span className="text-white font-medium">{gold}</span>
                 <span className="text-gray-500 text-sm">Gold</span>
               </div>
@@ -376,6 +469,8 @@ export function InventoryModal({
                   onDrop={handleDrop}
                   onDragOver={(e) => handleDragOver(e, `inventory-${index}`)}
                   onDragLeave={handleDragLeave}
+                  onUseItem={handleUseItem}
+                  canUseItem={!inCombat}
                 />
               ))}
             </div>

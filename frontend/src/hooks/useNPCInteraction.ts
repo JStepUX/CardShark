@@ -1,204 +1,145 @@
 /**
  * @file useNPCInteraction.ts
- * @description Hook for managing NPC interactions in world play.
- *
- * Extracted from WorldPlayView to separate concerns:
- * - Conversation target state (thin context, non-bonded)
- * - Bonded ally state (full context, follows player)
- * - NPC selection (talk vs combat initiation)
- * - Multi-speaker parsing for dual-speaker mode
- * - Sentiment tracking and affinity changes
- *
- * This hook manages all aspects of player-NPC interaction.
+ * @description Manages NPC conversation, bonding, multi-speaker parsing,
+ * sentiment/affinity tracking, time advancement, and context injection.
+ * Extracted from WorldPlayView.tsx.
  */
-
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { CharacterCard } from '../types/schema';
-import type { GridRoom } from '../types/worldGrid';
-import type { NPCRelationship, TimeState } from '../types/worldRuntime';
-import type { Message } from '../services/chat/chatTypes';
+import type { GridRoom, CombatDisplayNPC } from '../types/worldGrid';
+import type { WorldCard } from '../types/worldCard';
+import type { NPCRelationship, TimeState, TimeConfig } from '../types/worldRuntime';
 import type { CombatInitData } from '../types/combat';
-import { buildThinNPCContext, buildDualSpeakerContext, injectNPCContext } from '../utils/worldCardAdapter';
+import { injectRoomContext, injectNPCContext, buildThinNPCContext, buildDualSpeakerContext } from '../utils/worldCardAdapter';
 import {
   parseMultiSpeakerResponse,
   splitIntoMessages,
   hasAllyInterjection,
   type MultiSpeakerConfig
 } from '../utils/multiSpeakerParser';
-import { createDefaultRelationship, updateRelationshipAffinity } from '../utils/affinityUtils';
+import { createDefaultRelationship, updateRelationshipAffinity, resetDailyAffinity } from '../utils/affinityUtils';
 import { calculateSentimentAffinity, updateSentimentHistory, resetSentimentAfterGain } from '../utils/sentimentAffinityCalculator';
-import { dispatchScrollToBottom } from './useScrollToBottom';
-import type { CombatDisplayNPC } from './useRoomTransition';
+import { advanceTime } from '../utils/timeUtils';
+import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
+import type { EmotionState } from '../hooks/useEmotionDetection';
 
-// =============================================================================
-// Types
-// =============================================================================
 
-export interface NPCInteractionState {
-  // Conversation target (thin context, temporary)
-  conversationTargetId: string | undefined;
-  conversationTargetName: string;
-  conversationTargetCard: CharacterCard | null;
-
-  // Bonded ally (full context, follows player)
-  activeNpcId: string | undefined;
-  activeNpcName: string;
-  activeNpcCard: CharacterCard | null;
-
-  // Combat state
-  isInCombat: boolean;
-  combatInitData: CombatInitData | null;
+/** Message shape (subset of ChatMessage) */
+interface ChatMessage {
+  id: string;
+  role: string;
+  content: string;
+  status?: string;
+  timestamp: number;
+  metadata?: Record<string, unknown>;
 }
 
-export interface NPCInteractionDependencies {
-  // Room context
+export interface UseNPCInteractionOptions {
   currentRoom: GridRoom | null;
   roomNpcs: CombatDisplayNPC[];
+  worldCard: WorldCard | null;
   worldId: string;
-
-  // Character data (world card loaded as base character)
   characterData: CharacterCard | null;
-
-  // API config
-  apiConfig: Record<string, unknown> | null;
-
-  // User info
+  messages: ChatMessage[];
+  setMessages: (messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
+  addMessage: (message: ChatMessage) => void;
+  setCharacterDataOverride: (data: CharacterCard | null) => void;
+  apiConfig: unknown;
   currentUser: { id?: string; name?: string; filename?: string; user_uuid?: string } | null;
-
-  // Message management
-  messages: Message[];
-  setMessages: (messages: Message[]) => void;
-  addMessage: (message: Message) => void;
-
-  // Character override (for context injection)
-  setCharacterDataOverride: (card: CharacterCard | null) => void;
-
-  // Emotion detection for sentiment
-  currentEmotion: { valence: number; arousal: number } | null;
-
-  // Time state for affinity tracking
   timeState: TimeState;
-
-  // Relationship state
+  setTimeState: (state: TimeState) => void;
+  timeConfig: TimeConfig;
   npcRelationships: Record<string, NPCRelationship>;
-  setNpcRelationships: React.Dispatch<React.SetStateAction<Record<string, NPCRelationship>>>;
+  setNpcRelationships: (rel: Record<string, NPCRelationship> | ((prev: Record<string, NPCRelationship>) => Record<string, NPCRelationship>)) => void;
+  currentEmotion: EmotionState | null;
+  // Combat trigger callback: view initiates combat when hostile NPC clicked
+  onHostileNpcClicked: (initData: CombatInitData) => void;
 }
 
-export interface UseNPCInteractionResult {
-  // State
+export interface UseNPCInteractionReturn {
   conversationTargetId: string | undefined;
   conversationTargetName: string;
-  conversationTargetCard: CharacterCard | null;
   activeNpcId: string | undefined;
   activeNpcName: string;
   activeNpcCard: CharacterCard | null;
-  isInCombat: boolean;
-  combatInitData: CombatInitData | null;
-
-  // Setters
-  setActiveNpcId: React.Dispatch<React.SetStateAction<string | undefined>>;
-  setActiveNpcName: React.Dispatch<React.SetStateAction<string>>;
-  setActiveNpcCard: React.Dispatch<React.SetStateAction<CharacterCard | null>>;
-  setIsInCombat: React.Dispatch<React.SetStateAction<boolean>>;
-  setCombatInitData: React.Dispatch<React.SetStateAction<CombatInitData | null>>;
-
-  // Actions
+  setActiveNpcId: (id: string | undefined) => void;
+  setActiveNpcName: (name: string) => void;
+  setActiveNpcCard: (card: CharacterCard | null) => void;
   handleSelectNpc: (npcId: string) => Promise<void>;
   handleBondNpc: () => Promise<void>;
   clearConversationTarget: () => void;
   dismissBondedAlly: () => void;
-
-  // Computed
-  currentSpeakingNpcName: string;
 }
 
-// =============================================================================
-// Hook Implementation
-// =============================================================================
-
-export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInteractionResult {
-  const {
-    currentRoom,
-    roomNpcs,
-    worldId,
-    characterData,
-    apiConfig,
-    currentUser,
-    messages,
-    setMessages,
-    addMessage,
-    setCharacterDataOverride,
-    currentEmotion,
-    timeState,
-    npcRelationships,
-    setNpcRelationships,
-  } = deps;
-
-  // Conversation target state (thin context, temporary)
+export function useNPCInteraction({
+  currentRoom,
+  roomNpcs,
+  worldCard,
+  worldId,
+  characterData,
+  messages,
+  setMessages,
+  addMessage,
+  setCharacterDataOverride,
+  apiConfig,
+  currentUser,
+  timeState,
+  setTimeState,
+  timeConfig,
+  npcRelationships,
+  setNpcRelationships,
+  currentEmotion,
+  onHostileNpcClicked,
+}: UseNPCInteractionOptions): UseNPCInteractionReturn {
+  // Conversation target state (for talking to NPCs WITHOUT bonding)
   const [conversationTargetId, setConversationTargetId] = useState<string | undefined>();
   const [conversationTargetName, setConversationTargetName] = useState<string>('');
   const [conversationTargetCard, setConversationTargetCard] = useState<CharacterCard | null>(null);
 
-  // Bonded ally state (full context, follows player)
+  // Bonded ally state
   const [activeNpcId, setActiveNpcId] = useState<string | undefined>();
   const [activeNpcName, setActiveNpcName] = useState<string>('');
   const [activeNpcCard, setActiveNpcCard] = useState<CharacterCard | null>(null);
 
-  // Combat state
-  const [isInCombat, setIsInCombat] = useState(false);
-  const [combatInitData, setCombatInitData] = useState<CombatInitData | null>(null);
-
-  // Track processed multi-speaker messages to avoid reprocessing
+  // Track processed message IDs for multi-speaker parsing
   const processedMultiSpeakerIds = useRef<Set<string>>(new Set());
 
-  // Computed
-  const currentSpeakingNpcName = conversationTargetName || activeNpcName;
-
-  // ==========================================================================
-  // Character Context Injection
-  // ==========================================================================
-
+  // ============================================
+  // CONTEXT INJECTION - 4 modes
+  // ============================================
   useEffect(() => {
-    if (!characterData || !currentRoom) return;
-
-    // World card as base
-    const worldCharCard = characterData;
-
     if (conversationTargetCard && activeNpcCard && currentRoom) {
-      // Dual-speaker mode: talking to an NPC while having a bonded ally
-      const dualSpeakerCard = buildDualSpeakerContext(
+      // DUAL-SPEAKER MODE
+      const dualCard = buildDualSpeakerContext(
         conversationTargetCard,
         activeNpcCard,
-        worldCharCard,
+        worldCard as any,
         currentRoom
       );
-      setCharacterDataOverride(dualSpeakerCard);
-      console.log(`[useNPCInteraction] Dual-speaker mode: ${conversationTargetName} (target) + ${activeNpcName} (ally)`);
+      setCharacterDataOverride(dualCard);
+      console.log(`[NPC] Dual-speaker mode: ${conversationTargetName} (target) + ${activeNpcName} (ally)`);
     } else if (conversationTargetCard && currentRoom) {
-      // Conversation mode with thin context
       setCharacterDataOverride(conversationTargetCard);
     } else if (activeNpcCard && currentRoom) {
-      // Bonded ally mode: inject room/world context into ally card
-      // Use injectNPCContext for full context with thin frame support
+      const worldCharCard = characterData;
       const modifiedNpcCard = injectNPCContext(activeNpcCard, worldCharCard, currentRoom, roomNpcs);
       setCharacterDataOverride(modifiedNpcCard);
+    } else if (worldCard && currentRoom) {
+      const modifiedCharacterData = injectRoomContext(worldCard as any, currentRoom);
+      setCharacterDataOverride(modifiedCharacterData);
     } else {
-      // No active NPC - use base world card (with room injected if available)
       setCharacterDataOverride(null);
     }
-  }, [characterData, currentRoom, activeNpcCard, activeNpcName, conversationTargetCard, conversationTargetName, setCharacterDataOverride, roomNpcs]);
+  }, [characterData, currentRoom, activeNpcCard, activeNpcName, conversationTargetCard, conversationTargetName, setCharacterDataOverride, worldCard, roomNpcs]);
 
-  // ==========================================================================
-  // Multi-Speaker Parsing
-  // ==========================================================================
-
+  // ============================================
+  // MULTI-SPEAKER PARSING
+  // ============================================
   useEffect(() => {
-    // Only process if in dual-speaker mode
     if (!conversationTargetId || !activeNpcId || !activeNpcName || !conversationTargetName) {
       return;
     }
 
-    // Find the most recent assistant message that hasn't been processed
     const recentMessages = [...messages].reverse();
     const targetMessage = recentMessages.find(msg =>
       msg.role === 'assistant' &&
@@ -207,19 +148,12 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
       !msg.metadata?.multiSpeaker
     );
 
-    if (!targetMessage) {
-      return;
-    }
+    if (!targetMessage) return;
 
-    // Mark as processed
     processedMultiSpeakerIds.current.add(targetMessage.id);
 
-    // Check for ally interjections
-    if (!hasAllyInterjection(targetMessage.content, activeNpcName)) {
-      return;
-    }
+    if (!hasAllyInterjection(targetMessage.content, activeNpcName)) return;
 
-    // Parse multi-speaker response
     const config: MultiSpeakerConfig = {
       targetName: conversationTargetName,
       targetId: conversationTargetId,
@@ -228,80 +162,63 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
     };
 
     const segments = parseMultiSpeakerResponse(targetMessage.content, config);
+    if (segments.length <= 1) return;
 
-    if (segments.length <= 1) {
-      return;
-    }
+    console.log(`[NPC] Splitting multi-speaker response into ${segments.length} messages`);
+    const newMessages = splitIntoMessages(segments, targetMessage as any, config);
 
-    console.log(`[useNPCInteraction] Splitting multi-speaker response into ${segments.length} messages`);
-
-    // Create new messages from segments
-    const newMessages = splitIntoMessages(segments, targetMessage, config);
-
-    // Replace original message with split messages
     const messageIndex = messages.findIndex(m => m.id === targetMessage.id);
     if (messageIndex === -1) return;
 
     const before = messages.slice(0, messageIndex);
     const after = messages.slice(messageIndex + 1);
-
     setMessages([...before, ...newMessages, ...after]);
-
   }, [messages, conversationTargetId, conversationTargetName, activeNpcId, activeNpcName, setMessages]);
 
-  // ==========================================================================
-  // Sentiment Tracking
-  // ==========================================================================
-
+  // ============================================
+  // SENTIMENT / AFFINITY TRACKING
+  // ============================================
   useEffect(() => {
     const currentNpcId = conversationTargetId || activeNpcId;
     const currentNpcName = conversationTargetName || activeNpcName;
 
     if (!currentNpcId || !currentNpcName || !currentEmotion) return;
 
-    // Get or create relationship
     const relationship = npcRelationships[currentNpcId] || createDefaultRelationship(currentNpcId);
 
-    // Update sentiment history
     const updatedRelationship = updateSentimentHistory(
       relationship,
       currentEmotion.valence,
       messages.length
     );
 
-    // Calculate potential affinity change
     const sentimentResult = calculateSentimentAffinity(
       updatedRelationship,
       currentEmotion.valence,
       messages.length,
       timeState.currentDay,
-      60 // daily cap
+      60
     );
 
-    // Update relationship state
-    setNpcRelationships(prev => ({
+    setNpcRelationships((prev: Record<string, NPCRelationship>) => ({
       ...prev,
       [currentNpcId]: updatedRelationship,
     }));
 
-    // Grant affinity if conditions met
     if (sentimentResult.shouldGainAffinity) {
       const finalRelationship = updateRelationshipAffinity(updatedRelationship, sentimentResult.affinityDelta);
-
       finalRelationship.affinity_gained_today += sentimentResult.affinityDelta;
       finalRelationship.affinity_day_started = timeState.currentDay;
-
       const resetRelationship = resetSentimentAfterGain(finalRelationship, messages.length);
 
-      setNpcRelationships(prev => ({
+      setNpcRelationships((prev: Record<string, NPCRelationship>) => ({
         ...prev,
         [currentNpcId]: resetRelationship,
       }));
 
       console.log(`[Affinity] ${currentNpcName}: ${updatedRelationship.affinity} -> ${finalRelationship.affinity} (${sentimentResult.affinityDelta > 0 ? '+' : ''}${sentimentResult.affinityDelta}) - ${sentimentResult.reason}`);
 
-      // Add notification
-      const emoji = sentimentResult.affinityDelta > 0 ? '❤️' : '💔';
+      const emoji = sentimentResult.affinityDelta > 0 ? '\u2764\uFE0F' : '\uD83D\uDC94';
       addMessage({
         id: crypto.randomUUID(),
         role: 'system' as const,
@@ -314,13 +231,51 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
           delta: sentimentResult.affinityDelta,
           reason: sentimentResult.reason,
         }
-      });
+      } as ChatMessage);
     }
-  }, [messages.length, currentEmotion, activeNpcId, activeNpcName, conversationTargetId, conversationTargetName, addMessage, timeState.currentDay, npcRelationships, setNpcRelationships]);
+  }, [messages.length, currentEmotion, activeNpcId, activeNpcName, conversationTargetId, conversationTargetName, addMessage, timeState.currentDay]);
 
-  // ==========================================================================
-  // Actions
-  // ==========================================================================
+  // ============================================
+  // TIME ADVANCEMENT
+  // ============================================
+  useEffect(() => {
+    if (!timeConfig.enableDayNightCycle) return;
+
+    const gameplayMessages = messages.filter(msg => msg.role === 'user' || msg.role === 'assistant');
+    const gameplayMessageCount = gameplayMessages.length;
+
+    if (gameplayMessageCount <= timeState.totalMessages) return;
+
+    const { newState, newDayStarted } = advanceTime(timeState, timeConfig);
+    setTimeState(newState);
+
+    if (newDayStarted) {
+      setNpcRelationships((prev: Record<string, NPCRelationship>) => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(npcId => {
+          updated[npcId] = resetDailyAffinity(updated[npcId], newState.currentDay);
+        });
+        return updated;
+      });
+
+      addMessage({
+        id: crypto.randomUUID(),
+        role: 'system' as const,
+        content: `*A new day dawns... (Day ${newState.currentDay})*`,
+        timestamp: Date.now(),
+        metadata: {
+          type: 'day_transition',
+          day: newState.currentDay
+        }
+      } as ChatMessage);
+
+      console.log(`[Time] Day ${newState.currentDay} started - Daily affinity caps reset`);
+    }
+  }, [messages, timeState, timeConfig, addMessage, setTimeState, setNpcRelationships]);
+
+  // ============================================
+  // ACTIONS
+  // ============================================
 
   const clearConversationTarget = useCallback(() => {
     if (conversationTargetId) {
@@ -331,9 +286,6 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
     }
   }, [conversationTargetId, conversationTargetName]);
 
-  /**
-   * Handle NPC selection - starts combat (hostile) or conversation (non-hostile)
-   */
   const handleSelectNpc = useCallback(async (npcId: string) => {
     if (!currentRoom) return;
 
@@ -343,31 +295,22 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
       return;
     }
 
-    // Already bonded ally
     if (activeNpcId === npcId) {
       console.log(`NPC ${npc.name} is already bonded as ally.`);
       return;
     }
 
-    // Already in conversation
     if (conversationTargetId === npcId) {
       console.log(`Already in conversation with ${npc.name}.`);
       return;
     }
 
-    // Hostile NPC - initiate combat
+    // Hostile NPC - delegate combat initiation to the view
     if (npc.hostile) {
       clearConversationTarget();
 
       const hostileNpcs = roomNpcs.filter((n: CombatDisplayNPC) => n.hostile);
-
-      // Include bonded NPC as ally
-      const allies: Array<{
-        id: string;
-        name: string;
-        level: number;
-        imagePath: string | null;
-      }> = [];
+      const allies: Array<{ id: string; name: string; level: number; imagePath: string | null }> = [];
 
       if (activeNpcId && activeNpcName) {
         const boundNpc = roomNpcs.find((n: CombatDisplayNPC) => n.id === activeNpcId);
@@ -404,8 +347,7 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
         playerAdvantage: true,
       };
 
-      setCombatInitData(initData);
-      setIsInCombat(true);
+      onHostileNpcClicked(initData);
 
       addMessage({
         id: crypto.randomUUID(),
@@ -416,14 +358,13 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
           type: 'combat_start',
           roomId: currentRoom.id,
         }
-      });
+      } as ChatMessage);
 
       return;
     }
 
-    // Non-hostile NPC - start conversation with thin context
+    // Non-hostile NPC - start conversation with THIN CONTEXT
     clearConversationTarget();
-
     setConversationTargetId(npcId);
     setConversationTargetName(npc.name);
 
@@ -435,16 +376,12 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
       }
 
       const npcCharacterData = await response.json();
-
-      // Build thin context card
       const worldCharCard = characterData;
       const thinContextCard = buildThinNPCContext(npcCharacterData, worldCharCard, currentRoom);
-
       setConversationTargetCard(thinContextCard);
 
-      // Check API config
       if (!apiConfig) {
-        console.error('No API configuration available');
+        console.error('No API configuration available for greeting generation');
         addMessage({
           id: crypto.randomUUID(),
           role: 'assistant' as const,
@@ -452,36 +389,32 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
           timestamp: Date.now(),
           metadata: {
             type: 'conversation_start',
-            npcId: npcId,
+            npcId,
             roomId: currentRoom.id,
             characterId: npcCharacterData.data?.character_uuid,
             isBonded: false,
             generated: false
           }
-        });
+        } as ChatMessage);
         return;
       }
 
-      // Create placeholder message
       const introMessageId = crypto.randomUUID();
-      const placeholderMessage = {
+      addMessage({
         id: introMessageId,
         role: 'assistant' as const,
         content: '...',
         timestamp: Date.now(),
         metadata: {
           type: 'conversation_start',
-          npcId: npcId,
+          npcId,
           roomId: currentRoom.id,
           characterId: npcCharacterData.data?.character_uuid,
           isBonded: false,
           generated: true
         }
-      };
+      } as ChatMessage);
 
-      addMessage(placeholderMessage);
-
-      // Generate greeting
       const greetingResponse = await fetch('/api/generate-greeting', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -501,29 +434,25 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
         return;
       }
 
-      // Stream the response
       const { PromptHandler } = await import('../handlers/promptHandler');
 
       let generatedIntro = '';
       const bufferInterval = 50;
       let buffer = '';
-      let bufTimer: ReturnType<typeof setTimeout> | null = null;
+      let bufTimer: NodeJS.Timeout | null = null;
 
       const updateIntroContent = (chunk: string, isFinal = false) => {
         buffer += chunk;
-
         if (bufTimer) clearTimeout(bufTimer);
         bufTimer = setTimeout(() => {
           const curBuf = buffer;
           buffer = '';
           generatedIntro += curBuf;
-
           (setMessages as any)((prev: any) => prev.map((msg: any) =>
             msg.id === introMessageId
               ? { ...msg, content: generatedIntro }
               : msg
           ));
-
           dispatchScrollToBottom();
         }, isFinal ? 0 : bufferInterval);
       };
@@ -532,17 +461,11 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
         for await (const chunk of PromptHandler.streamResponse(greetingResponse, npc.name)) {
           updateIntroContent(chunk);
         }
-
-        if (buffer.length > 0) {
-          updateIntroContent('', true);
-        }
+        if (buffer.length > 0) updateIntroContent('', true);
 
         (setMessages as any)((prev: any) => prev.map((msg: any) =>
           msg.id === introMessageId
-            ? {
-              ...msg,
-              content: generatedIntro.trim() || `*${npc.name} looks up as you approach*`
-            }
+            ? { ...msg, content: generatedIntro.trim() || `*${npc.name} looks up as you approach*` }
             : msg
         ));
 
@@ -558,12 +481,8 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
     } catch (err) {
       console.error('Error starting conversation with NPC:', err);
     }
-  }, [roomNpcs, currentRoom, addMessage, characterData, worldId, apiConfig, currentUser, activeNpcId, activeNpcName, conversationTargetId, clearConversationTarget, setMessages]);
+  }, [roomNpcs, currentRoom, addMessage, characterData, worldId, apiConfig, currentUser, activeNpcId, activeNpcName, conversationTargetId, clearConversationTarget, setMessages, onHostileNpcClicked]);
 
-  /**
-   * Bond with the current conversation target NPC.
-   * Upgrades from thin context to full context.
-   */
   const handleBondNpc = useCallback(async () => {
     if (!conversationTargetId || !currentRoom) {
       console.error('Cannot bond: no conversation target or no room');
@@ -576,7 +495,6 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
       return;
     }
 
-    // Check if already have bonded ally
     if (activeNpcId) {
       console.log(`Already have bonded ally: ${activeNpcName}. Unbond them first.`);
       addMessage({
@@ -590,7 +508,7 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
           existingAllyId: activeNpcId,
           existingAllyName: activeNpcName,
         }
-      });
+      } as ChatMessage);
       return;
     }
 
@@ -603,12 +521,10 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
 
       const npcCharacterData = await response.json();
 
-      // Clear conversation target state
       setConversationTargetId(undefined);
       setConversationTargetName('');
       setConversationTargetCard(null);
 
-      // Set as bonded ally
       setActiveNpcId(conversationTargetId);
       setActiveNpcName(npc.name);
       setActiveNpcCard(npcCharacterData);
@@ -624,7 +540,7 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
           roomId: currentRoom.id,
           characterId: npcCharacterData.data?.character_uuid,
         }
-      });
+      } as ChatMessage);
 
       console.log(`Bonded with NPC: ${npc.name} (full context, ally)`);
     } catch (err) {
@@ -632,60 +548,43 @@ export function useNPCInteraction(deps: NPCInteractionDependencies): UseNPCInter
     }
   }, [roomNpcs, currentRoom, addMessage, conversationTargetId, activeNpcId, activeNpcName]);
 
-  /**
-   * Dismiss the bonded ally.
-   */
   const dismissBondedAlly = useCallback(() => {
-    if (!activeNpcId || !activeNpcName) return;
+    if (!currentRoom) return;
 
-    addMessage({
-      id: crypto.randomUUID(),
-      role: 'assistant' as const,
-      content: `*${activeNpcName} stays behind as you part ways.*`,
-      timestamp: Date.now(),
-      metadata: {
-        type: 'ally_dismissed',
-        npcId: activeNpcId,
-        npcName: activeNpcName,
-      }
-    });
+    const npc = roomNpcs.find((n: CombatDisplayNPC) => n.id === activeNpcId);
+    if (!npc) return;
 
     setActiveNpcId(undefined);
     setActiveNpcName('');
     setActiveNpcCard(null);
 
-    console.log(`[useNPCInteraction] Dismissed ally: ${activeNpcName}`);
-  }, [activeNpcId, activeNpcName, addMessage]);
+    addMessage({
+      id: crypto.randomUUID(),
+      role: 'assistant' as const,
+      content: `${npc.name} has been dismissed, but will remain in the area.`,
+      timestamp: Date.now(),
+      metadata: {
+        type: 'npc_dismissed',
+        npcId: activeNpcId,
+        roomId: currentRoom.id,
+      }
+    } as ChatMessage);
 
-  // ==========================================================================
-  // Return
-  // ==========================================================================
+    console.log(`Dismissed NPC: ${npc.name} - full character context cleared`);
+  }, [roomNpcs, currentRoom, addMessage, activeNpcId]);
 
   return {
-    // State
     conversationTargetId,
     conversationTargetName,
-    conversationTargetCard,
     activeNpcId,
     activeNpcName,
     activeNpcCard,
-    isInCombat,
-    combatInitData,
-
-    // Setters
     setActiveNpcId,
     setActiveNpcName,
     setActiveNpcCard,
-    setIsInCombat,
-    setCombatInitData,
-
-    // Actions
     handleSelectNpc,
     handleBondNpc,
     clearConversationTarget,
     dismissBondedAlly,
-
-    // Computed
-    currentSpeakingNpcName,
   };
 }

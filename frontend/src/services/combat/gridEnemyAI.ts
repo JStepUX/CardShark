@@ -3,15 +3,22 @@
  * @description Enemy AI for grid-based tactical combat.
  *
  * AI Decision Priority:
- * 1. If in attack range of target: Attack
- * 2. If can reach attack range: Move then Attack
- * 3. If can move closer: Move toward nearest enemy
- * 4. Else: Defend or End Turn
+ * 1. Heal: Use med items if HP < 30%
+ * 2. Buff: Use buff items if no active buff and high-value target in range
+ * 3. AoE: Use AoE weapons/bombs if 3+ enemies can be hit
+ * 4. If in attack range of target: Attack (multi-attack with light weapons)
+ * 5. If can reach attack range: Move then Attack (multi-attack if light weapon)
+ * 6. If can move closer: Move toward nearest enemy
+ * 7. Else: Defend or End Turn
  *
  * Targeting Priority:
- * 1. Lowest HP enemy (finish off wounded)
- * 2. Closest enemy (minimize movement)
- * 3. Highest threat (player > allies)
+ * 1. THREAT: Enemies who dealt damage (up to 100 points)
+ * 2. Proximity: Closer targets preferred (up to 80 points)
+ * 3. Low HP: Finish off wounded (up to 50 points)
+ * 4. In range: Targets within attack range (30 points)
+ * 5. High armor: Gun users prefer armored targets (20 points)
+ * 6. Clear LOS: Ranged units prefer clear shots (15 points)
+ * 7. Player: Slight preference for player (5 points)
  */
 
 import {
@@ -20,6 +27,7 @@ import {
     GridCombatAction,
     GridMoveAction,
     GRID_AP_COSTS,
+    MAX_LIGHT_ATTACKS_PER_TURN,
 } from '../../types/combat';
 import { TilePosition } from '../../types/localMap';
 import { findPath, getReachableTiles, PathfindingGrid } from '../../utils/pathfinding';
@@ -27,7 +35,13 @@ import {
     calculateDistance,
     hasLineOfSight,
     CombatGrid,
+    getBlastPattern,
+    getCombatantsOnTiles,
 } from '../../utils/gridCombatUtils';
+import {
+    isLightWeapon,
+    isAoEWeapon,
+} from '../../types/inventory';
 
 // =============================================================================
 // Types
@@ -179,6 +193,138 @@ export function decideAIActions(
         }
     }
 
+    // =============================================================================
+    // NEW DECISION LOGIC: Items, AoE, and Advanced Tactics
+    // =============================================================================
+
+    // 1. HEAL CHECK (highest priority): Use healing item if HP is low
+    const hpPercent = actor.currentHp / actor.maxHp;
+    if (hpPercent < 0.3 && currentAP >= 2 && actor.combatItems.length > 0) {
+        // Find best healing item
+        const healingItems = actor.combatItems.filter(
+            item => item.consumableSubtype === 'med' && item.stats?.healPercent
+        );
+
+        if (healingItems.length > 0) {
+            // Sort by heal amount (prefer major > minor > full restore based on need)
+            healingItems.sort((a, b) => {
+                const healA = (a.stats?.healPercent ?? 0) * actor.maxHp;
+                const healB = (b.stats?.healPercent ?? 0) * actor.maxHp;
+                return healB - healA;
+            });
+
+            const bestHealItem = healingItems[0];
+            actions.push({
+                type: 'grid_use_item',
+                actorId: combatantId,
+                itemId: bestHealItem.id,
+                targetId: combatantId, // Use on self
+            });
+            currentAP -= 2;
+
+            // Continue to attack phase if AP remains
+        }
+    }
+
+    // 2. BUFF CHECK: Use buff items if no active buff and there's a high-value target
+    if (currentAP >= 2 && actor.combatItems.length > 0) {
+        const buffItems = actor.combatItems.filter(
+            item => item.consumableSubtype === 'buff'
+        );
+
+        for (const buffItem of buffItems) {
+            // Check if actor already has this buff type active
+            const hasAttackBuff = buffItem.stats?.attackBonus && actor.activeBuffs.attackBonus > 0;
+            const hasDamageBuff = buffItem.stats?.damageBonus && actor.activeBuffs.damageBonus > 0;
+            const hasDefenseBuff = buffItem.stats?.defenseBonus && actor.activeBuffs.defenseBonus > 0;
+
+            if (!hasAttackBuff && !hasDamageBuff && !hasDefenseBuff) {
+                // Check if there's a high-value target in range (low HP enemy)
+                const targetInRange = enemies.find(e => {
+                    const dist = calculateDistance(currentPosition, e.position);
+                    return dist <= actor.attackRange && e.currentHp / e.maxHp < 0.5;
+                });
+
+                if (targetInRange) {
+                    actions.push({
+                        type: 'grid_use_item',
+                        actorId: combatantId,
+                        itemId: buffItem.id,
+                        targetId: combatantId, // Use on self
+                    });
+                    currentAP -= 2;
+                    break; // Only use one buff per turn
+                }
+            }
+        }
+    }
+
+    // 3. AOE CHECK: Use AoE weapons or bombs if multiple enemies can be hit
+    if (currentAP >= 3) {
+        const hasAoEWeapon = isAoEWeapon(actor.weaponSubtype);
+        const bombItems = actor.combatItems.filter(
+            item => item.consumableSubtype === 'bomb'
+        );
+
+        if (hasAoEWeapon || bombItems.length > 0) {
+            // Determine blast pattern (magic_aoe uses 'cross', bombs use 'radius_3x3')
+            const blastPatternType = hasAoEWeapon ? 'cross' : 'radius_3x3';
+
+            // Scan all enemy positions for best AoE target
+            let bestAoETarget: TilePosition | null = null;
+            let bestAoEScore = 2; // Need to hit at least 3 enemies to be worth it
+
+            for (const enemy of enemies) {
+                const targetPos = enemy.position;
+                const blastTiles = getBlastPattern(targetPos, blastPatternType, grid);
+                const affectedIds = getCombatantsOnTiles(blastTiles, state.combatants);
+
+                // Count enemies and allies hit
+                let enemyCount = 0;
+                let allyCount = 0;
+                for (const combatantId of affectedIds) {
+                    const combatant = state.combatants[combatantId];
+                    if (!combatant || combatant.isKnockedOut) continue;
+
+                    if (combatant.isPlayerControlled !== actor.isPlayerControlled) {
+                        enemyCount++;
+                    } else if (combatant.id !== actor.id) {
+                        allyCount++;
+                    }
+                }
+
+                // For AoE weapons (magic), avoid hitting allies completely
+                // For bombs, allies can be hit but prefer to avoid it
+                const score = hasAoEWeapon
+                    ? (allyCount === 0 ? enemyCount : 0)
+                    : (enemyCount - allyCount * 0.5);
+
+                if (score > bestAoEScore) {
+                    bestAoEScore = score;
+                    bestAoETarget = targetPos;
+                }
+            }
+
+            if (bestAoETarget) {
+                const itemId = bombItems.length > 0 ? bombItems[0].id : undefined;
+                actions.push({
+                    type: 'grid_aoe_attack',
+                    actorId: combatantId,
+                    targetPosition: bestAoETarget,
+                    itemId,
+                });
+                return {
+                    actions,
+                    reasoning: `Using AoE attack on ${Math.floor(bestAoEScore)} enemies`,
+                };
+            }
+        }
+    }
+
+    // =============================================================================
+    // END NEW DECISION LOGIC
+    // =============================================================================
+
     if (canAttackNow && currentAP >= GRID_AP_COSTS.attack) {
         // Attack immediately
         actions.push({
@@ -187,6 +333,39 @@ export function decideAIActions(
             targetId: primaryTarget.id,
             targetPosition: primaryTarget.position,
         });
+        currentAP -= GRID_AP_COSTS.attack;
+
+        // 4. LIGHT WEAPON MULTI-ATTACK: If using light weapon, attempt second attack
+        if (isLightWeapon(actor.weaponSubtype) &&
+            actor.lightAttacksThisTurn < MAX_LIGHT_ATTACKS_PER_TURN &&
+            currentAP >= 1) {
+
+            // Find another target in range (prefer wounded enemies)
+            const secondaryTargets = enemies.filter(e =>
+                e.id !== primaryTarget.id &&
+                !e.isKnockedOut &&
+                calculateDistance(currentPosition, e.position) <= actor.attackRange
+            );
+
+            if (secondaryTargets.length > 0) {
+                // Sort by HP (prefer wounded)
+                secondaryTargets.sort((a, b) => a.currentHp - b.currentHp);
+                const secondTarget = secondaryTargets[0];
+
+                actions.push({
+                    type: 'grid_attack',
+                    actorId: combatantId,
+                    targetId: secondTarget.id,
+                    targetPosition: secondTarget.position,
+                });
+
+                return {
+                    actions,
+                    reasoning: `Light weapon multi-attack on ${primaryTarget.name} and ${secondTarget.name}`,
+                };
+            }
+        }
+
         return {
             actions,
             reasoning: `Attacking ${primaryTarget.name} (in range)`,
@@ -233,6 +412,38 @@ export function decideAIActions(
                     targetId: primaryTarget.id,
                     targetPosition: primaryTarget.position,
                 });
+                currentAP -= GRID_AP_COSTS.attack;
+
+                // Light weapon multi-attack after move
+                if (isLightWeapon(actor.weaponSubtype) &&
+                    actor.lightAttacksThisTurn < MAX_LIGHT_ATTACKS_PER_TURN &&
+                    currentAP >= 1) {
+
+                    // Find another target in range from new position
+                    const secondaryTargets = enemies.filter(e =>
+                        e.id !== primaryTarget.id &&
+                        !e.isKnockedOut &&
+                        calculateDistance(currentPosition, e.position) <= actor.attackRange
+                    );
+
+                    if (secondaryTargets.length > 0) {
+                        secondaryTargets.sort((a, b) => a.currentHp - b.currentHp);
+                        const secondTarget = secondaryTargets[0];
+
+                        actions.push({
+                            type: 'grid_attack',
+                            actorId: combatantId,
+                            targetId: secondTarget.id,
+                            targetPosition: secondTarget.position,
+                        });
+
+                        return {
+                            actions,
+                            reasoning: `Moving and multi-attacking ${primaryTarget.name} and ${secondTarget.name}`,
+                        };
+                    }
+                }
+
                 return {
                     actions,
                     reasoning: `Moving to attack ${primaryTarget.name}`,
@@ -308,8 +519,9 @@ function getEnemyTargets(state: GridCombatState, combatantId: string): GridComba
  * 2. Proximity - up to 80 points
  * 3. Low HP - up to 50 points
  * 4. In attack range - 30 points
- * 5. Clear LOS (ranged) - 15 points
- * 6. Player preference - 5 points
+ * 5. High armor (gun users) - 20 points
+ * 6. Clear LOS (ranged) - 15 points
+ * 7. Player preference - 5 points
  */
 function scoreTargets(
     actor: GridCombatant,
@@ -318,6 +530,9 @@ function scoreTargets(
     threatMap?: Map<string, number>
 ): TargetScore[] {
     const scores: TargetScore[] = [];
+
+    // Check if actor is using a gun (armor penetration)
+    const isGunUser = actor.weaponSubtype === 'gun';
 
     for (const enemy of enemies) {
         const distance = calculateDistance(actor.position, enemy.position);
@@ -352,6 +567,11 @@ function scoreTargets(
         // Prefer targets with clear LOS (for ranged)
         if (actor.attackRange > 1 && hasLineOfSight(actor.position, enemy.position, grid)) {
             score += 15;
+        }
+
+        // Gun users prefer high-armor targets (armor penetration advantage)
+        if (isGunUser && enemy.armor >= 2) {
+            score += 20;
         }
 
         scores.push({ target: enemy, score, distance });

@@ -75,6 +75,9 @@ export class EntityCardSprite extends PIXI.Container implements CardSpriteInterf
     private hpBarFill!: PIXI.Graphics;
     private hpText!: PIXI.Text;
 
+    // Buff icons (combat only)
+    private buffIconContainer!: PIXI.Container;
+
     // State
     private currentHp: number = 0;
     private maxHp: number = 0;
@@ -120,6 +123,7 @@ export class EntityCardSprite extends PIXI.Container implements CardSpriteInterf
         this.createStatusBadge(entity);
         this.createNamePlate(entity.name);
         this.createHPBar();
+        this.createBuffIcons();
 
         // Position pivot near bottom so card "stands" in tile with head above
         this.pivot.set(CARD_WIDTH / 2, PIVOT_Y_OFFSET);
@@ -495,6 +499,76 @@ export class EntityCardSprite extends PIXI.Container implements CardSpriteInterf
         }
 
         this.hpText.text = `HP ${Math.max(0, Math.floor(this.currentHp))}/${this.maxHp}`;
+    }
+
+    /**
+     * Create buff icon container (positioned above the level badge area, top-right)
+     */
+    private createBuffIcons(): void {
+        this.buffIconContainer = new PIXI.Container();
+        // Position at top-right of card
+        this.buffIconContainer.x = CARD_WIDTH - 4;
+        this.buffIconContainer.y = 4;
+        this.buffIconContainer.visible = false; // Hidden until buffs are set
+        this.addChild(this.buffIconContainer);
+    }
+
+    /**
+     * Update buff icons displayed on this card.
+     * Shows small colored circles for each active buff type.
+     *
+     * @param buffs - Object with buff types and whether they're active
+     */
+    updateBuffIcons(buffs: {
+        attack?: boolean;
+        damage?: boolean;
+        defense?: boolean;
+    }): void {
+        // Clear existing icons
+        this.buffIconContainer.removeChildren();
+
+        const activeBuffs: Array<{ color: number; label: string }> = [];
+        if (buffs.attack) activeBuffs.push({ color: 0xFF6B35, label: 'ATK' });
+        if (buffs.damage) activeBuffs.push({ color: 0xEF4444, label: 'DMG' });
+        if (buffs.defense) activeBuffs.push({ color: 0x3B82F6, label: 'DEF' });
+
+        if (activeBuffs.length === 0) {
+            this.buffIconContainer.visible = false;
+            return;
+        }
+
+        this.buffIconContainer.visible = true;
+        const iconSize = 14;
+        const gap = 2;
+
+        activeBuffs.forEach((buff, i) => {
+            const yPos = i * (iconSize + gap);
+
+            // Background circle
+            const bg = new PIXI.Graphics();
+            bg.circle(0, 0, iconSize / 2);
+            bg.fill({ color: buff.color, alpha: 0.9 });
+            bg.stroke({ color: 0xFFFFFF, alpha: 0.6, width: 1 });
+            bg.x = -(iconSize / 2) - 2;
+            bg.y = yPos + iconSize / 2;
+            this.buffIconContainer.addChild(bg);
+
+            // Label text
+            const label = new PIXI.Text({
+                text: buff.label[0], // First letter: A, D, D
+                style: {
+                    fontFamily: FONT_FAMILY,
+                    fontSize: 7,
+                    fontWeight: 'bold',
+                    fill: 0xFFFFFF,
+                },
+                resolution: TEXT_RESOLUTION,
+            });
+            label.anchor.set(0.5);
+            label.x = bg.x;
+            label.y = bg.y;
+            this.buffIconContainer.addChild(label);
+        });
     }
 
     /**

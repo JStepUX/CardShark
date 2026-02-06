@@ -534,3 +534,102 @@ export function findSafestRetreatTile(
 
     return safestTile;
 }
+
+// =============================================================================
+// AoE Blast Patterns
+// =============================================================================
+
+import type { BlastPattern } from '../types/inventory';
+
+/**
+ * Get all tiles affected by an AoE blast pattern centered on a target tile.
+ *
+ * - radius_3x3: 3x3 square (9 tiles including center)
+ * - cross: 2 tiles in each cardinal direction from center (9 tiles)
+ *
+ * @param target - Center tile of the blast
+ * @param pattern - Blast pattern type
+ * @param grid - Combat grid (for bounds checking)
+ * @returns Array of affected tile positions
+ */
+export function getBlastPattern(
+    target: TilePosition,
+    pattern: BlastPattern,
+    grid: CombatGrid
+): TilePosition[] {
+    const tiles: TilePosition[] = [];
+
+    if (pattern === 'radius_3x3') {
+        // 3x3 square centered on target
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                const x = target.x + dx;
+                const y = target.y + dy;
+                if (x >= 0 && x < grid.width && y >= 0 && y < grid.height) {
+                    tiles.push({ x, y });
+                }
+            }
+        }
+    } else if (pattern === 'cross') {
+        // Center tile
+        tiles.push({ x: target.x, y: target.y });
+        // 2 tiles in each cardinal direction
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+            for (let dist = 1; dist <= 2; dist++) {
+                const x = target.x + dx * dist;
+                const y = target.y + dy * dist;
+                if (x >= 0 && x < grid.width && y >= 0 && y < grid.height) {
+                    tiles.push({ x, y });
+                }
+            }
+        }
+    }
+
+    return tiles;
+}
+
+/**
+ * Get all adjacent enemy combatants around a position.
+ * Used for cleave mechanic (heavy melee).
+ *
+ * @param position - Center position
+ * @param state - Combat state
+ * @param actorId - The attacker's ID (excluded from results)
+ * @param actorIsPlayerControlled - Whether attacker is on player side
+ * @returns Array of adjacent enemy combatant IDs
+ */
+export function getAdjacentEnemies(
+    position: TilePosition,
+    combatants: Record<string, { id: string; position: TilePosition; isPlayerControlled: boolean; isKnockedOut: boolean }>,
+    actorId: string,
+    actorIsPlayerControlled: boolean
+): string[] {
+    const enemies: string[] = [];
+    for (const combatant of Object.values(combatants)) {
+        if (combatant.id === actorId) continue;
+        if (combatant.isKnockedOut) continue;
+        if (combatant.isPlayerControlled === actorIsPlayerControlled) continue; // Same side
+        if (areAdjacent(position, combatant.position)) {
+            enemies.push(combatant.id);
+        }
+    }
+    return enemies;
+}
+
+/**
+ * Get combatants standing on specified tiles.
+ */
+export function getCombatantsOnTiles(
+    tiles: TilePosition[],
+    combatants: Record<string, { id: string; position: TilePosition; isKnockedOut: boolean }>
+): string[] {
+    const tileSet = new Set(tiles.map(t => `${t.x},${t.y}`));
+    const result: string[] = [];
+    for (const combatant of Object.values(combatants)) {
+        if (combatant.isKnockedOut) continue;
+        if (tileSet.has(`${combatant.position.x},${combatant.position.y}`)) {
+            result.push(combatant.id);
+        }
+    }
+    return result;
+}

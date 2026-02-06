@@ -81,7 +81,8 @@ export type TileHighlight =
     // Combat-specific highlights
     | 'selected_target'    // Yellow - selected attack target
     | 'active_combatant'   // Bright gold - current turn entity
-    | 'path_preview';      // Light blue - movement path preview
+    | 'path_preview'       // Light blue - movement path preview
+    | 'aoe_preview';       // Orange - AoE blast pattern preview
 
 /**
  * Local map tile data
@@ -156,6 +157,7 @@ export const HIGHLIGHT_COLORS: Record<TileHighlight, { color: number; alpha: num
     selected_target: { color: 0xFBBF24, alpha: 0.5 },   // Yellow/Amber
     active_combatant: { color: 0xFFD700, alpha: 0.6 },  // Bright gold
     path_preview: { color: 0x60A5FA, alpha: 0.4 },      // Light blue
+    aoe_preview: { color: 0xF97316, alpha: 0.5 },       // Orange for AoE blast
 };
 
 // ============================================
