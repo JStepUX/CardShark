@@ -9,7 +9,7 @@ interface GalleryGridProps<T> {
   columns?: number; // Optional fixed column count
 }
 
-function GalleryGrid<T>({ items, renderItem, emptyMessage, className, columns }: GalleryGridProps<T>) {
+function GalleryGridInner<T>({ items, renderItem, emptyMessage, className, columns }: GalleryGridProps<T>) {
   if (!items.length) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
@@ -26,5 +26,7 @@ function GalleryGrid<T>({ items, renderItem, emptyMessage, className, columns }:
     </div>
   );
 }
+
+const GalleryGrid = React.memo(GalleryGridInner) as typeof GalleryGridInner;
 
 export default GalleryGrid;

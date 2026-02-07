@@ -672,6 +672,50 @@ class CharacterService:
         
         return db_char
 
+    def update_character_folder(self, character_uuid: str, folder_name: Optional[str]) -> bool:
+        """Updates a character's folder assignment in both DB (extensions_json) and PNG metadata."""
+        with self._get_session_context() as db:
+            db_char = self.get_character_by_uuid(character_uuid, db)
+            if not db_char:
+                self.logger.log_warning(f"Character {character_uuid} not found for folder update")
+                return False
+
+            # Update extensions_json in DB
+            extensions = self._safe_json_load(db_char.extensions_json, {}, "extensions_json", character_uuid)
+            if folder_name is not None:
+                extensions["cardshark_folder"] = folder_name
+            else:
+                extensions.pop("cardshark_folder", None)
+
+            db_char.extensions_json = json.dumps(extensions)
+            db_char.updated_at = datetime.datetime.utcnow()
+            db.commit()
+
+            # Also write to PNG so folder survives DB purge
+            try:
+                metadata = self.png_handler.read_metadata(db_char.png_file_path)
+                if metadata and metadata.get("data"):
+                    png_extensions = metadata["data"].get("extensions", {})
+                    if folder_name is not None:
+                        png_extensions["cardshark_folder"] = folder_name
+                    else:
+                        png_extensions.pop("cardshark_folder", None)
+                    metadata["data"]["extensions"] = png_extensions
+                    self.png_handler.write_metadata_to_png(db_char.png_file_path, metadata)
+            except Exception as e:
+                self.logger.log_error(f"Failed to write folder to PNG {db_char.png_file_path}: {e}")
+                # DB is already updated, PNG write failure is non-fatal
+
+            return True
+
+    def bulk_update_folder(self, uuids: List[str], folder_name: Optional[str]) -> int:
+        """Moves multiple characters to a folder. Returns count of successfully updated."""
+        updated = 0
+        for char_uuid in uuids:
+            if self.update_character_folder(char_uuid, folder_name):
+                updated += 1
+        return updated
+
     def delete_character(self, character_uuid: str, delete_png_file: bool = False) -> bool:
         """Deletes a character from DB and optionally its PNG file."""
         with self._get_session_context() as db:

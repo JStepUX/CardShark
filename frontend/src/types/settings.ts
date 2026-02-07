@@ -88,6 +88,18 @@ export interface Settings {
   
   // Content filtering
   wordSwapRules?: WordSwapRule[];
+
+  // Gallery folder management
+  gallery_folders?: {
+    migrated: boolean;
+    folders: Array<{
+      id: string;
+      name: string;
+      isDefault: boolean;
+      color: string;
+      sortOrder?: number;
+    }>;
+  };
 }
 
 export const DEFAULT_REASONING_SETTINGS: ReasoningSettings = {

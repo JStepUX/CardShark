@@ -55,7 +55,8 @@
       "Bash(D:)",
       "Bash(cmd /c \"cd /d D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit 2>&1\")",
       "Bash(cmd /c \"cd /d D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit\")",
-      "Bash(cmd /c \"D: && cd D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit 2>&1 && echo TSC_OK || echo TSC_FAILED\")"
+      "Bash(cmd /c \"D: && cd D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit 2>&1 && echo TSC_OK || echo TSC_FAILED\")",
+      "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\character\\\\CharacterFolderView.tsx\")"
     ]
   }
 }

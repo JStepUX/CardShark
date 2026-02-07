@@ -958,6 +958,47 @@ async def extract_lore_from_upload_endpoint(
 
 
 
+# --- Gallery Folder Management ---
+from backend.models.folder_models import UpdateFolderRequest, BulkUpdateFolderRequest
+
+@router.patch("/character/{character_uuid}/folder", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Update a character's folder assignment")
+async def update_character_folder(
+    character_uuid: str,
+    request: UpdateFolderRequest,
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Update a single card's folder assignment (DB + PNG dual-write)."""
+    try:
+        success = char_service.update_character_folder(character_uuid, request.folder_name)
+        if not success:
+            raise NotFoundException(f"Character {character_uuid} not found")
+        return create_data_response({"message": f"Folder updated to '{request.folder_name}'"})
+    except NotFoundException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating folder for {character_uuid}: {e}")
+        raise handle_generic_error(e, "updating character folder")
+
+@router.post("/characters/bulk-folder", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Move multiple cards to a folder")
+async def bulk_update_folder(
+    request: BulkUpdateFolderRequest,
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Move multiple cards to a folder at once."""
+    try:
+        updated = char_service.bulk_update_folder(request.uuids, request.folder_name)
+        return create_data_response({
+            "message": f"Moved {updated}/{len(request.uuids)} cards to '{request.folder_name}'",
+            "updated": updated,
+            "total": len(request.uuids)
+        })
+    except Exception as e:
+        logger.error(f"Error in bulk folder update: {e}")
+        raise handle_generic_error(e, "bulk updating folders")
+
+
 # Deprecated/Old Endpoints to be removed or fully refactored:
 # - /characters/{character_id}/avatar (avatar handling is part of save_card now)
 # - The old path-based /character/{path:path} delete (replaced by UUID delete)
