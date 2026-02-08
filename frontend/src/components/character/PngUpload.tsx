@@ -68,8 +68,9 @@ const PngUpload: React.FC = () => {
             toast.success('Loaded existing character data from image!');
           }
 
-          // Navigate to info page after a short delay to show the toast
-          setTimeout(() => navigate('/info'), 500);
+          // Navigate to character detail info tab after a short delay to show the toast
+          const charUuid = metadata?.data?.character_uuid;
+          setTimeout(() => navigate(charUuid ? `/character/${charUuid}?tab=info` : '/gallery'), 500);
         }
       } else {
         const errorMsg = data.message || 'Upload failed';
@@ -110,8 +111,9 @@ const PngUpload: React.FC = () => {
     toast.success('New character template created. Please fill in the details.');
     setShowNewCharacterDialog(false);
 
-    // Navigate to info page after a short delay
-    setTimeout(() => navigate('/info'), 500);
+    // Navigate to character detail info tab after a short delay
+    const charUuid = emptyCharacter.data.character_uuid;
+    setTimeout(() => navigate(charUuid ? `/character/${charUuid}?tab=info` : '/gallery'), 500);
   };
 
   return (

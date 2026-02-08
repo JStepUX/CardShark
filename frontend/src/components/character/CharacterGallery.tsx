@@ -5,13 +5,13 @@
  * @consumers AppRoutes.tsx, WorldCreationModal.tsx
  */
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { CharacterFile } from '../../types/schema';
 import { GalleryFolderSettings, DEFAULT_GALLERY_FOLDER_SETTINGS, getFolderForCard } from '../../types/gallery';
-import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Info, RefreshCw, Upload, DoorOpen, Download, ArrowLeft, Settings2 } from 'lucide-react';
+import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Info, RefreshCw, DoorOpen, Download, ArrowLeft, Settings2, ImagePlus } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
@@ -181,6 +181,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   lazyLoad = false,
 }) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { settings, updateSettings } = useSettings();
 
   // State for character list, loading status, and errors
@@ -231,6 +232,20 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     onSettingsUpdate: async (updates) => { await updateSettings(updates); },
     onCacheInvalidate: invalidateCharacterCache,
   });
+
+  // Restore folder from URL param (e.g. back from CharacterDetailView)
+  const folderFromUrl = searchParams.get('folder');
+  useEffect(() => {
+    if (folderFromUrl && galFolders.currentFolder !== folderFromUrl) {
+      galFolders.navigateToFolder(folderFromUrl);
+      // Clear the param so it doesn't persist on subsequent navigations
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('folder');
+        return next;
+      }, { replace: true });
+    }
+  }, [folderFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close sort dropdown on outside click
   useEffect(() => {
@@ -492,7 +507,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             const cardType = character.card_type || character.extensions?.card_type;
             if (cardType === 'room' && character.character_uuid) navigate(`/room/${character.character_uuid}/edit`);
             else if (cardType === 'world' && character.character_uuid) navigate(`/world/${character.character_uuid}/launcher`);
-            else if (character.is_incomplete) navigate('/info');
+            else if (character.character_uuid && character.is_incomplete) navigate(`/character/${character.character_uuid}?tab=info${galFolders.currentFolder ? `&folder=${encodeURIComponent(galFolders.currentFolder)}` : ''}`);
+            else if (character.character_uuid) navigate(`/character/${character.character_uuid}${galFolders.currentFolder ? `?folder=${encodeURIComponent(galFolders.currentFolder)}` : ''}`);
             else navigate('/chat');
           }
         }
@@ -501,7 +517,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     finally { setLoading(false); }
   }, [deletingPath, onCharacterClick, isSecondarySelector, getCharacterImage, navigate,
       setCharacterData, setImageUrl, onCharacterSelected, setSecondaryCharacterData,
-      setSecondaryImageUrl, setSecondaryIsLoading, setPrimaryLoading]);
+      setSecondaryImageUrl, setSecondaryIsLoading, setPrimaryLoading, galFolders.currentFolder]);
 
   const handleCharacterClick = useCallback((character: CharacterFile) => {
     if (galFolders.organizationMode) {
@@ -515,6 +531,8 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     event.stopPropagation();
     if (character.extensions?.card_type === 'world' && character.character_uuid) {
       await selectCharacter(character, `/world/${character.character_uuid}/builder`, true);
+    } else if (character.character_uuid) {
+      await selectCharacter(character, `/character/${character.character_uuid}?tab=info`, true);
     } else {
       selectCharacter(character, '/info', true);
     }
@@ -671,7 +689,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   }, [characters]);
 
   // Determine context-specific info
-  const isInWorldsFolder = galFolders.currentFolder === 'Worlds';
+  // isInWorldsFolder removed — world import now always in header
   const isInRoomsFolder = galFolders.currentFolder === 'Rooms';
   const itemCount = sortedDisplayCards.length;
 
@@ -756,12 +774,19 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Context-specific buttons */}
-              {isInWorldsFolder && (
-                <button onClick={handleImportWorld}
-                  className="p-2 rounded-lg border bg-emerald-800 border-emerald-600 text-emerald-100 hover:text-white hover:bg-emerald-700 transition-all"
-                  title="Import world from ZIP file"><Upload size={16} /></button>
+              {/* Import buttons */}
+              {!isSecondarySelector && (
+                <>
+                  <button onClick={() => navigate('/import')}
+                    className="p-2 rounded-lg border bg-orange-800 border-orange-600 text-orange-100 hover:text-white hover:bg-orange-700 transition-all"
+                    title="Import Character PNG"><ImagePlus size={16} /></button>
+                  <button onClick={handleImportWorld}
+                    className="p-2 rounded-lg border bg-emerald-800 border-emerald-600 text-emerald-100 hover:text-white hover:bg-emerald-700 transition-all"
+                    title="Import World"><MapIcon size={16} /></button>
+                </>
               )}
+
+              {/* Context-specific buttons */}
               {isInRoomsFolder && (
                 <button onClick={handleCleanupOrphanedRooms}
                   className="p-2 rounded-lg border bg-red-900 border-red-700 text-red-200 hover:text-white hover:bg-red-800 transition-all"

@@ -2,21 +2,17 @@
 import React, { createContext, useContext, useState } from 'react';
 import { CharacterCard } from '../types/schema';
 
-// Panel mode type - supports both comparison and workshop panels
-type PanelMode = 'comparison' | 'workshop' | null;
+// Panel mode type - supports comparison panel
+type PanelMode = 'comparison' | null;
 
 interface ComparisonContextType {
-  // Panel mode control (new unified approach)
+  // Panel mode control
   panelMode: PanelMode;
   setPanelMode: (mode: PanelMode) => void;
 
-  // Backward compatibility - comparison mode
+  // Comparison mode
   isCompareMode: boolean;
   setCompareMode: (active: boolean) => void;
-
-  // Workshop mode
-  isWorkshopMode: boolean;
-  setWorkshopMode: (active: boolean) => void;
 
   // Comparison panel state
   secondaryCharacterData: CharacterCard | null;
@@ -41,17 +37,11 @@ export const ComparisonProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [secondaryIsLoading, setSecondaryIsLoading] = useState(false);
   const [secondaryError, setSecondaryError] = useState<string | null>(null);
 
-  // Derived states for backward compatibility and convenience
+  // Derived states
   const isCompareMode = panelMode === 'comparison';
-  const isWorkshopMode = panelMode === 'workshop';
 
-  // Helper methods - backward compatible with existing code
   const setCompareMode = (active: boolean) => {
     setPanelMode(active ? 'comparison' : null);
-  };
-
-  const setWorkshopMode = (active: boolean) => {
-    setPanelMode(active ? 'workshop' : null);
   };
 
   const value = {
@@ -59,8 +49,6 @@ export const ComparisonProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setPanelMode,
     isCompareMode,
     setCompareMode,
-    isWorkshopMode,
-    setWorkshopMode,
     secondaryCharacterData,
     setSecondaryCharacterData,
     secondaryImageUrl,

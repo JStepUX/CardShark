@@ -248,17 +248,20 @@ class CharacterIndexingService:
                 await self._create_database_record_for_existing_file(file_path, metadata, is_incomplete)
                 self.logger.log_info(f"Added new character: {file_path}{' (incomplete)' if is_incomplete else ''}")
             else:
-                # Update existing character
-                existing_char = await to_thread(
-                    self.character_service.get_character_by_path, file_path
-                )
-                if existing_char:
-                    await to_thread(
-                        self.character_service.update_character,
-                        existing_char.character_uuid,
-                        metadata,
-                        False  # write_to_png=False
-                    )
+                # Update existing character — lookup + update in a single sync call with db session
+                def _update_existing():
+                    with self.character_service._get_session_context() as db:
+                        existing_char = self.character_service.get_character_by_path(file_path, db)
+                        if existing_char:
+                            self.character_service.update_character(
+                                existing_char.character_uuid,
+                                metadata,
+                                False  # write_to_png=False
+                            )
+                            return True
+                    return False
+                updated = await to_thread(_update_existing)
+                if updated:
                     self.logger.log_info(f"Updated character: {file_path}")
             
         except Exception as e:

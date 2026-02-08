@@ -363,16 +363,15 @@ export class ChatStorage {
   /**
    * Creates a new chat for a character
    * @param character - The character to create the chat for
-   * @param chatType - Optional chat type: 'chat' (default) or 'workshop'
    */
-  static async createNewChat(character: CharacterCard | null, chatType: 'chat' | 'workshop' = 'chat'): Promise<any> {
+  static async createNewChat(character: CharacterCard | null): Promise<any> {
     if (!character) {
       console.error('Cannot create chat: No character provided');
       return { success: false, error: 'No character selected' };
     }
 
     try {
-      console.log('Creating new chat for character:', character.data?.name, 'type:', chatType);
+      console.log('Creating new chat for character:', character.data?.name);
 
       // Extract character ID
       const characterUuid = this.getCharacterId(character);
@@ -382,9 +381,8 @@ export class ChatStorage {
       }
       console.log('Using character_uuid:', characterUuid);
 
-      const payload: { character_uuid: string; user_uuid?: string; title?: string; chat_type?: string } = {
-        character_uuid: characterUuid,
-        chat_type: chatType
+      const payload: { character_uuid: string; user_uuid?: string; title?: string } = {
+        character_uuid: characterUuid
       };
       // Optional fields can be added here if available, e.g.:
       // if (currentUser?.uuid) payload.user_uuid = currentUser.uuid;

@@ -90,7 +90,7 @@ const ChatContext = createContext<ChatContextType | null>(null);
 
 export { ChatContext }; // Export the context for optional usage
 
-export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad?: boolean }> = ({ children, disableAutoLoad = false }) => {
+export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad?: boolean; initialSessionId?: string }> = ({ children, disableAutoLoad = false, initialSessionId }) => {
   const { characterData } = useCharacter(); const apiConfigContext = useContext(APIConfigContext);
   const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
 
@@ -135,6 +135,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
   const isLoadingChatRef = useRef(false);
   const loadingForCharacterRef = useRef<string | null>(null); // Track which character we're loading for
   const createNewChatRef = useRef<(() => Promise<string | null>) | null>(null);
+  const loadExistingChatRef = useRef<((chatId: string) => Promise<void>) | null>(null);
   const isCreatingChatRef = useRef(false); // Prevent concurrent chat creation
   const settingsSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const settingsSaveRetryCountRef = useRef<number>(0);
@@ -333,15 +334,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     try {
       if (!chatToSaveId) {
         console.debug('currentChatId is null, attempting to create a new chat session first.');
-        const effectiveCharacter = characterDataOverride || characterData;
-        if (!effectiveCharacter) {
+        if (!characterData) {
           console.error('Cannot create new chat session: characterData is null.');
           setError('Cannot create new chat session: No character selected.');
           return false;
         }
-        // Use workshop chat type if character override is set
-        const chatType = characterDataOverride ? 'workshop' : 'chat';
-        const newChatResponse = await ChatStorage.createNewChat(effectiveCharacter, chatType);
+        const newChatResponse = await ChatStorage.createNewChat(characterData);
         if (newChatResponse.success && newChatResponse.chat_session_uuid) {
           chatToSaveId = newChatResponse.chat_session_uuid;
           setCurrentChatId(chatToSaveId);
@@ -460,6 +458,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         setIsLoading(true);
         setError(null);
         if (!characterData) throw new Error('No character data available');
+
+        // If initialSessionId is provided (e.g. from history nav), load that specific session
+        if (initialSessionId && loadExistingChatRef.current) {
+          console.log('  Loading specific session from initialSessionId:', initialSessionId);
+          isLoadingChatRef.current = false; // Release mutex before calling loadExistingChat (it has its own)
+          await loadExistingChatRef.current(initialSessionId);
+          return; // loadExistingChat handles all state updates
+        }
 
         // Request latest chat from backend
         // Backend filters for chats with user messages (message_count > 1)
@@ -612,7 +618,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       isLoadingChatRef.current = false;
       loadingForCharacterRef.current = null;
     };
-  }, [characterData, resetTriggeredLoreImagesState]);
+  }, [characterData, resetTriggeredLoreImagesState, initialSessionId]);
 
   const debouncedSave = MessageUtils.createDebouncedSave(
     (msgs: Message[]): Promise<boolean> => saveChat(msgs).catch(e => { console.error("Debounced saveChat err:", e); throw e; }), 500
@@ -745,9 +751,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     }));
     setMessages(currentMsgs => { saveChat(currentMsgs); return currentMsgs; });
   }, [saveChat]); const createNewChat = useCallback(async (): Promise<string | null> => {
-    // Use override if available (e.g. for Workshop mode with custom prompts/no greeting)
-    const effectiveCharacter = characterDataOverride || characterData;
-    if (!effectiveCharacter) return null;
+    if (!characterData) return null;
 
     // Prevent concurrent chat creation
     if (isCreatingChatRef.current) {
@@ -761,11 +765,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     setIsLoading(true); setError(null); setCurrentChatId(null); setMessages([]);
     messagesRef.current = []; // Sync ref immediately since useEffect update is async
 
-    // Determine chat type based on whether we're using character override (Workshop mode)
-    const chatType = characterDataOverride ? 'workshop' : 'chat';
-
     try {
-      await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(effectiveCharacter, chatType);
+      await ChatStorage.clearContextWindow(); const newChatResp = await ChatStorage.createNewChat(characterData);
       if (!newChatResp.success || !newChatResp.chat_session_uuid) {
         console.error('Failed to create new chat session backend:', newChatResp.error);
         setError(newChatResp.error || 'Failed to create new chat session.');
@@ -778,16 +779,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       console.log(`New chat session created with ID: ${newCId}`);
 
       let initMsgs: Message[] = [];
-      // Only add first_mes if it exists and is not empty (Workshop mode sets it to empty string)
-      if (effectiveCharacter.data.first_mes && effectiveCharacter.data.first_mes.trim()) {
-        const charN = effectiveCharacter.data.name || 'Character';
+      // Only add first_mes if it exists and is not empty
+      if (characterData.data.first_mes && characterData.data.first_mes.trim()) {
+        const charN = characterData.data.name || 'Character';
         const userN = currentUser?.name || 'User';
-        const subContent = effectiveCharacter.data.first_mes.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN);
+        const subContent = characterData.data.first_mes.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN);
         const firstM = MessageUtils.createAssistantMessage(subContent);
 
         // Populate variations with alternate greetings if available
-        if (effectiveCharacter.data.alternate_greetings && Array.isArray(effectiveCharacter.data.alternate_greetings) && effectiveCharacter.data.alternate_greetings.length > 0) {
-          const alternates = effectiveCharacter.data.alternate_greetings.map(alt =>
+        if (characterData.data.alternate_greetings && Array.isArray(characterData.data.alternate_greetings) && characterData.data.alternate_greetings.length > 0) {
+          const alternates = characterData.data.alternate_greetings.map(alt =>
             alt.replace(/\{\{char\}\}/g, charN).replace(/\{\{user\}\}/g, userN)
           );
           firstM.variations = [subContent, ...alternates];
@@ -797,12 +798,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         initMsgs = [firstM];
         setLastContextWindow({
           type: 'new_chat_first_message', timestamp: new Date().toISOString(),
-          characterName: effectiveCharacter.data?.name || 'Unknown', firstMessage: effectiveCharacter.data.first_mes, chatId: newCId
+          characterName: characterData.data?.name || 'Unknown', firstMessage: characterData.data.first_mes, chatId: newCId
         });
       } else {
         setLastContextWindow({
           type: 'new_chat_empty', timestamp: new Date().toISOString(),
-          characterName: effectiveCharacter?.data?.name || 'Unknown', chatId: newCId
+          characterName: characterData?.data?.name || 'Unknown', chatId: newCId
         });
       }
 
@@ -814,7 +815,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         // If messages already exist (e.g. user prompt), keep them and prepend initMsgs if appropriate
         // effectively merging the prompt into the new session context
         // But typically initMsgs is just the greeting or empty.
-        // For Workshop (empty first_mes), initMsgs is empty anyway so nothing gets prepended.
         // For normal chat, if user sends message first, maybe we skip greeting? Or Prepend?
         // Standard behavior: If user speaks first, greeting is usually suppressed or added before.
         // Let's prepend if initMsgs exists and messagesRef doesn't start with it.
@@ -830,7 +830,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           body: JSON.stringify({
             chat_session_uuid: newCId,
             messages: messagesRef.current.length === 0 ? initMsgs : [...initMsgs, ...messagesRef.current], // reliable-save needs current state
-            title: effectiveCharacter.data.name ? `Chat with ${effectiveCharacter.data.name}` : undefined
+            title: characterData.data.name ? `Chat with ${characterData.data.name}` : undefined
           })
         });
       } catch (err) {
@@ -851,7 +851,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       setIsLoading(false);
       isCreatingChatRef.current = false; // Reset the creation flag
     }
-  }, [characterData, characterDataOverride, currentUser, saveChat]);
+  }, [characterData, currentUser, saveChat]);
 
   /**
    * Fork the current chat at a specific message index.
@@ -863,8 +863,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
    * @param bringCount - How many messages to bring: 5, 10, or 'all' (default 'all')
    */
   const forkChat = useCallback(async (atMessageIndex: number, bringCount: number | 'all' = 'all'): Promise<string | null> => {
-    const effectiveCharacter = characterDataOverride || characterData;
-    if (!effectiveCharacter?.data?.character_uuid) {
+    if (!characterData?.data?.character_uuid) {
       setError('No character selected');
       return null;
     }
@@ -896,7 +895,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       const newChatId = await chatService.forkChat(
         currentChatId,
         atMessageIndex,
-        effectiveCharacter.data.character_uuid,
+        characterData.data.character_uuid,
         currentUser?.id,
         startIndex
       );
@@ -904,7 +903,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       console.log(`Chat forked: ${currentChatId} -> ${newChatId} at message index ${atMessageIndex}`);
 
       // Load the new forked chat
-      const loadResponse = await ChatStorage.loadChat(newChatId, effectiveCharacter);
+      const loadResponse = await ChatStorage.loadChat(newChatId, characterData);
 
       if (loadResponse.success) {
         const sessionData = loadResponse.data || loadResponse;
@@ -916,7 +915,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         setLastContextWindow({
           type: 'forked_chat',
           timestamp: new Date().toISOString(),
-          characterName: effectiveCharacter.data?.name,
+          characterName: characterData.data?.name,
           sourceChatId: currentChatId,
           newChatId: newChatId,
           messageCount: loadedMessages.length
@@ -994,7 +993,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
             setLastContextWindow({
               type: 'regeneration',
               timestamp: new Date().toISOString(),
-              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              characterName: (characterData)?.data?.name || 'Unknown',
               messageId: message.id,
               ...payload
             });
@@ -1028,7 +1027,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
             setLastContextWindow({
               type: 'regeneration',
               timestamp: new Date().toISOString(),
-              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              characterName: (characterData)?.data?.name || 'Unknown',
               messageId: message.id,
               ...payload
             });
@@ -1064,8 +1063,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       };
 
       // Get character name for ghost suffix stripping
-      const effectiveChar = characterDataOverride || characterData;
-      const charName = effectiveChar?.data?.name || '';
+      const charName = (characterDataOverride || characterData)?.data?.name || '';
 
       for await (const chunk of PromptHandler.streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
@@ -1185,14 +1183,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         excludeMessageId: assistantMsgId
       });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
-      // Use character data override if set (for world cards with room context)
-      const effectiveCharacterData = characterDataOverride || characterData;
       const response = await PromptHandler.generateChatResponse(
         effectiveChatId,
         ctxMsgs,
         fmtAPIConfig,
         abortCtrl.signal,
-        effectiveCharacterData,
+        characterDataOverride || characterData,
         sessionNotes,
         compressionLevel, // Changed from compressionEnabled
         compressedContextCache, // Pass cache for smart compression
@@ -1207,7 +1203,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
           setLastContextWindow({
             type: 'generation',
             timestamp: new Date().toISOString(),
-            characterName: effectiveCharacterData?.data?.name || 'Unknown',
+            characterName: characterData?.data?.name || 'Unknown',
             messageId: assistantMsgId,
             ...payload // Spread payload properties directly
           });
@@ -1249,7 +1245,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       };
 
       // Get character name for ghost suffix stripping
-      const charName = effectiveCharacterData?.data?.name || '';
+      const charName = (characterDataOverride || characterData)?.data?.name || '';
 
       for await (const chunk of PromptHandler.streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
@@ -1498,7 +1494,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
             setLastContextWindow({
               type: 'continuation',
               timestamp: new Date().toISOString(),
-              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              characterName: (characterData)?.data?.name || 'Unknown',
               messageId: message.id,
               ...payload
             });
@@ -1533,7 +1529,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
             setLastContextWindow({
               type: 'continuation',
               timestamp: new Date().toISOString(),
-              characterName: (characterDataOverride || characterData)?.data?.name || 'Unknown',
+              characterName: (characterData)?.data?.name || 'Unknown',
               messageId: message.id,
               ...payload
             });
@@ -1564,8 +1560,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       };
 
       // Get character name for ghost suffix stripping
-      const effectiveChar = characterDataOverride || characterData;
-      const charName = effectiveChar?.data?.name || '';
+      const charName = (characterDataOverride || characterData)?.data?.name || '';
 
       for await (const chunk of PromptHandler.streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
@@ -1601,8 +1596,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       else {
         console.log("Continuation aborted, saving current.");
         // Strip character name prefix from appended content
-        const effectiveChar = characterDataOverride || characterData;
-        const charName = effectiveChar?.data?.name || '';
+        const charName = (characterDataOverride || characterData)?.data?.name || '';
         const strippedAppended = stripCharacterPrefix(appendedContent, charName);
         const finalMsgs = messagesRef.current.map(msg => {
           if (msg.id === message.id) {
@@ -1760,6 +1754,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       loadingForCharacterRef.current = null;
     }
   }, [characterData]);
+
+  useEffect(() => { loadExistingChatRef.current = loadExistingChat; }, [loadExistingChat]);
 
   const updateReasoningSettings = useCallback((settings: ReasoningSettings) => {
     setReasoningSettings(settings);

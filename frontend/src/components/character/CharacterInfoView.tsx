@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Copy, Wrench, MoreHorizontal, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Copy, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
@@ -7,7 +7,6 @@ import { CharacterCard } from '../../types/schema';
 import RichTextEditor from '../RichTextEditor';
 import { FindReplaceDialog } from '../FindReplaceDialog';
 import { Dialog } from '../common/Dialog';
-import MessagesView from '../MessagesView';
 import { saveCharacterCardToPng } from '../../handlers/exportHandlers';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import { htmlToPlainText } from '../../utils/contentUtils';
@@ -77,6 +76,18 @@ const JsonViewerModal: React.FC<{
   );
 };
 
+// Approximate token count: ~4 characters per token (matches promptHandler.ts)
+const estimateTokens = (text: unknown): number => {
+  if (!text) return 0;
+  const str = typeof text === 'string' ? text
+    : Array.isArray(text) ? text.join(' ')
+    : typeof text === 'object' ? JSON.stringify(text)
+    : String(text);
+  return Math.ceil(str.length / 4);
+};
+
+const TOKEN_FIELDS = ['name', 'description', 'scenario', 'personality', 'mes_example', 'system_prompt', 'first_mes'] as const;
+
 interface CharacterInfoViewProps {
   isSecondary?: boolean;
 }
@@ -84,15 +95,15 @@ interface CharacterInfoViewProps {
 const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = false }) => {  // Use the appropriate context based on the mode
   const navigate = useNavigate();
   const primaryContext = useCharacter();
-  const { isCompareMode, setCompareMode, isWorkshopMode, setWorkshopMode, secondaryCharacterData, setSecondaryCharacterData } = useComparison();
+  const { isCompareMode, setCompareMode, secondaryCharacterData, setSecondaryCharacterData } = useComparison();
 
   // Determine which data to use based on isSecondary prop
   const { characterData, setCharacterData } = isSecondary
     ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
     : primaryContext;
 
-  // Always get imageUrl, hasUnsavedChanges, and isGeneratingThinFrame from primary context (not used in secondary/compare mode)
-  const { imageUrl, hasUnsavedChanges, setHasUnsavedChanges, isGeneratingThinFrame } = primaryContext;
+  // Always get imageUrl and hasUnsavedChanges from primary context (not used in secondary/compare mode)
+  const { imageUrl, hasUnsavedChanges, setHasUnsavedChanges } = primaryContext;
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
   // Smart change tracking state - removed local hasUnsavedChanges, now using context
@@ -419,41 +430,23 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
     }
   }, [showOverflowMenu]);
 
+  const totalTokens = useMemo(() => {
+    if (!characterData?.data) return 0;
+    return TOKEN_FIELDS.reduce((sum, f) => sum + estimateTokens(characterData.data[f]), 0);
+  }, [characterData]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-none px-8 pt-8 pb-4 flex items-center justify-between gap-4">
         <h2 className="text-lg font-semibold whitespace-nowrap">
           {isSecondary ? "Comparison View" : "Primary Character Info"}
+          {totalTokens > 0 && (
+            <span className="ml-2 text-sm font-normal text-stone-500">~{totalTokens.toLocaleString()} tokens</span>
+          )}
         </h2>
 
         {/* Toolbar - Save Changes button and icon buttons */}
         <div className="flex items-center gap-3 min-w-0">
-          {/* Save Changes button - only show when there are unsaved changes and not in secondary view */}
-          {!isSecondary && hasUnsavedChanges && (
-            <button
-              onClick={() => primaryContext.saveCharacter()}
-              disabled={isGeneratingThinFrame}
-              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
-                isGeneratingThinFrame
-                  ? 'bg-green-800 cursor-wait'
-                  : 'bg-green-700 hover:bg-green-600'
-              }`}
-              title={isGeneratingThinFrame ? "Generating character profile..." : "Save character changes to PNG"}
-            >
-              {isGeneratingThinFrame ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating Profile...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save Changes
-                </>
-              )}
-            </button>
-          )}
-
           {/* Tools group */}
           <div className="flex items-center gap-1">
             <button
@@ -502,19 +495,6 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           {/* Panel toggles */}
           {!isSecondary && (
             <div className="flex items-center gap-1">
-              {characterData && (
-                <button
-                  onClick={() => setWorkshopMode(!isWorkshopMode)}
-                  className={`p-2 rounded-lg transition-colors ${isWorkshopMode
-                    ? 'text-white bg-stone-600'
-                    : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                    }`}
-                  title={isWorkshopMode ? "Close Workshop" : "Open Workshop"}
-                >
-                  <Wrench className="w-5 h-5" />
-                </button>
-              )}
-
               <button
                 onClick={toggleCompareMode}
                 className={`p-2 rounded-lg transition-colors ${isCompareMode
@@ -684,10 +664,6 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               />
             </div>
 
-            <div className="h-8" /> {/* Bottom spacing */}
-
-            {/* Render the MessagesView component for greeting management */}
-            <MessagesView isSecondary={isSecondary} />
           </div>
         </div>
       </div>

@@ -257,7 +257,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
     console.warn(`[ChatBubble] Rendering completed assistant message with empty content: ID=${message.id}`);
   }  // Use original styling with performance optimizations
   return (
-    <div className={`w-full rounded-lg transition-colors text-white performance-contain performance-transform ${
+    <div className={`group w-full rounded-lg transition-colors text-white performance-contain performance-transform ${
       isAllyMessage ? 'bg-stone-800/90 border-l-2 border-purple-500/50' : 'bg-stone-800'
     }`}>
       {/* Message header - shows name and buttons */}
@@ -271,51 +271,54 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
           {/* Show different buttons based on message role and state */}
           {message.role === 'assistant' && (
             <>
-              {/* Copy button - use the copy functionality */}
-              <button
-                onClick={handleCopy}
-                className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
-                title={copied ? "Copied!" : "Copy message"}
-              >
-                <Copy size={16} />
-                {copied && <span className="sr-only">Copied!</span>}
-              </button>
-
-              {/* Regeneration buttons */}
-              {isFirstMessage && onRegenerateGreeting && !isGenerating && (
+              {/* Hover-reveal action buttons */}
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                {/* Copy button */}
                 <button
-                  onClick={onRegenerateGreeting}
-                  disabled={isRegeneratingGreeting}
+                  onClick={handleCopy}
                   className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
-                  title="Regenerate greeting"
+                  title={copied ? "Copied!" : "Copy message"}
                 >
-                  <Sparkles size={16} />
+                  <Copy size={16} />
+                  {copied && <span className="sr-only">Copied!</span>}
                 </button>
-              )}
 
-              {/* Try again button for non-greeting messages */}
-              {!isFirstMessage && onTryAgain && !isGenerating && (
-                <button
-                  onClick={onTryAgain}
-                  className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
-                  title="Regenerate response"
-                >
-                  <RotateCw size={16} />
-                </button>
-              )}
+                {/* Regeneration buttons */}
+                {isFirstMessage && onRegenerateGreeting && !isGenerating && (
+                  <button
+                    onClick={onRegenerateGreeting}
+                    disabled={isRegeneratingGreeting}
+                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                    title="Regenerate greeting"
+                  >
+                    <Sparkles size={16} />
+                  </button>
+                )}
 
-              {/* Continue button */}
-              {onContinue && !isGenerating && (
-                <button
-                  onClick={onContinue}
-                  className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
-                  title="Continue response"
-                >
-                  <StepForward size={16} />
-                </button>
-              )}
+                {/* Try again button for non-greeting messages */}
+                {!isFirstMessage && onTryAgain && !isGenerating && (
+                  <button
+                    onClick={onTryAgain}
+                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                    title="Regenerate response"
+                  >
+                    <RotateCw size={16} />
+                  </button>
+                )}
 
-              {/* Variation controls */}
+                {/* Continue button */}
+                {onContinue && !isGenerating && (
+                  <button
+                    onClick={onContinue}
+                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
+                    title="Continue response"
+                  >
+                    <StepForward size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* Always-visible: Variation controls (pagination) */}
               {hasVariations && !isGenerating && (
                 <div className="flex items-center">
                   <button
@@ -342,7 +345,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                 </div>
               )}
 
-              {/* Stop generation button */}
+              {/* Always-visible: Stop generation button */}
               {isGenerating && onStop && (
                 <button
                   onClick={onStop}
@@ -355,9 +358,9 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
             </>
           )}
 
-          {/* Show delete button for all message types when not generating */}
+          {/* Hover-reveal: Fork and Delete for all message types when not generating */}
           {!isGenerating && (
-            <>
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
               {/* Fork from here dropdown */}
               {onFork && (
                 <div className="relative" ref={forkDropdownRef}>
@@ -411,7 +414,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
               >
                 <Trash2 size={16} />
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>      {/* Message content */}

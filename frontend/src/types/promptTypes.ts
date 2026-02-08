@@ -60,9 +60,6 @@ export enum StandardPromptKey {
   CHAT_CONTINUE = 'chat_continue',       // Continue a conversation
   ASSISTANT_PROMPT = 'assistant_prompt', // Generic assistant system prompt
 
-  // Workshop prompts
-  WORKSHOP_PROMPT = 'workshop_prompt',   // Character development workshop prompt
-
   // Reasoning prompts
   REASONING = 'reasoning',               // Thinking/reasoning prompt
 

@@ -9,7 +9,6 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useAPIConfig } from '../contexts/APIConfigContext';
-import { useOptionalSideNav } from '../contexts/SideNavContext';
 import ChatView from '../components/chat/ChatView';
 import { JournalModal } from '../components/SidePanel/JournalModal';
 import { PixiMapModal } from '../components/world/pixi/PixiMapModal';
@@ -82,13 +81,6 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   } = useChat();
   const { characterData } = useCharacter();
   const { apiConfig } = useAPIConfig();
-  const sideNav = useOptionalSideNav();
-
-  // Collapse side navigation when entering world play for more map space
-  useEffect(() => {
-    sideNav?.collapse();
-  }, [sideNav]);
-
   const worldId = propWorldId || uuid || '';
 
   // Get user profile from route state (passed from WorldLauncher)

@@ -11,18 +11,14 @@ import { APIConfigProvider } from '../contexts/APIConfigContext';
 import { TemplateProvider } from '../contexts/TemplateContext';
 import { CharacterProvider } from '../contexts/CharacterContext';
 import { ChatProvider } from '../contexts/ChatContext';
-import { ImageHandlerProvider } from '../contexts/ImageHandlerContext';
 import { KoboldCPPProvider } from '../hooks/useKoboldCPP';
-import { SideNavProvider } from '../contexts/SideNavContext';
 import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
 
 // Lazily load route components
 // Character and Gallery views
 const CharacterGallery = lazy(() => import('./character/CharacterGallery'));
 const PngUpload = lazy(() => import('./character/PngUpload'));
-const InfoViewRouter = lazy(() => import('./InfoViewRouter'));
-const LoreView = lazy(() => import('./LoreView'));
-const MessagesView = lazy(() => import('./MessagesView'));
+const CharacterDetailView = lazy(() => import('./character/CharacterDetailView'));
 
 // Chat view
 const ChatView = lazy(() => import('./chat/ChatView'));
@@ -48,7 +44,6 @@ const AppRoutes: React.FC = () => (
       <APIConfigProvider>
         <TemplateProvider>
           <CharacterProvider>
-            <SideNavProvider>
               <KoboldCPPProvider pollInterval={120000}>
                 <Routes>
                 <Route path="/" element={<Layout />}>
@@ -65,6 +60,13 @@ const AppRoutes: React.FC = () => (
                   <Route path="import" element={
                     <LazyRoute routeName="Import Character">
                       <PngUpload />
+                    </LazyRoute>
+                  } />
+
+                  {/* Character Detail — tabbed view (Chat, Info, Greetings, Lore) */}
+                  <Route path="character/:uuid" element={
+                    <LazyRoute routeName="Character Detail">
+                      <CharacterDetailView />
                     </LazyRoute>
                   } />
 
@@ -95,30 +97,7 @@ const AppRoutes: React.FC = () => (
                     </LazyRoute>
                   } />
 
-                  {/* Character routes with ImageHandler and ChatProvider for workshop panel */}
-                  <Route path="info" element={
-                    <ChatProvider disableAutoLoad={true}>
-                      <LazyRoute routeName="Character Info">
-                        <ImageHandlerProvider>
-                          <InfoViewRouter />
-                        </ImageHandlerProvider>
-                      </LazyRoute>
-                    </ChatProvider>
-                  } />
-
-                  <Route path="lore" element={
-                    <LazyRoute routeName="Lore Manager">
-                      <LoreView />
-                    </LazyRoute>
-                  } />
-
-                  <Route path="messages" element={
-                    <LazyRoute routeName="Messages">
-                      <MessagesView />
-                    </LazyRoute>
-                  } />
-
-                  {/* Chat route with chat-specific providers - LAZY LOADED */}
+                  {/* Legacy /chat route — fallback for characters without UUID */}
                   <Route path="chat" element={
                     <ChatProvider>
                       <LazyRoute routeName="Chat">
@@ -147,7 +126,6 @@ const AppRoutes: React.FC = () => (
                 </Route>
               </Routes>
               </KoboldCPPProvider>
-            </SideNavProvider>
           </CharacterProvider>
         </TemplateProvider>
       </APIConfigProvider>

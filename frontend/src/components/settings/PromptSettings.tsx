@@ -457,14 +457,6 @@ const PROMPT_CATEGORIES = [
         ]
       },
       {
-        key: StandardPromptKey.WORKSHOP_PROMPT,
-        title: 'Workshop System Prompt',
-        description: 'System prompt for the Workshop Panel character development assistant',
-        variables: [
-          PromptVariable.CHAR_NAME
-        ]
-      },
-      {
         key: StandardPromptKey.ASSISTANT_PROMPT,
         title: 'Assistant System Prompt',
         description: 'System prompt for the generic CardShark assistant',

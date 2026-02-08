@@ -133,8 +133,8 @@ const ChatHistoryView: React.FC = () => {
                     setImageUrl(imageUrl);
                 }
 
-                // Navigate to chat view with the session ID as query param
-                navigate(`/chat?session=${item.chat_session_uuid}`);
+                // Navigate to character detail view with session param
+                navigate(`/character/${item.character_uuid}?session=${item.chat_session_uuid}`);
             } catch (charErr) {
                 // Character loading failed - this is an orphaned chat
                 console.warn('Character not found for chat, opening assignment dialog:', charErr);

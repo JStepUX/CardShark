@@ -1,39 +1,26 @@
 // frontend/src/components/Layout.tsx (Modified)
 import React, { useRef, useState, useEffect } from "react";
-import { Outlet, useLocation } from "react-router-dom"; // Added useLocation for routing transitions
+import { Outlet } from "react-router-dom";
 import { useCharacter } from "../contexts/CharacterContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
 import ComparisonPanel from "./ComparisonPanel";
-import WorkshopPanel from "./WorkshopPanel";
 import SideNav from "./SideNav";
 import { BottomBanner } from "./BottomBanner";
-import { ChatProvider } from "../contexts/ChatContext";
 
 const Layout: React.FC = () => {
 
   // State management
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
   const [infoMessage, _setInfoMessage] = useState<string | null>(null);
-  const location = useLocation(); // Track route changes
-
   const { settings } = useSettings();
 
   const {
-    characterData: _characterData,
-    setCharacterData: _setCharacterData,
-    imageUrl: _imageUrl,
-    setImageUrl: _setImageUrl,
     isLoading,
-    setIsLoading,
     error,
-    setError,
-    saveCharacter,
-    invalidateCharacterCache
   } = useCharacter();
 
-  // Comparison and workshop context
-  const { isCompareMode, isWorkshopMode, setWorkshopMode } = useComparison();
+  const { isCompareMode } = useComparison();
 
   // We no longer need to load settings here as it's handled by the SettingsContext
 
@@ -182,71 +169,6 @@ const Layout: React.FC = () => {
   }, []);
 
 
-  // Auto-close workshop mode on route change as it should only be active in Info/Greetings
-  useEffect(() => {
-    setWorkshopMode(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
-
-
-  // World import handler
-  const handleWorldImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.zip';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('conflict_policy', 'skip');
-
-        const response = await fetch('/api/world-cards/import', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (response.status === 409) {
-          // Conflict - ask user
-          const shouldOverwrite = window.confirm('World already exists. Overwrite?');
-          if (shouldOverwrite) {
-            formData.set('conflict_policy', 'overwrite');
-            const retryResponse = await fetch('/api/world-cards/import', {
-              method: 'POST',
-              body: formData,
-            });
-            const retryResult = await retryResponse.json();
-            if (retryResult.success && retryResult.data) {
-              alert(`World "${retryResult.data.world_name}" imported successfully!\nNPCs: ${retryResult.data.imported_npcs} imported, ${retryResult.data.skipped_npcs} skipped`);
-              invalidateCharacterCache(); // Refresh gallery
-            } else {
-              throw new Error(retryResult.message || 'Failed to import world');
-            }
-          }
-          return;
-        }
-
-        const result = await response.json();
-        if (result.success && result.data) {
-          alert(`World "${result.data.world_name}" imported successfully!\nNPCs: ${result.data.imported_npcs} imported, ${result.data.skipped_npcs} skipped`);
-          invalidateCharacterCache(); // Refresh gallery
-        } else {
-          throw new Error(result.message || 'Failed to import world');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to import world');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    input.click();
-  };
-
   // Settings change tracking
   const incrementSettingsChangeCount = () => {
     setSettingsChangeCount((prev) => prev + 1);
@@ -262,16 +184,13 @@ const Layout: React.FC = () => {
       {/* Add Bottom Banner at the top level */}
       <BottomBanner healthStatus={healthStatus} />
 
-      {/* Side Navigation */}
-      <SideNav
-        onWorldImport={handleWorldImport}
-        onSave={saveCharacter}
-      />
+      {/* Icon Rail */}
+      <SideNav />
 
       {/* Main Content Area - single flex container for side-by-side layout */}
-      <div className={`flex flex-1 ${(isCompareMode || isWorkshopMode) ? 'min-w-0' : 'min-w-[600px]'} pb-8 bg-stone-900 overflow-hidden`}>
+      <div className={`flex flex-1 ${isCompareMode ? 'min-w-0' : 'min-w-[600px]'} pb-8 bg-stone-900 overflow-hidden`}>
         {/* Main content column */}
-        <div className={`flex flex-col ${(isCompareMode || isWorkshopMode) ? 'w-1/2' : 'flex-1'} h-full overflow-hidden`}>
+        <div className={`flex flex-col ${isCompareMode ? 'w-1/2' : 'flex-1'} h-full overflow-hidden`}>
           {error && (
             <div className="flex-none px-8 py-4 bg-red-900/50 text-red-200">{error}</div>
           )}
@@ -287,15 +206,10 @@ const Layout: React.FC = () => {
           <Outlet />
         </div>
 
-        {/* Panel slot - supports both comparison and workshop panels */}
-        {(isCompareMode || isWorkshopMode) && (
+        {/* Panel slot - comparison panel */}
+        {isCompareMode && (
           <div className="flex flex-col w-1/2 h-full border-l border-stone-800 relative z-20 overflow-hidden">
-            {isCompareMode && <ComparisonPanel settingsChangeCount={settingsChangeCount} />}
-            {isWorkshopMode && (
-              <ChatProvider disableAutoLoad={true}>
-                <WorkshopPanel onClose={() => setWorkshopMode(false)} />
-              </ChatProvider>
-            )}
+            <ComparisonPanel settingsChangeCount={settingsChangeCount} />
           </div>
         )}
       </div>

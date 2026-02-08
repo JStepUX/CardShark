@@ -145,7 +145,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
     characterDataOverride,
   } = useChat();
 
-  // Effective character name: use override (bonded ally) if set, otherwise base character
+  // Use NPC override name if active, otherwise base character
   const effectiveCharacterName = (characterDataOverride || characterData)?.data?.name || 'Character';
 
   // Extract lore image paths for display in chat bubbles
