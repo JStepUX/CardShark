@@ -66,9 +66,10 @@ async def generate_greeting(request: Request):
         # Parse the request JSON
         request_data = await request.json()
 
-        # Extract character data and API config
+        # Extract character data, API config, and optional partial message
         character_data = request_data.get('character_data')
         api_config = request_data.get('api_config')
+        partial_message = request_data.get('partial_message', '')
 
         if not character_data:
             return JSONResponse(
@@ -128,6 +129,14 @@ async def generate_greeting(request: Request):
             # Default instruction for greeting generation
             generation_instruction = f"#Generate an alternate first message for {name}. ##Only requirements: - Establish the world: Where are we? What does it feel like here? - Establish {name}'s presence (not bio): How do they occupy this space? Everything else (tone, structure, acknowledging/ignoring {{{{user}}}}, dialogue/action/interiority, length) is your choice. ##Choose what best serves this character in this moment. ##Goal: Create a scene unique to {name} speaking only for {name}"
 
+        # Build prompt: if partial_message provided, continue from it; otherwise bare turn marker
+        if partial_message and partial_message.strip():
+            prompt = f"\n{name}: {partial_message}"
+            # Augment instruction to continue from the seed text
+            generation_instruction += f"\n\nIMPORTANT: The greeting has already been started as shown below. Continue naturally from where it left off. Do NOT repeat the beginning text. Write ONLY the continuation."
+        else:
+            prompt = f"\n{name}:"
+
         # Stream the response using ApiHandler
         # Use system_instruction for the generation directive (goes into system context)
         # Use prompt as just the turn marker (what the model continues from)
@@ -135,7 +144,7 @@ async def generate_greeting(request: Request):
             "api_config": api_config,
             "generation_params": {
                 "system_instruction": generation_instruction,
-                "prompt": f"\n{name}:",
+                "prompt": prompt,
                 "memory": full_memory,
                 "stop_sequence": ["User:", "Human:", "</s>", f"\n{name}:", "{{user}}:"],
                 "character_data": character_data,

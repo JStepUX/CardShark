@@ -188,31 +188,31 @@ const CharacterDetailView: React.FC = () => {
           </button>
           <h1 className="text-lg font-semibold text-white truncate">{characterName}</h1>
 
-          {/* Character-level Save button — visible across all tabs when dirty */}
-          {hasUnsavedChanges && (
-            <button
-              onClick={() => saveCharacter(apiConfig ? (apiConfig as unknown as Record<string, unknown>) : undefined)}
-              disabled={isGeneratingThinFrame}
-              className={`ml-auto flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg transition-colors ${
-                isGeneratingThinFrame
-                  ? 'bg-green-800 cursor-wait'
-                  : 'bg-green-700 hover:bg-green-600'
-              }`}
-              title={isGeneratingThinFrame ? "Generating character profile..." : "Save character changes"}
-            >
-              {isGeneratingThinFrame ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save
-                </>
-              )}
-            </button>
-          )}
+          {/* Character-level Save button — always visible, subtle outline when clean, filled when dirty */}
+          <button
+            onClick={() => saveCharacter(apiConfig ? (apiConfig as unknown as Record<string, unknown>) : undefined)}
+            disabled={isGeneratingThinFrame}
+            className={`ml-auto flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              isGeneratingThinFrame
+                ? 'bg-green-800 text-white cursor-wait'
+                : hasUnsavedChanges
+                  ? 'bg-green-700 text-white hover:bg-green-600'
+                  : 'border border-orange-700 text-orange-500 hover:text-orange-400 hover:border-orange-600'
+            }`}
+            title={isGeneratingThinFrame ? "Generating character profile..." : "Save character"}
+          >
+            {isGeneratingThinFrame ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save
+              </>
+            )}
+          </button>
         </div>
 
         {/* Tab bar */}

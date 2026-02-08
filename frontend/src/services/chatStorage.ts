@@ -59,7 +59,8 @@ export class ChatStorage {
   static async generateGreetingStream(
     characterData: any,
     apiConfig: any,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    partialMessage?: string
   ): Promise<{ success: boolean; greeting?: string; message?: string }> {
     try {
       // Use the dedicated greeting generation endpoint
@@ -71,7 +72,8 @@ export class ChatStorage {
         body: JSON.stringify({
           character_data: characterData,
           api_config: apiConfig,
-          prompt_template: promptService.getPrompt('generateIntro')
+          prompt_template: promptService.getPrompt('generateIntro'),
+          partial_message: partialMessage || ''
         })
       });
 

@@ -23,7 +23,9 @@ const MessageCard: React.FC<{
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<Message>) => void;
   onSetFirst: (id: string) => void;
-}> = React.memo(({ message, onDelete, onUpdate, onSetFirst }) => (
+  onGenerate: (id: string) => void;
+  isGenerating: boolean;
+}> = React.memo(({ message, onDelete, onUpdate, onSetFirst, onGenerate, isGenerating }) => (
   <div className="bg-gradient-to-b from-zinc-800 via-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg border border-zinc-700/50">
     <div className="flex items-center justify-between mb-3">
       {/* Checkbox to set this message as the primary 'first_mes' */}
@@ -36,14 +38,26 @@ const MessageCard: React.FC<{
         />
         Set as Primary Greeting
       </label>
-      {/* Delete button */}
-      <button
-        onClick={() => onDelete(message.id)}
-        className="p-1.5 text-gray-400 hover:text-red-400 rounded-full hover:bg-red-900/30 transition-colors"
-        aria-label="Delete message"
-      >
-        <Trash2 className="h-5 w-5" />
-      </button>
+      <div className="flex items-center gap-1">
+        {/* Per-card Generate button */}
+        <button
+          onClick={() => onGenerate(message.id)}
+          disabled={isGenerating}
+          className="p-1.5 text-gray-400 hover:text-purple-400 rounded-full hover:bg-purple-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label={message.content.trim() ? "Continue greeting from current text" : "Generate greeting"}
+          title={message.content.trim() ? "Continue from current text" : "Generate greeting"}
+        >
+          <Sparkles className="h-5 w-5" />
+        </button>
+        {/* Delete button */}
+        <button
+          onClick={() => onDelete(message.id)}
+          className="p-1.5 text-gray-400 hover:text-red-400 rounded-full hover:bg-red-900/30 transition-colors"
+          aria-label="Delete message"
+        >
+          <Trash2 className="h-5 w-5" />
+        </button>
+      </div>
     </div>
     {/* Rich text editor for editing the message content */}
     <RichTextEditor
@@ -70,8 +84,8 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
   const { apiConfig } = useAPIConfig(); // Get API config for generation
 
   // Select the appropriate character data based on isSecondary prop
-  const { characterData, setCharacterData } = isSecondary
-    ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData }
+  const { characterData, setCharacterData, setHasUnsavedChanges } = isSecondary
+    ? { characterData: secondaryCharacterData, setCharacterData: setSecondaryCharacterData, setHasUnsavedChanges: primaryContext.setHasUnsavedChanges }
     : primaryContext;
 
   // Local state for managing the list of messages shown in the UI
@@ -185,7 +199,9 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
   }, []);
 
   // --- AI Greeting Generation Handler ---
-  const handleGenerateGreeting = useCallback(async () => {
+  // If targetMessageId is provided, generate into that existing card (using its content as seed).
+  // Otherwise, create a new card and generate from scratch.
+  const handleGenerateGreeting = useCallback(async (targetMessageId?: string) => {
     // Prevent generation if already running, or data is missing
     if (isGeneratingGreeting || !characterData || !apiConfig) return;
 
@@ -203,50 +219,79 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
     setIsGeneratingGreeting(true); // Set loading state
     setError(null); // Clear previous errors
 
-    // Create a new ID for the message being generated
-    const newMessageId = crypto.randomUUID();
+    // Determine if continuing from existing card or creating new
+    let messageId: string;
+    let seedText = '';
 
-    // Add a placeholder message immediately
-    setMessages(prev => {
-      const newMessage: Message = {
-        id: newMessageId,
-        content: '',
-        isFirst: prev.length === 0,
-        order: prev.length,
-      };
-      return [...prev, newMessage];
-    });
+    if (targetMessageId) {
+      // Per-card generate: use existing card's content as seed
+      messageId = targetMessageId;
+      const existingMsg = messages.find(m => m.id === targetMessageId);
+      seedText = existingMsg?.content?.trim() || '';
+    } else {
+      // Header Generate button: create a new placeholder card
+      messageId = crypto.randomUUID();
+      setMessages(prev => {
+        const newMessage: Message = {
+          id: messageId,
+          content: '',
+          isFirst: prev.length === 0,
+          order: prev.length,
+        };
+        return [...prev, newMessage];
+      });
+    }
+
+    // Track generated text locally for clean accumulation
+    let generatedText = '';
 
     try {
-      // Use streaming greeting generation
+      // Use streaming greeting generation with optional seed text
       const result = await ChatStorage.generateGreetingStream(
         characterData,
         apiConfig,
         (chunk) => {
-          // Update message content as chunks arrive
+          generatedText += chunk;
+          // Show seed + streamed continuation during generation
+          const displayContent = seedText ? seedText + generatedText : generatedText;
           setMessages(prev => prev.map(msg =>
-            msg.id === newMessageId
-              ? { ...msg, content: msg.content + chunk }
+            msg.id === messageId
+              ? { ...msg, content: displayContent }
               : msg
           ));
-        }
+        },
+        seedText || undefined
       );
 
       if (!result.success) {
-        // If failed, remove the placeholder
-        setMessages(prev => prev.filter(msg => msg.id !== newMessageId));
+        if (!targetMessageId) {
+          // If failed on a new card, remove the placeholder
+          setMessages(prev => prev.filter(msg => msg.id !== messageId));
+        }
         throw new Error(result.message || 'Greeting generation failed on the backend.');
       }
 
-      // If success, the message is already fully populated via the stream
+      // Final update: strip any character name prefix the model may have added
+      if (result.success && result.greeting) {
+        const charName = characterData?.data?.name || '';
+        const stripped = result.greeting.replace(new RegExp(`^\\s*${charName}:\\s*`, 'i'), '');
+        const finalContent = seedText ? seedText + stripped : stripped;
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId
+            ? { ...msg, content: finalContent }
+            : msg
+        ));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred during generation.');
-      // Remove the partial/empty message on error
-      setMessages(prev => prev.filter(msg => msg.id !== newMessageId));
+      if (!targetMessageId) {
+        // Remove the partial/empty message on error (only for new cards)
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      }
     } finally {
       setIsGeneratingGreeting(false); // Clear loading state regardless of outcome
     }
-  }, [isGeneratingGreeting, characterData, apiConfig]); // Dependencies for the handler
+  }, [isGeneratingGreeting, characterData, apiConfig, messages]); // Dependencies for the handler
 
 
   // --- Derived State & Effects ---
@@ -296,7 +341,10 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
       };
     });
 
-  }, [messages, characterData, setCharacterData]); // Dependencies for the sync effect
+    // Mark character as having unsaved changes so Save button appears
+    setHasUnsavedChanges(true);
+
+  }, [messages, characterData, setCharacterData, setHasUnsavedChanges]); // Dependencies for the sync effect
 
 
   // --- Render JSX ---
@@ -310,7 +358,7 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
           <div className="flex items-center gap-2">
             {/* Generate Greeting Button */}
             <button
-              onClick={handleGenerateGreeting}
+              onClick={() => handleGenerateGreeting()}
               disabled={isGeneratingGreeting || !apiConfig?.enabled}
               className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 ${isGeneratingGreeting || !apiConfig?.enabled
                 ? 'bg-stone-600 text-gray-400 cursor-not-allowed'
@@ -365,6 +413,8 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
                 onDelete={handleDeleteMessage}
                 onUpdate={handleUpdateMessage}
                 onSetFirst={handleSetFirst}
+                onGenerate={(id) => handleGenerateGreeting(id)}
+                isGenerating={isGeneratingGreeting}
               />
             ))}
           </div>
