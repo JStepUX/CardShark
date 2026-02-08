@@ -221,7 +221,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
               value={settings.max_context_length}
               onChange={val => handleSettingChange('max_context_length', val)}
               min={512}
-              max={16384}
+              max={262144}
               step={128}
               tooltip="Maximum context window size"
               width="w-full"

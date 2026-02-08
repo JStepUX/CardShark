@@ -529,14 +529,15 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
 
   const handleInfoIconClick = useCallback(async (event: React.MouseEvent, character: CharacterFile) => {
     event.stopPropagation();
+    const folderParam = galFolders.currentFolder ? `&folder=${encodeURIComponent(galFolders.currentFolder)}` : '';
     if (character.extensions?.card_type === 'world' && character.character_uuid) {
       await selectCharacter(character, `/world/${character.character_uuid}/builder`, true);
     } else if (character.character_uuid) {
-      await selectCharacter(character, `/character/${character.character_uuid}?tab=info`, true);
+      await selectCharacter(character, `/character/${character.character_uuid}?tab=info${folderParam}`, true);
     } else {
       selectCharacter(character, '/info', true);
     }
-  }, [selectCharacter]);
+  }, [selectCharacter, galFolders.currentFolder]);
 
   const handleTrashIconClick = useCallback((event: React.MouseEvent, character: CharacterFile) => {
     event.stopPropagation();

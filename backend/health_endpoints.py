@@ -67,13 +67,15 @@ async def get_llm_status(request: Request):
     Returns:
         dict: LLM status with configured provider and live model info
     """
+    import asyncio
     import httpx
 
     llm_status = {
         "configured": False,
         "provider": None,
         "model": None,
-        "model_source": "none"  # "settings", "live", or "none"
+        "model_source": "none",  # "settings", "live", or "none"
+        "max_context_length": None
     }
 
     try:
@@ -93,22 +95,33 @@ async def get_llm_status(request: Request):
                 # Get model name from settings first
                 model_name = active_api.get("model") or active_api.get("model_info", {}).get("name")
 
-                # For KoboldCPP, try to fetch actual loaded model from the API
+                # For KoboldCPP, try to fetch actual loaded model and context length
                 if provider.lower() == "koboldcpp" and active_api.get("url"):
                     try:
-                        async with httpx.AsyncClient(timeout=1.0) as client:
+                        async with httpx.AsyncClient(timeout=2.0) as client:
                             kobold_url = active_api["url"].rstrip("/")
-                            response = await client.get(f"{kobold_url}/api/v1/model")
-                            if response.status_code == 200:
-                                model_data = response.json()
-                                # KoboldCPP returns {"result": "model_name"}
+                            # Fetch model info and true context length concurrently
+                            model_task = client.get(f"{kobold_url}/api/v1/model")
+                            ctx_task = client.get(f"{kobold_url}/api/extra/true_max_context_length")
+                            results = await asyncio.gather(model_task, ctx_task, return_exceptions=True)
+
+                            # Parse model response
+                            if not isinstance(results[0], Exception) and results[0].status_code == 200:
+                                model_data = results[0].json()
                                 live_model = model_data.get("result")
                                 if live_model:
                                     model_name = live_model
                                     llm_status["model_source"] = "live"
+
+                            # Parse context length response
+                            if not isinstance(results[1], Exception) and results[1].status_code == 200:
+                                ctx_data = results[1].json()
+                                ctx_value = ctx_data.get("value")
+                                if isinstance(ctx_value, int) and ctx_value > 0:
+                                    llm_status["max_context_length"] = ctx_value
                     except Exception as e:
-                        _logger.log_debug(f"Could not fetch live model from KoboldCPP: {e}")
-                        # Fall back to settings value
+                        _logger.log_debug(f"Could not fetch live info from KoboldCPP: {e}")
+                        # Fall back to settings values
 
                 if model_name:
                     llm_status["model"] = model_name

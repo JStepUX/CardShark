@@ -13,6 +13,7 @@ interface HealthStatus {
     configured: boolean;
     provider: string | null;
     model: string | null;
+    max_context_length?: number | null;
   };
 }
 

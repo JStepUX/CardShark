@@ -4,6 +4,7 @@ import { Outlet } from "react-router-dom";
 import { useCharacter } from "../contexts/CharacterContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useComparison } from "../contexts/ComparisonContext";
+import { useAPIConfig } from "../contexts/APIConfigContext";
 import ComparisonPanel from "./ComparisonPanel";
 import SideNav from "./SideNav";
 import { BottomBanner } from "./BottomBanner";
@@ -13,7 +14,7 @@ const Layout: React.FC = () => {
   // State management
   const [settingsChangeCount, setSettingsChangeCount] = useState(0);
   const [infoMessage, _setInfoMessage] = useState<string | null>(null);
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
 
   const {
     isLoading,
@@ -21,6 +22,7 @@ const Layout: React.FC = () => {
   } = useCharacter();
 
   const { isCompareMode } = useComparison();
+  const { activeApiId, apiConfig } = useAPIConfig();
 
   // We no longer need to load settings here as it's handled by the SettingsContext
 
@@ -33,6 +35,7 @@ const Layout: React.FC = () => {
       configured: boolean;
       provider: string | null;
       model: string | null;
+      max_context_length?: number | null;
     };
   }
 
@@ -131,7 +134,8 @@ const Layout: React.FC = () => {
             const hasChanged = !prevLLM ||
               prevLLM.configured !== llmData.configured ||
               prevLLM.provider !== llmData.provider ||
-              prevLLM.model !== llmData.model;
+              prevLLM.model !== llmData.model ||
+              prevLLM.max_context_length !== llmData.max_context_length;
 
             // Only update state if something changed
             if (hasChanged) {
@@ -141,7 +145,8 @@ const Layout: React.FC = () => {
                 llm: {
                   configured: llmData.configured,
                   provider: llmData.provider,
-                  model: llmData.model
+                  model: llmData.model,
+                  max_context_length: llmData.max_context_length ?? null
                 }
               };
             }
@@ -168,6 +173,23 @@ const Layout: React.FC = () => {
     };
   }, []);
 
+  // Auto-sync KoboldCPP context length: when the live max_context_length from the
+  // LLM status poll differs from the stored generation_settings value, update settings
+  useEffect(() => {
+    const liveCtx = healthStatus.llm?.max_context_length;
+    if (!liveCtx || !activeApiId) return;
+    // Only applies to KoboldCPP
+    if (apiConfig?.provider?.toLowerCase() !== 'koboldcpp') return;
+
+    const storedCtx = apiConfig?.generation_settings?.max_context_length;
+    if (storedCtx === liveCtx) return;
+
+    console.log(`[llm-status] Syncing max_context_length: ${storedCtx} → ${liveCtx}`);
+    // Backend deep-merges partial updates, so we only send the changed leaf
+    updateSettings({
+      apis: { [activeApiId]: { generation_settings: { max_context_length: liveCtx } } }
+    } as unknown as Partial<typeof settings>);
+  }, [healthStatus.llm?.max_context_length, activeApiId, apiConfig?.provider, apiConfig?.generation_settings?.max_context_length]);
 
   // Settings change tracking
   const incrementSettingsChangeCount = () => {
