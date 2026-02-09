@@ -125,6 +125,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     dynatemp_min: number;
     dynatemp_max: number;
     dynatemp_exponent: number;
+    reasoning_model: boolean;
   }>({
     max_length: config.generation_settings?.max_length ?? 220,
     max_context_length: config.generation_settings?.max_context_length ?? 6144,
@@ -142,7 +143,8 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     dynatemp_enabled: config.generation_settings?.dynatemp_enabled ?? false,
     dynatemp_min: config.generation_settings?.dynatemp_min ?? 0.0,
     dynatemp_max: config.generation_settings?.dynatemp_max ?? 2.0,
-    dynatemp_exponent: config.generation_settings?.dynatemp_exponent ?? 1.0
+    dynatemp_exponent: config.generation_settings?.dynatemp_exponent ?? 1.0,
+    reasoning_model: config.generation_settings?.reasoning_model ?? false
   });
 
   useEffect(() => {
@@ -164,7 +166,8 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
         dynatemp_enabled: config.generation_settings.dynatemp_enabled ?? false,
         dynatemp_min: config.generation_settings.dynatemp_min ?? 0.0,
         dynatemp_max: config.generation_settings.dynatemp_max ?? 2.0,
-        dynatemp_exponent: config.generation_settings.dynatemp_exponent ?? 1.0
+        dynatemp_exponent: config.generation_settings.dynatemp_exponent ?? 1.0,
+        reasoning_model: config.generation_settings.reasoning_model ?? false
       };
       setSettings(newSettings);
     }
@@ -211,7 +214,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
               value={settings.max_length}
               onChange={val => handleSettingChange('max_length', val)}
               min={1}
-              max={512}
+              max={settings.reasoning_model ? 16384 : 512}
               step={1}
               tooltip="Maximum number of tokens to generate"
               width="w-full"
@@ -236,6 +239,28 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
               tooltip="Controls randomness (higher = more random)"
               width="w-full"
             />
+          </div>
+          <div className="flex items-center mt-2">
+            <input
+              type="checkbox"
+              id="reasoning-model"
+              checked={settings.reasoning_model}
+              onChange={(e) => {
+                const isReasoning = e.target.checked;
+                const updates: Partial<typeof settings> = { reasoning_model: isReasoning };
+                if (isReasoning && settings.max_length < 4096) {
+                  updates.max_length = 4096;
+                }
+                const newSettings = { ...settings, ...updates };
+                setSettings(newSettings);
+                onUpdate({ generation_settings: newSettings });
+              }}
+              className="mr-2 h-4 w-4 rounded bg-stone-700 border-stone-500 focus:ring-blue-500"
+            />
+            <label htmlFor="reasoning-model" className="text-sm font-medium text-gray-300">
+              Reasoning Model
+            </label>
+            <span className="ml-2 text-xs text-gray-500">(strips thinking tags, raises token budget)</span>
           </div>
         </div>
 

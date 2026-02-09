@@ -1,6 +1,7 @@
 """
 @file cross_drive_static_files.py
 @description Custom StaticFiles implementation to handle cross-drive paths on Windows.
+             Includes SPA fallback: serves index.html for unmatched routes when html=True.
 @dependencies starlette, anyio
 @consumers main.py
 """
@@ -8,6 +9,7 @@ import os
 import anyio
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 from starlette.types import Scope, Receive, Send
+from starlette.responses import FileResponse
 from fastapi import Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -19,6 +21,9 @@ class CrossDriveStaticFiles(StarletteStaticFiles):
     This is necessary because the standard StaticFiles implementation performs
     path containment checks that fail when the static directory and requested
     files are on different drives.
+
+    Also provides SPA fallback: when html=True and a path doesn't match a real
+    file, serves index.html so client-side routing can handle the URL.
     """
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -43,8 +48,21 @@ class CrossDriveStaticFiles(StarletteStaticFiles):
             return self.not_found(scope)
 
     def not_found(self, scope: Scope):
-        """Return a 404 Not Found response."""
+        """Return a 404 or SPA fallback response.
+
+        When html=True, serve index.html for unmatched paths so the React
+        client-side router can handle them (e.g. /character/:uuid, /gallery).
+        Only fall back for paths that look like page routes, not file requests.
+        """
         if self.html:
+            # Serve index.html as SPA fallback for paths that don't have a file extension
+            # (paths with extensions like .js, .css, .png are real file requests that should 404)
+            request_path = scope.get("path", "")
+            _, ext = os.path.splitext(request_path)
+            if not ext:
+                index_path = os.path.join(self.directory, "index.html")
+                if os.path.isfile(index_path):
+                    return FileResponse(index_path, media_type="text/html")
             return HTMLResponse(content="Not Found", status_code=404)
         return PlainTextResponse(content="Not Found", status_code=404)
 

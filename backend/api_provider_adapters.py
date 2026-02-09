@@ -511,6 +511,145 @@ class KoboldCppAdapter(ApiProviderAdapter):
             yield f"data: {json.dumps({'error': {'type': 'ServerError', 'message': error_msg}})}\n\n".encode('utf-8')
 
 
+class OllamaAdapter(ApiProviderAdapter):
+    """Adapter for Ollama local inference server.
+
+    Ollama exposes an OpenAI-compatible API at /v1/chat/completions.
+    Model listing uses Ollama's native /api/tags endpoint.
+    No API key required.
+    """
+
+    def get_endpoint_url(self, base_url: str) -> str:
+        """Get the chat completions endpoint URL for Ollama"""
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = f'http://{base_url}'
+
+        normalized = base_url.rstrip('/')
+
+        if normalized.endswith('/v1/chat/completions'):
+            return normalized
+        if normalized.endswith('/v1'):
+            return f"{normalized}/chat/completions"
+        return f"{normalized}/v1/chat/completions"
+
+    def prepare_headers(self, api_key: Optional[str]) -> Dict[str, str]:
+        """Prepare headers for Ollama (no auth needed)"""
+        return {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+        }
+
+    def prepare_request_data(self,
+                           prompt: str,
+                           memory: Optional[str],
+                           stop_sequence: List[str],
+                           generation_settings: Dict[str, Any],
+                           **kwargs) -> Dict[str, Any]:
+        """Prepare request data in OpenAI-compatible format for Ollama"""
+        model = generation_settings.get('model', '')
+        if not model:
+            self.logger.log_warning("No model specified for Ollama")
+
+        messages = []
+        if memory and memory.strip():
+            messages.append({"role": "system", "content": memory})
+        messages.append({"role": "user", "content": prompt})
+
+        actual_settings = generation_settings
+        if 'generation_settings' in generation_settings:
+            actual_settings = generation_settings['generation_settings']
+
+        data: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": kwargs.get('stream', True)
+        }
+
+        if stop_sequence:
+            data["stop"] = stop_sequence
+
+        # Map generation settings to OpenAI-compatible params
+        max_tokens = actual_settings.get('max_length', actual_settings.get('max_tokens', 220))
+        if max_tokens:
+            data["max_tokens"] = max_tokens
+
+        for param in ["temperature", "top_p", "presence_penalty"]:
+            if param in actual_settings and actual_settings[param] is not None:
+                data[param] = actual_settings[param]
+
+        self.logger.log_step(f"Ollama request prepared for model: {model}")
+        return data
+
+    def parse_streaming_response(self, line: bytes) -> Optional[Dict[str, Any]]:
+        """Parse OpenAI-compatible streaming response from Ollama"""
+        try:
+            line_text = line.decode('utf-8')
+            if line_text.startswith('data: '):
+                data_portion = line_text[6:]
+                if data_portion.strip() == "[DONE]":
+                    return None
+                try:
+                    content = json.loads(data_portion)
+                    if 'choices' in content and len(content['choices']) > 0:
+                        choice = content['choices'][0]
+                        if 'delta' in choice and 'content' in choice['delta']:
+                            return {'content': choice['delta']['content']}
+                    return None
+                except json.JSONDecodeError:
+                    self.logger.log_error(f"Invalid JSON in Ollama response: {data_portion}")
+                    return None
+            return None
+        except Exception as e:
+            self.logger.log_error(f"Error parsing Ollama response: {e}")
+            return None
+
+    def list_models(self, base_url: str) -> Dict[str, Any]:
+        """Fetch available models from Ollama's /api/tags endpoint"""
+        try:
+            if not base_url.startswith(('http://', 'https://')):
+                base_url = f'http://{base_url}'
+
+            url = base_url.rstrip('/') + '/api/tags'
+            self.logger.log_step(f"Fetching Ollama models from: {url}")
+
+            response = requests.get(url, timeout=5)
+
+            if response.status_code != 200:
+                error_msg = self._handle_error(response)
+                self.logger.log_error(f"Failed to fetch Ollama models: {error_msg}")
+                return {"success": False, "error": error_msg}
+
+            data = response.json()
+            models_list = data.get('models', [])
+
+            formatted_models = []
+            for model in models_list:
+                name = model.get('name', '')
+                if not name:
+                    continue
+                size_bytes = model.get('size', 0)
+                size_gb = round(size_bytes / (1024 ** 3), 2) if size_bytes else None
+
+                model_info: Dict[str, Any] = {
+                    "id": name,
+                    "name": name,
+                }
+                if size_gb:
+                    model_info["size_gb"] = size_gb
+
+                formatted_models.append(model_info)
+
+            return {"success": True, "models": formatted_models}
+
+        except requests.exceptions.ConnectionError:
+            return {"success": False, "error": "Cannot connect to Ollama. Is it running?"}
+        except Exception as e:
+            error_msg = f"Error fetching Ollama models: {str(e)}"
+            self.logger.log_error(error_msg)
+            self.logger.log_error(traceback.format_exc())
+            return {"success": False, "error": error_msg}
+
+
 class OpenAIAdapter(ApiProviderAdapter):
     """Adapter for OpenAI API"""
     
@@ -1251,11 +1390,11 @@ def get_provider_adapter(provider: str, logger) -> ApiProviderAdapter:
     """Factory function to get the appropriate adapter for a provider"""
     adapters = {
         'KoboldCPP': KoboldCppAdapter,
+        'Ollama': OllamaAdapter,
         'OpenAI': OpenAIAdapter,
         'Claude': ClaudeAdapter,
         'OpenRouter': OpenRouterAdapter,
         'Featherless': FeatherlessAdapter,
-        # Add more adapters as needed
     }
     
     adapter_class = adapters.get(provider)

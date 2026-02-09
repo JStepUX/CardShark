@@ -28,7 +28,7 @@ interface APISettingsViewProps {}
 export const APISettingsView: React.FC<APISettingsViewProps> = () => {
   const [activeTab, setActiveTab] = useState<'general' | 'api' | 'templates' | 'prompts' | 'highlighting' | 'filtering'>('general');
   const { setAPIConfig, activeApiId, setActiveApiId } = useAPIConfig();  const { settings, updateSettings, isLoading } = useSettings();
-  const [wordSwapRules, setWordSwapRules] = useState<WordSwapRule[]>(settings.wordSwapRules || []);
+  const [wordSwapRules, setWordSwapRules] = useState<WordSwapRule[]>(settings?.wordSwapRules || []);
   
   // Update local wordSwapRules when settings are loaded or changed
   useEffect(() => {
@@ -198,28 +198,17 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
     console.log(`Removed API locally with ID: ${id}, Name: ${apiName}`);
 
     // 2. Persist the removal to the backend.
-    // Create the intended final state of the 'apis' map.
-    // The backend should replace its entire 'apis' map with this one.
-    // If the backend performs a deep merge *into* its existing 'apis' map
-    // without removing keys not present in this payload, deletions will not persist.
-    const remainingApis = { ...settings.apis };
-    delete remainingApis[id];
-
+    // Send null for the deleted key — backend deep_merge treats null as "delete this key".
     const updatePayload: Partial<Settings> = {
-        apis: remainingApis,
+        apis: { [id]: null } as any,
     };
 
     if (id === activeApiId) { // If the active API was the one removed
-        const newActiveApiIdCandidate = Object.keys(remainingApis).length > 0 ? Object.keys(remainingApis)[0] : null;
-        setActiveApiId(newActiveApiIdCandidate ?? ''); // Update context's activeApiId immediately
-
-        // Update activeApiId in the payload to be sent to the backend.
-        // Send null or undefined to clear activeApiId if no suitable API is left.
+        const remainingApiIds = Object.keys(settings.apis).filter(k => k !== id);
+        const newActiveApiIdCandidate = remainingApiIds.length > 0 ? remainingApiIds[0] : null;
+        setActiveApiId(newActiveApiIdCandidate ?? '');
         updatePayload.activeApiId = newActiveApiIdCandidate ?? undefined;
     }
-    // If the removed API was not active, activeApiId in settings.json generally shouldn't change,
-    // unless it becomes invalid (e.g., points to a non-existent ID after other operations).
-    // The current logic correctly updates activeApiId if the *active* one is removed.
 
     updateSettings(updatePayload)
       .then(() => {

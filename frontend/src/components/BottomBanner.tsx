@@ -96,7 +96,7 @@ export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '', heal
 
   // Get available APIs that are enabled
   const availableApis = Object.entries(allAPIConfigs)
-    .filter(([, config]) => config.enabled)
+    .filter(([, config]) => config?.enabled)
     .map(([id, config]) => ({ id, ...config }));
 
   return (

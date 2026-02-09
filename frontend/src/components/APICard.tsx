@@ -73,11 +73,6 @@ export const APICard: React.FC<APICardProps> = ({
       }
     }
 
-    // Diagnostic log for models_directory in APICard
-    if (api.provider === APIProvider.KOBOLD) {
-      console.log(`[APICard - KoboldCPP ${apiId}] settings.models_directory from context:`, settings.models_directory);
-      console.log(`[APICard - KoboldCPP ${apiId}] settings.model_directory from context:`, settings.model_directory);
-    }
   }, [api]); // Primary dependency is the 'api' prop. Add others if they should also trigger this sync.
 
   // Effect to determine if there are unsaved changes by comparing editableApi to the original api prop.
@@ -211,28 +206,7 @@ export const APICard: React.FC<APICardProps> = ({
         toast.info(`Connection test failed. API "${configToPersist.name || 'Unnamed API'}" saved but not enabled.`);
       }
     } else {
-      // Only show generic save success if no implicit test was attempted or needed (e.g. already enabled)
-      // Use a safe comparison mechanism that avoids circular reference issues
-      try {
-        // Convert to string first to handle potential circular references
-        const configString = JSON.stringify(configToPersist);
-        const editableString = JSON.stringify(editableApi);
-        if (configString === editableString) {
-          toast.success(`API configuration "${configToPersist.name || 'Unnamed API'}" saved successfully!`);
-        }
-      } catch (error) {
-        // If JSON.stringify fails due to circular references, fall back to a simpler comparison
-        console.warn('Stringification failed during comparison, falling back to simple comparison:', error);
-        if (
-          configToPersist.name === editableApi.name &&
-          configToPersist.url === editableApi.url &&
-          configToPersist.apiKey === editableApi.apiKey &&
-          configToPersist.provider === editableApi.provider &&
-          configToPersist.model === editableApi.model
-        ) {
-          toast.success(`API configuration "${configToPersist.name || 'Unnamed API'}" saved successfully!`);
-        }
-      }
+      toast.success(`API configuration "${configToPersist.name || 'Unnamed API'}" saved successfully!`);
     }
   };
 
@@ -291,31 +265,20 @@ export const APICard: React.FC<APICardProps> = ({
   const handleDownloadKoboldCPP = async () => {
     if (isDownloading) return;
 
-    // Test toast to verify sonner is working
-    console.log('Testing toast functionality...');
-    toast.info('Testing toast - this should appear immediately');
-
     setIsDownloading(true);
     try {
       // First check if KoboldCPP is running
-      console.log('Checking KoboldCPP status...');
       const statusCheck = await fetch('/api/koboldcpp/status');
-      console.log('Status check response:', statusCheck.status, statusCheck.ok);
       if (statusCheck.ok) {
         const statusData = await statusCheck.json();
-        console.log('Status data:', statusData);
         if (statusData.is_running) {
-          console.log('KoboldCPP is running, showing toast...');
           toast.error('KoboldCPP is currently running. Please stop it before downloading/updating.', {
             description: 'You can stop KoboldCPP from the model selector or by closing the application.',
             duration: 6000
           });
-          console.log('Toast called');
           setIsDownloading(false);
           return;
         }
-      } else {
-        console.log('Status check failed:', statusCheck.status);
       }
 
       // Try streaming download first for better UX
@@ -648,7 +611,7 @@ export const APICard: React.FC<APICardProps> = ({
       )}
 
       {/* --- Model Selector Integration --- */}
-      {(editableApi.provider === APIProvider.KOBOLD || editableApi.provider === APIProvider.OPENROUTER || editableApi.provider === APIProvider.FEATHERLESS) ? (
+      {(editableApi.provider === APIProvider.KOBOLD || editableApi.provider === APIProvider.OLLAMA || editableApi.provider === APIProvider.OPENROUTER || editableApi.provider === APIProvider.FEATHERLESS) ? (
         <ModelSelector
           apiUrl={editableApi.url || ''}
           provider={editableApi.provider as APIProvider} // Use the imported ModelSelector

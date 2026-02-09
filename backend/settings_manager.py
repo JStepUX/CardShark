@@ -1,5 +1,6 @@
 # backend/settings_manager.py
 # Description: Manages settings for the application, including loading, saving, and updating settings.
+import copy
 import json
 import os
 import sys
@@ -13,9 +14,13 @@ def deep_merge(source, destination):
     """
     Recursively merge source dict into destination dict.
     Modifies destination in place.
+    A value of None signals deletion of that key from the destination.
     """
     for key, value in source.items():
-        if isinstance(value, collections.abc.Mapping):
+        if value is None:
+            # None means "delete this key"
+            destination.pop(key, None)
+        elif isinstance(value, collections.abc.Mapping):
             # Get node or create one
             node = destination.setdefault(key, {})
             if isinstance(node, collections.abc.Mapping):
@@ -188,7 +193,6 @@ class SettingsManager:
         """Save the provided settings dictionary to file."""
         try:
             # Make a deep copy to avoid modifying the live settings object during processing
-            import copy
             settings_copy = copy.deepcopy(settings_to_save)            # Convert Python booleans to JSON booleans
             def convert_booleans(obj):
                 if isinstance(obj, dict):
@@ -316,7 +320,6 @@ class SettingsManager:
 
             # Perform a deep merge of new_settings onto a copy of self.settings
             # This prevents modifying self.settings directly if saving fails
-            import copy
             current_settings_copy = copy.deepcopy(self.settings)
             merged_settings = deep_merge(new_settings, current_settings_copy)
 

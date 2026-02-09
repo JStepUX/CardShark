@@ -5,6 +5,7 @@ import { APIConfig, APIProvider } from '../../types/api';
 
 const PROVIDER_TYPES = [
   { id: APIProvider.KOBOLD, name: 'KoboldCPP' },
+  { id: APIProvider.OLLAMA, name: 'Ollama' },
   { id: APIProvider.OPENAI, name: 'OpenAI' },
   { id: APIProvider.CLAUDE, name: 'Claude (Anthropic)' },
   { id: APIProvider.GEMINI, name: 'Gemini (Google)' },
@@ -14,6 +15,7 @@ const PROVIDER_TYPES = [
 
 const DEFAULT_MODELS = {
   [APIProvider.KOBOLD]: '',
+  [APIProvider.OLLAMA]: '',
   [APIProvider.OPENAI]: 'gpt-3.5-turbo',
   [APIProvider.CLAUDE]: 'claude-3-sonnet-20240229',
   [APIProvider.GEMINI]: 'gemini-pro',
@@ -259,18 +261,19 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           value={api.url || ''}
           onChange={(e) => onUpdate({ url: e.target.value })}
           placeholder={api.provider === APIProvider.KOBOLD ? 'http://localhost:5001' :
-            api.provider === APIProvider.OPENAI ? 'https://api.openai.com/v1' :
-              api.provider === APIProvider.CLAUDE ? 'https://api.anthropic.com/v1/messages' :
-                api.provider === APIProvider.GEMINI ? 'https://generativelanguage.googleapis.com/v1beta/models' :
-                  api.provider === APIProvider.FEATHERLESS ? 'https://api.featherless.ai/v1' :
-                    'https://api.openrouter.ai/api/v1'}
+            api.provider === APIProvider.OLLAMA ? 'http://localhost:11434' :
+              api.provider === APIProvider.OPENAI ? 'https://api.openai.com/v1' :
+                api.provider === APIProvider.CLAUDE ? 'https://api.anthropic.com/v1/messages' :
+                  api.provider === APIProvider.GEMINI ? 'https://generativelanguage.googleapis.com/v1beta/models' :
+                    api.provider === APIProvider.FEATHERLESS ? 'https://api.featherless.ai/v1' :
+                      'https://api.openrouter.ai/api/v1'}
           className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
         />
       </div>
 
       <div>
         <label htmlFor="api-key" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          API Key {api.provider !== APIProvider.KOBOLD && <span className="text-red-500">*</span>}
+          API Key {api.provider !== APIProvider.KOBOLD && api.provider !== APIProvider.OLLAMA && <span className="text-red-500">*</span>}
         </label>
         <input
           id="api-key"
@@ -278,7 +281,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           value={api.apiKey || ''}
           onChange={(e) => onUpdate({ apiKey: e.target.value })}
           className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
-          placeholder={api.provider === APIProvider.KOBOLD ? '(Optional)' : 'Required for this provider'}
+          placeholder={api.provider === APIProvider.KOBOLD || api.provider === APIProvider.OLLAMA ? '(Optional)' : 'Required for this provider'}
         />
       </div>
 
@@ -315,6 +318,7 @@ const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIC
     [APIProvider.KOBOLD]: [
       { id: '', name: 'Default (Use model loaded in KoboldCPP)' }
     ],
+    [APIProvider.OLLAMA]: [],
     [APIProvider.OPENAI]: [
       { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
       { id: 'gpt-4', name: 'GPT-4' },

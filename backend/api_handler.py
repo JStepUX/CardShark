@@ -8,9 +8,201 @@ import re
 import certifi # For SSL certificate bundle
 from typing import Dict, Optional, Tuple, Generator
 
+
+class ThinkingTagFilter:
+    """Streaming state machine that strips <think>...</think> and <thinking>...</thinking> tags.
+
+    Two states: NORMAL and INSIDE_THINKING.
+    Buffers partial tag prefixes to avoid false positives on characters like '<'.
+    """
+
+    OPEN_TAGS = ['<think>', '<thinking>']
+    CLOSE_TAGS = ['</think>', '</thinking>']
+    ALL_TAGS = OPEN_TAGS + CLOSE_TAGS
+    MAX_TAG_LEN = max(len(t) for t in ALL_TAGS)  # 12 for '</thinking>'
+
+    _STRIP_RE = re.compile(r'<think(?:ing)?>[\s\S]*?</think(?:ing)?>', re.DOTALL)
+
+    def __init__(self):
+        self._state = 'NORMAL'  # 'NORMAL' or 'INSIDE_THINKING'
+        self._buffer = ''
+
+    def _is_prefix_of_any_tag(self, text: str, tags: list) -> bool:
+        """Check if text is a prefix of any tag in the list."""
+        for tag in tags:
+            if tag.startswith(text):
+                return True
+        return False
+
+    def process(self, token: str) -> str:
+        """Feed a token in, get filtered text out. May return empty string."""
+        self._buffer += token
+        output = ''
+
+        while self._buffer:
+            if self._state == 'NORMAL':
+                # Look for potential open tag start
+                tag_pos = self._buffer.find('<')
+                if tag_pos == -1:
+                    # No '<' at all — emit everything
+                    output += self._buffer
+                    self._buffer = ''
+                else:
+                    # Emit everything before the '<'
+                    output += self._buffer[:tag_pos]
+                    self._buffer = self._buffer[tag_pos:]
+
+                    # Check if buffer matches a complete open tag
+                    matched_tag = None
+                    for tag in self.OPEN_TAGS:
+                        if self._buffer.startswith(tag):
+                            matched_tag = tag
+                            break
+
+                    if matched_tag:
+                        # Transition to INSIDE_THINKING, consume the tag
+                        self._buffer = self._buffer[len(matched_tag):]
+                        self._state = 'INSIDE_THINKING'
+                    elif self._is_prefix_of_any_tag(self._buffer, self.OPEN_TAGS):
+                        # Could be a partial open tag — wait for more tokens
+                        break
+                    else:
+                        # Not a tag prefix — emit the '<' and continue
+                        output += self._buffer[0]
+                        self._buffer = self._buffer[1:]
+
+            else:  # INSIDE_THINKING
+                # Look for potential close tag
+                tag_pos = self._buffer.find('<')
+                if tag_pos == -1:
+                    # No '<' — swallow everything
+                    self._buffer = ''
+                else:
+                    # Discard everything before the '<'
+                    self._buffer = self._buffer[tag_pos:]
+
+                    # Check if buffer matches a complete close tag
+                    matched_tag = None
+                    for tag in self.CLOSE_TAGS:
+                        if self._buffer.startswith(tag):
+                            matched_tag = tag
+                            break
+
+                    if matched_tag:
+                        # Transition back to NORMAL, consume the close tag
+                        self._buffer = self._buffer[len(matched_tag):]
+                        self._state = 'NORMAL'
+                    elif self._is_prefix_of_any_tag(self._buffer, self.CLOSE_TAGS):
+                        # Could be a partial close tag — wait for more tokens
+                        break
+                    else:
+                        # Not a close tag prefix — discard the '<' and continue swallowing
+                        self._buffer = self._buffer[1:]
+
+        return output
+
+    def flush(self) -> str:
+        """End-of-stream cleanup. Emit remaining buffer if NORMAL, discard if INSIDE_THINKING."""
+        if self._state == 'NORMAL':
+            result = self._buffer
+            self._buffer = ''
+            return result
+        else:
+            self._buffer = ''
+            return ''
+
+    @staticmethod
+    def strip_thinking_tags(text: str) -> str:
+        """One-shot regex strip for non-streaming path."""
+        return ThinkingTagFilter._STRIP_RE.sub('', text).strip()
+
+
 class ApiHandler:
     def __init__(self, logger):
         self.logger = logger
+
+    def _apply_thinking_filter(self, chunk: bytes, thinking_filter: ThinkingTagFilter) -> Optional[bytes]:
+        """Apply thinking tag filter to a streaming SSE chunk.
+
+        Returns filtered chunk bytes, or None if the chunk should be swallowed entirely.
+        """
+        try:
+            chunk_str = chunk.decode('utf-8')
+        except UnicodeDecodeError:
+            return chunk  # Pass through non-UTF-8 chunks unchanged
+
+        # Process each SSE data line in the chunk
+        lines = chunk_str.split('\n')
+        output_lines = []
+
+        for line in lines:
+            if not line.startswith('data: '):
+                output_lines.append(line)
+                continue
+
+            data_str = line[6:]  # Strip 'data: ' prefix
+
+            # Pass through [DONE] and non-JSON data
+            if data_str.strip() == '[DONE]':
+                output_lines.append(line)
+                continue
+
+            try:
+                data = json.loads(data_str)
+            except (json.JSONDecodeError, ValueError):
+                output_lines.append(line)
+                continue
+
+            # Pass through non-content data (errors, streaming signals, etc.)
+            if 'streaming_start' in data or 'streaming_active' in data or 'error' in data:
+                output_lines.append(line)
+                continue
+
+            # Extract text content from various provider formats
+            text = None
+            content_key = None
+
+            if 'content' in data:
+                text = data['content']
+                content_key = 'content'
+            elif 'token' in data:
+                text = data['token']
+                content_key = 'token'
+            elif 'choices' in data:
+                # OpenAI/OpenRouter streaming format
+                choices = data.get('choices', [])
+                if choices:
+                    delta = choices[0].get('delta', {})
+                    if 'content' in delta:
+                        text = delta['content']
+                        # We'll reconstruct this format after filtering
+
+            if text is None:
+                output_lines.append(line)
+                continue
+
+            # Apply the thinking filter
+            filtered = thinking_filter.process(text)
+
+            if not filtered:
+                # Content was swallowed (inside thinking tags) — skip this data line
+                continue
+
+            # Reconstruct the JSON with filtered text
+            if 'choices' in data and data.get('choices'):
+                data['choices'][0]['delta']['content'] = filtered
+            elif content_key:
+                data[content_key] = filtered
+
+            output_lines.append(f"data: {json.dumps(data)}")
+
+        result = '\n'.join(output_lines)
+
+        # If result is empty or only whitespace/newlines, swallow the chunk
+        if not result.strip():
+            return None
+
+        return result.encode('utf-8')
 
     def test_connection(self, url: str, api_key: Optional[str] = None, provider: Optional[str] = None) -> Tuple[bool, Optional[str], Optional[Dict]]:
         """Test connection to LLM API endpoint and detect template."""
@@ -317,14 +509,17 @@ class ApiHandler:
                 # Correctly extract text from KoboldCPP non-streaming response
                 # Extract text from the 'response' key for KoboldCPP /api/generate
                 content = result.get('response', '')
-            elif provider in ['OpenAI', 'OpenRouter']:
+            elif provider in ['OpenAI', 'OpenRouter', 'Ollama']:
                 content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
             elif provider == 'Claude':
                 content = result.get('content', [{}])[0].get('text', '')
             else:
                 # Generic fallback
                 content = str(result)
-                
+
+            # Strip thinking tags from non-streaming responses
+            content = ThinkingTagFilter.strip_thinking_tags(content)
+
             return {
                 'content': content,
                 'provider': provider,
@@ -356,23 +551,31 @@ class ApiHandler:
  
             # Prepare generation settings for the adapter
             current_generation_settings = original_generation_settings.copy()
-            if provider == 'Featherless':
-                self.logger.log_step("Preparing Featherless-specific generation settings.")
+            if provider in ('Featherless', 'Ollama'):
+                self.logger.log_step(f"Preparing {provider}-specific generation settings.")
                 model_name_from_config = api_config.get('model')
                 if model_name_from_config:
                     if 'model' not in current_generation_settings:
                         current_generation_settings['model'] = model_name_from_config
-                        self.logger.log_step(f"Added 'model': {model_name_from_config} to generation_settings for Featherless from api_config.")
+                        self.logger.log_step(f"Added 'model': {model_name_from_config} to generation_settings for {provider} from api_config.")
                     elif current_generation_settings.get('model') != model_name_from_config:
                         self.logger.log_warning(
                             f"Model in api_config ('{model_name_from_config}') differs from model in generation_settings "
                             f"('{current_generation_settings.get('model')}'). Using model from generation_settings."
                         )
                     else:
-                        self.logger.log_step(f"Model '{model_name_from_config}' already present in generation_settings for Featherless.")
+                        self.logger.log_step(f"Model '{model_name_from_config}' already present in generation_settings for {provider}.")
                 else:
-                    self.logger.log_warning("No 'model' found in api_config for Featherless provider.")
-            
+                    self.logger.log_warning(f"No 'model' found in api_config for {provider} provider.")
+
+            # Auto-scale token budget for reasoning models
+            if current_generation_settings.get('reasoning_model'):
+                current_max = current_generation_settings.get('max_length', 220)
+                REASONING_MIN_LENGTH = 4096
+                if current_max < REASONING_MIN_LENGTH:
+                    self.logger.log_step(f"Reasoning model: scaling max_length {current_max} → {REASONING_MIN_LENGTH}")
+                    current_generation_settings['max_length'] = REASONING_MIN_LENGTH
+
             # Log what we're using
             self.logger.log_step(f"Using API URL: {url}")
             self.logger.log_step(f"Using templateId: {templateId}")
@@ -383,20 +586,32 @@ class ApiHandler:
             # Extract basic required parameters
             prompt = generation_params.get('prompt')
             memory = generation_params.get('memory')
-            stop_sequence = generation_params.get('stop_sequence', [
-                "<|im_end|>\n<|im_start|>user",
-                "<|im_end|>\n<|im_start|>assistant",
-                "</s>",
-                "User:",
-                "Assistant:"
-            ])
+
+            # Use provider-appropriate default stop sequences
+            from backend.kobold_prompt_builder import is_kobold_provider
+            is_kobold = is_kobold_provider(api_config)
+
+            if is_kobold:
+                stop_sequence = generation_params.get('stop_sequence', [
+                    "User:",
+                    "Assistant:"
+                ])
+            else:
+                stop_sequence = generation_params.get('stop_sequence', [
+                    "<|im_end|>\n<|im_start|>user",
+                    "<|im_end|>\n<|im_start|>assistant",
+                    "</s>",
+                    "User:",
+                    "Assistant:"
+                ])
             quiet = generation_params.get('quiet', True)
 
             # Handle system_instruction - prepend to memory for proper instruction handling
             # This ensures generation instructions are treated as directives in system context,
             # not as content to continue (which causes instruction leakage in KoboldCPP)
+            # For KoboldCPP: skip here — handled after lore matching by the builder
             system_instruction = generation_params.get('system_instruction')
-            if system_instruction:
+            if system_instruction and not is_kobold:
                 self.logger.log_step(f"Prepending system_instruction to memory ({len(system_instruction)} chars)")
                 if memory:
                     memory = f"{system_instruction}\n\n{memory}"
@@ -588,8 +803,51 @@ class ApiHandler:
                     self.logger.log_error(f"Error processing lore: {str(e)}")
                     # Continue with generation even if lore processing fails
             
-            # Add </s> to stop sequences if not already present
-            if "</s>" not in stop_sequence:
+            # KoboldCPP story-mode rebuild: clean memory, fold system instruction,
+            # rebuild prompt from raw chat_history, set clean stop sequences
+            if is_kobold:
+                from backend.kobold_prompt_builder import (
+                    clean_memory, fold_system_instruction, build_story_prompt,
+                    build_story_stop_sequences, extract_block
+                )
+
+                char_data = character_data.get('data', {}) if character_data else {}
+                char_name = char_data.get('name', 'Character')
+                user_name = 'User'
+
+                # Clean memory: strip empty field lines from lore handler output
+                memory = clean_memory(memory or '')
+
+                # Fold system_instruction into memory as narrative framing
+                if system_instruction:
+                    memory = fold_system_instruction(system_instruction, memory)
+
+                # Append *** separator between memory and prompt
+                if memory and not memory.rstrip().endswith('***'):
+                    memory = memory.rstrip() + '\n***'
+
+                # Rebuild prompt from chat_history (main chat flow)
+                raw_history = generation_params.get('chat_history', [])
+                if raw_history:
+                    original_prompt = prompt or ''
+                    session_notes = extract_block(original_prompt, '[Session Notes]', '[End Session Notes]')
+                    compressed = extract_block(original_prompt, '[Previous Events Summary]', '[End Summary')
+
+                    prompt = ''
+                    if compressed:
+                        prompt += compressed + '\n\n'
+                    if session_notes:
+                        prompt += f'[Session Notes]\n{session_notes}\n[End Session Notes]\n\n'
+                    prompt += build_story_prompt(raw_history, char_name, user_name)
+
+                # Set clean stop sequences
+                stop_sequence = build_story_stop_sequences(char_name, user_name)
+
+                self.logger.log_step(f"KoboldCPP story-mode rebuild complete. Memory: {len(memory)} chars, Prompt: {len(prompt) if prompt else 0} chars")
+                self.logger.log_step(f"KoboldCPP stop_sequence: {stop_sequence}")
+
+            # Add </s> to stop sequences if not already present (skip for KoboldCPP)
+            if not is_kobold and "</s>" not in stop_sequence:
                 stop_sequence.append("</s>")
             
             # Save context window for debugging if provided
@@ -673,10 +931,11 @@ class ApiHandler:
             self.logger.log_step("Iterating over adapter generator in api_handler...")
             chunk_count = 0
             has_yielded_content = False
-            
+            thinking_filter = ThinkingTagFilter()
+
             for chunk in adapter_generator:
                 chunk_count += 1
-                
+
                 # For OpenRouter, handle empty chunks and role-only chunks specially
                 if provider == "OpenRouter" and b'{"content":""}' in chunk:
                     # OpenRouter is sending a role-only chunk, ensure streaming continues
@@ -686,11 +945,19 @@ class ApiHandler:
                         yield f"data: {json.dumps({'content': '', 'streaming_active': True})}\n\n".encode('utf-8')
                         has_yielded_content = True
                 else:
-                    # Regular content chunk
-                    if chunk_count % 50 == 0:  # Log every 50 chunks
-                        self.logger.log_step(f"Yielding chunk {chunk_count} from adapter generator...")
-                    yield chunk
-                    has_yielded_content = True
+                    # Apply thinking tag filter to content chunks
+                    filtered_chunk = self._apply_thinking_filter(chunk, thinking_filter)
+                    if filtered_chunk is not None:
+                        if chunk_count % 50 == 0:  # Log every 50 chunks
+                            self.logger.log_step(f"Yielding chunk {chunk_count} from adapter generator...")
+                        yield filtered_chunk
+                        has_yielded_content = True
+
+            # Flush any remaining buffered content from the thinking filter
+            flush_text = thinking_filter.flush()
+            if flush_text:
+                yield f"data: {json.dumps({'content': flush_text})}\n\n".encode('utf-8')
+
             self.logger.log_step(f"Finished iterating adapter generator. Total chunks yielded: {chunk_count}")
             # No explicit return needed here as yielding handles the generator response
             

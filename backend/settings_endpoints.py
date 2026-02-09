@@ -62,6 +62,9 @@ class FeatherlessModelsPayload(BaseModel):
     url: str
     apiKey: Optional[str] = None
 
+class OllamaModelsPayload(BaseModel):
+    url: str
+
 # --- Settings Endpoints ---
 
 @router.get("/settings", response_model=DataResponse, responses=STANDARD_RESPONSES)
@@ -460,3 +463,32 @@ async def get_featherless_models_proxy(
         logger.log_error(f"Error proxying Featherless models request: {str(e)}")
         logger.log_error(traceback.format_exc())
         raise handle_generic_error(e, "Failed to fetch models")
+
+@router.post("/ollama/models", response_model=DataResponse, responses=STANDARD_RESPONSES)
+async def get_ollama_models_proxy(
+    payload: OllamaModelsPayload,
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Proxy to fetch available models from a local Ollama instance."""
+    try:
+        logger.log_step(f"Proxying Ollama models request for URL: {payload.url}")
+        adapter = get_provider_adapter("Ollama", logger)
+
+        models_response = adapter.list_models(payload.url)
+
+        if models_response and isinstance(models_response, dict):
+            if models_response.get("success") is True and "models" in models_response:
+                logger.log_step(f"Successfully fetched {len(models_response['models'])} models from Ollama.")
+                return create_data_response({
+                    "models": models_response["models"]
+                })
+            elif models_response.get("success") is False and "error" in models_response:
+                logger.log_warning(f"Error from Ollama adapter: {models_response['error']}")
+                return create_error_response(models_response['error'], "400")
+
+        logger.log_warning(f"Unexpected response format from Ollama adapter: {models_response}")
+        return create_error_response("Unexpected response format from Ollama adapter", "500")
+    except Exception as e:
+        logger.log_error(f"Error proxying Ollama models request: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise handle_generic_error(e, "Failed to fetch Ollama models")

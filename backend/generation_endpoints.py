@@ -152,6 +152,21 @@ async def generate_greeting(request: Request):
             }
         }
 
+        # KoboldCPP override: build clean story-mode payload
+        from backend.kobold_prompt_builder import is_kobold_provider
+        if is_kobold_provider(api_config):
+            from backend.kobold_prompt_builder import (
+                build_story_memory, build_greeting_prompt, build_story_stop_sequences
+            )
+            stream_request_data['generation_params']['memory'] = build_story_memory(
+                character_data, system_instruction=generation_instruction)
+            stream_request_data['generation_params']['prompt'] = build_greeting_prompt(
+                name, partial_message)
+            stream_request_data['generation_params']['stop_sequence'] = build_story_stop_sequences(
+                name, 'User')
+            # Remove system_instruction so api_handler doesn't re-process it
+            stream_request_data['generation_params'].pop('system_instruction', None)
+
         return StreamingResponse(
             _api_handler.stream_generate(stream_request_data),
             media_type="text/event-stream"
@@ -266,6 +281,20 @@ async def generate_impersonate(request: Request):
             }
         }
 
+        # KoboldCPP override: build clean story-mode payload
+        from backend.kobold_prompt_builder import is_kobold_provider
+        if is_kobold_provider(api_config):
+            from backend.kobold_prompt_builder import (
+                build_story_memory, build_impersonate_prompt
+            )
+            stream_request_data['generation_params']['memory'] = build_story_memory(
+                character_data, system_instruction=generation_instruction)
+            stream_request_data['generation_params']['prompt'] = build_impersonate_prompt(
+                messages, char_name, user_name, partial_message)
+            stream_request_data['generation_params']['stop_sequence'] = [
+                f"{char_name}:", f"\n{char_name}: "]
+            stream_request_data['generation_params'].pop('system_instruction', None)
+
         return StreamingResponse(
             _api_handler.stream_generate(stream_request_data),
             media_type="text/event-stream"
@@ -376,6 +405,17 @@ Keep it to 2-4 paragraphs unless the user requests otherwise."""
                 "quiet": True
             }
         }
+
+        # KoboldCPP override: clean stop sequences and fold instruction into memory
+        from backend.kobold_prompt_builder import is_kobold_provider
+        if is_kobold_provider(api_config):
+            from backend.kobold_prompt_builder import build_room_content_prompt
+            stream_request_data['generation_params']['stop_sequence'] = ["[END]", "---"]
+            stream_request_data['generation_params']['memory'] = (
+                generation_instruction + '\n\n' + full_memory if generation_instruction else full_memory)
+            stream_request_data['generation_params']['prompt'] = build_room_content_prompt(
+                field_type, existing_text)
+            stream_request_data['generation_params'].pop('system_instruction', None)
 
         return StreamingResponse(
             _api_handler.stream_generate(stream_request_data),
@@ -550,6 +590,12 @@ Personality:
                 "max_tokens": 300  # Thin frames should be concise
             }
         }
+
+        # KoboldCPP override: remove </s> from stop sequences
+        # Keep prompt structure as-is since JSON generation requires structured prompting
+        from backend.kobold_prompt_builder import is_kobold_provider
+        if is_kobold_provider(api_config):
+            stream_request_data['generation_params']['stop_sequence'] = ["\n\n\n", "```\n\n"]
 
         # Collect the streamed response with timeout
         collected_response = []

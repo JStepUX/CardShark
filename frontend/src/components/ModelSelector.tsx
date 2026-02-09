@@ -49,6 +49,12 @@ interface FeatherlessModelSelectorProps {
   onChange: (model: string) => void;
 }
 
+interface OllamaModelSelectorProps {
+  apiUrl: string;
+  selectedModel: string;
+  onChange: (model: string) => void;
+}
+
 // --- Child Selector Components ---
 
 // OpenRouter Model Selector Component
@@ -295,6 +301,103 @@ const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
 };
 
 
+// Ollama Model Selector Component
+const OllamaModelSelector: React.FC<OllamaModelSelectorProps> = ({
+  apiUrl,
+  selectedModel,
+  onChange,
+}) => {
+  const [models, setModels] = useState<Array<{ id: string; name: string; size_gb?: number }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (apiUrl) {
+      fetchOllamaModels();
+    }
+  }, [apiUrl]);
+
+  const fetchOllamaModels = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/ollama/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: apiUrl })
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
+      }
+      const fetchedData = await response.json();
+      if (!fetchedData.success) {
+        throw new Error(fetchedData.error || 'Failed to fetch models from Ollama');
+      }
+      const validModels = (fetchedData.data?.models || fetchedData.models || [])
+        .filter((m: { id: string }) => m.id)
+        .sort((a: { name: string }, b: { name: string }) => (a.name || '').localeCompare(b.name || ''));
+      setModels(validModels);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to load models';
+      setError(message);
+      toast.error(`Ollama Error: ${message}`);
+      setModels([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredModels = models.filter(model =>
+    (model.name || model.id).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-gray-300 mb-1">Ollama Model</label>
+      <input
+        type="text"
+        placeholder="Search models..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="w-full px-3 py-1.5 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 text-sm mb-2"
+        disabled={isLoading}
+      />
+      {isLoading ? (
+        <div className="flex items-center text-gray-400">
+          <LoadingSpinner text="Loading models..." />
+        </div>
+      ) : error ? (
+        <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
+          <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
+        </div>
+      ) : models.length === 0 && !isLoading ? (
+        <div className="text-gray-400 text-xs p-2">No models found. Make sure Ollama is running and has models pulled.</div>
+      ) : (
+        <select
+          value={selectedModel || ''}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 text-sm"
+          size={Math.min(10, filteredModels.length + 1)}
+          disabled={isLoading}
+        >
+          <option value="" disabled={!!selectedModel}>-- Select a Model --</option>
+          {filteredModels.length === 0 && searchTerm && (
+            <option value="" disabled>No models match "{searchTerm}"</option>
+          )}
+          {filteredModels.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}{model.size_gb ? ` (${model.size_gb} GB)` : ''}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+};
+
+
 // KoboldCPP Model Selector Component (Main ModelSelector)
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   apiUrl,
@@ -311,12 +414,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   // Use the hook correctly
   const { status: koboldHookStatus, refresh: refreshKoboldStatus } = useKoboldCPP();
 
-  // Add useEffect to log models state changes
-  useEffect(() => {
-    console.log(`[ModelSelector State Watcher] models state updated (${models.length}):`, models.slice(0, 5));
-  }, [models]);
-
   const isKobold = provider === APIProvider.KOBOLD;
+  const isOllama = provider === APIProvider.OLLAMA;
   const isOpenRouter = provider === APIProvider.OPENROUTER;
   const isFeatherless = provider === APIProvider.FEATHERLESS;
 
@@ -332,10 +431,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   const fetchLocalModels = async () => {
     if (!modelsDirectory) {
-      console.log("[ModelSelector] fetchLocalModels skipped: no modelsDirectory");
       return;
     }
-    console.log(`[ModelSelector] fetchLocalModels called for directory: ${modelsDirectory}`);
     setIsLoading(true);
     setError(null);
     try {
@@ -344,22 +441,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory: modelsDirectory })
       });
-      console.log(`[ModelSelector] fetchLocalModels response status: ${response.status}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: { message: `HTTP error! status: ${response.status}` } }));
         throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
       }
       const fetchedData = await response.json();
-      console.log(`[ModelSelector] fetchLocalModels fetchedData:`, fetchedData);
-      // Removed incorrect success check: if (!fetchedData.success) { ... }
-      // Directly use the models array from the response
       const modelsFromBackend = fetchedData.models || [];
-      const sortedModels = [...modelsFromBackend].sort((a: Model, b: Model) => a.name.localeCompare(b.name)); // Ensure sorting a copy
-      console.log(`[ModelSelector] Attempting to set local models state with ${sortedModels.length} models. First 5:`, sortedModels.slice(0, 5));
-      setModels(sortedModels); // Call state setter
+      const sortedModels = [...modelsFromBackend].sort((a: Model, b: Model) => a.name.localeCompare(b.name));
+      setModels(sortedModels);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load local models';
-      console.error(`[ModelSelector] Error in fetchLocalModels: ${message}`, e);
       setError(message);
       toast.error(`KoboldCPP Error: ${message}`);
       setModels([]); // Clear models on error
@@ -372,10 +463,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const handleConnectKobold = async () => {
     if (selectedModel && modelsDirectory) {
       setIsLoading(true);
-      setError(null); try {
-        console.log(`Requesting backend to connect KoboldCPP with model: ${selectedModel}`);
-        console.log(`Models directory: ${modelsDirectory}`);
-
+      setError(null);
+      try {
         const response = await fetch('/api/koboldcpp/connect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -383,17 +472,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         });
 
         if (!response.ok) {
-          console.error(`Failed to connect KoboldCPP. Status: ${response.status}`);
           let errorMessage = `HTTP error! status: ${response.status}`;
-
           try {
             const errorData = await response.json();
             errorMessage = errorData.detail || errorData.error?.message || errorMessage;
-            console.error("Error details:", errorData);
-          } catch (parseError) {
-            console.error("Failed to parse error response:", parseError);
+          } catch {
+            // Response wasn't JSON
           }
-
           throw new Error(`Failed to connect KoboldCPP: ${errorMessage}`);
         }
 
@@ -402,10 +487,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           throw new Error(result.error || 'Backend failed to start KoboldCPP');
         }
         toast.info("KoboldCPP server starting...");
-        setTimeout(refreshKoboldStatus, 5000); // Refresh status after delay
+        setTimeout(refreshKoboldStatus, 5000);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
-        console.error("Failed to connect KoboldCPP:", error);
         setError(`Failed to start KoboldCPP: ${message}`);
         toast.error(`KoboldCPP Error: ${message}`);
       } finally {
@@ -419,22 +503,18 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   const handleDisconnectKobold = async () => {
     setIsLoading(true);
-    setError(null); try {
-      console.log("Requesting backend to disconnect KoboldCPP");
+    setError(null);
+    try {
       const response = await fetch('/api/koboldcpp/disconnect', { method: 'POST' });
 
       if (!response.ok) {
-        console.error(`Failed to disconnect KoboldCPP. Status: ${response.status}`);
         let errorMessage = `HTTP error! status: ${response.status}`;
-
         try {
           const errorData = await response.json();
           errorMessage = errorData.detail || errorData.error?.message || errorMessage;
-          console.error("Error details:", errorData);
-        } catch (parseError) {
-          console.error("Failed to parse error response:", parseError);
+        } catch {
+          // Response wasn't JSON
         }
-
         throw new Error(`Failed to disconnect KoboldCPP: ${errorMessage}`);
       }
 
@@ -443,10 +523,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         throw new Error(result.message || 'Backend failed to stop KoboldCPP');
       }
       toast.info("KoboldCPP server stopping...");
-      setTimeout(refreshKoboldStatus, 3000); // Refresh status after delay
+      setTimeout(refreshKoboldStatus, 3000);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("Failed to disconnect KoboldCPP:", error);
       setError(`Failed to stop KoboldCPP: ${message}`);
       toast.error(`KoboldCPP Error: ${message}`);
     } finally {
@@ -458,13 +537,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const filteredLocalModels = models.filter(model =>
     model.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Log state just before rendering
-  console.log(`[ModelSelector Render] Provider: ${provider}, isKobold: ${isKobold}, isOpenRouter: ${isOpenRouter}, isFeatherless: ${isFeatherless}`);
-  console.log(`[ModelSelector Render] modelsDirectory prop:`, modelsDirectory);
-  if (isKobold) {
-    console.log(`[ModelSelector Render - Kobold] models state (${models.length}):`, models.slice(0, 5)); // Log first 5
-  }
 
   // Render specific selector based on provider
   if (isKobold) {
@@ -539,6 +611,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           </>
         )}
       </div>
+    );
+  } else if (isOllama) {
+    return (
+      <OllamaModelSelector
+        apiUrl={apiUrl}
+        selectedModel={selectedModel || ''}
+        onChange={onChange}
+      />
     );
   } else if (isOpenRouter) {
     return (

@@ -20,6 +20,7 @@ export interface GenerationSettings {
   dynatemp_exponent?: number;
   smoothing_factor?: number;
   presence_penalty?: number;
+  reasoning_model?: boolean;
 }
 
 // Default generation settings for KoboldCPP
@@ -46,6 +47,7 @@ export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
 
 export enum APIProvider {
   KOBOLD = 'KoboldCPP',
+  OLLAMA = 'Ollama',
   CLAUDE = 'Claude',
   OPENAI = 'OpenAI',
   GEMINI = 'Gemini',
@@ -108,6 +110,12 @@ export const PROVIDER_CONFIGS: Record<APIProvider, ProviderConfig> = {
     templateId: ChatTemplate.MISTRAL,
     requiresApiKey: false,
     defaultName: 'Local KoboldCPP'
+  },
+  [APIProvider.OLLAMA]: {
+    defaultUrl: 'http://localhost:11434',
+    templateId: ChatTemplate.OPENAI,
+    requiresApiKey: false,
+    defaultName: 'Local Ollama'
   },
   [APIProvider.OPENAI]: {
     defaultUrl: 'https://api.openai.com/v1',
@@ -179,7 +187,7 @@ export interface ConnectionStatus {
 export const APIConfigSchema = z.object({
   id: z.string().optional(),
   name: z.string().optional(), // Added name field for user-friendly identification
-  provider: z.enum(['KoboldCPP', 'OpenAI', 'Claude', 'Gemini', 'OpenRouter', 'Featherless']),
+  provider: z.enum(['KoboldCPP', 'Ollama', 'OpenAI', 'Claude', 'Gemini', 'OpenRouter', 'Featherless']),
   url: z.string().url().optional(),
   apiKey: z.string().optional(),
   model: z.string().optional(),

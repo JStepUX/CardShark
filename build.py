@@ -376,6 +376,7 @@ hidden_imports = [    # Core FastAPI and dependencies
     'backend.database',
     'backend.database_migrations',
     'backend.errors',
+    'backend.kobold_prompt_builder',
     'backend.koboldcpp_manager',
     'backend.koboldcpp_handler',
     'backend.log_manager',
