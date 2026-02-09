@@ -63,8 +63,8 @@ class LayoutExit(BaseModel):
 
 class GridSize(BaseModel):
     """Grid dimensions for room layout"""
-    cols: int = Field(9, ge=1, description="Number of columns")
-    rows: int = Field(9, ge=1, description="Number of rows")
+    cols: int = Field(15, ge=1, description="Number of columns")
+    rows: int = Field(15, ge=1, description="Number of rows")
 
 
 class RoomLayoutData(BaseModel):
@@ -72,7 +72,7 @@ class RoomLayoutData(BaseModel):
     Room layout data for spatial configuration
     Configures NPC positions, dead zones, containers, exits
     """
-    gridSize: GridSize = Field(default_factory=lambda: GridSize(cols=9, rows=9), description="Grid dimensions")
+    gridSize: GridSize = Field(default_factory=GridSize, description="Grid dimensions")
     spawns: List[SpawnPoint] = Field(default_factory=list, description="NPC spawn positions")
     deadZones: List[Zone] = Field(default_factory=list, description="Dead zones (water, walls, hazards)")
     containers: Optional[List[LayoutContainer]] = Field(None, description="Interactive containers (future)")

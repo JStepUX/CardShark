@@ -17,6 +17,7 @@ import {
     TilePosition,
     ExitDirection,
     LocalMapConfig,
+    DEFAULT_LAYOUT_GRID_SIZE,
 } from '../../../../types/localMap';
 import { GridCombatant } from '../../../../types/combat';
 import type { BlastPattern } from '../../../../types/inventory';
@@ -39,10 +40,10 @@ import { useSettings } from '../../../../contexts/SettingsContext';
 // Debug logging flag - set to true for development debugging
 const DEBUG = false;
 
-// Default configuration - 9x9 square grid with center point at (4,4)
+// Default configuration - uses shared grid size from localMap.ts
 const DEFAULT_CONFIG: LocalMapConfig = {
-    gridWidth: 9,
-    gridHeight: 9,
+    gridWidth: DEFAULT_LAYOUT_GRID_SIZE.cols,
+    gridHeight: DEFAULT_LAYOUT_GRID_SIZE.rows,
     tileSize: 124,
 };
 

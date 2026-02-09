@@ -250,8 +250,8 @@ export interface RoomLayoutData {
  * Default grid size matching LocalMapStage gameplay dimensions
  */
 export const DEFAULT_LAYOUT_GRID_SIZE = {
-    cols: 9,
-    rows: 9,
+    cols: 15,
+    rows: 15,
 };
 
 /**

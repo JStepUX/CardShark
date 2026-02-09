@@ -26,14 +26,15 @@ import {
     TilePosition,
     ExitTile,
     LocalMapConfig,
+    DEFAULT_LAYOUT_GRID_SIZE,
 } from '../../../../types/localMap';
 import { LocalMapTile } from './LocalMapTile';
 import { EntityCardSprite } from './EntityCardSprite';
 import { CombatParticleSystem, EFFECT_COLORS, PROJECTILE_PRESETS } from './CombatParticleSystem';
 
-// Default grid configuration (9x9 square with true center point at 4,4)
-const DEFAULT_GRID_WIDTH = 9;
-const DEFAULT_GRID_HEIGHT = 9;
+// Default grid configuration - uses shared grid size from localMap.ts
+const DEFAULT_GRID_WIDTH = DEFAULT_LAYOUT_GRID_SIZE.cols;
+const DEFAULT_GRID_HEIGHT = DEFAULT_LAYOUT_GRID_SIZE.rows;
 const DEFAULT_TILE_SIZE = 80;
 const TILE_GAP = 2;
 
