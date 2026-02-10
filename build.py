@@ -295,6 +295,7 @@ backend_datas = [
     ('backend/models/*', 'backend/models'),    ('backend/utils/*', 'backend/utils'),
     ('backend/services/*.py', 'backend/services'),  # Add services directory for character_service
     ('backend/default_room.png', 'backend'),         # Add default room image
+    ('backend/assets/defaults/*', 'backend/assets/defaults'),  # Default demo world NPC assets
     ('backend/gallery_metadata.json', 'backend'),    # Add gallery manifest
     ('content_filters/*.json', 'content_filters'),   # Add content filters JSON files
     ('content_filters/builtin/*.json', 'content_filters/builtin'),  # Add builtin filter packages
@@ -416,6 +417,8 @@ hidden_imports = [    # Core FastAPI and dependencies
     # Services subdirectory
     'backend.services.character_indexing_service', # Added based on file listing, was missing
     'backend.services.character_service', # Added based on file listing, was missing
+    'backend.services.character_sync_service',  # Character file-to-DB sync at startup
+    'backend.services.default_world_service',   # Demo world provisioning
     'backend.services.image_storage_service', # Added for unified image storage
     'backend.services.chat_service', # Added
     'backend.services.lore_activation_tracker', # Added for lore temporal effects (sticky/cooldown/delay)

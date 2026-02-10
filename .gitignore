@@ -39,6 +39,8 @@ yarn-error.log*
 Thumbs.db
 *.sqlite
 Beekeeper*.*
+defaults/
+backend/assets/
 
 # Temporary files
 *.tmp

@@ -26,10 +26,23 @@ class CharacterSyncService:
 
     def _get_characters_dir(self) -> Path:
         """Get the characters directory from settings or default."""
-        # This logic mimics what's in CharacterService, ideally should be centralized
-        # For now, we'll use the same logic to ensure consistency
-        # Assuming standard structure for now as per project conventions
-        return Path("characters")
+        from backend.utils.path_utils import get_application_base_path
+
+        character_dir = self.settings_manager.get_setting("character_directory")
+        if character_dir:
+            p = Path(character_dir)
+            if p.is_absolute():
+                p.mkdir(parents=True, exist_ok=True)
+                return p
+            # Relative paths resolve against application base
+            p = get_application_base_path() / character_dir
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+
+        # Fallback to default
+        default_dir = get_application_base_path() / "characters"
+        default_dir.mkdir(parents=True, exist_ok=True)
+        return default_dir
 
     def sync_characters(self):
         """
@@ -106,10 +119,21 @@ class CharacterSyncService:
             self.logger.log_warning(f"Characters directory not found: {self.characters_dir}")
             return stats
 
-        # Get all PNG files
+        # Get all PNG files (top-level characters + worlds/ and rooms/ subdirs)
         png_files = list(self.characters_dir.glob("*.png"))
+        for subdir in ("worlds", "rooms"):
+            sub_path = self.characters_dir / subdir
+            if sub_path.exists():
+                png_files.extend(sub_path.glob("*.png"))
+
+        # Also scan the defaults/ directory for bundled demo/test characters
+        from backend.utils.path_utils import get_application_base_path
+        defaults_dir = get_application_base_path() / "defaults"
+        if defaults_dir.exists():
+            png_files.extend(defaults_dir.glob("*.png"))
+
         stats['total'] = len(png_files)
-        self.logger.log_step(f"Found {len(png_files)} character files.", level=0)
+        self.logger.log_step(f"Found {len(png_files)} character/world/room files.", level=0)
 
         for file_path in png_files:
             try:
@@ -172,6 +196,22 @@ class CharacterSyncService:
                 return None
             return value if isinstance(value, str) else json.dumps(value)
 
+        # Auto-assign gallery folder based on card type if not already set
+        extensions = data_section.get("extensions", {})
+        if isinstance(extensions, str):
+            import json as _json
+            try:
+                extensions = _json.loads(extensions)
+            except (ValueError, TypeError):
+                extensions = {}
+        if not extensions.get("cardshark_folder"):
+            if extensions.get("world_data"):
+                extensions["cardshark_folder"] = "Worlds"
+            elif extensions.get("room_data"):
+                extensions["cardshark_folder"] = "Rooms"
+            else:
+                extensions["cardshark_folder"] = "Characters"
+
         # Create new Character record
         char_data = {
             "character_uuid": data_section.get("character_uuid") or str(uuid.uuid4()),
@@ -185,7 +225,7 @@ class CharacterSyncService:
             "png_file_path": relative_path,
             "tags": as_json_str(data_section.get("tags", [])),
             "spec_version": metadata.get("spec_version", "2.0"),
-            "extensions_json": as_json_str(data_section.get("extensions", {})),
+            "extensions_json": as_json_str(extensions),
             "alternate_greetings_json": as_json_str(data_section.get("alternate_greetings", [])),
             "creator_notes": data_section.get("creator_notes"),
             "system_prompt": data_section.get("system_prompt"),
@@ -224,6 +264,20 @@ class CharacterSyncService:
                 return None
             return value if isinstance(value, str) else json.dumps(value)
 
+        # Auto-assign gallery folder for worlds/rooms if not already set
+        extensions = data_section.get("extensions", {})
+        if isinstance(extensions, str):
+            import json as _json
+            try:
+                extensions = _json.loads(extensions)
+            except (ValueError, TypeError):
+                extensions = {}
+        if not extensions.get("cardshark_folder"):
+            if extensions.get("world_data"):
+                extensions["cardshark_folder"] = "Worlds"
+            elif extensions.get("room_data"):
+                extensions["cardshark_folder"] = "Rooms"
+
         # Update fields
         db_char.name = data_section.get("name", db_char.name)
         db_char.description = data_section.get("description")
@@ -234,7 +288,7 @@ class CharacterSyncService:
         db_char.creator_comment = metadata.get("creatorcomment") or data_section.get("creator_comment")
         db_char.tags = as_json_str(data_section.get("tags", []))
         db_char.spec_version = metadata.get("spec_version", db_char.spec_version)
-        db_char.extensions_json = as_json_str(data_section.get("extensions", {}))
+        db_char.extensions_json = as_json_str(extensions)
         db_char.alternate_greetings_json = as_json_str(data_section.get("alternate_greetings", []))
         db_char.creator_notes = data_section.get("creator_notes")
         db_char.system_prompt = data_section.get("system_prompt")

@@ -122,6 +122,7 @@ from backend.database import init_db, SessionLocal, get_db # Import SessionLocal
 from contextlib import asynccontextmanager
 from backend.services.character_service import CharacterService # Import CharacterService
 from backend.services.character_sync_service import CharacterSyncService # Import CharacterSyncService
+from backend.services.default_world_service import DefaultWorldService # Import DefaultWorldService
 from backend.services.user_profile_service import UserProfileService # Import UserProfileService
 from backend.services.image_storage_service import ImageStorageService # Import ImageStorageService
 from backend.services.character_lore_service import CharacterLoreService # Import CharacterLoreService
@@ -170,10 +171,23 @@ async def lifespan(app: FastAPI):
             logger=logger
         )
         
+        # Initialize DefaultWorldService (needed before sync for bundled asset deployment)
+        default_world_service = DefaultWorldService(
+            character_service=app.state.character_service,
+            world_card_service=app.state.world_card_handler,
+            png_handler=png_handler,
+            settings_manager=settings_manager,
+            logger=logger,
+        )
+
+        # Deploy bundled character PNGs from assets/defaults/ before sync
+        try:
+            default_world_service.deploy_bundled_characters()
+        except Exception as e:
+            logger.log_warning(f"Bundled character deployment failed: {e}")
+
         # Synchronize character directories using the initialized service
         try:
-            # app.state.character_service.sync_character_directories() # Deprecated method
-            
             # Initialize and run the new CharacterSyncService
             character_sync_service = CharacterSyncService(
                 db_session_generator=db_session_generator,
@@ -181,13 +195,19 @@ async def lifespan(app: FastAPI):
                 settings_manager=settings_manager,
                 logger=logger
             )
-            app.state.character_sync_service = character_sync_service # Store for dependency injection if needed
+            app.state.character_sync_service = character_sync_service
             character_sync_service.sync_characters()
         except Exception as sync_exc:
             logger.log_error(f"Character sync failed: {sync_exc}")
             raise
         logger.log_info("Initial character directory synchronization complete.")
-        
+
+        # Ensure default demo world exists
+        try:
+            default_world_service.ensure_default_world()
+        except Exception as e:
+            logger.log_warning(f"Default world provisioning failed: {e}")
+
         # Initialize and run user profile synchronization
         try:
             user_profile_service = UserProfileService(

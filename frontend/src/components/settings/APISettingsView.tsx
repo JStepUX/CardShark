@@ -123,7 +123,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
 
         let shouldMakeActive = false;
         if (configToSave.enabled) {
-          const enabledApis = Object.values(updatedLocalApis).filter(api => api.enabled);
+          const enabledApis = Object.values(updatedLocalApis).filter(api => api?.enabled);
           if (enabledApis.length === 1 && enabledApis[0].id === id) {
             // This is now the only enabled API
             shouldMakeActive = true;
@@ -414,7 +414,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
               {/* API Cards */}
             <div ref={containerRef} className="space-y-4">
               {/* Render cards based on localApis state */}
-              {Object.entries(localApis || {}).map(([id, api]: [string, APIConfig]) => ( // Added type assertion for api
+              {Object.entries(localApis || {}).filter(([, api]) => api != null).map(([id, api]: [string, APIConfig]) => (
                 <div key={id} className="bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4">
                   <APICard
                     api={api}
