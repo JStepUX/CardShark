@@ -21,7 +21,7 @@ import { adventureLogApi } from '../api/adventureLogApi';
 import type { WorldCard, RoomInstanceState } from '../types/worldCard';
 import type { GridWorldState, GridRoom, CombatDisplayNPC } from '../types/worldGrid';
 import type { ExitDirection, TilePosition, LocalMapConfig, LocalMapState } from '../types/localMap';
-import { DEFAULT_LAYOUT_GRID_SIZE } from '../types/localMap';
+import { DEFAULT_LAYOUT_GRID_SIZE, LOCAL_MAP_TILE_SIZE } from '../types/localMap';
 import type { TransitionState, ProgressStatus } from '../types/transition';
 import { createIdleTransitionState, TRANSITION_TIMEOUT_MS, THIN_FRAME_TIMEOUT_MS, SUMMARIZATION_TIMEOUT_MS } from '../types/transition';
 import type { NPCRelationship, TimeState } from '../types/worldRuntime';
@@ -36,7 +36,7 @@ import { getSpawnPosition } from '../utils/localMapUtils';
 import { preloadRoomTextures } from '../utils/texturePreloader';
 import { generateThinFrame, mergeThinFrameIntoCard } from '../services/thinFrameService';
 
-const LOCAL_MAP_CONFIG: LocalMapConfig = { gridWidth: DEFAULT_LAYOUT_GRID_SIZE.cols, gridHeight: DEFAULT_LAYOUT_GRID_SIZE.rows, tileSize: 100 };
+const LOCAL_MAP_CONFIG: LocalMapConfig = { gridWidth: DEFAULT_LAYOUT_GRID_SIZE.cols, gridHeight: DEFAULT_LAYOUT_GRID_SIZE.rows, tileSize: LOCAL_MAP_TILE_SIZE };
 
 
 interface UseRoomTransitionOptions {
@@ -599,7 +599,8 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
         timestamp: Date.now(),
         metadata: {
           type: 'room_introduction',
-          roomId: targetRoom.id
+          roomId: targetRoom.id,
+          speakerName: 'Narrator',
         }
       };
       addMessage(roomIntroMessage);
@@ -615,7 +616,8 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
         metadata: {
           type: 'npc_travel',
           npcId: activeNpcId,
-          roomId: targetRoom.id
+          roomId: targetRoom.id,
+          speakerName: activeNpcName,
         }
       };
       addMessage(followMessage);

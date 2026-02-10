@@ -18,6 +18,10 @@ import {
     ExitDirection,
     LocalMapConfig,
     DEFAULT_LAYOUT_GRID_SIZE,
+    LOCAL_MAP_TILE_SIZE,
+    LOCAL_MAP_TILE_GAP,
+    LOCAL_MAP_CARD_OVERFLOW_PADDING,
+    LOCAL_MAP_ZOOM,
 } from '../../../../types/localMap';
 import { GridCombatant } from '../../../../types/combat';
 import type { BlastPattern } from '../../../../types/inventory';
@@ -40,17 +44,15 @@ import { useSettings } from '../../../../contexts/SettingsContext';
 // Debug logging flag - set to true for development debugging
 const DEBUG = false;
 
-// Default configuration - uses shared grid size from localMap.ts
+// Default configuration - uses shared grid size and tile size from localMap.ts
 const DEFAULT_CONFIG: LocalMapConfig = {
     gridWidth: DEFAULT_LAYOUT_GRID_SIZE.cols,
     gridHeight: DEFAULT_LAYOUT_GRID_SIZE.rows,
-    tileSize: 124,
+    tileSize: LOCAL_MAP_TILE_SIZE,
 };
 
-// Padding for cards that overflow tile boundaries
-// Padding around grid for cards that extend above their tiles
-// Cards are 140px tall with pivot ~110px from top, so they extend well above tile center
-const CARD_OVERFLOW_PADDING = 120;
+// Padding around grid for cards that extend above their tiles (from centralized constants)
+const CARD_OVERFLOW_PADDING = LOCAL_MAP_CARD_OVERFLOW_PADDING;
 
 /** Extended NPC data with combat info */
 interface ResolvedNPC extends DisplayNPC {
@@ -195,12 +197,15 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     // Track which room we last calculated positions for (to avoid recalculating on companion change)
     const lastPlacedRoomIdRef = useRef<string | null>(null);
 
+    // Track which room we last centered the camera on (for room transition re-centering)
+    const lastCenteredRoomRef = useRef<string | null>(null);
+
     // Movement state for click-to-move
     const [isMoving, setIsMoving] = useState(false);
     const movementAbortRef = useRef(false);
 
-    // Zoom/pan state - start zoomed in for better card visibility
-    const DEFAULT_ZOOM = 1.35;
+    // Zoom/pan state - start zoomed in for RPG feel (from centralized constants)
+    const DEFAULT_ZOOM: number = LOCAL_MAP_ZOOM.default;
     const [currentZoom, setCurrentZoom] = useState(DEFAULT_ZOOM);
     const [isPanMode, setIsPanMode] = useState(false);
     const isPanModeRef = useRef(false);
@@ -574,14 +579,14 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
     const handleZoomIn = useCallback(() => {
         if (!stageRef.current) return;
-        const newZoom = Math.min(stageRef.current.getZoom() + 0.25, 2.0);
+        const newZoom = Math.min(stageRef.current.getZoom() + LOCAL_MAP_ZOOM.buttonStep, LOCAL_MAP_ZOOM.max);
         stageRef.current.setZoom(newZoom);
         setCurrentZoom(newZoom);
     }, []);
 
     const handleZoomOut = useCallback(() => {
         if (!stageRef.current) return;
-        const newZoom = Math.max(stageRef.current.getZoom() - 0.25, 0.5);
+        const newZoom = Math.max(stageRef.current.getZoom() - LOCAL_MAP_ZOOM.buttonStep, LOCAL_MAP_ZOOM.min);
         stageRef.current.setZoom(newZoom);
         setCurrentZoom(newZoom);
     }, []);
@@ -609,8 +614,8 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         const mouseY = e.clientY - rect.top - CARD_OVERFLOW_PADDING;
 
         // Calculate zoom delta
-        const zoomDelta = e.deltaY > 0 ? -0.1 : 0.1;
-        const newZoom = Math.max(0.5, Math.min(2.0, stageRef.current.getZoom() + zoomDelta));
+        const zoomDelta = e.deltaY > 0 ? -LOCAL_MAP_ZOOM.wheelStep : LOCAL_MAP_ZOOM.wheelStep;
+        const newZoom = Math.max(LOCAL_MAP_ZOOM.min, Math.min(LOCAL_MAP_ZOOM.max, stageRef.current.getZoom() + zoomDelta));
 
         // Zoom toward cursor position
         stageRef.current.setZoom(newZoom, mouseX, mouseY);
@@ -1010,8 +1015,8 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             }
 
             // Calculate dimensions with padding for card overflow
-            const stageWidth = config.gridWidth * (config.tileSize + 2);
-            const stageHeight = config.gridHeight * (config.tileSize + 2);
+            const stageWidth = config.gridWidth * (config.tileSize + LOCAL_MAP_TILE_GAP);
+            const stageHeight = config.gridHeight * (config.tileSize + LOCAL_MAP_TILE_GAP);
             const canvasWidth = stageWidth + CARD_OVERFLOW_PADDING * 2;
             const canvasHeight = stageHeight + CARD_OVERFLOW_PADDING * 2;
 
@@ -1403,6 +1408,19 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
             stageRef.current.updateFromState(mapState);
             stageRef.current.setCombatMode(inCombat);
+
+            // Re-center camera on player when room changes
+            if (currentRoom?.id !== lastCenteredRoomRef.current) {
+                lastCenteredRoomRef.current = currentRoom?.id ?? null;
+                if (containerRef.current) {
+                    stageRef.current.setZoom(DEFAULT_ZOOM);
+                    const rect = containerRef.current.getBoundingClientRect();
+                    const viewportWidth = rect.width - CARD_OVERFLOW_PADDING * 2;
+                    const viewportHeight = rect.height - CARD_OVERFLOW_PADDING * 2;
+                    stageRef.current.centerOnTile(playerPosition, viewportWidth, viewportHeight);
+                    setCurrentZoom(DEFAULT_ZOOM);
+                }
+            }
 
             // Notify parent of map state for external combat system
             // Only when NOT in combat - once combat starts, combat engine owns the state

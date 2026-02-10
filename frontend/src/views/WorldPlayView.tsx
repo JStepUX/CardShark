@@ -367,6 +367,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       metadata: {
         type: 'system',
         isDevReset: true,
+        speakerName: 'System',
       }
     });
   }, [currentRoom, worldState, worldId, addMessage]);
@@ -455,6 +456,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       metadata: {
         type: 'npc_dismissed',
         npcId: activeNpcId,
+        speakerName: activeNpcName,
       }
     });
 

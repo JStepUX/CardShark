@@ -58,7 +58,8 @@
       "Bash(cmd /c \"D: && cd D:\\\\Bolt-On\\\\cardshark\\\\frontend && npx tsc --noEmit 2>&1 && echo TSC_OK || echo TSC_FAILED\")",
       "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\character\\\\CharacterFolderView.tsx\")",
       "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\WorkshopPanel.tsx\")",
-      "WebFetch(domain:lite.koboldai.net)"
+      "WebFetch(domain:lite.koboldai.net)",
+      "Bash(echo:*)"
     ]
   }
 }

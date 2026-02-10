@@ -239,9 +239,9 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   // Helper to get user name display - already using formatUserName function which handles both string and UserProfile objects
   const formattedUserName = currentUser ? formatUserName(currentUser) : 'User';
 
-  // Determine the display name for assistant messages
+  // Determine the display name for assistant/system messages
   // Priority: metadata.speakerName > characterName prop > 'Assistant'
-  const speakerDisplayName = message.role === 'assistant'
+  const speakerDisplayName = (message.role === 'assistant' || message.role === 'system')
     ? (message.metadata?.speakerName as string | undefined) || characterName || 'Assistant'
     : formattedUserName;
 

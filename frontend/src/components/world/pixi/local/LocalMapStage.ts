@@ -27,6 +27,9 @@ import {
     ExitTile,
     LocalMapConfig,
     DEFAULT_LAYOUT_GRID_SIZE,
+    LOCAL_MAP_TILE_SIZE,
+    LOCAL_MAP_TILE_GAP,
+    LOCAL_MAP_ZOOM,
 } from '../../../../types/localMap';
 import { LocalMapTile } from './LocalMapTile';
 import { EntityCardSprite } from './EntityCardSprite';
@@ -35,8 +38,6 @@ import { CombatParticleSystem, EFFECT_COLORS, PROJECTILE_PRESETS } from './Comba
 // Default grid configuration - uses shared grid size from localMap.ts
 const DEFAULT_GRID_WIDTH = DEFAULT_LAYOUT_GRID_SIZE.cols;
 const DEFAULT_GRID_HEIGHT = DEFAULT_LAYOUT_GRID_SIZE.rows;
-const DEFAULT_TILE_SIZE = 80;
-const TILE_GAP = 2;
 
 // Debug logging flag - set to true for development debugging
 const DEBUG = false;
@@ -83,9 +84,9 @@ export class LocalMapStage extends PIXI.Container {
     private viewportPan: { x: number; y: number } = { x: 0, y: 0 };
     private contentContainer: PIXI.Container;
 
-    // Zoom constraints
-    private static readonly MIN_ZOOM = 0.5;
-    private static readonly MAX_ZOOM = 2.0;
+    // Zoom constraints (from centralized constants)
+    private static readonly MIN_ZOOM = LOCAL_MAP_ZOOM.min;
+    private static readonly MAX_ZOOM = LOCAL_MAP_ZOOM.max;
 
     constructor(config?: Partial<LocalMapConfig>) {
         super();
@@ -94,13 +95,13 @@ export class LocalMapStage extends PIXI.Container {
         this.config = {
             gridWidth: config?.gridWidth ?? DEFAULT_GRID_WIDTH,
             gridHeight: config?.gridHeight ?? DEFAULT_GRID_HEIGHT,
-            tileSize: config?.tileSize ?? DEFAULT_TILE_SIZE,
+            tileSize: config?.tileSize ?? LOCAL_MAP_TILE_SIZE,
             backgroundImage: config?.backgroundImage ?? null,
         };
 
         // Calculate stage dimensions
-        this.stageWidth = this.config.gridWidth * (this.config.tileSize + TILE_GAP);
-        this.stageHeight = this.config.gridHeight * (this.config.tileSize + TILE_GAP);
+        this.stageWidth = this.config.gridWidth * (this.config.tileSize + LOCAL_MAP_TILE_GAP);
+        this.stageHeight = this.config.gridHeight * (this.config.tileSize + LOCAL_MAP_TILE_GAP);
 
         // Create content container for zoom/pan transforms
         this.contentContainer = new PIXI.Container();
@@ -251,8 +252,8 @@ export class LocalMapStage extends PIXI.Container {
                 );
 
                 // Position tile
-                tile.x = x * (this.config.tileSize + TILE_GAP);
-                tile.y = y * (this.config.tileSize + TILE_GAP);
+                tile.x = x * (this.config.tileSize + LOCAL_MAP_TILE_GAP);
+                tile.y = y * (this.config.tileSize + LOCAL_MAP_TILE_GAP);
 
                 // Set up click handler
                 tile.on('pointerdown', () => {
@@ -424,7 +425,7 @@ export class LocalMapStage extends PIXI.Container {
                 // Card needs to move to new position
                 // Large distance (> 2 tiles) = teleport instantly (e.g., room transition, state reset)
                 // Small distance = animate smoothly (e.g., click-to-move)
-                const TELEPORT_THRESHOLD = (this.config.tileSize + TILE_GAP) * 2;
+                const TELEPORT_THRESHOLD = (this.config.tileSize + LOCAL_MAP_TILE_GAP) * 2;
                 const distance = Math.sqrt(distanceSquared);
 
                 if (distance > TELEPORT_THRESHOLD) {
@@ -468,8 +469,8 @@ export class LocalMapStage extends PIXI.Container {
      */
     private getTileCenter(pos: TilePosition): { x: number; y: number } {
         return {
-            x: pos.x * (this.config.tileSize + TILE_GAP) + this.config.tileSize / 2,
-            y: pos.y * (this.config.tileSize + TILE_GAP) + this.config.tileSize / 2,
+            x: pos.x * (this.config.tileSize + LOCAL_MAP_TILE_GAP) + this.config.tileSize / 2,
+            y: pos.y * (this.config.tileSize + LOCAL_MAP_TILE_GAP) + this.config.tileSize / 2,
         };
     }
 
@@ -673,7 +674,7 @@ export class LocalMapStage extends PIXI.Container {
      * Reset zoom and pan to default
      */
     resetView(): void {
-        this.viewportZoom = 1.0;
+        this.viewportZoom = LOCAL_MAP_ZOOM.default;
         this.viewportPan = { x: 0, y: 0 };
         this.applyViewportTransform();
     }
@@ -704,8 +705,8 @@ export class LocalMapStage extends PIXI.Container {
         const scaledWidth = this.stageWidth * this.viewportZoom;
         const scaledHeight = this.stageHeight * this.viewportZoom;
 
-        // Allow panning such that at least 10% of the map is visible (relaxed from 25%)
-        const minVisibleFraction = 0.10;
+        // Allow panning such that a percentage of the map stays visible
+        const minVisibleFraction = LOCAL_MAP_ZOOM.minVisibleFraction;
         const minVisibleX = scaledWidth * minVisibleFraction;
         const minVisibleY = scaledHeight * minVisibleFraction;
 

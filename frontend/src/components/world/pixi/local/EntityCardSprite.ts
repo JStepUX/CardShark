@@ -14,14 +14,20 @@
  */
 
 import * as PIXI from 'pixi.js';
-import { LocalMapEntity, Allegiance, ALLEGIANCE_COLORS } from '../../../../types/localMap';
+import {
+    LocalMapEntity,
+    Allegiance,
+    ALLEGIANCE_COLORS,
+    LOCAL_MAP_CARD_WIDTH,
+    LOCAL_MAP_CARD_HEIGHT,
+    LOCAL_MAP_CARD_PIVOT_FROM_BOTTOM,
+} from '../../../../types/localMap';
 import { TextureCache } from '../../../combat/pixi/TextureCache';
 import { CardAnimationController, CardSpriteInterface } from './CardAnimationController';
 
-// Card dimensions - sized so cards "stand" in tiles with heads extending above
-// Cards are wider than before, and positioned with feet at tile center
-const CARD_WIDTH = 100;
-const CARD_HEIGHT = 140;
+// Card dimensions from centralized constants
+const CARD_WIDTH = LOCAL_MAP_CARD_WIDTH;
+const CARD_HEIGHT = LOCAL_MAP_CARD_HEIGHT;
 // Portrait now fills the entire card (edge-to-edge minus border)
 const PORTRAIT_WIDTH = CARD_WIDTH - 6; // 94px (3px border on each side)
 const PORTRAIT_HEIGHT = CARD_HEIGHT - 6; // 134px (3px border top and bottom)
@@ -32,8 +38,8 @@ const BORDER_RADIUS = 8;
 const NAME_OVERLAY_HEIGHT = 28;
 
 // Pivot Y offset - how far from top of card the pivot point is
-// This makes the card "stand" with ~40px below tile center (feet) and rest above
-const PIVOT_Y_OFFSET = CARD_HEIGHT - 40;
+// This makes the card "stand" with feet at tile center and rest above
+const PIVOT_Y_OFFSET = CARD_HEIGHT - LOCAL_MAP_CARD_PIVOT_FROM_BOTTOM;
 
 // Badge sizes (scaled proportionally)
 const LEVEL_BADGE_RADIUS = 12;

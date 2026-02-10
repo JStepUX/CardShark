@@ -230,6 +230,7 @@ export function useNPCInteraction({
           npcId: currentNpcId,
           delta: sentimentResult.affinityDelta,
           reason: sentimentResult.reason,
+          speakerName: 'Narrator',
         }
       } as ChatMessage);
     }
@@ -265,7 +266,8 @@ export function useNPCInteraction({
         timestamp: Date.now(),
         metadata: {
           type: 'day_transition',
-          day: newState.currentDay
+          day: newState.currentDay,
+          speakerName: 'Narrator',
         }
       } as ChatMessage);
 
@@ -357,6 +359,7 @@ export function useNPCInteraction({
         metadata: {
           type: 'combat_start',
           roomId: currentRoom.id,
+          speakerName: 'Narrator',
         }
       } as ChatMessage);
 
@@ -393,7 +396,8 @@ export function useNPCInteraction({
             roomId: currentRoom.id,
             characterId: npcCharacterData.data?.character_uuid,
             isBonded: false,
-            generated: false
+            generated: false,
+            speakerName: npc.name,
           }
         } as ChatMessage);
         return;
@@ -411,7 +415,8 @@ export function useNPCInteraction({
           roomId: currentRoom.id,
           characterId: npcCharacterData.data?.character_uuid,
           isBonded: false,
-          generated: true
+          generated: true,
+          speakerName: npc.name,
         }
       } as ChatMessage);
 
@@ -507,6 +512,7 @@ export function useNPCInteraction({
           reason: 'already_bonded',
           existingAllyId: activeNpcId,
           existingAllyName: activeNpcName,
+          speakerName: 'Narrator',
         }
       } as ChatMessage);
       return;
@@ -539,6 +545,7 @@ export function useNPCInteraction({
           npcId: conversationTargetId,
           roomId: currentRoom.id,
           characterId: npcCharacterData.data?.character_uuid,
+          speakerName: npc.name,
         }
       } as ChatMessage);
 
@@ -567,6 +574,7 @@ export function useNPCInteraction({
         type: 'npc_dismissed',
         npcId: activeNpcId,
         roomId: currentRoom.id,
+        speakerName: npc.name,
       }
     } as ChatMessage);
 

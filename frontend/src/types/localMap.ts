@@ -254,6 +254,29 @@ export const DEFAULT_LAYOUT_GRID_SIZE = {
     rows: 15,
 };
 
+/** Tile rendering constants (single source of truth) */
+export const LOCAL_MAP_TILE_SIZE = 124;
+export const LOCAL_MAP_TILE_GAP = 2;
+
+/** Card sprite dimensions */
+export const LOCAL_MAP_CARD_WIDTH = 100;
+export const LOCAL_MAP_CARD_HEIGHT = 140;
+export const LOCAL_MAP_CARD_PIVOT_FROM_BOTTOM = 40;
+
+/** Canvas padding derived from card overflow above tiles */
+export const LOCAL_MAP_CARD_OVERFLOW_PADDING =
+    LOCAL_MAP_CARD_HEIGHT - LOCAL_MAP_CARD_PIVOT_FROM_BOTTOM + 20; // 120
+
+/** Zoom viewport constants */
+export const LOCAL_MAP_ZOOM = {
+    default: 2.2,    // ~5 tiles visible — zoomed-in RPG feel
+    min: 0.75,       // full 15x15 grid visible
+    max: 3.0,        // close-up inspection
+    buttonStep: 0.3,
+    wheelStep: 0.15,
+    minVisibleFraction: 0.25, // 25% of map must stay in view when panning
+} as const;
+
 /**
  * Create a default empty RoomLayoutData
  */
