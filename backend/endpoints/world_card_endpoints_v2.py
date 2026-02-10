@@ -85,8 +85,8 @@ def get_export_handler(
 async def create_world_card(
     name: str = Form(..., description="World name"),
     description: str = Form("", description="World description"),
-    grid_width: int = Form(10, description="Grid width"),
-    grid_height: int = Form(10, description="Grid height"),
+    grid_width: int = Form(15, description="Grid width"),
+    grid_height: int = Form(15, description="Grid height"),
     first_mes: str = Form(None, description="World introduction text"),
     system_prompt: str = Form(None, description="World atmosphere/system prompt"),
     image: UploadFile = File(None, description="Optional world image (uses default if not provided)"),

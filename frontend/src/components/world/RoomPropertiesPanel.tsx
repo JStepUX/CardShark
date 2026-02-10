@@ -1,7 +1,9 @@
-import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2, Sparkles, Loader2, LayoutGrid } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { GridRoom } from '../../utils/worldStateApi';
 import { RoomNPC } from '../../types/room';
+import type { RoomLayoutData } from '../../types/localMap';
+import { cleanOrphanedSpawns } from '../../types/localMap';
 import { NPCSettingsModal } from '../NPCSettingsModal';
 import { UnifiedImageGallery, ImageSelection } from '../common/UnifiedImageGallery';
 import { APIConfig } from '../../types/api';
@@ -97,14 +99,12 @@ interface RoomPropertiesPanelProps {
   onClose: () => void;
   onOpenNPCPicker?: () => void;
   onRemoveFromCell?: () => void;
-  onOpenLayoutEditor?: () => void;
   isVisible?: boolean;
-  isCompact?: boolean;  // When layout drawer is open, show narrower panel
   apiConfig?: APIConfig | null;
   worldContext?: WorldContext;
 }
 
-export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, onRemoveFromCell, onOpenLayoutEditor, isVisible = true, isCompact = false, apiConfig, worldContext }: RoomPropertiesPanelProps) {
+export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpdate, onClose, onOpenNPCPicker, onRemoveFromCell, isVisible = true, apiConfig, worldContext }: RoomPropertiesPanelProps) {
   const [uploading, setUploading] = useState(false);
   const [editingField, setEditingField] = useState<{
     field: 'description' | 'introduction_text';
@@ -258,9 +258,14 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
   };
   const handleRemoveNPC = (character_uuid: string) => {
     if (!room) return;
+    const newNpcs = room.npcs.filter(npc => npc.character_uuid !== character_uuid);
+    const npcIds = newNpcs.map(n => n.character_uuid);
+    const layoutData = (room as GridRoom & { layout_data?: RoomLayoutData }).layout_data;
+    const cleanedLayout = layoutData ? cleanOrphanedSpawns(layoutData, npcIds) : undefined;
     onUpdate({
       ...room,
-      npcs: room.npcs.filter(npc => npc.character_uuid !== character_uuid),
+      npcs: newNpcs,
+      ...(cleanedLayout ? { layout_data: cleanedLayout } : {}),
     });
   };
 
@@ -334,30 +339,18 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
         className={`
           bg-[#141414] border-l border-[#2a2a2a]
           flex flex-col shadow-2xl transition-all duration-300 ease-out overflow-hidden
-          ${isVisible && room ? (isCompact ? 'w-[350px]' : 'w-[500px]') : 'w-0'}
+          ${isVisible && room ? 'w-[400px]' : 'w-0'}
         `}
       >
         {/* Header */}
         <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
           <h3 className="text-sm font-medium text-white">Room Properties</h3>
-          <div className="flex items-center gap-2">
-            {onOpenLayoutEditor && room && (
-              <button
-                onClick={onOpenLayoutEditor}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-400 hover:text-blue-400 hover:bg-[#2a2a2a] rounded transition-colors"
-                title="Configure Room Layout"
-              >
-                <LayoutGrid size={14} />
-                <span>Layout</span>
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-[#2a2a2a] rounded transition-colors"
-            >
-              <X size={16} className="text-gray-400" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-[#2a2a2a] rounded transition-colors"
+          >
+            <X size={16} className="text-gray-400" />
+          </button>
         </div>
 
         {!room ? (
@@ -527,7 +520,12 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                     {room.npcs.map((npc) => (
                       <div
                         key={npc.character_uuid}
-                        className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 flex items-center justify-between"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('entityId', npc.character_uuid);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing"
                       >
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <Users size={14} className="text-gray-500 shrink-0" />

@@ -1,6 +1,8 @@
 // frontend/src/types/localMap.ts
 // Types for the local map (tactical grid view within a room)
 
+import { EDITOR_GRID_SIZE } from './editorGrid';
+
 /**
  * Position on the local map grid
  */
@@ -247,12 +249,10 @@ export interface RoomLayoutData {
 }
 
 /**
- * Default grid size matching LocalMapStage gameplay dimensions
+ * Default grid size matching LocalMapStage gameplay dimensions.
+ * Re-exported from editorGrid.ts for backward compatibility with gameplay code.
  */
-export const DEFAULT_LAYOUT_GRID_SIZE = {
-    cols: 15,
-    rows: 15,
-};
+export const DEFAULT_LAYOUT_GRID_SIZE = EDITOR_GRID_SIZE;
 
 /** Tile rendering constants (single source of truth) */
 export const LOCAL_MAP_TILE_SIZE = 124;
@@ -328,4 +328,18 @@ export function getCellZoneType(
         }
     }
     return null;
+}
+
+/**
+ * Remove orphaned spawn points whose entityId is not in the given NPC ID list.
+ * Returns a new RoomLayoutData with cleaned spawns, or the original if nothing changed.
+ */
+export function cleanOrphanedSpawns(
+    layoutData: RoomLayoutData,
+    npcIds: string[]
+): RoomLayoutData {
+    const npcIdSet = new Set(npcIds);
+    const cleanedSpawns = layoutData.spawns.filter(s => npcIdSet.has(s.entityId));
+    if (cleanedSpawns.length === layoutData.spawns.length) return layoutData;
+    return { ...layoutData, spawns: cleanedSpawns };
 }

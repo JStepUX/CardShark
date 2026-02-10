@@ -1,14 +1,16 @@
 /**
  * @file WorldEditor.tsx
- * @description World Builder interface for creating and editing world maps.
- * @dependencies worldApi (V2), roomApi, GridCanvas, RoomPropertiesPanel, RoomLayoutDrawer, NPCPickerModal
+ * @description World Builder with unified grid editor. World view ↔ Room view navigation.
+ * @dependencies worldApi (V2), roomApi, WorldGridView, RoomGridView, EditorHeader, EditorToolbar,
+ *               RoomPropertiesPanel, NPCPickerModal, CellActionMenu, RoomGalleryPicker
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
-import { GridCanvas, type Tool } from '../components/world/GridCanvas';
+import { WorldGridView, type Tool } from '../components/world/WorldGridView';
+import { RoomGridView } from '../components/world/RoomGridView';
+import { EditorHeader } from '../components/world/EditorHeader';
+import { EditorToolbar } from '../components/world/EditorToolbar';
 import { RoomPropertiesPanel } from '../components/world/RoomPropertiesPanel';
-import { RoomLayoutDrawer } from '../components/world/RoomLayoutDrawer';
 import { NPCPickerModal } from '../components/world/NPCPickerModal';
 import { CellActionMenu } from '../components/world/CellActionMenu';
 import { RoomGalleryPicker } from '../components/world/RoomGalleryPicker';
@@ -17,8 +19,12 @@ import { roomApi } from '../api/roomApi';
 import type { WorldCard, WorldRoomPlacement } from '../types/worldCard';
 import type { RoomCardSummary } from '../types/room';
 import type { GridRoom } from '../types/worldGrid';
-import type { RoomLayoutData, ExitDirection } from '../types/localMap';
+import type { RoomLayoutData, ExitDirection, ZoneType } from '../types/localMap';
+import { cleanOrphanedSpawns, createDefaultRoomLayoutData } from '../types/localMap';
+import { EDITOR_GRID_SIZE } from '../types/editorGrid';
+import type { RoomEditorTool } from '../types/editorGrid';
 import { roomCardToGridRoom } from '../utils/roomCardAdapter';
+import { useGridViewport } from '../hooks/useGridViewport';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
 import { useAPIConfig } from '../contexts/APIConfigContext';
@@ -35,42 +41,81 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
   const worldId = propWorldId || uuid || '';
 
+  // Core state
   const [worldCard, setWorldCard] = useState<WorldCard | null>(null);
   const [rooms, setRooms] = useState<GridRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<GridRoom | null>(null);
-  const [activeTool, setActiveTool] = useState<Tool>('edit'); // default to unified edit tool
   const [isDirty, setIsDirty] = useState(false);
-  const [showNPCPicker, setShowNPCPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [availableCharacters, setAvailableCharacters] = useState<any[]>([]);
+  const [availableCharacters, setAvailableCharacters] = useState<{ id: string; name: string; imageUrl: string; tags: string[] }[]>([]);
   const [missingRoomCount, setMissingRoomCount] = useState(0);
   const [showMissingRoomWarning, setShowMissingRoomWarning] = useState(false);
 
-  // Room Layout Editor drawer state
-  const [showLayoutDrawer, setShowLayoutDrawer] = useState(false);
+  // Navigation state
+  const [editorView, setEditorView] = useState<'world' | 'room'>('world');
 
-  // Grid size state - from world card
-  const [gridSize, setGridSize] = useState({ width: 10, height: 10 });
+  // World-level tools
+  const [activeTool, setActiveTool] = useState<Tool>('edit');
 
-  // Cell action menu state
+  // Room-level tools
+  const [activeRoomTool, setActiveRoomTool] = useState<RoomEditorTool>('npc-place');
+  const [selectedZoneType, setSelectedZoneType] = useState<ZoneType>('water');
+  const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
+
+  // Grid size state
+  const [gridSize, setGridSize] = useState<{ width: number; height: number }>({ width: EDITOR_GRID_SIZE.cols, height: EDITOR_GRID_SIZE.rows });
+
+  // Cell action menu
   const [showCellMenu, setShowCellMenu] = useState(false);
   const [cellMenuPosition, setCellMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
 
-  // Room gallery picker state
+  // Modals
+  const [showNPCPicker, setShowNPCPicker] = useState(false);
   const [showRoomPicker, setShowRoomPicker] = useState(false);
 
-  // Memoized world context for room content generation
+  // Shared viewport
+  const [viewport, viewportHandlers] = useGridViewport();
+
+  // World context for AI generation
   const worldContext = useMemo(() => {
     if (!worldCard) return undefined;
-    return {
-      name: worldCard.data.name,
-      description: worldCard.data.description || ''
-    };
+    return { name: worldCard.data.name, description: worldCard.data.description || '' };
   }, [worldCard]);
 
-  // Load world data and available characters
+  // Current room's layout data
+  const currentLayoutData = useMemo(() => {
+    if (!selectedRoom) return createDefaultRoomLayoutData();
+    return (selectedRoom as GridRoom & { layout_data?: RoomLayoutData }).layout_data || createDefaultRoomLayoutData();
+  }, [selectedRoom]);
+
+  // NPC info list for the current room
+  const currentRoomNpcs = useMemo(() => {
+    if (!selectedRoom) return [];
+    return selectedRoom.npcs.map(npc => {
+      const char = availableCharacters.find(c => c.id === npc.character_uuid);
+      return {
+        id: npc.character_uuid,
+        name: char?.name || 'Unknown NPC',
+        imageUrl: char?.imageUrl,
+      };
+    });
+  }, [selectedRoom, availableCharacters]);
+
+  // Exit directions for current room (computed from world grid adjacency)
+  const currentExitDirections = useMemo((): ExitDirection[] => {
+    if (!selectedRoom) return [];
+    const { x, y } = selectedRoom.position;
+    const dirs: ExitDirection[] = [];
+    if (rooms.some(r => r.id !== selectedRoom.id && r.position.x === x && r.position.y === y - 1)) dirs.push('north');
+    if (rooms.some(r => r.id !== selectedRoom.id && r.position.x === x && r.position.y === y + 1)) dirs.push('south');
+    if (rooms.some(r => r.id !== selectedRoom.id && r.position.x === x + 1 && r.position.y === y)) dirs.push('east');
+    if (rooms.some(r => r.id !== selectedRoom.id && r.position.x === x - 1 && r.position.y === y)) dirs.push('west');
+    return dirs;
+  }, [selectedRoom, rooms]);
+
+  // --- Load world data ---
   useEffect(() => {
     async function loadData() {
       if (!worldId) {
@@ -81,59 +126,49 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
       try {
         setIsLoading(true);
-
-        // Load world card (V2)
         const world = await worldApi.getWorld(worldId);
         setWorldCard(world);
 
-        // Set grid size from world data
         const worldData = world.data.extensions.world_data;
         setGridSize(worldData.grid_size);
 
-        // Load room cards for all placed rooms, tracking any that are missing
         const loadedRooms: GridRoom[] = [];
         let missingRooms = 0;
         for (const placement of worldData.rooms) {
           try {
             const roomCard = await roomApi.getRoom(placement.room_uuid);
-
-            // Convert RoomCard to GridRoom format using adapter
-            // Pass placement data so instance NPCs/images override room card defaults
             const gridRoom = roomCardToGridRoom(roomCard, placement.grid_position, placement);
             loadedRooms.push(gridRoom);
           } catch (err) {
             console.warn(`Failed to load room ${placement.room_uuid}:`, err);
             missingRooms++;
-            // Continue loading other rooms
           }
         }
         setRooms(loadedRooms);
 
-        // Show warning if any rooms were not found (may have been deleted)
         if (missingRooms > 0) {
           setMissingRoomCount(missingRooms);
           setShowMissingRoomWarning(true);
         }
 
-        // Load available characters for NPC picker (same approach as CharacterGallery)
         const charResponse = await fetch('/api/characters');
         if (charResponse.ok) {
           const charData = await charResponse.json();
-          // Handle both API response shapes
           const charList = charData.characters || charData.data || charData || [];
           const characters = charList
-            .filter((c: any) => {
-              const cardType = c.extensions_json?.card_type || c.card_type;
-              return cardType !== 'world' && cardType !== 'room'; // Only character cards as NPCs
+            .filter((c: Record<string, unknown>) => {
+              const ext = c.extensions_json as Record<string, unknown> | undefined;
+              const cardType = ext?.card_type || c.card_type;
+              return cardType !== 'world' && cardType !== 'room';
             })
-            .map((c: any) => {
-              const uuid = c.character_uuid;
-              const timestamp = c.updated_at ? new Date(c.updated_at).getTime() : Date.now();
+            .map((c: Record<string, unknown>) => {
+              const charUuid = c.character_uuid as string;
+              const timestamp = c.updated_at ? new Date(c.updated_at as string).getTime() : Date.now();
               return {
-                id: uuid,
-                name: c.name,
-                imageUrl: uuid ? `/api/character-image/${uuid}?t=${timestamp}` : '/pngPlaceholder.png',
-                tags: c.tags || [],
+                id: charUuid,
+                name: c.name as string,
+                imageUrl: charUuid ? `/api/character-image/${charUuid}?t=${timestamp}` : '/pngPlaceholder.png',
+                tags: (c.tags as string[]) || [],
               };
             });
           setAvailableCharacters(characters);
@@ -149,65 +184,64 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     loadData();
   }, [worldId]);
 
-  // Keyboard shortcuts
+  // --- Keyboard shortcuts ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      switch (e.key.toLowerCase()) {
-        case 'e':
-          setActiveTool('edit');
-          break;
-        case 'm':
-          setActiveTool('move');
-          break;
-        case 'd':
-          setActiveTool('eraser');
-          break;
-        case 'escape':
-          setSelectedRoom(null);
-          break;
-        case 'delete':
-        case 'backspace':
-          if (selectedRoom && !e.repeat) {
-            handleRoomDelete(selectedRoom.id);
-          }
-          break;
+      if (editorView === 'world') {
+        switch (e.key.toLowerCase()) {
+          case 'e': setActiveTool('edit'); break;
+          case 'm': setActiveTool('move'); break;
+          case 'd': setActiveTool('eraser'); break;
+          case 'escape': setSelectedRoom(null); break;
+          case 'delete':
+          case 'backspace':
+            if (selectedRoom && !e.repeat) handleRoomDelete(selectedRoom.id);
+            break;
+        }
+      } else {
+        if (e.key === 'Escape') {
+          setEditorView('world');
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedRoom, rooms]);
+  }, [editorView, selectedRoom]);
 
+  // --- Navigation ---
+  const navigateToRoom = useCallback((room: GridRoom) => {
+    setSelectedRoom(room);
+    setEditorView('room');
+    setSelectedNpcId(null);
+    viewportHandlers.resetView();
+  }, [viewportHandlers]);
+
+  const navigateToWorld = useCallback(() => {
+    setEditorView('world');
+    setSelectedNpcId(null);
+    viewportHandlers.resetView();
+  }, [viewportHandlers]);
+
+  // --- Cell actions (world view) ---
   const handleCellClick = useCallback((position: { x: number; y: number }, event: React.MouseEvent) => {
-    // Check if cell is occupied
     const room = rooms.find(r => r.position.x === position.x && r.position.y === position.y);
-
     if (room) {
-      // Occupied cell: directly select the room (opens properties panel)
-      setSelectedRoom(room);
+      navigateToRoom(room);
     } else {
-      // Empty cell: show action menu for create/import
       setSelectedCell(position);
       setCellMenuPosition({ x: event.clientX, y: event.clientY });
       setShowCellMenu(true);
     }
-  }, [rooms]);
+  }, [rooms, navigateToRoom]);
 
   const handleCreateNewRoom = useCallback(async () => {
     if (!selectedCell) return;
 
     try {
-      // Create a new room card via API
-      const roomSummary = await roomApi.createRoom({
-        name: 'New Room',
-        description: '',
-      });
-
-      // Add room to grid at selected position
+      const roomSummary = await roomApi.createRoom({ name: 'New Room', description: '' });
       const newRoom: GridRoom = {
         id: roomSummary.uuid,
         name: roomSummary.name,
@@ -220,13 +254,13 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       };
 
       setRooms(prev => [...prev, newRoom]);
-      setSelectedRoom(newRoom);
       setIsDirty(true);
+      navigateToRoom(newRoom);
     } catch (err) {
       console.error('Failed to create room:', err);
       setError(err instanceof Error ? err.message : 'Failed to create room');
     }
-  }, [selectedCell]);
+  }, [selectedCell, navigateToRoom]);
 
   const handleImportFromGallery = useCallback(() => {
     setShowRoomPicker(true);
@@ -235,45 +269,35 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   const handleRoomImport = useCallback((roomSummary: RoomCardSummary) => {
     if (!selectedCell) return;
 
-    // Load full room card to get all details
     roomApi.getRoom(roomSummary.uuid).then(roomCard => {
-      // Use adapter to create GridRoom with deep-copied NPCs
-      // No placement data yet since this is a fresh import
       const newRoom = roomCardToGridRoom(roomCard, selectedCell);
-
       setRooms(prev => [...prev, newRoom]);
       setIsDirty(true);
       setShowRoomPicker(false);
+      navigateToRoom(newRoom);
     }).catch(err => {
       console.error('Failed to import room:', err);
       setError(err instanceof Error ? err.message : 'Failed to import room');
     });
-  }, [selectedCell]);
+  }, [selectedCell, navigateToRoom]);
 
   const handleRoomCreate = useCallback((position: { x: number; y: number }) => {
-    // Legacy handler - now redirects to cell click
     const mockEvent = { clientX: 0, clientY: 0 } as React.MouseEvent;
     handleCellClick(position, mockEvent);
   }, [handleCellClick]);
 
   const handleEditRoom = useCallback(() => {
     if (!selectedCell) return;
-
     const room = rooms.find(r => r.position.x === selectedCell.x && r.position.y === selectedCell.y);
-    if (room) {
-      setSelectedRoom(room);
-    }
-  }, [selectedCell, rooms]);
+    if (room) navigateToRoom(room);
+  }, [selectedCell, rooms, navigateToRoom]);
 
   const handleRemoveRoom = useCallback(() => {
     if (!selectedCell) return;
-
     const room = rooms.find(r => r.position.x === selectedCell.x && r.position.y === selectedCell.y);
     if (room) {
       setRooms(prev => prev.filter(r => r.id !== room.id));
-      if (selectedRoom?.id === room.id) {
-        setSelectedRoom(null);
-      }
+      if (selectedRoom?.id === room.id) setSelectedRoom(null);
       setIsDirty(true);
     }
   }, [selectedCell, rooms, selectedRoom?.id]);
@@ -282,28 +306,27 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     setRooms(prev => prev.filter(r => r.id !== roomId));
     if (selectedRoom?.id === roomId) {
       setSelectedRoom(null);
+      if (editorView === 'room') setEditorView('world');
     }
     setIsDirty(true);
-  }, [selectedRoom?.id]);
+  }, [selectedRoom?.id, editorView]);
 
-  // Handler for removing the selected room from properties panel
   const handleRemoveSelectedRoom = useCallback(() => {
     if (!selectedRoom) return;
     setRooms(prev => prev.filter(r => r.id !== selectedRoom.id));
     setSelectedRoom(null);
+    setEditorView('world');
     setIsDirty(true);
   }, [selectedRoom]);
 
-  // Debounced room card persistence (separate from local state updates)
+  // --- Room updates ---
   const debouncedRoomSaveRef = useRef<{ [roomId: string]: NodeJS.Timeout }>({});
 
   const handleRoomUpdate = useCallback(async (updatedRoom: GridRoom) => {
-    // Update local state immediately for responsive UI
     setRooms(prev => prev.map(r => r.id === updatedRoom.id ? updatedRoom : r));
     setSelectedRoom(updatedRoom);
     setIsDirty(true);
 
-    // Debounce the API call to prevent saving on every keystroke
     if (debouncedRoomSaveRef.current[updatedRoom.id]) {
       clearTimeout(debouncedRoomSaveRef.current[updatedRoom.id]);
     }
@@ -314,30 +337,20 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           name: updatedRoom.name,
           description: updatedRoom.description,
           first_mes: updatedRoom.introduction_text || undefined,
-          layout_data: (updatedRoom as any).layout_data || undefined,
+          layout_data: (updatedRoom as GridRoom & { layout_data?: RoomLayoutData }).layout_data || undefined,
         });
-        console.log(`Room card "${updatedRoom.name}" saved successfully`);
       } catch (err) {
         console.error('Failed to update room card:', err);
-        // Continue anyway - changes are still in local state and will be saved with world
       }
-    }, 1000); // Wait 1 second after last change before saving
+    }, 1000);
   }, []);
 
-  // Handle layout data changes from the layout editor
   const handleLayoutChange = useCallback((layoutData: RoomLayoutData) => {
     if (!selectedRoom) return;
-
-    // Update room with new layout data
-    const updatedRoom = {
-      ...selectedRoom,
-      layout_data: layoutData,
-    } as GridRoom & { layout_data: RoomLayoutData };
-
+    const updatedRoom = { ...selectedRoom, layout_data: layoutData } as GridRoom & { layout_data: RoomLayoutData };
     handleRoomUpdate(updatedRoom);
   }, [selectedRoom, handleRoomUpdate]);
 
-  // Cleanup: clear all pending debounced saves on unmount
   useEffect(() => {
     return () => {
       Object.values(debouncedRoomSaveRef.current).forEach(timeout => clearTimeout(timeout));
@@ -345,55 +358,44 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   }, []);
 
   const handleRoomMove = useCallback((roomId: string, newPosition: { x: number; y: number }) => {
-    // Check if target position is occupied
     const isOccupied = rooms.some(r => r.position.x === newPosition.x && r.position.y === newPosition.y && r.id !== roomId);
     if (isOccupied) return;
 
-    setRooms(prev => prev.map(r => {
-      if (r.id === roomId) {
-        return { ...r, position: newPosition };
-      }
-      return r;
-    }));
+    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, position: newPosition } : r));
     setIsDirty(true);
   }, [rooms]);
 
   const handleNPCsConfirm = useCallback((npcs: import('../types/room').RoomNPC[]) => {
     if (selectedRoom) {
-      const updatedRoom = { ...selectedRoom, npcs };
+      const npcIds = npcs.map(n => n.character_uuid);
+      const layoutData = (selectedRoom as GridRoom & { layout_data?: RoomLayoutData }).layout_data;
+      const cleanedLayout = layoutData ? cleanOrphanedSpawns(layoutData, npcIds) : undefined;
+      const updatedRoom = {
+        ...selectedRoom,
+        npcs,
+        ...(cleanedLayout ? { layout_data: cleanedLayout } : {}),
+      };
       handleRoomUpdate(updatedRoom);
     }
     setShowNPCPicker(false);
   }, [selectedRoom, handleRoomUpdate]);
 
+  // --- Save ---
   const handleSave = useCallback(async () => {
     if (!worldCard || !worldId) return;
 
     try {
-      // Convert GridRoom[] to WorldRoomPlacement[]
-      // CRITICAL: Persist instance data (NPCs, images, names) to world card
-      // The instance_name and instance_description enable "lazy loading" -
-      // the map can render without fetching each room card individually
-      const roomPlacements: WorldRoomPlacement[] = rooms.map(room => {
-        console.log(`Saving room ${room.name} at (${room.position.x},${room.position.y}):`, {
-          npcCount: room.npcs.length,
-          npcs: room.npcs
-        });
-        return {
-          room_uuid: room.id,
-          grid_position: room.position,
-          instance_name: room.name, // Cache room name for map display
-          instance_description: room.description || undefined, // Cache description for tooltips
-          instance_npcs: room.npcs.length > 0 ? room.npcs : undefined, // Full RoomNPC[] objects
-          instance_image_path: room.image_path || undefined, // Custom image override
-          // instance_state: undefined, // Future: loot, doors, enemy HP, etc.
-        };
-      });
+      const roomPlacements: WorldRoomPlacement[] = rooms.map(room => ({
+        room_uuid: room.id,
+        grid_position: room.position,
+        instance_name: room.name,
+        instance_description: room.description || undefined,
+        instance_npcs: room.npcs.length > 0 ? room.npcs : undefined,
+        instance_image_path: room.image_path || undefined,
+      }));
 
-      // Calculate required grid size based on room positions
       let maxX = gridSize.width - 1;
       let maxY = gridSize.height - 1;
-
       rooms.forEach(room => {
         maxX = Math.max(maxX, room.position.x);
         maxY = Math.max(maxY, room.position.y);
@@ -402,8 +404,6 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       const saveWidth = maxX + 1;
       const saveHeight = maxY + 1;
 
-      // Auto-detect starting position if current one points to empty cell
-      // This fixes "World not found" when rooms aren't placed at (0,0)
       const worldData = worldCard.data.extensions.world_data;
       const currentStart = worldData.starting_position || { x: 0, y: 0 };
       const hasRoomAtStart = roomPlacements.some(
@@ -415,32 +415,20 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
         grid_size: { width: saveWidth, height: saveHeight },
       };
 
-      // If no room at starting position, pick top-left-most room
       if (!hasRoomAtStart && roomPlacements.length > 0) {
         const sorted = [...roomPlacements].sort((a, b) =>
           a.grid_position.y - b.grid_position.y || a.grid_position.x - b.grid_position.x
         );
         const newStart = sorted[0].grid_position;
-        console.log(`No room at starting position (${currentStart.x}, ${currentStart.y}), ` +
-          `auto-setting to (${newStart.x}, ${newStart.y})`);
-        updatePayload = {
-          ...updatePayload,
-          starting_position: newStart,
-          player_position: newStart,
-        };
+        updatePayload = { ...updatePayload, starting_position: newStart, player_position: newStart };
       }
 
-      // Update world card
       await worldApi.updateWorld(worldId, updatePayload);
-
       setIsDirty(false);
 
-      // Update local grid size if it expanded
       if (saveWidth > gridSize.width || saveHeight > gridSize.height) {
         setGridSize({ width: saveWidth, height: saveHeight });
       }
-
-      console.log('World saved successfully');
     } catch (err) {
       console.error('Error saving world:', err);
       setError(err instanceof Error ? err.message : 'Failed to save world');
@@ -448,13 +436,11 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   }, [worldCard, worldId, rooms, gridSize]);
 
   const handleBack = useCallback(() => {
-    if (onBack) {
-      onBack();
-    } else {
-      navigate(-1);
-    }
+    if (onBack) onBack();
+    else navigate(-1);
   }, [onBack, navigate]);
 
+  // --- Loading / error states ---
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0a0a0a] text-white">
@@ -471,10 +457,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       <div className="flex items-center justify-center h-screen bg-[#0a0a0a] text-white">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
-          <button
-            onClick={handleBack}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
-          >
+          <button onClick={handleBack} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg">
             Go Back
           </button>
         </div>
@@ -492,11 +475,11 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
 
   return (
     <div className="flex flex-col h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Missing Rooms Warning Banner */}
+      {/* Missing Rooms Warning */}
       {showMissingRoomWarning && missingRoomCount > 0 && (
         <div className="bg-amber-900/90 border-b border-amber-700 px-4 py-2 flex items-center justify-between z-50">
           <span className="text-amber-200 text-sm">
-            ⚠️ {missingRoomCount} room{missingRoomCount !== 1 ? 's were' : ' was'} not found and {missingRoomCount !== 1 ? 'have' : 'has'} been removed from the grid. Save to update the world.
+            {missingRoomCount} room{missingRoomCount !== 1 ? 's were' : ' was'} not found and removed from the grid. Save to update.
           </span>
           <button
             onClick={() => setShowMissingRoomWarning(false)}
@@ -508,92 +491,85 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       )}
 
       {/* Header */}
-      <div className="bg-[#141414] border-b border-[#2a2a2a] px-3 md:px-6 py-3 md:py-4 flex items-center justify-between gap-2 shrink-0 z-30 relative">
-        <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
-          <button
-            onClick={handleBack}
-            className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors shrink-0"
-            title="Go back"
-          >
-            <ArrowLeft size={20} className="text-gray-400" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-sm md:text-base font-medium truncate">{worldCard.data.name}</h1>
-            <p className="text-xs md:text-sm text-gray-500 truncate hidden sm:block">{worldCard.data.description}</p>
-          </div>
-        </div>
+      <EditorHeader
+        worldName={worldCard.data.name}
+        worldDescription={worldCard.data.description}
+        roomName={editorView === 'room' ? selectedRoom?.name : undefined}
+        editorView={editorView}
+        isDirty={isDirty}
+        onBack={handleBack}
+        onSave={handleSave}
+        onNavigateToWorld={navigateToWorld}
+      />
 
-        <div className="flex items-center gap-2 shrink-0">
-          {isDirty && (
-            <span className="text-xs text-yellow-500 mr-2">Unsaved</span>
-          )}
+      {/* Toolbar */}
+      <EditorToolbar
+        editorView={editorView}
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
+        activeRoomTool={activeRoomTool}
+        onRoomToolChange={setActiveRoomTool}
+        selectedZoneType={selectedZoneType}
+        onZoneTypeChange={setSelectedZoneType}
+        viewport={viewport}
+        viewportHandlers={viewportHandlers}
+      />
 
-          <button
-            onClick={handleSave}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-          >
-            <Save size={16} />
-            <span className="text-sm">Save</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Body (Canvas + Properties) */}
+      {/* Main Body */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Center - Content (Flexible Width) */}
+        {/* Center canvas area */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Grid Canvas */}
-          <GridCanvas
-            rooms={rooms}
-            selectedRoom={selectedRoom}
-            activeTool={activeTool}
-            gridSize={gridSize}
-            onRoomSelect={setSelectedRoom}
-            onRoomCreate={handleRoomCreate}
-            onRoomDelete={handleRoomDelete}
-            onRoomMove={handleRoomMove}
-            onCellClick={handleCellClick}
-            onToolChange={setActiveTool}
-          />
+          {editorView === 'world' ? (
+            <WorldGridView
+              rooms={rooms}
+              selectedRoom={selectedRoom}
+              activeTool={activeTool}
+              gridSize={gridSize}
+              onRoomSelect={(room) => { if (room) navigateToRoom(room); else setSelectedRoom(null); }}
+              onRoomCreate={handleRoomCreate}
+              onRoomDelete={handleRoomDelete}
+              onRoomMove={handleRoomMove}
+              onCellClick={handleCellClick}
+              viewport={viewport}
+              viewportHandlers={viewportHandlers}
+            />
+          ) : selectedRoom ? (
+            <RoomGridView
+              room={selectedRoom}
+              layoutData={currentLayoutData}
+              npcs={currentRoomNpcs}
+              activeTool={activeRoomTool}
+              selectedNpcId={selectedNpcId}
+              selectedZoneType={selectedZoneType}
+              exitDirections={currentExitDirections}
+              viewport={viewport}
+              worldId={worldId}
+              onLayoutChange={handleLayoutChange}
+              onSelectNpc={setSelectedNpcId}
+            />
+          ) : null}
         </div>
 
-        {/* Right Panels Container - Properties + Layout Drawer side by side */}
-        <div className="flex shrink-0">
-          {/* Room Properties Panel - narrower when drawer is open */}
-          <RoomPropertiesPanel
-            room={selectedRoom}
-            worldId={worldId}
-            availableCharacters={availableCharacters}
-            onUpdate={handleRoomUpdate}
-            onClose={() => {
-              setSelectedRoom(null);
-              setShowLayoutDrawer(false);
-            }}
-            onOpenNPCPicker={() => setShowNPCPicker(true)}
-            onRemoveFromCell={handleRemoveSelectedRoom}
-            onOpenLayoutEditor={() => setShowLayoutDrawer(true)}
-            isVisible={!!selectedRoom}
-            isCompact={showLayoutDrawer}
-            apiConfig={apiConfig}
-            worldContext={worldContext}
-          />
-
-          {/* Room Layout Editor Drawer - appears to the right of properties */}
-          <RoomLayoutDrawer
-            isOpen={showLayoutDrawer}
-            onClose={() => setShowLayoutDrawer(false)}
-            room={selectedRoom}
-            worldId={worldId}
-            availableCharacters={availableCharacters}
-            onLayoutChange={handleLayoutChange}
-            exitDirections={selectedRoom
-              ? (Object.entries(selectedRoom.connections)
-                .filter(([, roomId]) => roomId !== null)
-                .map(([dir]) => dir) as ExitDirection[])
-              : []
-            }
-          />
-        </div>
+        {/* Right panel: Room Properties (only in room view) */}
+        {editorView === 'room' && (
+          <div className="flex shrink-0">
+            <RoomPropertiesPanel
+              room={selectedRoom}
+              worldId={worldId}
+              availableCharacters={availableCharacters}
+              onUpdate={handleRoomUpdate}
+              onClose={() => {
+                setSelectedRoom(null);
+                setEditorView('world');
+              }}
+              onOpenNPCPicker={() => setShowNPCPicker(true)}
+              onRemoveFromCell={handleRemoveSelectedRoom}
+              isVisible={!!selectedRoom}
+              apiConfig={apiConfig}
+              worldContext={worldContext}
+            />
+          </div>
+        )}
       </div>
 
       {/* NPC Picker Modal */}
@@ -606,7 +582,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
         />
       )}
 
-      {/* Cell Action Menu */}
+      {/* Cell Action Menu (world view only) */}
       {showCellMenu && selectedCell && (
         <CellActionMenu
           position={cellMenuPosition}
@@ -632,10 +608,6 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   );
 }
 
-/**
- * WorldEditor wrapped with ErrorBoundary to catch rendering errors.
- * Uses WorldLoadError as fallback for user-friendly error display.
- */
 function WorldEditorWithErrorBoundary(props: WorldEditorProps) {
   return (
     <ErrorBoundary

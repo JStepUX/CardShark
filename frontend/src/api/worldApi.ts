@@ -12,6 +12,7 @@ import {
   WorldUserProgressUpdate,
   WorldUserProgressSummary
 } from '../types/worldCard';
+import { EDITOR_GRID_SIZE } from '../types/editorGrid';
 
 const BASE_URL = '/api/world-cards-v2';
 const PROGRESS_BASE_URL = '/api/world';
@@ -31,8 +32,8 @@ export const worldApi = {
       formData.append('grid_width', String(request.grid_size.width));
       formData.append('grid_height', String(request.grid_size.height));
     } else {
-      formData.append('grid_width', '10');
-      formData.append('grid_height', '10');
+      formData.append('grid_width', String(EDITOR_GRID_SIZE.cols));
+      formData.append('grid_height', String(EDITOR_GRID_SIZE.rows));
     }
     if (request.first_mes) formData.append('first_mes', request.first_mes);
     if (request.system_prompt) formData.append('system_prompt', request.system_prompt);
