@@ -43,4 +43,4 @@ export const ZONE_CELL_COLORS: Record<string, string> = {
 };
 
 /** Room editor tool types */
-export type RoomEditorTool = 'npc-place' | 'tile-paint' | 'eraser';
+export type RoomEditorTool = 'pan' | 'npc-place' | 'tile-paint' | 'eraser';

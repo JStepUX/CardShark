@@ -8,7 +8,7 @@ import type { RoomLayoutData, SpawnPoint, CellPosition, ZoneType, ExitDirection 
 import { DEFAULT_LAYOUT_GRID_SIZE } from '../../types/localMap';
 import { ZONE_CELL_COLORS } from '../../types/editorGrid';
 import type { RoomEditorTool } from '../../types/editorGrid';
-import type { GridViewportState } from '../../hooks/useGridViewport';
+import type { GridViewportState, GridViewportHandlers } from '../../hooks/useGridViewport';
 import { getExitPosition } from '../../utils/localMapUtils';
 
 interface NPCInfo {
@@ -33,9 +33,11 @@ interface RoomGridViewProps {
     selectedZoneType: ZoneType;
     exitDirections: ExitDirection[];
     viewport: GridViewportState;
+    viewportHandlers: GridViewportHandlers;
     worldId: string;
     onLayoutChange: (layoutData: RoomLayoutData) => void;
     onSelectNpc: (npcId: string | null) => void;
+    onRequestNpcPicker?: (cell: CellPosition) => void;
 }
 
 export function RoomGridView({
@@ -47,9 +49,11 @@ export function RoomGridView({
     selectedZoneType,
     exitDirections,
     viewport,
+    viewportHandlers,
     worldId,
     onLayoutChange,
     onSelectNpc,
+    onRequestNpcPicker,
 }: RoomGridViewProps) {
     const [hoveredCell, setHoveredCell] = useState<CellPosition | null>(null);
     const [dragOverCell, setDragOverCell] = useState<CellPosition | null>(null);
@@ -58,6 +62,7 @@ export function RoomGridView({
     const { cellSize, gap, pan } = viewport;
     const { cols, rows } = layoutData.gridSize || DEFAULT_LAYOUT_GRID_SIZE;
 
+    const isPanMode = activeTool === 'pan';
     const isZoneMode = activeTool === 'tile-paint';
     const isEraseMode = activeTool === 'eraser';
     const isNpcMode = activeTool === 'npc-place';
@@ -157,6 +162,8 @@ export function RoomGridView({
 
     // --- Cell interaction ---
     const handleCellClick = useCallback((col: number, row: number) => {
+        if (isPanMode) return; // Pan tool doesn't interact with cells
+
         const cellKey = `${col},${row}`;
 
         if (isEraseMode) {
@@ -180,15 +187,11 @@ export function RoomGridView({
         }
 
         if (isNpcMode) {
-            const spawn = spawnsByCell.get(cellKey);
-            if (spawn) {
-                onSelectNpc(spawn.entityId);
-            } else if (selectedNpcId) {
-                placeNpc(col, row, selectedNpcId);
-            }
+            // Open NPC picker to choose which NPC to place at this cell
+            onRequestNpcPicker?.({ col, row });
         }
-    }, [isEraseMode, isZoneMode, isNpcMode, selectedNpcId, spawnsByCell, zonesByCell, exitCellsMap,
-        removeSpawn, unpaintZone, paintZone, placeNpc, onSelectNpc]);
+    }, [isPanMode, isEraseMode, isZoneMode, isNpcMode, spawnsByCell, zonesByCell, exitCellsMap,
+        removeSpawn, unpaintZone, paintZone, onRequestNpcPicker]);
 
     const handleMouseDown = useCallback((col: number, row: number) => {
         if (isZoneMode || isEraseMode) {
@@ -277,7 +280,7 @@ export function RoomGridView({
                         className={`
                             relative border transition-all select-none
                             ${isExit ? 'border-blue-400/60' : 'border-white/10'}
-                            ${(isZoneMode || isEraseMode) && isExit ? 'cursor-not-allowed' : 'cursor-pointer'}
+                            ${isPanMode ? 'cursor-grab active:cursor-grabbing' : (isZoneMode || isEraseMode) && isExit ? 'cursor-not-allowed' : 'cursor-pointer'}
                             ${cellBgClass}
                             ${isHovered && !spawn && !zoneType && !isExit ? 'bg-blue-500/20' : ''}
                             ${isDragOver ? 'bg-green-500/30 border-green-400' : ''}
@@ -288,7 +291,7 @@ export function RoomGridView({
                         onMouseEnter={() => handleMouseEnter(col, row)}
                         onMouseLeave={() => setHoveredCell(null)}
                         onMouseUp={handleMouseUp}
-                        onClick={() => !(isZoneMode || isEraseMode) && handleCellClick(col, row)}
+                        onClick={() => !isPanMode && !(isZoneMode || isEraseMode) && handleCellClick(col, row)}
                         onDragOver={(e) => handleDragOver(e, col, row)}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, col, row)}
@@ -353,11 +356,29 @@ export function RoomGridView({
         handleDrop, handleSpawnDragStart,
     ]);
 
+    // Container-level mouse down: start pan on background or middle-click
+    const handleContainerMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement;
+        const isInsideCell = target.closest('[data-cell="true"]');
+        // Pan tool: grip anywhere including cells. Otherwise: middle mouse always, left on background only.
+        if (e.button === 1 || (e.button === 0 && (isPanMode || !isInsideCell))) {
+            viewportHandlers.handleMouseDown(e, isPanMode);
+        }
+    }, [viewportHandlers, isPanMode]);
+
+    const handleContainerMouseUp = useCallback(() => {
+        handleMouseUp();
+        viewportHandlers.handleMouseUp();
+    }, [handleMouseUp, viewportHandlers]);
+
     return (
         <div
-            className="flex-1 bg-[#0a0a0a] relative overflow-hidden"
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            className="flex-1 bg-[#0a0a0a] relative overflow-hidden cursor-grab active:cursor-grabbing"
+            onMouseDown={handleContainerMouseDown}
+            onMouseMove={viewportHandlers.handleMouseMove}
+            onMouseUp={handleContainerMouseUp}
+            onMouseLeave={handleContainerMouseUp}
+            onWheel={viewportHandlers.handleWheel}
         >
             {/* Scrollable/pannable container */}
             <div className="w-full h-full overflow-hidden">
@@ -410,13 +431,13 @@ export function RoomGridView({
             {/* Tool hint overlay */}
             <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none">
                 <p className="text-xs text-gray-300">
-                    {isNpcMode
-                        ? (selectedNpcId
-                            ? 'Click a cell to place selected NPC, or drag NPCs from the panel'
-                            : 'Select an NPC from the panel, then click a cell to place')
-                        : isZoneMode
-                            ? `Click to paint ${selectedZoneType} zones. Click painted cells to remove.`
-                            : 'Click to erase spawns or zones from cells.'
+                    {isPanMode
+                        ? 'Click and drag to pan the map. Middle-click always pans.'
+                        : isNpcMode
+                            ? 'Click a cell to place an NPC.'
+                            : isZoneMode
+                                ? `Click to paint ${selectedZoneType} zones. Click painted cells to remove.`
+                                : 'Click to erase spawns or zones from cells.'
                     }
                 </p>
             </div>

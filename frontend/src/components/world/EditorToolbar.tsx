@@ -2,7 +2,7 @@
 // Mode-adaptive toolbar: world tools (Edit/Move/Delete) or room tools (NPC/Tile/Eraser) + zoom.
 
 import { useState, useRef, useEffect } from 'react';
-import { Edit3, Move, Trash2, Users, Paintbrush, Eraser, ZoomIn, ZoomOut, ChevronDown, Droplets, Square, AlertTriangle, Ban } from 'lucide-react';
+import { Edit3, Move, Trash2, Hand, Users, Paintbrush, Eraser, ZoomIn, ZoomOut, ChevronDown, Droplets, Square, AlertTriangle, Ban } from 'lucide-react';
 import type { Tool } from './WorldGridView';
 import type { RoomEditorTool } from '../../types/editorGrid';
 import type { ZoneType } from '../../types/localMap';
@@ -92,6 +92,20 @@ export function EditorToolbar({
                 ) : (
                     // Room tools
                     <>
+                        {/* Pan */}
+                        <button
+                            onClick={() => onRoomToolChange('pan')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
+                                activeRoomTool === 'pan'
+                                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                                    : 'text-gray-400 hover:bg-[#2a2a2a] hover:text-white border border-transparent'
+                            }`}
+                            title="Pan (Esc)"
+                        >
+                            <Hand size={16} />
+                            <span className="hidden sm:inline">Pan</span>
+                        </button>
+
                         {/* NPC Place */}
                         <button
                             onClick={() => onRoomToolChange('npc-place')}

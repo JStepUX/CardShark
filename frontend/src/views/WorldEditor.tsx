@@ -19,7 +19,7 @@ import { roomApi } from '../api/roomApi';
 import type { WorldCard, WorldRoomPlacement } from '../types/worldCard';
 import type { RoomCardSummary } from '../types/room';
 import type { GridRoom } from '../types/worldGrid';
-import type { RoomLayoutData, ExitDirection, ZoneType } from '../types/localMap';
+import type { RoomLayoutData, ExitDirection, ZoneType, CellPosition } from '../types/localMap';
 import { cleanOrphanedSpawns, createDefaultRoomLayoutData } from '../types/localMap';
 import { EDITOR_GRID_SIZE } from '../types/editorGrid';
 import type { RoomEditorTool } from '../types/editorGrid';
@@ -59,7 +59,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   const [activeTool, setActiveTool] = useState<Tool>('edit');
 
   // Room-level tools
-  const [activeRoomTool, setActiveRoomTool] = useState<RoomEditorTool>('npc-place');
+  const [activeRoomTool, setActiveRoomTool] = useState<RoomEditorTool>('pan');
   const [selectedZoneType, setSelectedZoneType] = useState<ZoneType>('water');
   const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
 
@@ -75,6 +75,9 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
   const [showNPCPicker, setShowNPCPicker] = useState(false);
   const [showRoomPicker, setShowRoomPicker] = useState(false);
 
+  // NPC placement target cell (when placing via grid click)
+  const [npcPlacementCell, setNpcPlacementCell] = useState<{ col: number; row: number } | null>(null);
+
   // Shared viewport
   const [viewport, viewportHandlers] = useGridViewport();
 
@@ -84,10 +87,20 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     return { name: worldCard.data.name, description: worldCard.data.description || '' };
   }, [worldCard]);
 
-  // Current room's layout data
+  // Current room's layout data (auto-upgrade old rooms with smaller grids)
   const currentLayoutData = useMemo(() => {
     if (!selectedRoom) return createDefaultRoomLayoutData();
-    return (selectedRoom as GridRoom & { layout_data?: RoomLayoutData }).layout_data || createDefaultRoomLayoutData();
+    const data = (selectedRoom as GridRoom & { layout_data?: RoomLayoutData }).layout_data || createDefaultRoomLayoutData();
+    if (data.gridSize.cols < EDITOR_GRID_SIZE.cols || data.gridSize.rows < EDITOR_GRID_SIZE.rows) {
+      return {
+        ...data,
+        gridSize: {
+          cols: Math.max(data.gridSize.cols, EDITOR_GRID_SIZE.cols),
+          rows: Math.max(data.gridSize.rows, EDITOR_GRID_SIZE.rows),
+        },
+      };
+    }
+    return data;
   }, [selectedRoom]);
 
   // NPC info list for the current room
@@ -202,7 +215,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
         }
       } else {
         if (e.key === 'Escape') {
-          setEditorView('world');
+          setActiveRoomTool('pan');
         }
       }
     };
@@ -365,20 +378,51 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
     setIsDirty(true);
   }, [rooms]);
 
+  // Handle NPC picker opened from grid cell click
+  const handleRequestNpcPicker = useCallback((cell: CellPosition) => {
+    setNpcPlacementCell(cell);
+    setShowNPCPicker(true);
+  }, []);
+
   const handleNPCsConfirm = useCallback((npcs: import('../types/room').RoomNPC[]) => {
     if (selectedRoom) {
-      const npcIds = npcs.map(n => n.character_uuid);
-      const layoutData = (selectedRoom as GridRoom & { layout_data?: RoomLayoutData }).layout_data;
-      const cleanedLayout = layoutData ? cleanOrphanedSpawns(layoutData, npcIds) : undefined;
-      const updatedRoom = {
-        ...selectedRoom,
-        npcs,
-        ...(cleanedLayout ? { layout_data: cleanedLayout } : {}),
-      };
-      handleRoomUpdate(updatedRoom);
+      const layoutData = (selectedRoom as GridRoom & { layout_data?: RoomLayoutData }).layout_data || currentLayoutData;
+
+      if (npcPlacementCell) {
+        // Cell-click flow: merge new selections into existing room NPCs, place at target cell
+        const existingNpcIds = new Set(selectedRoom.npcs.map(n => n.character_uuid));
+        const newNpcs = npcs.filter(n => !existingNpcIds.has(n.character_uuid));
+        const mergedNpcs = [...selectedRoom.npcs, ...newNpcs];
+        const allNpcIds = mergedNpcs.map(n => n.character_uuid);
+        const cleanedLayout = cleanOrphanedSpawns(layoutData, allNpcIds);
+
+        // Create spawns for newly placed NPCs at the target cell
+        const newSpawns = newNpcs.map(n => ({
+          entityId: n.character_uuid,
+          col: npcPlacementCell.col,
+          row: npcPlacementCell.row,
+        }));
+        const updatedLayout = { ...cleanedLayout, spawns: [...cleanedLayout.spawns, ...newSpawns] };
+
+        handleRoomUpdate({
+          ...selectedRoom,
+          npcs: mergedNpcs,
+          layout_data: updatedLayout,
+        });
+      } else {
+        // Panel flow: replace room NPC list entirely (manage mode)
+        const npcIds = npcs.map(n => n.character_uuid);
+        const cleanedLayout = cleanOrphanedSpawns(layoutData, npcIds);
+        handleRoomUpdate({
+          ...selectedRoom,
+          npcs,
+          layout_data: cleanedLayout,
+        });
+      }
     }
     setShowNPCPicker(false);
-  }, [selectedRoom, handleRoomUpdate]);
+    setNpcPlacementCell(null);
+  }, [selectedRoom, handleRoomUpdate, npcPlacementCell, currentLayoutData]);
 
   // --- Save ---
   const handleSave = useCallback(async () => {
@@ -543,9 +587,11 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
               selectedZoneType={selectedZoneType}
               exitDirections={currentExitDirections}
               viewport={viewport}
+              viewportHandlers={viewportHandlers}
               worldId={worldId}
               onLayoutChange={handleLayoutChange}
               onSelectNpc={setSelectedNpcId}
+              onRequestNpcPicker={handleRequestNpcPicker}
             />
           ) : null}
         </div>
@@ -576,9 +622,9 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       {showNPCPicker && selectedRoom && (
         <NPCPickerModal
           availableCharacters={availableCharacters}
-          selectedNPCs={selectedRoom.npcs}
+          selectedNPCs={npcPlacementCell ? [] : selectedRoom.npcs}
           onConfirm={handleNPCsConfirm}
-          onClose={() => setShowNPCPicker(false)}
+          onClose={() => { setShowNPCPicker(false); setNpcPlacementCell(null); }}
         />
       )}
 
