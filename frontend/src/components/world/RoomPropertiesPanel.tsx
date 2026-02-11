@@ -7,6 +7,7 @@ import { cleanOrphanedSpawns } from '../../types/localMap';
 import { NPCSettingsModal } from '../NPCSettingsModal';
 import { UnifiedImageGallery, ImageSelection } from '../common/UnifiedImageGallery';
 import { APIConfig } from '../../types/api';
+import { removeIncompleteSentences } from '../../utils/contentProcessing';
 
 interface WorldContext {
   name: string;
@@ -195,7 +196,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
 
       // If updateRoom is true (inline editing), update the room directly
       if (updateRoom && fullResponse) {
-        onUpdate({ ...room, [fieldType]: existingText + fullResponse });
+        onUpdate({ ...room, [fieldType]: existingText + removeIncompleteSentences(fullResponse) });
       }
     } catch (error) {
       console.error('Error generating room content:', error);

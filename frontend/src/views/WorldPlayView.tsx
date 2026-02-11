@@ -133,6 +133,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   // Ref for LocalMapView to trigger combat animations
   const localMapRef = useRef<LocalMapViewHandle | null>(null);
 
+  // Ref for defeat respawn — set after useRoomTransition provides handleNavigate
+  const handleNavigateRef = useRef<((roomId: string) => Promise<void>) | null>(null);
+
   // Ref for emotion detection NPC name (updated after NPC hook, read before it for stable hook order)
   const npcSpeakingNameRef = useRef<string>('');
 
@@ -260,6 +263,15 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     activeNpcId, activeNpcName, activeNpcCard,
     characterData, apiConfig, addMessage, setMessages,
     currentUser,
+    onDefeatRespawn: useCallback(async () => {
+      // Fast travel to starting room after defeat
+      const startPos = worldState?.starting_position;
+      if (!startPos || !worldState) return;
+      // Find the room at the starting position
+      const startRoom = worldState.grid[startPos.y]?.[startPos.x];
+      if (!startRoom) return;
+      await handleNavigateRef.current?.(startRoom.id);
+    }, [worldState]),
   });
 
   // Grid combat hook (must be after combat manager since it uses onCombatEnd)
@@ -388,6 +400,9 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     playerInventory, allyInventory,
     currentUser, apiConfig, setShowMap,
   });
+
+  // Keep navigate ref current for defeat respawn callback
+  handleNavigateRef.current = handleNavigate;
 
 
   // Navigate back to the World Launcher/Splash page

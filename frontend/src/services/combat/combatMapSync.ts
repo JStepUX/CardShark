@@ -45,6 +45,8 @@ export interface CombatInitOptions {
     playerInventory?: CharacterInventory;
     /** Ally's inventory (affects weapon type and damage) */
     allyInventory?: CharacterInventory;
+    /** Player starting HP fraction (0-1, default 1.0 = full HP). Used for respawn penalties. */
+    playerHpPercent?: number;
 }
 
 /**
@@ -179,6 +181,7 @@ export function initializeCombatFromMap(
         playerAdvantage = false,
         playerInventory,
         allyInventory,
+        playerHpPercent,
     } = options;
 
     // Convert participating entities to combatants
@@ -206,6 +209,14 @@ export function initializeCombatFromMap(
             playerSide.push(combatant.id);
         } else {
             enemySide.push(combatant.id);
+        }
+    }
+
+    // Apply respawn HP penalty to player if set
+    if (playerHpPercent !== undefined && playerHpPercent < 1) {
+        const playerCombatant = combatants[playerId];
+        if (playerCombatant) {
+            playerCombatant.currentHp = Math.max(1, Math.round(playerCombatant.maxHp * playerHpPercent));
         }
     }
 

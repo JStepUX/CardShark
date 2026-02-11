@@ -21,6 +21,7 @@ import { createDefaultRelationship, updateRelationshipAffinity, resetDailyAffini
 import { calculateSentimentAffinity, updateSentimentHistory, resetSentimentAfterGain } from '../utils/sentimentAffinityCalculator';
 import { advanceTime } from '../utils/timeUtils';
 import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
+import { removeIncompleteSentences } from '../utils/contentProcessing';
 import type { EmotionState } from '../hooks/useEmotionDetection';
 
 
@@ -470,7 +471,7 @@ export function useNPCInteraction({
 
         (setMessages as any)((prev: any) => prev.map((msg: any) =>
           msg.id === introMessageId
-            ? { ...msg, content: generatedIntro.trim() || `*${npc.name} looks up as you approach*` }
+            ? { ...msg, content: removeIncompleteSentences(generatedIntro.trim()) || `*${npc.name} looks up as you approach*` }
             : msg
         ));
 

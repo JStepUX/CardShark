@@ -26,6 +26,7 @@ import { buildCombatNarrativeSummary, buildPostCombatPrompt, buildDefeatPrompt }
 import { generateCombatLoot } from '../services/loot/lootGenerator';
 import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
 import { soundManager } from '../components/world/pixi/local';
+import { removeIncompleteSentences } from '../utils/contentProcessing';
 
 
 interface GridCombatHandle {
@@ -65,6 +66,8 @@ interface UseCombatManagerOptions {
   setMessages: (messages: any) => void;
   // For threat zone entry
   currentUser: { id?: string; name?: string } | null;
+  // For defeat respawn: navigate to starting room
+  onDefeatRespawn?: () => Promise<void>;
 }
 
 interface UseCombatManagerReturn {
@@ -99,10 +102,14 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
     addMessage,
     setMessages,
     currentUser,
+    onDefeatRespawn,
   } = options;
 
   // Ref for gridCombat — set by the view after useGridCombat is called to break circular dependency
   const gridCombatRef = useRef<GridCombatHandle | null>(null);
+
+  // Respawn HP penalty: fraction of max HP for next combat after defeat (1.0 = full, 0.25 = 25%)
+  const respawnHpPercentRef = useRef<number>(1.0);
 
   // Combat end screen state (tracks result until player clicks Continue)
   const [combatEndState, setCombatEndState] = useState<CombatEndState | null>(null);
@@ -264,7 +271,7 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
       // Final update
       (setMessages as any)((prev: any) => prev.map((msg: any) =>
         msg.id === narrativeMessageId
-          ? { ...msg, content: generatedNarrative.trim() || '*The battle is over.*' }
+          ? { ...msg, content: removeIncompleteSentences(generatedNarrative.trim()) || '*The battle is over.*' }
           : msg
       ));
 
@@ -410,9 +417,18 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
     if (apiConfig) {
       generatePostCombatNarrative(fullCombatState);
     }
+
+    // On defeat: fast travel to starting room with reduced HP for next combat
+    if (combatEndState.phase === 'defeat' && onDefeatRespawn) {
+      respawnHpPercentRef.current = 0.25;
+      // Navigate to starting room after a short delay (let narrative start streaming first)
+      setTimeout(() => {
+        onDefeatRespawn();
+      }, 1500);
+    }
   }, [combatEndState, currentRoom, apiConfig, playerProgression, levelUpInfo, roomNpcs,
       generatePostCombatNarrative, setIsInCombat, setRoomNpcs, setPlayerProgression, setPlayerInventory,
-      playerInventory, roomStatesRef]);
+      playerInventory, roomStatesRef, onDefeatRespawn]);
 
   // Handle entering a threat zone (triggers grid combat)
   const handleEnterThreatZone = useCallback((hostileIds: string[], currentPosition: TilePosition, mapState: LocalMapState) => {
@@ -430,10 +446,15 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
     setLocalMapStateCache(mapState);
 
     // Start combat with player and ally inventories for weapon stats
+    // Apply respawn HP penalty if recovering from a previous defeat
+    const hpPercent = respawnHpPercentRef.current;
     gridCombatRef.current?.startCombat(mapState, playerId, {
       playerInventory,
       allyInventory: allyInventory || undefined,
+      ...(hpPercent < 1 ? { playerHpPercent: hpPercent } : {}),
     });
+    // Reset the penalty after it's been applied
+    respawnHpPercentRef.current = 1.0;
     setIsInCombat(true);
   }, [roomNpcs, currentUser, playerInventory, allyInventory, setLocalMapStateCache, setIsInCombat]);
 

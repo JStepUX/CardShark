@@ -1,6 +1,7 @@
 import { CharacterCard } from '../types/schema';
 import { Message, UserProfile } from '../types/messages';
 import { promptService } from './promptService';
+import { removeIncompleteSentences } from '../utils/contentProcessing';
 
 export class ChatStorage {
   /**
@@ -130,7 +131,7 @@ export class ChatStorage {
 
       return {
         success: true,
-        greeting: fullGreeting
+        greeting: removeIncompleteSentences(fullGreeting)
       };
     } catch (error) {
       console.error('Error generating greeting:', error);
@@ -229,7 +230,7 @@ export class ChatStorage {
 
       return {
         success: true,
-        response: fullResponse
+        response: removeIncompleteSentences(fullResponse)
       };
     } catch (error) {
       console.error('Error generating impersonate response:', error);

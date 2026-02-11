@@ -577,17 +577,30 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     // ZOOM/PAN HANDLERS
     // ============================================
 
+    // Track last known mouse position within the container for button-triggered zoom
+    const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+
     const handleZoomIn = useCallback(() => {
         if (!stageRef.current) return;
         const newZoom = Math.min(stageRef.current.getZoom() + LOCAL_MAP_ZOOM.buttonStep, LOCAL_MAP_ZOOM.max);
-        stageRef.current.setZoom(newZoom);
+        const mp = lastMousePosRef.current;
+        if (mp) {
+            stageRef.current.setZoom(newZoom, mp.x, mp.y);
+        } else {
+            stageRef.current.setZoom(newZoom);
+        }
         setCurrentZoom(newZoom);
     }, []);
 
     const handleZoomOut = useCallback(() => {
         if (!stageRef.current) return;
         const newZoom = Math.max(stageRef.current.getZoom() - LOCAL_MAP_ZOOM.buttonStep, LOCAL_MAP_ZOOM.min);
-        stageRef.current.setZoom(newZoom);
+        const mp = lastMousePosRef.current;
+        if (mp) {
+            stageRef.current.setZoom(newZoom, mp.x, mp.y);
+        } else {
+            stageRef.current.setZoom(newZoom);
+        }
         setCurrentZoom(newZoom);
     }, []);
 
@@ -725,6 +738,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     // Handle mouse leave - stop auto-pan
     const handleMouseLeave = useCallback(() => {
         isPanningRef.current = false;
+        lastMousePosRef.current = null;
         stopAutoPan();
     }, [stopAutoPan]);
 
@@ -765,6 +779,15 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
     // Pan move handler
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        // Track mouse position for zoom-toward-cursor on button clicks
+        if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            lastMousePosRef.current = {
+                x: e.clientX - rect.left - CARD_OVERFLOW_PADDING,
+                y: e.clientY - rect.top - CARD_OVERFLOW_PADDING,
+            };
+        }
+
         // Manual panning (drag)
         if (isPanningRef.current && stageRef.current) {
             const dx = e.clientX - lastPanPosRef.current.x;
