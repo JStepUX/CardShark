@@ -619,9 +619,9 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
       const characterName = characterCard?.data?.name || 'Character';
       const effectiveCompressionLevel = compressionLevel || 'none';
 
-      // Create memory context using the template system with field expiration
+      // Create memory context for field breakdown / token display (Context Window Modal).
+      // The actual memory string is built by the backend from character_data.
       let memoryResult: MemoryContextResult | null = null;
-      let memory = '';
       if (characterCard?.data) {
         memoryResult = this.createMemoryContext(
           characterCard,
@@ -630,7 +630,6 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
           effectiveCompressionLevel,
           contextMessages.length
         );
-        memory = memoryResult.memory;
       }
 
       // Smart compression caching logic
@@ -752,6 +751,10 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
       // Get stop sequences from template or use defaults
       const stopSequences = this.getStopSequences(template, characterName);
 
+      // Compute excluded fields from field expiration breakdown
+      const excludedFields = memoryResult?.fieldBreakdown
+        .filter(f => f.status === 'expired').map(f => f.fieldKey) || [];
+
       // Build the payload for /api/generate endpoint
       // Extract only essential character data without lore book
       const essentialCharacterData = characterCard ? {
@@ -781,7 +784,9 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
           // Fix: Spread user generation settings (like banned_tokens) so they aren't lost
           ...(apiConfig.generation_settings || {}),
           prompt: finalPrompt,
-          memory: memory,
+          // Backend builds memory from character_data — send excluded_fields instead
+          excluded_fields: excludedFields,
+          user_name: 'User',
           stop_sequence: stopSequences,
           chat_session_uuid: chatSessionUuid, // Include for potential backend use
           character_data: essentialCharacterData, // Essential character data only, no lore book
@@ -799,6 +804,8 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
       if (onPayloadReady) {
         onPayloadReady({
           ...payload,
+          // Memory preview for Context Window Modal (backend builds the real one)
+          displayMemory: memoryResult?.memory || '',
           // Add field breakdown for token analysis modal
           fieldBreakdown: memoryResult?.fieldBreakdown || [],
           savedTokens: memoryResult?.savedTokens || 0,

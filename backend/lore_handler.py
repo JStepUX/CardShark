@@ -268,14 +268,154 @@ class LoreHandler:
         self.logger.log_step(f"Matched {len(matched_entries)} lore entries")
         return matched_entries
         
+    def build_memory(self,
+                     character_data: Dict,
+                     excluded_fields: List[str] = None,
+                     char_name: str = 'Character',
+                     user_name: str = 'User',
+                     lore_entries: List[Dict] = None,
+                     active_sticky_entries: List[Dict] = None,
+                     token_budget: int = 0) -> str:
+        """
+        Build the memory string from character card data with lore integration.
+        Single source of truth for memory assembly — replaces both
+        integrate_lore_into_prompt() and _create_basic_prompt().
+
+        Args:
+            character_data: Character card data dict (with 'data' sub-dict)
+            excluded_fields: List of field keys to skip (e.g. ['scenario', 'mes_example'])
+            char_name: Character name for {{char}} resolution
+            user_name: User name for {{user}} resolution
+            lore_entries: Newly matched lore entries (may be empty)
+            active_sticky_entries: Still-active sticky lore entries
+            token_budget: Max tokens for lore entries (0 = unlimited)
+
+        Returns:
+            Assembled memory string with resolved tokens
+        """
+        excluded = set(excluded_fields or [])
+
+        # Extract fields from character_data
+        if character_data and 'data' in character_data:
+            data = character_data['data']
+        elif character_data:
+            data = character_data
+        else:
+            data = {}
+
+        system_prompt = data.get('system_prompt', '') if 'system_prompt' not in excluded else ''
+        description = data.get('description', '') if 'description' not in excluded else ''
+        personality = data.get('personality', '') if 'personality' not in excluded else ''
+        scenario = data.get('scenario', '') if 'scenario' not in excluded else ''
+        examples = data.get('mes_example', '') if 'mes_example' not in excluded else ''
+
+        # Strip whitespace-only values
+        system_prompt = system_prompt.strip() if system_prompt else ''
+        description = description.strip() if description else ''
+        personality = personality.strip() if personality else ''
+        scenario = scenario.strip() if scenario else ''
+        examples = examples.strip() if examples else ''
+
+        # Merge matched + sticky lore entries (dedup by ID)
+        all_lore = list(lore_entries or [])
+        if active_sticky_entries:
+            matched_ids = set()
+            for entry in all_lore:
+                entry_id = entry.get('id') or entry.get('name', '')
+                if entry_id:
+                    matched_ids.add(entry_id)
+            for sticky_entry in active_sticky_entries:
+                entry_id = sticky_entry.get('id') or sticky_entry.get('name', '')
+                if entry_id not in matched_ids:
+                    all_lore.append(sticky_entry)
+
+        if all_lore:
+            self.logger.log_step(f"build_memory: {len(all_lore)} lore entries ({len(lore_entries or [])} matched, {len(active_sticky_entries or [])} sticky)")
+
+            # Apply token budget
+            if token_budget > 0:
+                all_lore = self._apply_token_budget(all_lore, token_budget)
+
+        # Group lore entries by position
+        before_char = []
+        after_char = []
+        author_note_top = []
+        author_note_bottom = []
+        before_example = []
+        after_example = []
+
+        position_mapping = {
+            0: before_char, 1: after_char,
+            2: author_note_top, 3: author_note_bottom,
+            4: None, 5: before_example, 6: after_example,
+            'before_char': before_char, 'after_char': after_char,
+            'an_top': author_note_top, 'an_bottom': author_note_bottom,
+            'at_depth': None, 'before_example': before_example, 'after_example': after_example
+        }
+
+        for entry in all_lore:
+            content = entry.get('content', '')
+            if not content:
+                continue
+            position = entry.get('position', self.default_position)
+            target_list = position_mapping.get(position, position_mapping[self.default_position])
+            if target_list is not None:
+                target_list.append(content)
+            else:
+                default_list = position_mapping.get(self.default_position, before_char)
+                if default_list is not None:
+                    default_list.append(content)
+
+        # Assemble memory in canonical order
+        memory = system_prompt if system_prompt else ""
+
+        if author_note_top:
+            if memory:
+                memory += "\n\n"
+            memory += "[Author's Note: " + "\n".join(author_note_top) + "]"
+
+        if memory:
+            memory += "\n\n"
+
+        if before_char:
+            memory += "\n".join(before_char)
+            memory += "\n\n"
+
+        if description:
+            memory += f"Persona: {description}"
+
+        if after_char:
+            memory += "\n\n" + "\n".join(after_char)
+
+        if personality:
+            memory += f"\nPersonality: {personality}"
+        if scenario:
+            memory += f"\nScenario: {scenario}"
+
+        if before_example:
+            memory += "\n\n" + "\n".join(before_example)
+
+        if examples:
+            memory += f"\n\n{examples}"
+
+        if after_example:
+            memory += "\n\n" + "\n".join(after_example)
+
+        if author_note_bottom:
+            memory += "\n\n[Author's Note: " + "\n".join(author_note_bottom) + "]"
+
+        # Final pass: resolve {{user}}/{{char}} tokens
+        memory = memory.replace('{{user}}', user_name).replace('{{char}}', char_name)
+
+        return memory
+
     def integrate_lore_into_prompt(self,
                                   character_data: Dict,
                                   matched_entries: List[Dict],
                                   active_sticky_entries: List[Dict] = None,
                                   token_budget: int = 0) -> str:
         """
-        Integrate lore entries into the prompt with token budget enforcement.
-        Combines newly matched entries with still-active sticky entries.
+        Legacy wrapper — delegates to build_memory().
 
         Args:
             character_data: Character card data
@@ -286,145 +426,12 @@ class LoreHandler:
         Returns:
             Formatted prompt with lore entries
         """
-        # Merge newly matched entries with sticky entries (avoid duplicates)
-        all_entries = list(matched_entries)  # Copy list
-
-        if active_sticky_entries:
-            # Get IDs of already-matched entries to avoid duplicates
-            matched_ids = set()
-            for entry in matched_entries:
-                entry_id = entry.get('id') or entry.get('name', '')
-                if entry_id:
-                    matched_ids.add(entry_id)
-
-            # Add sticky entries that aren't already matched
-            for sticky_entry in active_sticky_entries:
-                entry_id = sticky_entry.get('id') or sticky_entry.get('name', '')
-                if entry_id not in matched_ids:
-                    all_entries.append(sticky_entry)
-
-        if not all_entries:
-            return self._create_basic_prompt(character_data)
-
-        self.logger.log_step(f"Integrating {len(all_entries)} lore entries ({len(matched_entries)} newly matched, {len(active_sticky_entries or [])} sticky)")
-
-        # Apply token budget if specified
-        if token_budget > 0:
-            all_entries = self._apply_token_budget(all_entries, token_budget)
-
-        # Group entries by position
-        before_char = []  # Position 0 = before_char
-        after_char = []   # Position 1 = after_char
-        author_note_top = []  # Position 2 = an_top
-        author_note_bottom = []  # Position 3 = an_bottom
-        before_example = []  # Position 5 = before_example
-        after_example = []   # Position 6 = after_example
-
-        # Position mapping from integers or strings
-        position_mapping = {
-            # Integer positions
-            0: before_char,
-            1: after_char,
-            2: author_note_top,
-            3: author_note_bottom,
-            4: None,  # at_depth (not implemented in MVP)
-            5: before_example,
-            6: after_example,
-            # String positions (for compatibility)
-            'before_char': before_char,
-            'after_char': after_char,
-            'an_top': author_note_top,
-            'an_bottom': author_note_bottom,
-            'at_depth': None,  # Not implemented in MVP
-            'before_example': before_example,
-            'after_example': after_example
-        }
-
-        for entry in all_entries:
-            content = entry.get('content', '')
-            if not content:
-                continue
-                
-            # Get position (could be integer or string)
-            position = entry.get('position', self.default_position)
-            
-            # Add to appropriate list based on position
-            target_list = position_mapping.get(position, position_mapping[self.default_position])
-            
-            if target_list is not None:
-                target_list.append(content)
-            else:
-                # Fallback to default position if the mapping returns None (e.g., at_depth)
-                default_list = position_mapping.get(self.default_position, before_char)
-                if default_list is not None:
-                    default_list.append(content)
-        
-        # Create prompt with lore
-        # Extract the data we need
-        if character_data and 'data' in character_data:
-            data = character_data['data']
-            system_prompt = data.get('system_prompt', '')
-            description = data.get('description', '')
-            personality = data.get('personality', '')
-            scenario = data.get('scenario', '')
-            examples = data.get('mes_example', '')
-        else:
-            # Fallback if data structure is different
-            system_prompt = character_data.get('system_prompt', '')
-            description = character_data.get('description', '')
-            personality = character_data.get('personality', '')
-            scenario = character_data.get('scenario', '')
-            examples = character_data.get('mes_example', '')
-        
-        # Start with system prompt
-        memory = system_prompt if system_prompt else ""
-        
-        # Author's note top (if any)
-        if author_note_top:
-            if memory:
-                memory += "\n\n"
-            memory += "[Author's Note: " + "\n".join(author_note_top) + "]"
-            
-        # Add a separator if needed
-        if memory:
-            memory += "\n\n"
-            
-        # Add lore before character description
-        if before_char:
-            memory += "\n".join(before_char)
-            memory += "\n\n"
-            
-        # Add character description
-        if description:
-            memory += f"Persona: {description}"
-
-        # Add lore after character description
-        if after_char:
-            memory += "\n\n" + "\n".join(after_char)
-
-        # Add personality and scenario (skip empty fields)
-        if personality:
-            memory += f"\nPersonality: {personality}"
-        if scenario:
-            memory += f"\nScenario: {scenario}"
-        
-        # Add lore before examples
-        if before_example:
-            memory += "\n\n" + "\n".join(before_example)
-            
-        # Add examples
-        if examples:
-            memory += f"\n\n{examples}"
-            
-        # Add lore after examples
-        if after_example:
-            memory += "\n\n" + "\n".join(after_example)
-            
-        # Author's note bottom (if any)
-        if author_note_bottom:
-            memory += "\n\n[Author's Note: " + "\n".join(author_note_bottom) + "]"
-            
-        return memory
+        return self.build_memory(
+            character_data,
+            lore_entries=matched_entries,
+            active_sticky_entries=active_sticky_entries,
+            token_budget=token_budget
+        )
         
     def _apply_token_budget(self, entries: List[Dict], token_budget: int) -> List[Dict]:
         """
@@ -484,37 +491,8 @@ class LoreHandler:
         return included_entries
 
     def _create_basic_prompt(self, character_data: Dict) -> str:
-        """Create a basic prompt without lore"""
-        # Extract the data we need based on possible data structures
-        if character_data and 'data' in character_data:
-            data = character_data['data']
-            system_prompt = data.get('system_prompt', '')
-            description = data.get('description', '')
-            personality = data.get('personality', '')
-            scenario = data.get('scenario', '')
-            examples = data.get('mes_example', '')
-        else:
-            # Fallback if data structure is different
-            system_prompt = character_data.get('system_prompt', '')
-            description = character_data.get('description', '')
-            personality = character_data.get('personality', '')
-            scenario = character_data.get('scenario', '')
-            examples = character_data.get('mes_example', '')
-        
-        # Simple concatenation - return whatever is already in memory format
-        memory = system_prompt if system_prompt else ""
-        
-        if memory:
-            memory += "\n\n"
-            
-        if description:
-            memory += f"Persona: {description}"
-        if personality:
-            memory += f"\nPersonality: {personality}"
-        if scenario:
-            memory += f"\nScenario: {scenario}"
+        """Create a basic prompt without lore.
 
-        if examples:
-            memory += f"\n\n{examples}"
-
-        return memory
+        Legacy wrapper — delegates to build_memory() with no lore.
+        """
+        return self.build_memory(character_data)

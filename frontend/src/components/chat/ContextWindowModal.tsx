@@ -75,7 +75,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
     const genSettings = apiConfig?.generation_settings || {};
 
     return {
-      memory: payload.memory || '',
+      memory: payload.displayMemory || payload.memory || '',
       prompt: payload.prompt || '',
       stop_sequence: payload.stop_sequence || apiConfig?.stopSequences || [],
       generation_settings: {
@@ -138,8 +138,10 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
     const payload = contextData.generation_params || contextData;
 
     // Memory (character card + lore + system instruction)
-    if (payload.memory) {
-      const memoryTokens = countTokens(payload.memory);
+    // displayMemory is the frontend preview; payload.memory is the legacy field
+    const memoryText = contextData.displayMemory || payload.displayMemory || payload.memory || '';
+    if (memoryText) {
+      const memoryTokens = countTokens(memoryText);
       analysis.memory = memoryTokens;
       totalTokens += memoryTokens;
     }

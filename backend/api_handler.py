@@ -585,7 +585,10 @@ class ApiHandler:
 
             # Extract basic required parameters
             prompt = generation_params.get('prompt')
-            memory = generation_params.get('memory')
+            # Backend owns memory building — ignore frontend memory field
+            memory = ''
+            excluded_fields = generation_params.get('excluded_fields', [])
+            user_name = generation_params.get('user_name', 'User') or 'User'
 
             # Use provider-appropriate default stop sequences
             from backend.kobold_prompt_builder import is_kobold_provider
@@ -606,18 +609,10 @@ class ApiHandler:
                 ])
             quiet = generation_params.get('quiet', True)
 
-            # Handle system_instruction - prepend to memory for proper instruction handling
-            # This ensures generation instructions are treated as directives in system context,
-            # not as content to continue (which causes instruction leakage in KoboldCPP)
-            # For KoboldCPP: skip here — handled after lore matching by the builder
+            # system_instruction is prepended to memory AFTER build_memory() runs
+            # For KoboldCPP: handled via fold_system_instruction in the kobold path
             system_instruction = generation_params.get('system_instruction')
-            if system_instruction and not is_kobold:
-                self.logger.log_step(f"Prepending system_instruction to memory ({len(system_instruction)} chars)")
-                if memory:
-                    memory = f"{system_instruction}\n\n{memory}"
-                else:
-                    memory = system_instruction
-            
+
             # Process lore if character data is available
             character_data = generation_params.get('character_data')
             chat_history = generation_params.get('chat_history', [])
@@ -635,43 +630,39 @@ class ApiHandler:
             
             # Add lore matching to context window if it exists
             context_window = generation_params.get('context_window')
-              # Handle lore matching if character data is available
+
+            # Lore matching + unified memory building
+            matched_entries = []
+            active_sticky_entries = []
+            token_budget = 0
+
             if character_data and character_data.get('data') and character_data.get('data', {}).get('character_uuid'):
                 try:
                     from backend.lore_handler import LoreHandler
-                    from backend.services.character_service import CharacterService
-                    from backend.dependencies import get_db
-                    
+
                     lore_handler = LoreHandler(self.logger)
-                    
-                    # Get character UUID from the minimal character data
                     character_uuid = character_data.get('data', {}).get('character_uuid')
-                    
+
                     if character_uuid:
                         self.logger.log_step(f"Loading lore for character UUID: {character_uuid}")
-                        
-                        # Load character with lore from database instead of using payload data
-                        # We'll create a minimal DB session for this lookup
+
                         try:
-                            # Import required database components
                             from backend.database import SessionLocal
                             from backend.sql_models import Character as CharacterModel, LoreBook as LoreBookModel, LoreEntry as LoreEntryModel
                             import json
-                            
+
                             db = SessionLocal()
                             try:
-                                # Query character with lore book
                                 character_db = db.query(CharacterModel).filter(
                                     CharacterModel.character_uuid == character_uuid
                                 ).first()
-                                
+
                                 if character_db and character_db.lore_books:
-                                    lore_book = character_db.lore_books[0]  # Assuming one lore book per character
+                                    lore_book = character_db.lore_books[0]
                                     lore_entries = []
 
                                     for db_entry in lore_book.entries:
-                                        if db_entry.enabled:  # Only include enabled entries
-                                            # Parse extensions from JSON
+                                        if db_entry.enabled:
                                             extensions = {}
                                             if db_entry.extensions_json:
                                                 try:
@@ -680,7 +671,7 @@ class ApiHandler:
                                                     extensions = {}
 
                                             entry_dict = {
-                                                'id': db_entry.id,  # Include ID for tracking
+                                                'id': db_entry.id,
                                                 'content': db_entry.content,
                                                 'keys': json.loads(db_entry.keys_json) if db_entry.keys_json else [],
                                                 'secondary_keys': json.loads(db_entry.secondary_keys_json) if db_entry.secondary_keys_json else [],
@@ -688,7 +679,7 @@ class ApiHandler:
                                                 'position': db_entry.position,
                                                 'insertion_order': db_entry.insertion_order,
                                                 'case_sensitive': extensions.get('case_sensitive', False),
-                                                'use_regex': False,  # Default, can be in extensions
+                                                'use_regex': False,
                                                 'name': db_entry.comment or '',
                                                 'has_image': bool(db_entry.image_uuid),
                                                 'image_uuid': db_entry.image_uuid or '',
@@ -704,54 +695,42 @@ class ApiHandler:
                                                 }
                                             }
                                             lore_entries.append(entry_dict)
-                                    
+
                                     if lore_entries:
                                         self.logger.log_step(f"Loaded {len(lore_entries)} lore entries from database")
 
-                                        # Get chat_session_uuid for temporal tracking
                                         chat_session_uuid = generation_params.get('chat_session_uuid')
-
-                                        # Initialize activation tracker if we have a session UUID
                                         activation_tracker = None
-                                        active_sticky_entries = []
 
                                         if chat_session_uuid:
                                             try:
                                                 from backend.services.lore_activation_tracker import LoreActivationTracker
-
                                                 activation_tracker = LoreActivationTracker(db, chat_session_uuid)
 
-                                                # Get currently active sticky lore entries
                                                 active_lore_ids = activation_tracker.get_active_lore_entry_ids()
                                                 if active_lore_ids:
                                                     active_sticky_entries = [e for e in lore_entries if e.get('id') in active_lore_ids]
                                                     self.logger.log_step(f"Found {len(active_sticky_entries)} active sticky lore entries")
-
                                             except Exception as tracker_error:
                                                 self.logger.log_warning(f"Could not initialize lore activation tracker: {tracker_error}")
 
-                                        # Get scan_depth from character_book or use default
                                         character_book_data = character_data.get('data', {}).get('character_book', {})
                                         scan_depth = character_book_data.get('scan_depth', 3)
 
-                                        # Match lore entries against chat history (using new chat_messages API)
                                         matched_entries = lore_handler.match_lore_entries(
                                             lore_entries=lore_entries,
                                             chat_messages=chat_history,
                                             scan_depth=scan_depth
                                         )
 
-                                        # Activate newly matched entries with temporal tracking
                                         if matched_entries and activation_tracker:
                                             message_number = len(chat_history)
                                             for entry in matched_entries:
                                                 entry_id = entry.get('id')
                                                 if entry_id and not activation_tracker.is_in_cooldown(entry_id):
-                                                    # Get temporal settings from entry
                                                     sticky = entry.get('extensions', {}).get('sticky', 2)
                                                     cooldown = entry.get('extensions', {}).get('cooldown', 0)
                                                     delay = entry.get('extensions', {}).get('delay', 0)
-
                                                     activation_tracker.activate(
                                                         lore_entry_id=entry_id,
                                                         character_uuid=character_uuid,
@@ -761,33 +740,17 @@ class ApiHandler:
                                                         delay=delay
                                                     )
 
-                                        # Integrate lore (matched + active sticky) into prompt
-                                        if matched_entries or active_sticky_entries:
+                                        token_budget = character_book_data.get('token_budget', 0)
+
+                                        # Note lore info in context window
+                                        if (matched_entries or active_sticky_entries) and context_window is not None and isinstance(context_window, dict):
                                             total_active = len(set([e.get('id') for e in matched_entries + active_sticky_entries if e.get('id')]))
-                                            self.logger.log_step(f"Integrating {total_active} total lore entries (matched + sticky)")
-
-                                            # Get token budget from character_book
-                                            token_budget = character_book_data.get('token_budget', 0)  # 0 = unlimited
-
-                                            # Create new memory with lore
-                                            memory = lore_handler.integrate_lore_into_prompt(
-                                                character_data,
-                                                matched_entries,
-                                                active_sticky_entries,
-                                                token_budget
-                                            )
-
-                                            # Note this in the context window
-                                            if context_window is not None and isinstance(context_window, dict):
-                                                context_window['lore_info'] = {
-                                                    'matched_count': len(matched_entries),
-                                                    'sticky_count': len(active_sticky_entries),
-                                                    'total_count': total_active,
-                                                    'entry_keys': [entry.get('keys', [''])[0] for entry in matched_entries
-                                                                if entry.get('keys')]
-                                                }
-                                        else:
-                                            self.logger.log_step("No lore entries matched or active")
+                                            context_window['lore_info'] = {
+                                                'matched_count': len(matched_entries),
+                                                'sticky_count': len(active_sticky_entries),
+                                                'total_count': total_active,
+                                                'entry_keys': [entry.get('keys', [''])[0] for entry in matched_entries if entry.get('keys')]
+                                            }
                                     else:
                                         self.logger.log_step("No enabled lore entries found for character")
                                 else:
@@ -796,32 +759,49 @@ class ApiHandler:
                                 db.close()
                         except Exception as db_error:
                             self.logger.log_error(f"Error loading lore from database: {str(db_error)}")
-                            # Continue without lore if database lookup fails
                     else:
                         self.logger.log_step("No character UUID provided, skipping lore matching")
                 except Exception as e:
                     self.logger.log_error(f"Error processing lore: {str(e)}")
-                    # Continue with generation even if lore processing fails
-            
-            # KoboldCPP story-mode rebuild: clean memory, fold system instruction,
+
+            # Backend always builds memory from character_data (single source of truth)
+            if character_data and character_data.get('data'):
+                from backend.lore_handler import LoreHandler
+                lore_handler = LoreHandler(self.logger)
+                char_name = character_data['data'].get('name', 'Character')
+                memory = lore_handler.build_memory(
+                    character_data,
+                    excluded_fields=excluded_fields,
+                    char_name=char_name,
+                    user_name=user_name,
+                    lore_entries=matched_entries,
+                    active_sticky_entries=active_sticky_entries,
+                    token_budget=token_budget
+                )
+                self.logger.log_step(f"Built memory from character_data ({len(memory)} chars, {len(matched_entries)} matched lore, {len(active_sticky_entries)} sticky, {len(excluded_fields)} excluded fields)")
+
+            # Prepend system_instruction to memory for non-KoboldCPP providers
+            # (KoboldCPP uses fold_system_instruction in its own path below)
+            if system_instruction and not is_kobold:
+                self.logger.log_step(f"Prepending system_instruction to memory ({len(system_instruction)} chars)")
+                if memory:
+                    memory = f"{system_instruction}\n\n{memory}"
+                else:
+                    memory = system_instruction
+
+            # KoboldCPP story-mode rebuild: fold system instruction,
             # rebuild prompt from raw chat_history, set clean stop sequences
             if is_kobold:
                 from backend.kobold_prompt_builder import (
-                    clean_memory, fold_system_instruction, build_story_prompt,
+                    fold_system_instruction, build_story_prompt,
                     build_story_stop_sequences, extract_block
                 )
 
                 char_data = character_data.get('data', {}) if character_data else {}
                 char_name = char_data.get('name', 'Character')
-                user_name = generation_params.get('user_name', 'User') or 'User'
 
-                # Clean memory: strip empty field lines from lore handler output
-                memory = clean_memory(memory or '')
-
-                # Resolve {{user}}/{{char}} template tokens in memory
-                # (lore handler rebuilds memory from raw card data with unresolved tokens)
-                if memory:
-                    memory = memory.replace('{{user}}', user_name).replace('{{char}}', char_name)
+                # build_memory() already resolved {{user}}/{{char}} and skips empty fields,
+                # so clean_memory() and token resolution are no longer needed here.
 
                 # Fold system_instruction into memory as narrative framing
                 if system_instruction:
