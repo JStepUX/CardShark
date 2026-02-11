@@ -4,7 +4,7 @@ import { Message } from '../types/messages';
 import { CharacterData } from '../contexts/CharacterContext';
 import { APIConfigContext } from '../contexts/APIConfigContext';
 import { PromptHandler } from '../handlers/promptHandler';
-import { APIConfig } from '../types/api';
+import { APIConfig, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 
 export function useChatContinuation(
   messages: Message[],
@@ -27,13 +27,7 @@ export function useChatContinuation(
       const fullConfig = JSON.parse(JSON.stringify(config));
       
       if (!fullConfig.generation_settings) {
-        fullConfig.generation_settings = {
-          max_length: 220,
-          max_context_length: 6144,
-          temperature: 1.05,
-          top_p: 0.92,
-          top_k: 100,
-        };
+        fullConfig.generation_settings = { ...DEFAULT_GENERATION_SETTINGS };
       }
       
       return fullConfig;

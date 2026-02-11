@@ -2,7 +2,7 @@
 // Component for displaying and updating API configuration settings
 import React, { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Sliders } from 'lucide-react';
-import { APIConfig } from '../types/api';
+import { APIConfig, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 
 interface APIConfigurationPanelProps {
   config: APIConfig;
@@ -110,69 +110,34 @@ const RECOMMENDED_SAMPLER_ORDER = [6, 0, 1, 3, 4, 2, 5];
 
 const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, onUpdate }) => {
   const [expanded, setExpanded] = useState(true); // Set initial state to true
-  const [settings, setSettings] = useState<{
-    max_length: number;
-    max_context_length: number;
-    temperature: number;
-    top_p: number;
-    top_k: number;
-    top_a: number;
-    typical: number;
-    tfs: number;
-    min_p: number;
-    rep_pen: number;
-    rep_pen_range: number;
-    rep_pen_slope: number;
-    sampler_order: number[];
-    dynatemp_enabled: boolean;
-    dynatemp_min: number;
-    dynatemp_max: number;
-    dynatemp_exponent: number;
-    reasoning_model: boolean;
-  }>({
-    max_length: config.generation_settings?.max_length ?? 220,
-    max_context_length: config.generation_settings?.max_context_length ?? 6144,
-    temperature: config.generation_settings?.temperature ?? 1.05,
-    top_p: config.generation_settings?.top_p ?? 0.92,
-    top_k: config.generation_settings?.top_k ?? 100,
-    top_a: config.generation_settings?.top_a ?? 0,
-    typical: config.generation_settings?.typical ?? 1,
-    tfs: config.generation_settings?.tfs ?? 1,
-    min_p: config.generation_settings?.min_p ?? 0,
-    rep_pen: config.generation_settings?.rep_pen ?? 1.07,
-    rep_pen_range: config.generation_settings?.rep_pen_range ?? 360,
-    rep_pen_slope: config.generation_settings?.rep_pen_slope ?? 0.7,
-    sampler_order: config.generation_settings?.sampler_order ?? [6, 0, 1, 3, 4, 2, 5],
-    dynatemp_enabled: config.generation_settings?.dynatemp_enabled ?? false,
-    dynatemp_min: config.generation_settings?.dynatemp_min ?? 0.0,
-    dynatemp_max: config.generation_settings?.dynatemp_max ?? 2.0,
-    dynatemp_exponent: config.generation_settings?.dynatemp_exponent ?? 1.0,
-    reasoning_model: config.generation_settings?.reasoning_model ?? false
+  const d = DEFAULT_GENERATION_SETTINGS;
+
+  const buildSettings = (gen?: Record<string, unknown>) => ({
+    max_length: (gen?.max_length as number) ?? d.max_length!,
+    max_context_length: (gen?.max_context_length as number) ?? d.max_context_length!,
+    temperature: (gen?.temperature as number) ?? d.temperature!,
+    top_p: (gen?.top_p as number) ?? d.top_p!,
+    top_k: (gen?.top_k as number) ?? d.top_k!,
+    top_a: (gen?.top_a as number) ?? d.top_a!,
+    typical: (gen?.typical as number) ?? d.typical!,
+    tfs: (gen?.tfs as number) ?? d.tfs!,
+    min_p: (gen?.min_p as number) ?? d.min_p!,
+    rep_pen: (gen?.rep_pen as number) ?? d.rep_pen!,
+    rep_pen_range: (gen?.rep_pen_range as number) ?? d.rep_pen_range!,
+    rep_pen_slope: (gen?.rep_pen_slope as number) ?? d.rep_pen_slope!,
+    sampler_order: (gen?.sampler_order as number[]) ?? [...d.sampler_order!],
+    dynatemp_enabled: (gen?.dynatemp_enabled as boolean) ?? false,
+    dynatemp_min: (gen?.dynatemp_min as number) ?? 0.0,
+    dynatemp_max: (gen?.dynatemp_max as number) ?? 2.0,
+    dynatemp_exponent: (gen?.dynatemp_exponent as number) ?? d.dynatemp_exponent!,
+    reasoning_model: (gen?.reasoning_model as boolean) ?? false
   });
+
+  const [settings, setSettings] = useState(buildSettings(config.generation_settings as Record<string, unknown>));
 
   useEffect(() => {
     if (config.generation_settings) {
-      const newSettings = {
-        max_length: config.generation_settings.max_length ?? 220,
-        max_context_length: config.generation_settings.max_context_length ?? 6144,
-        temperature: config.generation_settings.temperature ?? 1.05,
-        top_p: config.generation_settings.top_p ?? 0.92,
-        top_k: config.generation_settings.top_k ?? 100,
-        top_a: config.generation_settings.top_a ?? 0,
-        typical: config.generation_settings.typical ?? 1,
-        tfs: config.generation_settings.tfs ?? 1,
-        min_p: config.generation_settings.min_p ?? 0,
-        rep_pen: config.generation_settings.rep_pen ?? 1.07,
-        rep_pen_range: config.generation_settings.rep_pen_range ?? 360,
-        rep_pen_slope: config.generation_settings.rep_pen_slope ?? 0.7,
-        sampler_order: config.generation_settings.sampler_order ?? [6, 0, 1, 3, 4, 2, 5],
-        dynatemp_enabled: config.generation_settings.dynatemp_enabled ?? false,
-        dynatemp_min: config.generation_settings.dynatemp_min ?? 0.0,
-        dynatemp_max: config.generation_settings.dynatemp_max ?? 2.0,
-        dynatemp_exponent: config.generation_settings.dynatemp_exponent ?? 1.0,
-        reasoning_model: config.generation_settings.reasoning_model ?? false
-      };
-      setSettings(newSettings);
+      setSettings(buildSettings(config.generation_settings as Record<string, unknown>));
     }
   }, [config.generation_settings]);
 

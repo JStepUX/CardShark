@@ -9,7 +9,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { CharacterData } from '../contexts/CharacterContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import { useAPIConfig } from '../contexts/APIConfigContext';
-import { APIConfig } from '../types/api';
+import { APIConfig, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 import { ChatStorage } from '../services/chatStorage';
 import { toast } from 'sonner';
 import { generateUUID } from '../utils/generateUUID';
@@ -164,7 +164,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
   const prepareAPIConfig = useCallback((config?: APIConfig | null): APIConfig => {
     const defaultConfig: APIConfig = {
       id: 'default', provider: 'KoboldCPP', url: 'http://localhost:5001', enabled: false, templateId: 'mistral',
-      generation_settings: { max_length: 220, max_context_length: 6144, temperature: 1.05, top_p: 0.92, top_k: 100 }
+      generation_settings: { ...DEFAULT_GENERATION_SETTINGS }
     };
     if (!config) return defaultConfig;
     const fullConfig = JSON.parse(JSON.stringify(config));

@@ -231,17 +231,18 @@ class KoboldCppAdapter(ApiProviderAdapter):
         """Prepare the request data for KoboldCPP in native format"""
         
         # Extract KoboldCPP-specific settings with proper parameter names
-        max_length = generation_settings.get('max_length', 240)
-        max_context_length = generation_settings.get('max_context_length', 6144)
-        temperature = generation_settings.get('temperature', 0.7)
+        # Defaults must match frontend/src/types/api.ts DEFAULT_GENERATION_SETTINGS
+        max_length = generation_settings.get('max_length', 220)
+        max_context_length = generation_settings.get('max_context_length', 8192)
+        temperature = generation_settings.get('temperature', 0.85)
         top_p = generation_settings.get('top_p', 0.9)
-        top_k = generation_settings.get('top_k', 100)
+        top_k = generation_settings.get('top_k', 80)
         top_a = generation_settings.get('top_a', 0)
         typical = generation_settings.get('typical', 1.0)  # Note: typical not typical_p
         tfs = generation_settings.get('tfs', 1)
-        min_p = generation_settings.get('min_p', 0)
-        rep_pen = generation_settings.get('rep_pen', 1.07)
-        rep_pen_range = generation_settings.get('rep_pen_range', 360)
+        min_p = generation_settings.get('min_p', 0.05)
+        rep_pen = generation_settings.get('rep_pen', 1.08)
+        rep_pen_range = generation_settings.get('rep_pen_range', 256)
         rep_pen_slope = generation_settings.get('rep_pen_slope', 0.7)
         sampler_order = generation_settings.get('sampler_order', [6, 0, 1, 3, 4, 2, 5])
         

@@ -8,7 +8,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { Message, UserProfile } from '../types/messages';
 import { useCharacter } from '../contexts/CharacterContext';
-import { APIConfig, APIProvider } from '../types/api';
+import { APIConfig, APIProvider, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 import { APIConfigContext } from '../contexts/APIConfigContext';
 import { PromptHandler } from '../handlers/promptHandler';
 import { ChatStorage } from '../services/chatStorage';
@@ -658,11 +658,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
   const { getRequestParameters, filterText, shouldUseClientFiltering } = useContentFilter();
 
   const prepareAPIConfig = useCallback((config?: APIConfig | null): APIConfig => {
-    const defaultConfigSettings = {
-      max_length: 220, max_context_length: 6144, temperature: 1.05, top_p: 0.92, top_k: 100,
-      top_a: 0, typical: 1, tfs: 1, rep_pen: 1.07, rep_pen_range: 360, rep_pen_slope: 0.7,
-      sampler_order: [6, 0, 1, 3, 4, 2, 5]
-    };
+    const defaultConfigSettings = { ...DEFAULT_GENERATION_SETTINGS };
     if (config) {
       const fullConfig = JSON.parse(JSON.stringify(config));
       if (!fullConfig.generation_settings) {

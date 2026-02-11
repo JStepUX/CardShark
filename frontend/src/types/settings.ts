@@ -32,15 +32,8 @@ export interface SyntaxHighlightSettings {
   };
 }
 
-export interface GenerationSettings {
-  temperature: number;
-  top_p: number;
-  top_k: number;
-  dynatemp_enabled: boolean;
-  dynatemp_min: number;
-  dynatemp_max: number;
-  dynatemp_exponent: number;
-}
+// GenerationSettings is defined in types/api.ts (single source of truth)
+export type { GenerationSettings } from './api';
 
 export interface Settings {
   // App Settings

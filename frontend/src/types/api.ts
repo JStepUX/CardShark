@@ -23,23 +23,25 @@ export interface GenerationSettings {
   reasoning_model?: boolean;
 }
 
-// Default generation settings for KoboldCPP
+// Single source of truth for generation setting defaults.
+// All frontend consumers and createAPIConfig() reference this object.
+// Backend defaults in api_provider_adapters.py must be kept in sync manually.
 export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
   max_length: 220,
-  max_context_length: 6144,
-  temperature: 1.05,
-  top_p: 0.92,
-  top_k: 100,
+  max_context_length: 8192,
+  temperature: 0.85,
+  top_p: 0.9,
+  top_k: 80,
   top_a: 0,
   typical: 1,
   tfs: 1,
-  rep_pen: 1.07,
-  rep_pen_range: 360,
+  rep_pen: 1.08,
+  rep_pen_range: 256,
   rep_pen_slope: 0.7,
   sampler_order: [6, 0, 1, 3, 4, 2, 5],
   trim_stop: true,
-  min_p: 0,
-  dynatemp_range: 0.45,
+  min_p: 0.05,
+  dynatemp_range: 0,
   dynatemp_exponent: 1,
   smoothing_factor: 0,
   presence_penalty: 0
