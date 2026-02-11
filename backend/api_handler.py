@@ -843,6 +843,41 @@ class ApiHandler:
                 # Set clean stop sequences
                 stop_sequence = build_story_stop_sequences(char_name, user_name)
 
+                # ── Context Budget Debugger ──────────────────────────────────
+                # Estimate tokens (~4 chars per token) and log per-field breakdown
+                def _est_tokens(text: str) -> int:
+                    return len(text) // 4 if text else 0
+
+                ctx_max = original_generation_settings.get('max_context_length', 8192)
+                ctx_memory_tok = _est_tokens(memory)
+                ctx_compressed_tok = _est_tokens(compressed) if raw_history and compressed else 0
+                ctx_notes_tok = _est_tokens(session_notes) if raw_history and session_notes else 0
+                ctx_history_tok = _est_tokens(build_story_prompt(raw_history, char_name, user_name)) if raw_history else _est_tokens(prompt)
+                ctx_total_tok = ctx_memory_tok + ctx_compressed_tok + ctx_notes_tok + ctx_history_tok
+
+                self.logger.log_step(
+                    f"KoboldCPP Context Budget (est. tokens, ~4 chars/token):\n"
+                    f"  Memory (card+lore+sys): {ctx_memory_tok:>6} tokens  ({len(memory or ''):>8} chars)\n"
+                    f"  Compressed summary:     {ctx_compressed_tok:>6} tokens\n"
+                    f"  Session notes:          {ctx_notes_tok:>6} tokens\n"
+                    f"  Chat history:           {ctx_history_tok:>6} tokens  ({len(raw_history) if raw_history else 0} messages)\n"
+                    f"  ─────────────────────────────────\n"
+                    f"  TOTAL:                  {ctx_total_tok:>6} tokens  /  {ctx_max} limit  "
+                    f"({ctx_total_tok * 100 // ctx_max}% used)"
+                )
+                if ctx_total_tok > ctx_max:
+                    self.logger.log_warning(
+                        f"CONTEXT OVERFLOW: Sending ~{ctx_total_tok} tokens but limit is {ctx_max}. "
+                        f"KoboldCPP will silently truncate from the front, losing character card and system context. "
+                        f"Overflow: ~{ctx_total_tok - ctx_max} tokens over budget."
+                    )
+                elif ctx_total_tok > ctx_max * 0.85:
+                    self.logger.log_warning(
+                        f"CONTEXT WARNING: Using {ctx_total_tok * 100 // ctx_max}% of context budget "
+                        f"({ctx_total_tok}/{ctx_max}). Approaching overflow."
+                    )
+                # ── End Context Budget Debugger ──────────────────────────────
+
                 self.logger.log_step(f"KoboldCPP story-mode rebuild complete. Memory: {len(memory)} chars, Prompt: {len(prompt) if prompt else 0} chars")
                 self.logger.log_step(f"KoboldCPP stop_sequence: {stop_sequence}")
 

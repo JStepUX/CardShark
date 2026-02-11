@@ -153,10 +153,10 @@ class CharacterDeduplicationService:
             keeper = sorted_chars[0]
             duplicates = sorted_chars[1:]
             
-            self.logger.log_info(f"Keeping character {keeper.id} (path: {keeper.png_file_path})")
-            
+            self.logger.log_info(f"Keeping character {keeper.character_uuid} (path: {keeper.png_file_path})")
+
             for dup in duplicates:
-                self.logger.log_info(f"Marking for removal: character {dup.id} (path: {dup.png_file_path})")
+                self.logger.log_info(f"Marking for removal: character {dup.character_uuid} (path: {dup.png_file_path})")
                 to_remove.append(dup)
         
         return to_remove
@@ -197,10 +197,10 @@ class CharacterDeduplicationService:
             keeper = sorted_chars[0]
             duplicates = sorted_chars[1:]
             
-            self.logger.log_info(f"Keeping character {keeper.id} for path {path}")
-            
+            self.logger.log_info(f"Keeping character {keeper.character_uuid} for path {path}")
+
             for dup in duplicates:
-                self.logger.log_info(f"Marking for removal: character {dup.id} (duplicate path)")
+                self.logger.log_info(f"Marking for removal: character {dup.character_uuid} (duplicate path)")
                 to_remove.append(dup)
         
         return to_remove

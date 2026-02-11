@@ -76,17 +76,31 @@ const CharacterDetailView: React.FC = () => {
       setLoadError(null);
 
       try {
-        // Fetch metadata
-        const metaRes = await fetch(`/api/character/${uuid}`);
-        if (!metaRes.ok) {
-          throw new Error(metaRes.status === 404
+        // Step 1: Get character record (includes png_file_path)
+        const charRes = await fetch(`/api/character/${uuid}`);
+        if (!charRes.ok) {
+          throw new Error(charRes.status === 404
             ? 'Character not found'
-            : `Failed to load character (${metaRes.status})`);
+            : `Failed to load character (${charRes.status})`);
         }
-        const metaJson = await metaRes.json();
-        const metadata = metaJson.data || metaJson;
+        const charJson = await charRes.json();
+        const charData = charJson.data || charJson;
 
-        // Fetch image
+        // Step 2: Fetch full V2 card metadata from PNG (same format as gallery)
+        let metadata = charData;
+        const pngPath = charData.png_file_path;
+        if (pngPath) {
+          const encodedPath = encodeURIComponent(pngPath.replace(/\\/g, '/'));
+          const fullMetaRes = await fetch(`/api/character-metadata/${encodedPath}`);
+          if (fullMetaRes.ok) {
+            const fullMetaJson = await fullMetaRes.json();
+            metadata = fullMetaJson.data || fullMetaJson;
+          }
+        }
+
+        if (cancelled) return;
+
+        // Step 3: Fetch image
         const imgRes = await fetch(`/api/character-image/${uuid}`);
         if (cancelled) return;
 

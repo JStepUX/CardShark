@@ -48,19 +48,13 @@ interface ContextWindowModalProps {
   title?: string;
 }
 
-// Simple token counting for estimation
+// Token estimation: ~4 characters per token for English text
+// This matches the backend's estimate and is closer to real tokenizer output than word count
 const countTokens = (text?: string): number => {
   if (!text || typeof text !== 'string') return 0;
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return 0;
-
-  // More accurate approximation: split on whitespace and count
-  // Also account for punctuation as separate tokens
-  const words = trimmed.split(/\s+/).filter(w => w.length > 0);
-
-  // Rough estimate: 1 token per word, plus extra for punctuation
-  // This is a simple heuristic - real tokenization is more complex
-  return Math.max(1, words.length);
+  const len = text.trim().length;
+  if (len === 0) return 0;
+  return Math.max(1, Math.ceil(len / 4));
 };
 
 const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
@@ -124,6 +118,16 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
     }
   };
 
+  // Extract text between markers from the prompt string
+  const extractBlock = (text: string, startMarker: string, endMarker: string): string => {
+    const startIdx = text.indexOf(startMarker);
+    if (startIdx === -1) return '';
+    const contentStart = startIdx + startMarker.length;
+    const endIdx = text.indexOf(endMarker, contentStart);
+    if (endIdx === -1) return '';
+    return text.substring(startIdx, endIdx + endMarker.length);
+  };
+
   // Analyze token usage from the actual API payload
   const tokenAnalysis = useMemo(() => {
     if (!contextData) return null;
@@ -131,42 +135,64 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
     const analysis: Record<string, number> = {};
     let totalTokens = 0;
 
-    // The payload structure can be in different places depending on when it was captured
-    // Check for: contextData.generation_params (direct from onPayloadReady callback)
-    // or contextData itself if it has the fields we need
     const payload = contextData.generation_params || contextData;
 
-    // Memory/System Prompt
+    // Memory (character card + lore + system instruction)
     if (payload.memory) {
       const memoryTokens = countTokens(payload.memory);
       analysis.memory = memoryTokens;
       totalTokens += memoryTokens;
     }
 
-    // Main prompt (includes formatted chat history)
+    // Break down the prompt into sub-categories instead of counting as one blob
+    // The prompt contains: compressed summary + session notes + formatted chat history
     if (payload.prompt) {
-      const promptTokens = countTokens(payload.prompt);
-      analysis.prompt = promptTokens;
-      totalTokens += promptTokens;
+      const promptStr = payload.prompt as string;
+
+      // Extract compressed summary
+      const compressedBlock = extractBlock(promptStr, '[Previous Events Summary]', '[End Summary - Recent conversation follows]');
+      if (compressedBlock) {
+        const compressedTokens = countTokens(compressedBlock);
+        analysis.compressed = compressedTokens;
+        totalTokens += compressedTokens;
+      }
+
+      // Extract session notes
+      const notesBlock = extractBlock(promptStr, '[Session Notes]', '[End Session Notes]');
+      if (notesBlock) {
+        const notesTokens = countTokens(notesBlock);
+        analysis.session_notes = notesTokens;
+        totalTokens += notesTokens;
+      }
+
+      // Chat history = prompt minus the extracted blocks
+      let chatPortion = promptStr;
+      if (compressedBlock) chatPortion = chatPortion.replace(compressedBlock, '');
+      if (notesBlock) chatPortion = chatPortion.replace(notesBlock, '');
+      const chatTokens = countTokens(chatPortion.trim());
+      analysis.chat_history = chatTokens;
+      totalTokens += chatTokens;
+
+      // Keep total prompt tokens for reference (but don't double-count)
+      analysis.prompt = countTokens(promptStr);
     }
 
-    // Chat history (raw messages)
+    // Message count for display
     if (payload.chat_history && Array.isArray(payload.chat_history)) {
-      let historyTokens = 0;
-      payload.chat_history.forEach((msg: { role: string, content: string }) => {
-        historyTokens += countTokens(msg.content);
-      });
-      analysis.chat_history = historyTokens;
-      totalTokens += historyTokens;
+      analysis.message_count = payload.chat_history.length;
     }
 
     analysis.total = totalTokens;
 
-    // Estimate remaining capacity - check both possible locations for api_config
+    // Read max_context_length from the correct nested path
     const apiConfig = contextData.api_config || payload.api_config || contextData.config;
-    const estimatedCapacity = apiConfig?.max_context_length || 8192;
+    const estimatedCapacity =
+      apiConfig?.generation_settings?.max_context_length ||
+      apiConfig?.max_context_length ||
+      8192;
     analysis.remainingCapacity = Math.max(0, estimatedCapacity - totalTokens);
     analysis.usagePercentage = Math.min(100, (totalTokens / estimatedCapacity) * 100);
+    analysis.maxContext = estimatedCapacity;
 
     return analysis;
   }, [contextData]);
@@ -209,10 +235,10 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
 
           <div className="flex items-center gap-2 mb-2">
             <div className="text-lg font-semibold">
-              {tokenAnalysis.total.toLocaleString()} tokens used
+              ~{tokenAnalysis.total.toLocaleString()} tokens used
             </div>
             <div className="text-sm text-gray-400">
-              (~{tokenAnalysis.remainingCapacity.toLocaleString()} remaining)
+              / {tokenAnalysis.maxContext?.toLocaleString()} limit (~{tokenAnalysis.remainingCapacity.toLocaleString()} remaining)
             </div>
           </div>
 
@@ -277,36 +303,53 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           <h3 className="text-sm font-medium mb-3">Token Usage Breakdown</h3>
 
           <div className="space-y-2">
-            {tokenAnalysis.memory !== undefined && (
+            {tokenAnalysis.memory !== undefined && tokenAnalysis.memory > 0 && (
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <FileText size={16} className="text-blue-400" />
-                  <span>Memory (System Prompt)</span>
+                  <span>Memory (Card + Lore + System)</span>
                 </div>
-                <div className="text-gray-300">{tokenAnalysis.memory.toLocaleString()} tokens</div>
+                <div className="text-gray-300">~{tokenAnalysis.memory.toLocaleString()} tokens</div>
               </div>
             )}
 
-            {tokenAnalysis.prompt !== undefined && (
+            {tokenAnalysis.compressed !== undefined && tokenAnalysis.compressed > 0 && (
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <FileText size={16} className="text-purple-400" />
+                  <span>Compressed Summary</span>
+                </div>
+                <div className="text-gray-300">~{tokenAnalysis.compressed.toLocaleString()} tokens</div>
+              </div>
+            )}
+
+            {tokenAnalysis.session_notes !== undefined && tokenAnalysis.session_notes > 0 && (
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <FileText size={16} className="text-yellow-400" />
+                  <span>Session Notes</span>
+                </div>
+                <div className="text-gray-300">~{tokenAnalysis.session_notes.toLocaleString()} tokens</div>
+              </div>
+            )}
+
+            {tokenAnalysis.chat_history !== undefined && tokenAnalysis.chat_history > 0 && (
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <MessageSquare size={16} className="text-green-400" />
-                  <span>Formatted Prompt</span>
+                  <span>Chat History{tokenAnalysis.message_count ? ` (${tokenAnalysis.message_count} messages)` : ''}</span>
                 </div>
-                <div className="text-gray-300">{tokenAnalysis.prompt.toLocaleString()} tokens</div>
-              </div>
-            )}
-
-            {tokenAnalysis.chat_history !== undefined && (
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <MessageSquare size={16} className="text-orange-400" />
-                  <span>Raw Chat History</span>
-                </div>
-                <div className="text-gray-300">{tokenAnalysis.chat_history.toLocaleString()} tokens</div>
+                <div className="text-gray-300">~{tokenAnalysis.chat_history.toLocaleString()} tokens</div>
               </div>
             )}
           </div>
+
+          {/* Overflow warning */}
+          {tokenAnalysis.usagePercentage > 90 && (
+            <div className="mt-3 pt-3 border-t border-stone-700 text-xs text-red-400">
+              Context is {tokenAnalysis.usagePercentage >= 100 ? 'overflowing' : 'near capacity'}. KoboldCPP will silently truncate from the front, potentially losing character card and system context.
+            </div>
+          )}
         </div>
 
         {/* API Configuration */}

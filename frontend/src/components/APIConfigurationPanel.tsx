@@ -95,15 +95,18 @@ const SamplerOrderItem: React.FC<{
   </div>
 );
 
+// KoboldCPP sampler IDs — verified against KoboldCPP source (sampling.cpp)
 const SAMPLER_ORDER_OPTIONS = [
-  { id: 6, label: 'Repetition Penalty' },
-  { id: 0, label: 'Temperature' },
-  { id: 1, label: 'Top K' },
-  { id: 3, label: 'Top P' },
-  { id: 4, label: 'TFS' },
-  { id: 2, label: 'Top A' },
-  { id: 5, label: 'Typical' }
+  { id: 0, label: 'Top K' },
+  { id: 1, label: 'Top A' },
+  { id: 2, label: 'Top P' },
+  { id: 3, label: 'TFS' },
+  { id: 4, label: 'Typical' },
+  { id: 5, label: 'Temperature' },
+  { id: 6, label: 'Repetition Penalty' }
 ];
+
+const RECOMMENDED_SAMPLER_ORDER = [6, 0, 1, 3, 4, 2, 5];
 
 const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, onUpdate }) => {
   const [expanded, setExpanded] = useState(true); // Set initial state to true
@@ -190,6 +193,14 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     setSettings(newSettings);
     onUpdate({ generation_settings: newSettings });
   };
+
+  const handleResetSamplerOrder = () => {
+    const newSettings = { ...settings, sampler_order: [...RECOMMENDED_SAMPLER_ORDER] };
+    setSettings(newSettings);
+    onUpdate({ generation_settings: newSettings });
+  };
+
+  const isDefaultSamplerOrder = JSON.stringify(settings.sampler_order) === JSON.stringify(RECOMMENDED_SAMPLER_ORDER);
 
   return (
     <div className="space-y-4 mt-4 border-t border-stone-800 pt-4">
@@ -370,7 +381,22 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
 
         {/* Sampler Order */}
         <div className="space-y-4">
-          <h4 className="text-sm text-gray-400">Sampler Order</h4>
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm text-gray-400">Sampler Order</h4>
+            {!isDefaultSamplerOrder && (
+              <button
+                onClick={handleResetSamplerOrder}
+                className="text-xs px-2 py-1 bg-amber-900/50 text-amber-400 hover:bg-amber-900/70 rounded transition-colors"
+              >
+                Reset to Recommended
+              </button>
+            )}
+          </div>
+          {!isDefaultSamplerOrder && (
+            <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-800/40 rounded px-3 py-2">
+              Non-default sampler order. Recommended: Rep Pen, Top K, Top A, TFS, Typical, Top P, Temperature
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto border border-stone-700 rounded-lg p-3 bg-stone-900">
             {settings.sampler_order.map((samplerId: number, index: number) => {
               const sampler = SAMPLER_ORDER_OPTIONS.find(s => s.id === samplerId);
