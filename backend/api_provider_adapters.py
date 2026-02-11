@@ -246,8 +246,15 @@ class KoboldCppAdapter(ApiProviderAdapter):
         rep_pen_slope = generation_settings.get('rep_pen_slope', 0.7)
         sampler_order = generation_settings.get('sampler_order', [6, 0, 1, 3, 4, 2, 5])
         
-        # DynaTemp settings
-        dynatemp_range = generation_settings.get('dynatemp_range', 0)
+        # DynaTemp settings — compute range from UI fields when available
+        # UI stores dynatemp_enabled + dynatemp_min/max; backend needs dynatemp_range
+        dynatemp_enabled = generation_settings.get('dynatemp_enabled', False)
+        if dynatemp_enabled:
+            dynatemp_min = generation_settings.get('dynatemp_min', 0.0)
+            dynatemp_max = generation_settings.get('dynatemp_max', 2.0)
+            dynatemp_range = max(0, dynatemp_max - dynatemp_min)
+        else:
+            dynatemp_range = 0
         dynatemp_exponent = generation_settings.get('dynatemp_exponent', 1)
         
         # Advanced settings

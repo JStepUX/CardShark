@@ -234,6 +234,7 @@ export class PromptHandler {
     warnDeprecation('createMemoryContext', 'ContextSerializer.createMemoryContext() or useContextSnapshot hook');
     if (DEBUG) console.log('Creating memory context with template:', template?.name || 'No template', 'User:', userName, 'Compression:', compressionLevel, 'Messages:', messageCount);
     const currentUser = userName || 'User'; // Fallback for user name
+    const characterName = character.data?.name || 'Character';
 
     // Define field mappings for all V2 spec fields
     const fieldMappings: Array<{
@@ -276,7 +277,7 @@ export class PromptHandler {
 
     // Process each field for inclusion/exclusion based on compression settings
     const fieldBreakdown: FieldTokenInfo[] = [];
-    const includedVariables: Record<string, string> = { user: currentUser };
+    const includedVariables: Record<string, string> = { user: currentUser, char: characterName };
     let totalTokens = 0;
     let savedTokens = 0;
 
@@ -318,15 +319,16 @@ export class PromptHandler {
 
     if (!template || !template.memoryFormat) {
       // Default memory format - manually build with included variables only
-      let scenario = includedVariables.scenario || '';
-      scenario = scenario.replace(/\{\{user\}\}/g, currentUser);
+      const scenario = includedVariables.scenario || '';
+      const parts: string[] = [];
+      if (includedVariables.system) parts.push(includedVariables.system);
+      if (includedVariables.description) parts.push(`Persona: ${includedVariables.description}`);
+      if (includedVariables.personality) parts.push(`Personality: ${includedVariables.personality}`);
+      if (scenario.trim()) parts.push(`[Scenario: ${scenario}]`);
+      if (includedVariables.examples) parts.push(includedVariables.examples);
+      parts.push('***');
 
-      memory = `${includedVariables.system || ''}
-Persona: ${includedVariables.description || ''}
-Personality: ${includedVariables.personality || ''}
-[Scenario: ${scenario}]
-${includedVariables.examples || ''}
-***`;
+      memory = parts.join('\n');
       if (DEBUG) console.log('Using default memory format with field expiration applied');
     } else {
       try {
@@ -336,16 +338,23 @@ ${includedVariables.examples || ''}
       } catch (error) {
         console.error('Error formatting memory context:', error);
         // Fallback to default format
-        let scenario = includedVariables.scenario || '';
-        scenario = scenario.replace(/\{\{user\}\}/g, currentUser);
-        memory = `${includedVariables.system || ''}
-Persona: ${includedVariables.description || ''}
-Personality: ${includedVariables.personality || ''}
-[Scenario: ${scenario}]
-${includedVariables.examples || ''}
-***`;
+        const fallbackScenario = includedVariables.scenario || '';
+        const fallbackParts: string[] = [];
+        if (includedVariables.system) fallbackParts.push(includedVariables.system);
+        if (includedVariables.description) fallbackParts.push(`Persona: ${includedVariables.description}`);
+        if (includedVariables.personality) fallbackParts.push(`Personality: ${includedVariables.personality}`);
+        if (fallbackScenario.trim()) fallbackParts.push(`[Scenario: ${fallbackScenario}]`);
+        if (includedVariables.examples) fallbackParts.push(includedVariables.examples);
+        fallbackParts.push('***');
+        memory = fallbackParts.join('\n');
       }
     }
+
+    // Final pass: resolve any {{user}}/{{char}} tokens inside character card field values
+    // (e.g., description contains "{{user}} is a friend" → "Doug is a friend")
+    memory = memory
+      .replace(/\{\{user\}\}/g, currentUser)
+      .replace(/\{\{char\}\}/g, characterName);
 
     const result: MemoryContextResult = {
       memory: memory.trim(),

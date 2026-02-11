@@ -759,6 +759,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
     console.log('Creating new chat');
     // Clear all state for new chat - both React state and ref for immediate consistency
     setIsLoading(true); setError(null); setCurrentChatId(null); setMessages([]);
+    setCompressedContextCache(null); // Clear stale compression from previous session
     messagesRef.current = []; // Sync ref immediately since useEffect update is async
 
     try {
@@ -897,6 +898,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       );
 
       console.log(`Chat forked: ${currentChatId} -> ${newChatId} at message index ${atMessageIndex}`);
+
+      // Clear stale compression cache — the forked session is a fresh start
+      setCompressedContextCache(null);
 
       // Load the new forked chat
       const loadResponse = await ChatStorage.loadChat(newChatId, characterData);
@@ -1662,6 +1666,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
     console.log(`Loading existing chat: ${chatIdToLoad}`);
     setIsLoading(true); setError(null); setCurrentChatId(null);
+    setCompressedContextCache(null); // Clear stale compression from previous session
     autoSaveDisabledCount.current++; // Disable saves during load
 
     try {

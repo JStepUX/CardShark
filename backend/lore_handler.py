@@ -395,15 +395,18 @@ class LoreHandler:
             memory += "\n\n"
             
         # Add character description
-        memory += f"Persona: {description}"
-        
+        if description:
+            memory += f"Persona: {description}"
+
         # Add lore after character description
         if after_char:
             memory += "\n\n" + "\n".join(after_char)
-            
-        # Add personality and scenario
-        memory += f"\nPersonality: {personality}"
-        memory += f"\nScenario: {scenario}"
+
+        # Add personality and scenario (skip empty fields)
+        if personality:
+            memory += f"\nPersonality: {personality}"
+        if scenario:
+            memory += f"\nScenario: {scenario}"
         
         # Add lore before examples
         if before_example:
@@ -504,11 +507,14 @@ class LoreHandler:
         if memory:
             memory += "\n\n"
             
-        memory += f"Persona: {description}"
-        memory += f"\nPersonality: {personality}"
-        memory += f"\nScenario: {scenario}"
-        
+        if description:
+            memory += f"Persona: {description}"
+        if personality:
+            memory += f"\nPersonality: {personality}"
+        if scenario:
+            memory += f"\nScenario: {scenario}"
+
         if examples:
             memory += f"\n\n{examples}"
-            
+
         return memory

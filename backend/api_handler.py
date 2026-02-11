@@ -813,10 +813,15 @@ class ApiHandler:
 
                 char_data = character_data.get('data', {}) if character_data else {}
                 char_name = char_data.get('name', 'Character')
-                user_name = 'User'
+                user_name = generation_params.get('user_name', 'User') or 'User'
 
                 # Clean memory: strip empty field lines from lore handler output
                 memory = clean_memory(memory or '')
+
+                # Resolve {{user}}/{{char}} template tokens in memory
+                # (lore handler rebuilds memory from raw card data with unresolved tokens)
+                if memory:
+                    memory = memory.replace('{{user}}', user_name).replace('{{char}}', char_name)
 
                 # Fold system_instruction into memory as narrative framing
                 if system_instruction:

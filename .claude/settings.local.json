@@ -59,7 +59,10 @@
       "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\character\\\\CharacterFolderView.tsx\")",
       "Bash(del \"D:\\\\Bolt-On\\\\cardshark\\\\frontend\\\\src\\\\components\\\\WorkshopPanel.tsx\")",
       "WebFetch(domain:lite.koboldai.net)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(sqlite3:*)",
+      "Bash(python:*)",
+      "Bash(npx:*)"
     ]
   }
 }
