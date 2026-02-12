@@ -594,7 +594,8 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
     compressedContextCache?: CompressedContextCache | null, // Optional: cached compression result for performance
     onCompressionStart?: () => void, // Optional: callback when compression starts
     onCompressionEnd?: () => void, // Optional: callback when compression ends
-    onPayloadReady?: (payload: any) => void // Optional: callback with the payload before sending
+    onPayloadReady?: (payload: any) => void, // Optional: callback with the payload before sending
+    continuationText?: string // Optional: for continue — partial assistant text used as generation prefix
   ): Promise<Response> {
     warnDeprecation('generateChatResponse', 'chatService.generateResponse() with ContextSerializer');
     if (!chatSessionUuid) {
@@ -743,9 +744,15 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
 
       // Inject ghost suffix to prevent model from writing user's actions/dialogue
       // This invisible turn marker nudges the model to continue as the character
+      // For continuation: append partial text so model continues mid-stream
       if (characterCard) {
-        finalPrompt += `\n${characterName}:`;
-        if (DEBUG) console.log('Ghost suffix injected:', `\\n${characterName}:`);
+        if (continuationText) {
+          finalPrompt += `\n${characterName}: ${continuationText}`;
+          if (DEBUG) console.log('Continuation prefix injected:', `\\n${characterName}: ${continuationText.slice(-50)}`);
+        } else {
+          finalPrompt += `\n${characterName}:`;
+          if (DEBUG) console.log('Ghost suffix injected:', `\\n${characterName}:`);
+        }
       }
 
       // Get stop sequences from template or use defaults
@@ -791,6 +798,7 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
           chat_session_uuid: chatSessionUuid, // Include for potential backend use
           character_data: essentialCharacterData, // Essential character data only, no lore book
           chat_history: contextMessages, // Include for backend context processing
+          ...(continuationText ? { continuation_text: continuationText } : {}), // For continue: backend uses as generation prefix
           quiet: true
         }
       };

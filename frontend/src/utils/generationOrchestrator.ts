@@ -97,6 +97,9 @@ export interface GenerationContextResult {
     /** Additional prompt instructions (e.g., for continuation) */
     additionalInstructions?: string;
 
+    /** For 'continue': the partial assistant response to use as generation prefix */
+    continuationText?: string;
+
     /** Context window metadata */
     metadata: {
         type: GenerationType;
@@ -113,7 +116,7 @@ export function buildGenerationContext(
     options: GenerationContextOptions
 ): GenerationContextResult {
     const { type } = config;
-    const { existingMessages, newUserMessage, targetMessage, includeTargetInContext, excludeMessageId } = options;
+    const { existingMessages, newUserMessage, targetMessage, excludeMessageId } = options;
 
     let contextMessages: PromptContextMessage[];
     let additionalInstructions: string | undefined;
@@ -152,7 +155,8 @@ export function buildGenerationContext(
         }
 
         case 'continue': {
-            // Continue: include messages up to and including the target message
+            // Continue: exclude the target message from context, pass its content
+            // as a generation prefix so the model continues mid-stream (like impersonate)
             if (!targetMessage) {
                 throw new Error('targetMessage required for continue');
             }
@@ -162,24 +166,11 @@ export function buildGenerationContext(
                 throw new Error('targetMessage not found in existingMessages');
             }
 
-            // Build context including the target message
-            const messagesToInclude = includeTargetInContext
-                ? existingMessages.slice(0, targetIdx + 1)
-                : existingMessages.slice(0, targetIdx);
-
+            // Exclude the target message — its content becomes the generation prefix
             contextMessages = buildContextMessages({
-                existingMessages: messagesToInclude,
+                existingMessages: existingMessages.slice(0, targetIdx),
                 excludeMessageId
             });
-
-            // Add continuation instruction
-            // Instead of injecting as a system message (which may be misplaced by templates),
-            // we'll add it as session notes which are properly positioned by PromptHandler
-            const lastPart = targetMessage.content.slice(-100);
-            additionalInstructions = `[CONTINUATION INSTRUCTION]
-The assistant's previous response was cut off. The last part was: "...${lastPart}"
-Continue the response from exactly that point. Do not repeat the existing text. Do not start a new paragraph unless necessary.
-[END CONTINUATION INSTRUCTION]`;
 
             targetMessageId = targetMessage.id;
             break;
@@ -206,6 +197,8 @@ Continue the response from exactly that point. Do not repeat the existing text. 
     return {
         contextMessages,
         additionalInstructions,
+        // For continue: pass the target message content as generation prefix
+        continuationText: type === 'continue' && targetMessage ? targetMessage.content : undefined,
         metadata: {
             type,
             messageCount: contextMessages.length,
@@ -243,7 +236,8 @@ export async function executeGeneration(
         compressedContextCache, // Added cache parameter
         onCompressionStart,
         onCompressionEnd,
-        onPayloadReady
+        onPayloadReady,
+        context.continuationText // For continue: partial text used as generation prefix
     );
 
     return response;

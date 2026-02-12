@@ -75,7 +75,12 @@ def _strip_html(text: str) -> str:
     return text.strip()
 
 
-def build_story_prompt(chat_history: List[dict], char_name: str, user_name: str = 'User') -> str:
+def build_story_prompt(
+    chat_history: List[dict],
+    char_name: str,
+    user_name: str = 'User',
+    continuation_text: str = ''
+) -> str:
     """Format raw chat messages as a plain-text transcript for KoboldCPP.
 
     Output format:
@@ -89,6 +94,7 @@ def build_story_prompt(chat_history: List[dict], char_name: str, user_name: str 
         chat_history: List of message dicts with 'role' and 'content' keys
         char_name: Character name for assistant messages
         user_name: User name for user messages
+        continuation_text: Optional partial assistant text to continue from
     """
     lines: List[str] = []
 
@@ -107,7 +113,11 @@ def build_story_prompt(chat_history: List[dict], char_name: str, user_name: str 
             lines.append(content)
 
     # End with the character's turn marker so the model continues as the character
-    lines.append(f"{char_name}:")
+    # For continuation: append partial text so model continues mid-stream
+    if continuation_text and continuation_text.strip():
+        lines.append(f"{char_name}: {_strip_html(continuation_text)}")
+    else:
+        lines.append(f"{char_name}:")
 
     return '\n'.join(lines)
 

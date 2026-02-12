@@ -24,8 +24,9 @@ import {
 import { LoreEntry, CharacterCard } from '../types/schema';
 import { buildContextMessages } from '../utils/contextBuilder';
 import { chatService, SessionSettings } from '../services/chat/chatService';
-import { stripCharacterPrefix } from '../utils/contentProcessing';
+import { stripCharacterPrefix, removeIncompleteSentences } from '../utils/contentProcessing';
 import { CompressionLevel, CompressedContextCache } from '../services/chat/chatTypes';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface ReasoningSettings {
   enabled: boolean;
@@ -93,6 +94,9 @@ export { ChatContext }; // Export the context for optional usage
 export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad?: boolean; initialSessionId?: string }> = ({ children, disableAutoLoad = false, initialSessionId }) => {
   const { characterData } = useCharacter(); const apiConfigContext = useContext(APIConfigContext);
   const apiConfig = apiConfigContext ? apiConfigContext.apiConfig : null;
+  const { settings } = useSettings();
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesRef = useRef<Message[]>(messages);
@@ -1079,14 +1083,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         }
         updateRegenMsgContent(chunk);
       }
-      if (!abortCtrl.signal.aborted && buffer.length > 0) updateRegenMsgContent('', true);
+      // Flush remaining buffer synchronously (not via timer) so post-processing
+      // sees the complete content and the timer can't overwrite cleaned results
+      if (!abortCtrl.signal.aborted) {
+        if (bufTimer) { clearTimeout(bufTimer); bufTimer = null; }
+        if (buffer.length > 0) { fullContent += buffer; buffer = ''; }
+      }
 
       // Strip character name prefix (e.g., "Bob:") that some models prepend (safety net)
       // Note: Ghost suffix stripping should handle this during streaming
       const strippedContent = stripCharacterPrefix(fullContent, charName);
+      // Apply incomplete sentence removal if enabled in settings
+      const cleanedContent = settingsRef.current?.remove_incomplete_sentences !== false
+        ? removeIncompleteSentences(strippedContent)
+        : strippedContent;
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
-          const finalFiltContent = shouldUseClientFiltering ? filterText(strippedContent) : strippedContent;
+          const finalFiltContent = shouldUseClientFiltering ? filterText(cleanedContent) : cleanedContent;
           const newVars = [...origVariations, finalFiltContent];
           return {
             ...msg,
@@ -1261,15 +1274,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         }
         updateAssistantMsgContent(chunk);
       }
-      if (!abortCtrl.signal.aborted && buffer.length > 0) updateAssistantMsgContent('', true);
+      // Flush remaining buffer synchronously (not via timer) so post-processing
+      // sees the complete content and the timer can't overwrite cleaned results
+      if (!abortCtrl.signal.aborted) {
+        if (bufTimer) { clearTimeout(bufTimer); bufTimer = null; }
+        if (buffer.length > 0) { fullContent += buffer; buffer = ''; }
+      }
 
       // Update the message status to complete and apply to React state
       // Strip character name prefix (e.g., "Bob:") that some models prepend (safety net)
       // Note: Ghost suffix stripping should handle this during streaming
       const strippedContent = stripCharacterPrefix(fullContent, charName);
+      // Apply incomplete sentence removal if enabled in settings
+      const cleanedContent = settingsRef.current?.remove_incomplete_sentences !== false
+        ? removeIncompleteSentences(strippedContent)
+        : strippedContent;
       const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? {
         ...msg,
-        content: shouldUseClientFiltering ? filterText(strippedContent) : strippedContent,
+        content: shouldUseClientFiltering ? filterText(cleanedContent) : cleanedContent,
         status: 'complete' as const
       } : msg);
       setMessages(finalMsgs); // Apply the final status update to React state
@@ -1503,7 +1525,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         {
           existingMessages: messagesRef.current,
           targetMessage: message,
-          includeTargetInContext: true,
+          includeTargetInContext: false, // Target excluded — its content is used as generation prefix
           excludeMessageId: undefined
         }
       );
@@ -1576,7 +1598,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         }
         updateContinueMsgContent(chunk);
       }
-      if (!abortCtrl.signal.aborted && buffer.length > 0) updateContinueMsgContent('', true);
+      // Flush remaining buffer synchronously (not via timer) so post-processing
+      // sees the complete content and the timer can't overwrite cleaned results
+      if (!abortCtrl.signal.aborted) {
+        if (bufTimer) { clearTimeout(bufTimer); bufTimer = null; }
+        if (buffer.length > 0) { appendedContent += buffer; buffer = ''; }
+      }
 
       // Strip character name prefix from appended content (e.g., "Bob:") that some models prepend (safety net)
       // Note: Ghost suffix stripping should handle this during streaming
@@ -1584,7 +1611,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       const finalMsgs = messagesRef.current.map(msg => {
         if (msg.id === message.id) {
           const finalCombined = origContent + strippedAppended;
-          const finalFilt = shouldUseClientFiltering ? filterText(finalCombined) : finalCombined;
+          // Apply incomplete sentence removal to the full combined content
+          const cleanedCombined = settingsRef.current?.remove_incomplete_sentences !== false
+            ? removeIncompleteSentences(finalCombined)
+            : finalCombined;
+          const finalFilt = shouldUseClientFiltering ? filterText(cleanedCombined) : cleanedCombined;
           const newVars = msg.variations ? [...msg.variations] : [origContent];
           newVars[msg.currentVariation ?? newVars.length - 1] = finalFilt;
           return { ...msg, content: finalFilt, variations: newVars };

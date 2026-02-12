@@ -817,13 +817,14 @@ class ApiHandler:
                     original_prompt = prompt or ''
                     session_notes = extract_block(original_prompt, '[Session Notes]', '[End Session Notes]')
                     compressed = extract_block(original_prompt, '[Previous Events Summary]', '[End Summary')
+                    continuation_text = generation_params.get('continuation_text', '')
 
                     prompt = ''
                     if compressed:
                         prompt += compressed + '\n\n'
                     if session_notes:
                         prompt += f'[Session Notes]\n{session_notes}\n[End Session Notes]\n\n'
-                    prompt += build_story_prompt(raw_history, char_name, user_name)
+                    prompt += build_story_prompt(raw_history, char_name, user_name, continuation_text)
 
                 # Set clean stop sequences
                 stop_sequence = build_story_stop_sequences(char_name, user_name)
