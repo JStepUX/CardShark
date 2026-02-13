@@ -212,9 +212,22 @@ class CharacterSyncService:
             else:
                 extensions["cardshark_folder"] = "Characters"
 
+        # Get or generate UUID, write back to PNG if generated
+        char_uuid = data_section.get("character_uuid")
+        if not char_uuid:
+            char_uuid = str(uuid.uuid4())
+            self.logger.log_info(f"Generated new UUID {char_uuid} for {relative_path}")
+            # Write UUID back to PNG so it persists across DB resets
+            try:
+                metadata.setdefault("data", data_section)["character_uuid"] = char_uuid
+                self.png_handler.write_metadata_to_png(str(file_path.resolve()), metadata)
+                self.logger.log_info(f"Wrote UUID {char_uuid} back to PNG: {relative_path}")
+            except Exception as write_err:
+                self.logger.log_warning(f"Could not write UUID back to PNG {relative_path}: {write_err}")
+
         # Create new Character record
         char_data = {
-            "character_uuid": data_section.get("character_uuid") or str(uuid.uuid4()),
+            "character_uuid": char_uuid,
             "name": data_section.get("name", file_path.stem),
             "description": data_section.get("description"),
             "personality": data_section.get("personality"),
@@ -311,7 +324,8 @@ class CharacterSyncService:
             if not char.png_file_path:
                 continue
                 
-            full_path = self.characters_dir / char.png_file_path
+            # png_file_path is stored as absolute path, use it directly
+            full_path = Path(char.png_file_path)
             if not full_path.exists():
                 self.logger.log_warning(f"Character file missing: {char.png_file_path}. Marking as archived/missing.")
                 # For now, we might just log it, or we could add an 'is_missing' flag to the model.

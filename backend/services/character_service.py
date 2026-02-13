@@ -148,7 +148,7 @@ class CharacterService:
                  return False
 
             abs_png_path = normalize_path(str(png_file.resolve()))
-            file_mod_time = datetime.datetime.fromtimestamp(png_file.stat().st_mtime)
+            file_mod_time = datetime.datetime.utcfromtimestamp(png_file.stat().st_mtime)
             
             with self._get_session_context() as db:
                 existing_char = db.query(CharacterModel).filter(CharacterModel.png_file_path == abs_png_path).first()
@@ -196,8 +196,14 @@ class CharacterService:
             elif not final_char_uuid:
                 final_char_uuid = str(uuid.uuid4())
                 self.logger.log_info(f"Generated new UUID {final_char_uuid} for {abs_png_path}")
-                # ImageStorageService will create lore image directory when needed
-                # TODO: Consider a mechanism to write this new UUID back to the PNG.
+                # Write UUID back to PNG so it persists across DB resets
+                if not is_incomplete_char and metadata and metadata.get("data"):
+                    try:
+                        metadata["data"]["character_uuid"] = final_char_uuid
+                        self.png_handler.write_metadata_to_png(abs_png_path, metadata)
+                        self.logger.log_info(f"Wrote UUID {final_char_uuid} back to PNG: {abs_png_path}")
+                    except Exception as write_err:
+                        self.logger.log_warning(f"Could not write UUID back to PNG {abs_png_path}: {write_err}")
 
             with self._get_session_context() as db:
                 if existing_char: # Update existing
@@ -357,7 +363,9 @@ class CharacterService:
         return db.query(CharacterModel).filter(CharacterModel.character_uuid == character_uuid).first()
 
     def get_character_by_path(self, png_file_path: str, db: Session) -> Optional[CharacterModel]:
-        return db.query(CharacterModel).filter(CharacterModel.png_file_path == str(Path(png_file_path).resolve())).first()
+        from backend.utils.path_utils import normalize_path
+        normalized = normalize_path(str(Path(png_file_path).resolve()))
+        return db.query(CharacterModel).filter(CharacterModel.png_file_path == normalized).first()
 
     def delete_character_by_path(self, png_file_path: str, delete_png_file: bool = False) -> bool:
         """Deletes a character by its PNG file path. If not found in DB, optionally deletes the file."""

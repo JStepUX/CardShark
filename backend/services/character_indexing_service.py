@@ -120,9 +120,9 @@ class CharacterIndexingService:
 
                     files_found.add(normalized_file_path)
                     
-                    # Get file modification time
+                    # Get file modification time (use UTC to match db_metadata_last_synced_at which stores utcnow())
                     try:
-                        file_mod_time = datetime.datetime.fromtimestamp(png_file.stat().st_mtime)
+                        file_mod_time = datetime.datetime.utcfromtimestamp(png_file.stat().st_mtime)
                     except (OSError, IOError):
                         continue
                     
@@ -230,22 +230,13 @@ class CharacterIndexingService:
             
             # Determine if this is an incomplete character (no valid metadata)
             is_incomplete = not metadata or not metadata.get("data")
-            
+
             if is_incomplete:
                 self.logger.log_info(f"No valid metadata in {file_path} - creating incomplete character stub for editing.")
-            
-            # Extract or generate UUID
-            character_uuid = await to_thread(
-                self.deduplication_service.extract_uuid_from_png, abs_file_path
-            )
-            if not character_uuid:
-                import uuid
-                character_uuid = str(uuid.uuid4())
-                self.logger.log_info(f"Generated new UUID {character_uuid} for {file_path}")
-            
+
             if is_new:
                 # Create database record pointing to the existing file (avoid filename collision logic)
-                await self._create_database_record_for_existing_file(file_path, metadata, is_incomplete)
+                await self._create_database_record_for_existing_file(abs_file_path, metadata, is_incomplete)
                 self.logger.log_info(f"Added new character: {file_path}{' (incomplete)' if is_incomplete else ''}")
             else:
                 # Update existing character — lookup + update in a single sync call with db session
@@ -329,20 +320,34 @@ class CharacterIndexingService:
                 else:
                     char_name = stem_name
             
-            # Get or generate UUID
-            abs_file_path = str(Path(file_path).resolve())
+            # Normalize path for consistent DB storage (lowercase on Windows)
+            abs_file_path = normalize_path(str(Path(file_path).resolve()))
             char_uuid = None
-            
+            uuid_was_generated = False
+
             # Only try to extract UUID from PNG if we have valid metadata
             if not is_incomplete:
                 char_uuid = await to_thread(
                     self.deduplication_service.extract_uuid_from_png, abs_file_path
                 )
-            
+
             if not char_uuid:
                 char_uuid = str(uuid.uuid4())
+                uuid_was_generated = True
                 self.logger.log_info(f"Generated new UUID {char_uuid} for character: {char_name}")
-            
+
+            # Write generated UUID back to PNG so it persists across DB resets
+            if uuid_was_generated and not is_incomplete and metadata and metadata.get("data"):
+                try:
+                    metadata["data"]["character_uuid"] = char_uuid
+                    await to_thread(
+                        self.character_service.png_handler.write_metadata_to_png,
+                        abs_file_path, metadata
+                    )
+                    self.logger.log_info(f"Wrote UUID {char_uuid} back to PNG: {abs_file_path}")
+                except Exception as write_err:
+                    self.logger.log_warning(f"Could not write UUID back to PNG {abs_file_path}: {write_err}")
+
             # Check for UUID duplicates
             uuid_duplicate = await to_thread(
                 self._check_uuid_duplicate, char_uuid, abs_file_path
@@ -352,7 +357,7 @@ class CharacterIndexingService:
                     f"Found UUID duplicate: {uuid_duplicate.png_file_path} and {abs_file_path} "
                     f"both have UUID {char_uuid}"
                 )
-            
+
             def _as_json_str(data):
                 """Helper to safely convert data to JSON string"""
                 if data is None:
@@ -363,7 +368,7 @@ class CharacterIndexingService:
                     return json.dumps(data)
                 except (TypeError, ValueError):
                     return str(data)
-            
+
             db_char = CharacterModel(
                 character_uuid=char_uuid,
                 name=char_name,
