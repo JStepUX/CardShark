@@ -1289,9 +1289,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
       const cleanedContent = settingsRef.current?.remove_incomplete_sentences !== false
         ? removeIncompleteSentences(strippedContent)
         : strippedContent;
+      const finalContent = shouldUseClientFiltering ? filterText(cleanedContent) : cleanedContent;
       const finalMsgs = messagesRef.current.map(msg => msg.id === assistantMsgId ? {
         ...msg,
-        content: shouldUseClientFiltering ? filterText(cleanedContent) : cleanedContent,
+        content: finalContent,
+        variations: [finalContent],
+        currentVariation: 0,
         status: 'complete' as const
       } : msg);
       setMessages(finalMsgs); // Apply the final status update to React state

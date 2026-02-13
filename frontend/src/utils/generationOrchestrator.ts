@@ -224,11 +224,14 @@ export async function executeGeneration(
             : context.additionalInstructions;
     }
 
+    // Thread generation type to backend for LogitShaper (regenerate/continue = non-advancing)
+    const enrichedApiConfig = { ...apiConfig, _generation_type: config.type };
+
     // Use PromptHandler to generate the response
     const response = await PromptHandler.generateChatResponse(
         chatSessionUuid,
         context.contextMessages,
-        apiConfig,
+        enrichedApiConfig,
         signal,
         characterData,
         effectiveSessionNotes,

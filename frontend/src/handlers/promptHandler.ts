@@ -799,6 +799,7 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
           character_data: essentialCharacterData, // Essential character data only, no lore book
           chat_history: contextMessages, // Include for backend context processing
           ...(continuationText ? { continuation_text: continuationText } : {}), // For continue: backend uses as generation prefix
+          generation_type: apiConfig._generation_type || 'generate', // LogitShaper: distinguish regen/continue from new turns
           quiet: true
         }
       };

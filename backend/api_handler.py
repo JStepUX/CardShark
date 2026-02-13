@@ -936,6 +936,23 @@ class ApiHandler:
                 self.logger.log_step("Using Featherless-specific streaming start handling")
                 yield f"data: {json.dumps({'content': '', 'streaming_start': True})}\n\n".encode('utf-8')
             
+            # ── LogitShaper: inject word-level bans for KoboldCPP ────────
+            logit_shaper = None
+            chat_session_uuid = generation_params.get('chat_session_uuid')
+            if is_kobold and chat_session_uuid:
+                try:
+                    from backend.logit_shaper import get_or_create_shaper
+                    logit_shaper = get_or_create_shaper(chat_session_uuid)
+                    shaper_bans = logit_shaper.get_banned_tokens()
+                    if shaper_bans:
+                        existing_bans = current_generation_settings.get('banned_tokens', [])
+                        merged = list(set(existing_bans + shaper_bans))
+                        current_generation_settings['banned_tokens'] = merged
+                        self.logger.log_step(f"LogitShaper: injected {len(shaper_bans)} bans → {shaper_bans}")
+                except Exception as shaper_err:
+                    self.logger.log_warning(f"LogitShaper pre-gen error: {shaper_err}")
+            # ── End LogitShaper pre-gen ───────────────────────────────────
+
             # Use our adapter system to handle the stream generation
             self.logger.log_step(f"Attempting to call adapter.stream_generate for {provider}...")
             adapter_generator = adapter.stream_generate(
@@ -953,6 +970,7 @@ class ApiHandler:
             chunk_count = 0
             has_yielded_content = False
             thinking_filter = ThinkingTagFilter()
+            response_text_parts = []  # LogitShaper: accumulate full response text
 
             for chunk in adapter_generator:
                 chunk_count += 1
@@ -971,6 +989,23 @@ class ApiHandler:
                     if filtered_chunk is not None:
                         if chunk_count % 50 == 0:  # Log every 50 chunks
                             self.logger.log_step(f"Yielding chunk {chunk_count} from adapter generator...")
+                        # LogitShaper: extract text content from SSE chunk for post-stream analysis
+                        if logit_shaper is not None:
+                            try:
+                                chunk_str = filtered_chunk.decode('utf-8') if isinstance(filtered_chunk, bytes) else filtered_chunk
+                                for sse_line in chunk_str.split('\n'):
+                                    if sse_line.startswith('data: '):
+                                        sse_data = sse_line[6:]
+                                        if sse_data.strip() and sse_data.strip() != '[DONE]':
+                                            try:
+                                                parsed = json.loads(sse_data)
+                                                text_fragment = parsed.get('content') or parsed.get('token') or ''
+                                                if text_fragment:
+                                                    response_text_parts.append(text_fragment)
+                                            except (json.JSONDecodeError, ValueError):
+                                                pass
+                            except Exception:
+                                pass  # Never interfere with streaming
                         yield filtered_chunk
                         has_yielded_content = True
 
@@ -980,6 +1015,24 @@ class ApiHandler:
                 yield f"data: {json.dumps({'content': flush_text})}\n\n".encode('utf-8')
 
             self.logger.log_step(f"Finished iterating adapter generator. Total chunks yielded: {chunk_count}")
+
+            # ── LogitShaper: analyze completed response ──────────────────
+            if logit_shaper is not None and response_text_parts:
+                try:
+                    full_response = ''.join(response_text_parts)
+                    gen_type = generation_params.get('generation_type', 'generate')
+                    is_regen = gen_type in ('regenerate', 'continue')
+                    logit_shaper.analyze_output(full_response, is_regeneration=is_regen)
+                    active_bans = logit_shaper.get_banned_tokens()
+                    self.logger.log_step(
+                        f"LogitShaper: analyzed {len(full_response)} chars (type={gen_type}), "
+                        f"turn={logit_shaper.current_turn_number}, "
+                        f"active_bans={active_bans if active_bans else '(none)'}"
+                    )
+                except Exception as shaper_err:
+                    self.logger.log_warning(f"LogitShaper post-gen error: {shaper_err}")
+            # ── End LogitShaper post-gen ──────────────────────────────────
+
             # No explicit return needed here as yielding handles the generator response
             
         except ValueError as ve:
