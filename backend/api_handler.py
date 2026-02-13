@@ -468,7 +468,7 @@ class ApiHandler:
                      'n', 'max_context_length', 'max_length', 'rep_pen', 'temperature',
                      'top_p', 'top_k', 'top_a', 'typical', 'tfs', 'rep_pen_range',
                      'rep_pen_slope', 'sampler_order', 'min_p', 'dynatemp_range',
-                     'dynatemp_exponent', 'smoothing_factor', 'presence_penalty', 'logit_bias',
+                     'dynatemp_exponent', 'smoothing_factor', 'presence_penalty', 'frequency_penalty', 'logit_bias',
                      'use_default_badwordsids', 'mirostat', 'mirostat_tau', 'mirostat_eta' # Add other known params
                  ]
                  relevant_settings = {k: v for k, v in generation_settings.items() if k in known_params}

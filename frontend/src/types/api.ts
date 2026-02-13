@@ -20,6 +20,7 @@ export interface GenerationSettings {
   dynatemp_exponent?: number;
   smoothing_factor?: number;
   presence_penalty?: number;
+  frequency_penalty?: number;
   reasoning_model?: boolean;
 }
 
@@ -44,7 +45,8 @@ export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
   dynatemp_range: 0,
   dynatemp_exponent: 1,
   smoothing_factor: 0,
-  presence_penalty: 0
+  presence_penalty: 0.10,
+  frequency_penalty: 0.05
 };
 
 export enum APIProvider {

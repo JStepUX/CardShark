@@ -1,7 +1,7 @@
 // components/APIConfigurationPanel.tsx
 // Component for displaying and updating API configuration settings
 import React, { useState, useEffect } from 'react';
-import { ChevronUp, ChevronDown, Sliders } from 'lucide-react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { APIConfig, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 
 interface APIConfigurationPanelProps {
@@ -109,7 +109,6 @@ const SAMPLER_ORDER_OPTIONS = [
 const RECOMMENDED_SAMPLER_ORDER = [6, 0, 1, 3, 4, 2, 5];
 
 const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, onUpdate }) => {
-  const [expanded, setExpanded] = useState(true); // Set initial state to true
   const d = DEFAULT_GENERATION_SETTINGS;
 
   const buildSettings = (gen?: Record<string, unknown>) => ({
@@ -125,6 +124,8 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
     rep_pen: (gen?.rep_pen as number) ?? d.rep_pen!,
     rep_pen_range: (gen?.rep_pen_range as number) ?? d.rep_pen_range!,
     rep_pen_slope: (gen?.rep_pen_slope as number) ?? d.rep_pen_slope!,
+    presence_penalty: (gen?.presence_penalty as number) ?? d.presence_penalty!,
+    frequency_penalty: (gen?.frequency_penalty as number) ?? d.frequency_penalty!,
     sampler_order: (gen?.sampler_order as number[]) ?? [...d.sampler_order!],
     dynatemp_enabled: (gen?.dynatemp_enabled as boolean) ?? false,
     dynatemp_min: (gen?.dynatemp_min as number) ?? 0.0,
@@ -168,19 +169,7 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
   const isDefaultSamplerOrder = JSON.stringify(settings.sampler_order) === JSON.stringify(RECOMMENDED_SAMPLER_ORDER);
 
   return (
-    <div className="space-y-4 mt-4 border-t border-stone-800 pt-4">
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 text-gray-300 hover:text-white py-2"
-        >
-          <Sliders size={18} />
-          <span className="text-md font-medium">Generation Settings</span>
-          {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-      </div>
-
-      <div className={`space-y-6 pt-2 transition-expand ${expanded ? 'expanded' : ''}`}>
+    <div className="space-y-6 mt-2">
         {/* Basic Settings */}
         <div className="space-y-4">
           <h4 className="text-sm text-gray-400">Basic Parameters</h4>
@@ -341,6 +330,26 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
               tooltip="Adjusts how penalty scales with distance"
               width="w-full"
             />
+            <NumberField
+              label="Presence Penalty"
+              value={settings.presence_penalty}
+              onChange={val => handleSettingChange('presence_penalty', val)}
+              min={-2}
+              max={2}
+              step={0.05}
+              tooltip="Penalizes tokens that have appeared at all (OpenAI-style)"
+              width="w-full"
+            />
+            <NumberField
+              label="Frequency Penalty"
+              value={settings.frequency_penalty}
+              onChange={val => handleSettingChange('frequency_penalty', val)}
+              min={-2}
+              max={2}
+              step={0.05}
+              tooltip="Penalizes tokens proportionally to how often they appeared (OpenAI-style)"
+              width="w-full"
+            />
           </div>
         </div>
 
@@ -434,7 +443,6 @@ const APIConfigurationPanel: React.FC<APIConfigurationPanelProps> = ({ config, o
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 };

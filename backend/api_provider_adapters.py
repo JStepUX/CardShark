@@ -259,6 +259,7 @@ class KoboldCppAdapter(ApiProviderAdapter):
         
         # Advanced settings
         presence_penalty = generation_settings.get('presence_penalty', 0)
+        frequency_penalty = generation_settings.get('frequency_penalty', 0)
         smoothing_factor = generation_settings.get('smoothing_factor', 0)
         
         # Extract word filtering settings if available
@@ -300,7 +301,8 @@ class KoboldCppAdapter(ApiProviderAdapter):
             "dynatemp_exponent": dynatemp_exponent,
             "smoothing_factor": smoothing_factor,
             "presence_penalty": presence_penalty,
-            
+            "frequency_penalty": frequency_penalty,
+
             # Additional metadata fields
             "banned_tokens": banned_tokens,
             "render_special": False,
@@ -581,7 +583,7 @@ class OllamaAdapter(ApiProviderAdapter):
         if max_tokens:
             data["max_tokens"] = max_tokens
 
-        for param in ["temperature", "top_p", "presence_penalty"]:
+        for param in ["temperature", "top_p", "presence_penalty", "frequency_penalty"]:
             if param in actual_settings and actual_settings[param] is not None:
                 data[param] = actual_settings[param]
 
@@ -692,11 +694,12 @@ class OpenAIAdapter(ApiProviderAdapter):
         temperature = generation_settings.get('temperature', 0.7)
         top_p = generation_settings.get('top_p', 0.9)
         presence_penalty = generation_settings.get('presence_penalty', 0)
+        frequency_penalty = generation_settings.get('frequency_penalty', 0)
         model = generation_settings.get('model', 'gpt-3.5-turbo')
-        
+
         # Extract logit_bias settings if available
         logit_bias = generation_settings.get('logit_bias', {})
-        
+
         # Create the OpenAI request format
         data = {
             "model": model,
@@ -705,6 +708,7 @@ class OpenAIAdapter(ApiProviderAdapter):
             "temperature": temperature,
             "top_p": top_p,
             "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
             "stop": stop_sequence,
             "stream": True
         }
