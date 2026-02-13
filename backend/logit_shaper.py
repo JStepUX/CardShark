@@ -51,6 +51,10 @@ def _is_protected(word: str, text: str) -> bool:
     if len(word) <= _MIN_WORD_LENGTH - 1:
         return True
 
+    # Contractions (don't, won't, can't, etc.) — always protected
+    if "'" in word:
+        return True
+
     # Check if the word appears capitalized mid-sentence (proper noun heuristic).
     # A "sentence start" is after . ! ? or start-of-string, followed by optional whitespace.
     # If the word ONLY appears at sentence starts, it's not a proper noun — not protected.
@@ -140,12 +144,13 @@ class LogitShaper:
             if len(self.turn_buffer) > WINDOW_SIZE:
                 self.turn_buffer = self.turn_buffer[-WINDOW_SIZE:]
 
-        # Decay existing bans
-        self._decay_bans()
-
-        # Detect new bans (only when we have a full window)
-        if len(self.turn_buffer) >= WINDOW_SIZE:
-            self._detect_new_bans()
+            # Decay and detect only on new turns — regens don't advance the
+            # counter so running decay there would be redundant at best and
+            # could prematurely expire bans at worst (post-gen of the last
+            # active turn removes the ban before a regen can benefit from it).
+            self._decay_bans()
+            if len(self.turn_buffer) >= WINDOW_SIZE:
+                self._detect_new_bans()
 
     def get_banned_tokens(self) -> List[str]:
         """Return the current list of banned words for KoboldCPP."""

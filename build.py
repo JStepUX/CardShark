@@ -363,7 +363,7 @@ hidden_imports = [    # Core FastAPI and dependencies
     'psutil._pswindows',
     'psutil._psplatform',
     
-    # Backend modules - only include ones that exist
+    # Backend modules - synced with filesystem 2026-02-12
     'backend',
     'backend.api_handler',
     'backend.api_provider_adapters',
@@ -371,71 +371,112 @@ hidden_imports = [    # Core FastAPI and dependencies
     'backend.backyard_handler',
     'backend.batch_converter',
     'backend.character_validator',
-    'backend.chat_handler',
     'backend.content_filter_manager',
-    'backend.content_filter_endpoints',
     'backend.database',
     'backend.database_migrations',
+    'backend.dependencies',
+    'backend.enhanced_error_handling',
+    'backend.error_handlers',
     'backend.errors',
     'backend.kobold_prompt_builder',
-    'backend.koboldcpp_manager',
     'backend.koboldcpp_handler',
+    'backend.koboldcpp_manager',
     'backend.log_manager',
+    'backend.logit_shaper',
     'backend.lore_handler',
-    'backend.lore_endpoints',
     'backend.network_server',
-    'backend.png_handler',
     'backend.png_debug_handler',
+    'backend.png_handler',
     'backend.png_metadata_handler',
+    'backend.response_models',
     'backend.room_card_endpoint',
+    'backend.schemas',
     'backend.settings_manager',
     'backend.sql_models',
     'backend.template_handler',
-    'backend.world_state_manager',
-    'backend.schemas', # Added
-      # All endpoint files
+    'backend.world_asset_handler',
+
+    # Endpoint files (root level)
     'backend.background_endpoints',
     'backend.character_endpoints',
+    'backend.character_image_endpoints',
     'backend.chat_endpoints',
     'backend.content_filter_endpoints',
+    'backend.file_upload_endpoints',
+    'backend.gallery_endpoints',
+    'backend.generation_endpoints',
+    'backend.health_endpoints',
     'backend.lore_endpoints',
-    'backend.npc_room_assignment_endpoints', # Added
+    'backend.npc_room_assignment_endpoints',
+    'backend.room_endpoints',
     'backend.settings_endpoints',
     'backend.template_endpoints',
     'backend.user_endpoints',
+    'backend.world_asset_endpoints',
     'backend.world_chat_endpoints',
-    'backend.world_endpoints',
-    'backend.room_endpoints', # Added based on file listing, was missing
-    
+
+    # Endpoints subdirectory
+    'backend.endpoints.adventure_log_endpoints',
+    'backend.endpoints.room_card_endpoints',
+    'backend.endpoints.world_progress_endpoints',
+
     # Handlers subdirectory
     'backend.handlers',
-    'backend.handlers.world_card_chat_handler',
-    'backend.handlers.world_state_handler',
     'backend.handlers.background_api',
+    'backend.handlers.character_image_handler',
+    'backend.handlers.room_card_handler',
+    'backend.handlers.world_card_chat_handler',
     'backend.handlers.world_chat_handler',
 
     # Services subdirectory
-    'backend.services.character_indexing_service', # Added based on file listing, was missing
-    'backend.services.character_service', # Added based on file listing, was missing
-    'backend.services.character_sync_service',  # Character file-to-DB sync at startup
-    'backend.services.default_world_service',   # Demo world provisioning
-    'backend.services.image_storage_service', # Added for unified image storage
-    'backend.services.chat_service', # Added
-    'backend.services.lore_activation_tracker', # Added for lore temporal effects (sticky/cooldown/delay)
-    'backend.services.npc_room_assignment_service', # Added
-    'backend.services.room_service', # Added
-    'backend.services.world_service', # Added
+    'backend.services.adventure_log_service',
+    'backend.services.character_indexing_service',
+    'backend.services.character_lore_service',
+    'backend.services.character_service',
+    'backend.services.character_sync_service',
+    'backend.services.chat_db_manager',
+    'backend.services.chat_models',
+    'backend.services.chat_service',
+    'backend.services.database_chat_endpoint_adapters',
+    'backend.services.default_world_service',
+    'backend.services.image_storage_service',
+    'backend.services.lore_activation_tracker',
+    'backend.services.npc_room_assignment_service',
+    'backend.services.reliable_chat_manager_db',
+    'backend.services.room_service',
+    'backend.services.summarization_service',
+    'backend.services.user_profile_service',
+    'backend.services.world_card_service',
+    'backend.services.world_export_service',
+    'backend.services.world_progress_service',
+    'backend.services.world_service',
 
-    # Models, Utils, and WorldCards subdirectories
+    # Models subdirectory
     'backend.models',
+    'backend.models.adventure_log',
     'backend.models.character_data',
+    'backend.models.folder_models',
+    'backend.models.room_card',
+    'backend.models.session_settings',
+    'backend.models.world_card',
+    'backend.models.world_data',
+    'backend.models.world_progress',
     'backend.models.world_state',
+
+    # Utils subdirectory
     'backend.utils',
+    'backend.utils.constants',
+    'backend.utils.cross_drive_static_files',
+    'backend.utils.jsonl_chat_utils',
     'backend.utils.location_extractor',
+    'backend.utils.path_utils',
     'backend.utils.user_dirs',
     'backend.utils.worldcard_location_utils',
+
+    # Worldcards subdirectory
     'backend.worldcards',
-    'backend.worldcards.errors',    'backend.worldcards.storage',    
+    'backend.worldcards.errors',
+    'backend.worldcards.storage',
     
     # Other important dependencies
     'email_validator',
