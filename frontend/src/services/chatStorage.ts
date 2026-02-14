@@ -158,6 +158,7 @@ export class ChatStorage {
     messages: any[],
     partialMessage: string = '',
     userName: string = 'User',
+    userDescription: string = '',
     onChunk?: (chunk: string) => void
   ): Promise<{ success: boolean; response?: string; message?: string }> {
     try {
@@ -173,6 +174,7 @@ export class ChatStorage {
           messages: messages,
           partial_message: partialMessage,
           user_name: userName,
+          ...(userDescription ? { user_persona: userDescription } : {}),
           prompt_template: promptService.getPrompt('impersonate')
         })
       });

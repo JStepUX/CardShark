@@ -127,9 +127,9 @@ frontend/src/
 
 ### Data Directories
 
-- `characters/` - Character PNG files with embedded metadata
-- `characters/worlds/` - World PNG cards (V2 format)
-- `characters/rooms/` - Room PNG cards (V2 format)
+- `characters/` - Character PNG files with embedded metadata (configurable via `character_directory` in `settings.json` / Settings > General > Character Folder Path)
+- `characters/worlds/` - World PNG cards (V2 format, always relative to the character directory)
+- `characters/rooms/` - Room PNG cards (V2 format, always relative to the character directory)
 - `backgrounds/` - Background images with metadata.json
 - `users/` - User profile PNGs
 - `templates/` - Chat prompt templates (JSON)

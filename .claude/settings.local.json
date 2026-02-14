@@ -63,7 +63,8 @@
       "Bash(sqlite3:*)",
       "Bash(python:*)",
       "Bash(npx:*)",
-      "Bash(node /d/Bolt-On/cardshark/test_trim.js:*)"
+      "Bash(node /d/Bolt-On/cardshark/test_trim.js:*)",
+      "Bash(cat:*)"
     ]
   }
 }

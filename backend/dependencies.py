@@ -13,6 +13,7 @@ from .png_metadata_handler import PngMetadataHandler
 
 # Service dependencies
 from .services.character_service import CharacterService
+from .services.character_lore_service import CharacterLoreService
 from .services.character_sync_service import CharacterSyncService
 from .services.character_sync_service import CharacterSyncService
 from .services.reliable_chat_manager_db import DatabaseReliableChatManager
@@ -64,11 +65,14 @@ def get_character_service_dependency(request: Request) -> CharacterService:
     settings_manager = get_settings_manager(request)
     logger = get_logger(request)
 
+    lore_service = getattr(request.app.state, 'lore_service', None)
+
     return CharacterService(
         db_session_generator=get_db,
         png_handler=png_handler,
         settings_manager=settings_manager,
-        logger=logger
+        logger=logger,
+        lore_service=lore_service
     )
 
 def get_character_sync_service_dependency(request: Request) -> CharacterSyncService:

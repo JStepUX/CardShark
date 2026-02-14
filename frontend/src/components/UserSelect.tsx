@@ -456,7 +456,8 @@ const UserSelect: React.FC<UserSelectProps> = ({
             </div>
             <div>
                 <label htmlFor="new-user-desc" className="block text-sm font-medium text-gray-300 mb-1">Description (Optional)</label>
-                <textarea id="new-user-desc" value={newUserDescription} onChange={(e) => setNewUserDescription(e.target.value)} className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 h-20 resize-none focus:outline-none text-white placeholder-slate-500" placeholder="Enter description (optional)"/>
+                <textarea id="new-user-desc" value={newUserDescription} onChange={(e) => { if (e.target.value.length <= 500) setNewUserDescription(e.target.value); }} maxLength={500} className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 h-20 resize-none focus:outline-none text-white placeholder-slate-500" placeholder="Describe your appearance — things a character would notice (height, hair, eyes, build, etc.)"/>
+                <div className={`text-xs mt-1 text-right ${newUserDescription.length > 480 ? 'text-red-400' : newUserDescription.length > 450 ? 'text-yellow-400' : 'text-gray-500'}`}>{newUserDescription.length}/500</div>
             </div>
             {/* Error Message within Dialog */}
             {error && !deleteError && (

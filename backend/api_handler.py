@@ -780,6 +780,13 @@ class ApiHandler:
                 )
                 self.logger.log_step(f"Built memory from character_data ({len(memory)} chars, {len(matched_entries)} matched lore, {len(active_sticky_entries)} sticky, {len(excluded_fields)} excluded fields)")
 
+            # Inject user persona block at end of memory (after character identity, before system_instruction)
+            user_persona = generation_params.get('user_persona', '')
+            if user_persona and user_persona.strip():
+                persona_block = f"\n\n[About {user_name}]\n{user_persona.strip()}\n[End About {user_name}]"
+                memory = (memory or '') + persona_block
+                self.logger.log_step(f"Injected user persona for '{user_name}' ({len(user_persona.strip())} chars)")
+
             # Prepend system_instruction to memory for non-KoboldCPP providers
             # (KoboldCPP uses fold_system_instruction in its own path below)
             if system_instruction and not is_kobold:

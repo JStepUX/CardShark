@@ -32,7 +32,14 @@ COMPLETED: [task summary]
 DELIVERABLES: [what you produced, where it lives]
 DECISIONS: [any judgment calls you made]
 NOTES FOR COORDINATOR: [follow-ups, observations, potential issues]
+SIGNAL: GREEN | YELLOW | RED
 ```
+
+## Signal Meanings
+**GREEN** - Done, no plan impact.
+**YELLOW** - Done, but findings affect downstream tasks. Add `PLAN IMPACT:` explaining what and which tasks.
+**RED** - Blocked or completed with workarounds that conflict with constraints. Add `PLAN IMPACT:` explaining what the coordinator should reconsider.
+
 
 ## Spawning Scouts
 

@@ -1434,6 +1434,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
 
     try {
       const userName = currentUser?.name || 'User';
+      const userDescription = currentUser?.description?.trim() || '';
 
       // Get messages for context (exclude system messages)
       const contextMessages = messagesRef.current.filter(m => m.role !== 'system' && m.role !== 'thinking');
@@ -1444,6 +1445,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode; disableAutoLoad
         contextMessages,
         partialMessage,
         userName,
+        userDescription,
         onChunk
       );
 

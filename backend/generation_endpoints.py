@@ -199,6 +199,7 @@ async def generate_impersonate(request: Request):
         messages = request_data.get('messages', [])  # Chat history
         partial_message = request_data.get('partial_message', '')  # User's partial input
         user_name = request_data.get('user_name', 'User')
+        user_persona = request_data.get('user_persona', '')
         prompt_template = request_data.get('prompt_template')
 
         if not character_data:
@@ -277,6 +278,8 @@ async def generate_impersonate(request: Request):
                 "memory": full_memory,
                 "stop_sequence": [f"{char_name}:", "</s>", "\n\n"],
                 "character_data": character_data,
+                "user_name": user_name,
+                "user_persona": user_persona,
                 "quiet": True
             }
         }

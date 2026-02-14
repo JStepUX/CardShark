@@ -18,6 +18,7 @@
 // handlers/promptHandler.ts
 import { CharacterCard } from '../types/schema';
 import { templateService } from '../services/templateService';
+import { ChatStorage } from '../services/chatStorage';
 import { Template } from '../types/templateTypes';
 import {
   CompressionLevel,
@@ -785,6 +786,10 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         }
       } : null;
 
+      const currentUserProfile = ChatStorage.getCurrentUser();
+      const resolvedUserName = currentUserProfile?.name || 'User';
+      const userPersona = currentUserProfile?.description?.trim() || '';
+
       const payload = {
         api_config: apiConfig,
         generation_params: {
@@ -793,7 +798,8 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
           prompt: finalPrompt,
           // Backend builds memory from character_data — send excluded_fields instead
           excluded_fields: excludedFields,
-          user_name: 'User',
+          user_name: resolvedUserName,
+          ...(userPersona ? { user_persona: userPersona } : {}),
           stop_sequence: stopSequences,
           chat_session_uuid: chatSessionUuid, // Include for potential backend use
           character_data: essentialCharacterData, // Essential character data only, no lore book
