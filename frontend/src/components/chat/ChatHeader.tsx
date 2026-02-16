@@ -5,7 +5,7 @@
  * @consumers ChatView.tsx
  */
 import React from 'react';
-import { Eye, Wallpaper, MessageSquare, Plus } from 'lucide-react';
+import { Eye, Wallpaper, MessageSquare, Plus, SlidersHorizontal } from 'lucide-react';
 // CharacterCard import removed
 
 interface ChatHeaderProps {
@@ -14,6 +14,8 @@ interface ChatHeaderProps {
   onShowBackgroundSettings: () => void;
   onShowChatSelector: () => void;
   onNewChat: () => void;
+  onToggleSamplerPanel?: () => void;
+  isSamplerPanelActive?: boolean;
 }
 
 const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -22,6 +24,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   onShowBackgroundSettings,
   onShowChatSelector,
   onNewChat,
+  onToggleSamplerPanel,
+  isSamplerPanelActive,
 }) => {
   return (
     <div className="flex-none p-4 border-b border-stone-800 relative z-10 flex justify-between items-center">
@@ -53,6 +57,19 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           </label>
         )} */}
         {/* End Reasoning Toggle */}
+        {onToggleSamplerPanel && (
+          <button
+            onClick={onToggleSamplerPanel}
+            className={`p-1 transition-colors ${
+              isSamplerPanelActive
+                ? 'text-blue-400 hover:text-blue-300'
+                : 'text-gray-400 hover:text-white'
+            }`}
+            title="Generation Settings"
+          >
+            <SlidersHorizontal size={18} />
+          </button>
+        )}
         <button onClick={onShowContextWindow} className="p-1 text-gray-400 hover:text-white" title="View Context Window">
           <Eye size={18} />
         </button>

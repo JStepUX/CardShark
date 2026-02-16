@@ -1,7 +1,7 @@
 // components/APICard.tsx
 // This file contains the APICard component which is used to display and manage API configurations in the UI. The component allows users to configure API settings, test the connection, and disconnect from the API. It also displays information about the connected model and provides options for selecting templates and generation settings.
 import React, { useState, useEffect, useCallback } from 'react';
-import { Globe2, Key, CheckCircle2, XCircle, Trash2, Star, Save, AlertTriangle, Eye, EyeOff, Settings as SettingsIcon, Download } from 'lucide-react'; // Removed Loader2, AlertCircleIcon as they are in ModelSelector
+import { Globe2, Key, CheckCircle2, XCircle, Trash2, Star, Save, AlertTriangle, Eye, EyeOff, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   APIProvider,
@@ -12,9 +12,7 @@ import {
 import { Template } from '../types/templateTypes';
 import { templateService } from '../services/templateService';
 import { useSettings } from '../contexts/SettingsContext';
-import APIConfigurationPanel from './APIConfigurationPanel';
-import { Dialog } from './common/Dialog';
-import { ModelSelector } from './ModelSelector'; // Import the new ModelSelector
+import { ModelSelector } from './ModelSelector';
 
 interface APICardProps {
   api: APIConfig; // This is the persisted API config
@@ -39,7 +37,6 @@ export const APICard: React.FC<APICardProps> = ({
   const [modelError, setModelError] = useState<string | undefined>(); // Specific error for model loading/connection
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showApiKey, setShowApiKey] = useState(false); // State for API key visibility
-  const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false); // State for config dialog
   const [isDownloading, setIsDownloading] = useState(false); // State for KoboldCPP download
   const [koboldStatus, setKoboldStatus] = useState<{ status: string, version?: string } | null>(null); // KoboldCPP status
   const { settings } = useSettings();
@@ -454,13 +451,6 @@ export const APICard: React.FC<APICardProps> = ({
             Save
           </button>
           <button
-            onClick={() => setIsConfigDialogOpen(true)}
-            className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-stone-800 rounded"
-            title="Configure API Settings"
-          >
-            <SettingsIcon size={18} />
-          </button>
-          <button
             onClick={onRemove}
             className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-stone-800 rounded"
             title="Remove API"
@@ -724,33 +714,7 @@ export const APICard: React.FC<APICardProps> = ({
           Last tested: {new Date(editableApi.lastConnectionStatus.timestamp).toLocaleString()}
           {editableApi.lastConnectionStatus.error && <span className="text-red-400 ml-2">(Error: {editableApi.lastConnectionStatus.error})</span>}
         </div>
-      )}      <Dialog
-        isOpen={isConfigDialogOpen}
-        onClose={() => setIsConfigDialogOpen(false)}
-        title={`Advanced Settings: ${editableApi.name || 'Unnamed API'}`}
-        showCloseButton={false}
-        className="max-w-3xl"
-        buttons={[
-          {
-            label: 'Cancel',
-            onClick: () => setIsConfigDialogOpen(false),
-          },
-          {
-            label: 'Save',
-            onClick: () => {
-              handleSave(); // Save changes when clicking Save
-              setIsConfigDialogOpen(false); // Close dialog after saving
-            },
-            variant: 'primary',
-            disabled: !hasChanges || isLoading,
-          },
-        ]}
-      >
-        <APIConfigurationPanel
-          config={editableApi}
-          onUpdate={handleLocalUpdate}
-        />
-      </Dialog>
+      )}
     </div>
   );
 };

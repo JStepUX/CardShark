@@ -95,6 +95,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
   const [showContextWindow, setShowContextWindow] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false);
+  const [showSamplerPanel, setShowSamplerPanel] = useState(false);
 
   // Reserved for future world card functionality
   // const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
@@ -420,6 +421,22 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
     navigate('/gallery');
   }, [setCharacterData, setImageUrl, navigate]);
 
+  // Sampler panel toggle
+  const handleToggleSamplerPanel = useCallback(() => {
+    const opening = !showSamplerPanel;
+    setShowSamplerPanel(opening);
+    if (opening && sidePanelCollapsed) {
+      setSidePanelCollapsed(false);
+    }
+  }, [showSamplerPanel, sidePanelCollapsed]);
+
+  // Side panel collapse — also closes sampler overlay
+  const handleToggleSidePanel = useCallback(() => {
+    const collapsing = !sidePanelCollapsed;
+    setSidePanelCollapsed(collapsing);
+    if (collapsing) setShowSamplerPanel(false);
+  }, [sidePanelCollapsed]);
+
   // Allow rendering without character - backend will create assistant on first message
   // if (!characterData) {
   //   return <div className="flex items-center justify-center h-full text-gray-400">No character selected</div>;
@@ -442,6 +459,8 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
           onShowBackgroundSettings={() => setShowBackgroundSettings(true)}
           onShowChatSelector={() => setShowChatSelector(true)}
           onNewChat={handleNewChat}
+          onToggleSamplerPanel={!disableSidePanel ? handleToggleSamplerPanel : undefined}
+          isSamplerPanelActive={showSamplerPanel}
         />
       )}
 
@@ -548,11 +567,13 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
           <SidePanel
             mode={sidePanelMode}
             isCollapsed={sidePanelCollapsed}
-            onToggleCollapse={() => setSidePanelCollapsed(!sidePanelCollapsed)}
+            onToggleCollapse={handleToggleSidePanel}
             characterName={effectiveCharacterName}
             onImageChange={handleImageChange}
             onUnloadCharacter={handleUnloadCharacter}
             onOpenJournal={() => setShowJournal(true)}
+            showSamplerOverlay={showSamplerPanel}
+            onCloseSamplerOverlay={() => setShowSamplerPanel(false)}
           />
         )}
       </div>

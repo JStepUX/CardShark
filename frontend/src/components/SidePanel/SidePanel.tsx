@@ -4,6 +4,8 @@ import { NPCShowcase } from '../world/NPCShowcase';
 import { DayNightSphere } from '../world/DayNightSphere';
 import { SidePanelProps } from './types';
 import { ContextManagementDropdown } from './ContextManagementDropdown';
+import { SamplerSettingsPanel } from './SamplerSettingsPanel';
+import { usePanelResize } from '../../hooks/usePanelResize';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
 import ImagePreview from '../ImagePreview';
@@ -28,13 +30,23 @@ export function SidePanel({
     relationships,
     timeState,
     timeConfig,
+    showSamplerOverlay,
+    onCloseSamplerOverlay,
 }: SidePanelProps) {
     const { compressionLevel, setCompressionLevel, sessionName, setSessionName, saveSessionNameNow } = useChat();
+    const { panelWidth, resizeHandleProps } = usePanelResize();
     const [animationClass, setAnimationClass] = useState('');
     const [isAnimating, setIsAnimating] = useState(false);
     const [showExpanded, setShowExpanded] = useState(!isCollapsed);
     const [localSessionName, setLocalSessionName] = useState(sessionName);
     const [justSaved, setJustSaved] = useState(false);
+
+    // Auto-expand when sampler overlay opens while collapsed
+    useEffect(() => {
+        if (showSamplerOverlay && isCollapsed) {
+            onToggleCollapse();
+        }
+    }, [showSamplerOverlay]);
 
     // Simple change detection
     const hasChanges = localSessionName !== sessionName;
@@ -115,7 +127,13 @@ export function SidePanel({
     }
 
     return (
-        <div className={`w-80 bg-[#1a1a1a] border-l border-gray-800 flex flex-col ${animationClass}`}>
+        <div className={`relative bg-[#1a1a1a] border-l border-gray-800 flex flex-col ${animationClass}`} style={{ width: panelWidth }}>
+            {/* Resize Handle */}
+            <div
+                {...resizeHandleProps}
+                className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors"
+            />
+
             {/* Header */}
             <div className="border-b border-gray-800 px-4 py-4 flex items-start justify-between">
                 <button
@@ -162,27 +180,33 @@ export function SidePanel({
                 </div>
             </div>
 
-            {/* Mode-specific content */}
+            {/* Mode-specific content OR sampler overlay */}
             <div className="flex-1 overflow-y-auto">
-                {mode === 'world' && <WorldModeContent
-                    currentRoom={currentRoom}
-                    npcs={npcs}
-                    activeNpcId={activeNpcId}
-                    onSelectNpc={onSelectNpc}
-                    onDismissNpc={onDismissNpc}
-                    onOpenMap={onOpenMap}
-                    worldId={worldId}
-                    relationships={relationships}
-                    timeState={timeState}
-                    timeConfig={timeConfig}
-                />}
+                {showSamplerOverlay ? (
+                    <SamplerSettingsPanel onClose={onCloseSamplerOverlay || (() => {})} />
+                ) : (
+                    <>
+                        {mode === 'world' && <WorldModeContent
+                            currentRoom={currentRoom}
+                            npcs={npcs}
+                            activeNpcId={activeNpcId}
+                            onSelectNpc={onSelectNpc}
+                            onDismissNpc={onDismissNpc}
+                            onOpenMap={onOpenMap}
+                            worldId={worldId}
+                            relationships={relationships}
+                            timeState={timeState}
+                            timeConfig={timeConfig}
+                        />}
 
-                {mode === 'character' && <CharacterModeContent
-                    onImageChange={onImageChange}
-                    onUnloadCharacter={onUnloadCharacter}
-                />}
+                        {mode === 'character' && <CharacterModeContent
+                            onImageChange={onImageChange}
+                            onUnloadCharacter={onUnloadCharacter}
+                        />}
 
-                {mode === 'assistant' && <AssistantModeContent />}
+                        {mode === 'assistant' && <AssistantModeContent />}
+                    </>
+                )}
             </div>
 
             {/* Bottom Section - Journal & Context Management (aligned with chat input) */}

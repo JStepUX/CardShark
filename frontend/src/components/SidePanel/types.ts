@@ -27,5 +27,9 @@ export interface SidePanelProps {
 
     // Journal modal callback (used in all modes)
     onOpenJournal?: () => void;
+
+    // Sampler overlay
+    showSamplerOverlay?: boolean;
+    onCloseSamplerOverlay?: () => void;
 }
 
