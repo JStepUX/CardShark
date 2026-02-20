@@ -826,12 +826,20 @@ class ApiHandler:
                     compressed = extract_block(original_prompt, '[Previous Events Summary]', '[End Summary')
                     continuation_text = generation_params.get('continuation_text', '')
 
+                    # Build post-history instructions (strongest prompt position).
+                    # Combines character card post_history_instructions + session Journal.
+                    post_history_parts = []
+                    card_post_history = char_data.get('post_history_instructions', '')
+                    if card_post_history and card_post_history.strip():
+                        post_history_parts.append(card_post_history.strip())
+                    if session_notes:
+                        post_history_parts.append(session_notes.strip())
+                    post_history = '\n'.join(post_history_parts)
+
                     prompt = ''
                     if compressed:
                         prompt += compressed + '\n\n'
-                    if session_notes:
-                        prompt += f'[Session Notes]\n{session_notes}\n[End Session Notes]\n\n'
-                    prompt += build_story_prompt(raw_history, char_name, user_name, continuation_text)
+                    prompt += build_story_prompt(raw_history, char_name, user_name, continuation_text, post_history)
 
                 # Set clean stop sequences
                 stop_sequence = build_story_stop_sequences(char_name, user_name)

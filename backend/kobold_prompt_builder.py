@@ -79,13 +79,15 @@ def build_story_prompt(
     chat_history: List[dict],
     char_name: str,
     user_name: str = 'User',
-    continuation_text: str = ''
+    continuation_text: str = '',
+    post_history: str = ''
 ) -> str:
     """Format raw chat messages as a plain-text transcript for KoboldCPP.
 
     Output format:
         User: message content
         CharName: message content
+        [post-history instructions]
         CharName:
 
     Strips HTML from message content (rich text editor may include HTML).
@@ -95,6 +97,8 @@ def build_story_prompt(
         char_name: Character name for assistant messages
         user_name: User name for user messages
         continuation_text: Optional partial assistant text to continue from
+        post_history: Optional instructions injected right before the char turn
+                      marker — the strongest position for influencing generation
     """
     lines: List[str] = []
 
@@ -112,6 +116,11 @@ def build_story_prompt(
             # System messages become unmarked context lines
             lines.append(content)
 
+    # Inject post-history instructions right before the character's turn marker.
+    # This is the strongest prompt position for behavioral steering (Author's Note).
+    if post_history and post_history.strip():
+        lines.append(f"[{post_history.strip()}]")
+
     # End with the character's turn marker so the model continues as the character
     # For continuation: append partial text so model continues mid-stream
     if continuation_text and continuation_text.strip():
@@ -125,12 +134,15 @@ def build_story_prompt(
 def build_story_stop_sequences(char_name: str, user_name: str = 'User') -> list:
     """Return clean stop sequences for KoboldCPP story mode.
 
+    Only stops when the model tries to write a user turn — never on the
+    character's own name, which was causing premature truncation of
+    multi-paragraph responses.
+
     No </s>, no {{user}}:, no ChatML tokens.
     """
     return [
         f"{user_name}:",
         f"\n{user_name} ",
-        f"\n{char_name}: ",
     ]
 
 

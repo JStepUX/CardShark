@@ -705,12 +705,18 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         if (DEBUG) console.log(`Compression enabled but below threshold (${contextMessages.length} < ${COMPRESSION_THRESHOLD})`);
       }
 
-      // Inject session notes
-      // Fix: Move notes to be BEFORE the conversation history to avoid confusing the model
-      let notesBlock = '';
-      if (sessionNotes && sessionNotes.trim()) {
-        notesBlock = `[Session Notes]\n${sessionNotes.trim()}\n[End Session Notes]`;
-        if (DEBUG) console.log('Injecting session notes into payload:', notesBlock);
+      // Build post-history instructions block (session notes + card post_history_instructions).
+      // Injected right before the {{char}}: suffix — the strongest prompt position.
+      let postHistoryBlock = '';
+      const cardPostHistory = characterCard?.data?.post_history_instructions?.trim() || '';
+      const trimmedNotes = sessionNotes?.trim() || '';
+      if (cardPostHistory || trimmedNotes) {
+        const parts: string[] = [];
+        if (cardPostHistory) parts.push(cardPostHistory);
+        if (trimmedNotes) parts.push(trimmedNotes);
+        // Wrapped in markers so the KoboldCPP backend can extract and reposition them
+        postHistoryBlock = `[Session Notes]\n${parts.join('\n')}\n[End Session Notes]`;
+        if (DEBUG) console.log('Post-history instructions:', postHistoryBlock);
       }
 
       // Format conversation history using the template system
@@ -723,17 +729,12 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         templateId
       );
 
-      // Combine memory, compressed context, notes, and prompt
-      // Revised Structure: memory (system prompt) → compressed context → session notes → conversation history
-      // This ensures the model sees the notes as context/instructions before generating the continuation
+      // Combine: compressed context → conversation history → post-history instructions → {{char}}:
+      // Post-history sits right before the generation suffix (strongest position for behavioral steering)
       let finalPrompt = '';
 
       if (compressedContext) {
         finalPrompt += `${compressedContext}\n\n`;
-      }
-
-      if (notesBlock) {
-        finalPrompt += `${notesBlock}\n\n`;
       }
 
       finalPrompt += prompt;
@@ -741,6 +742,11 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
       // Ensure we don't send an empty prompt if history is empty (e.g. first message)
       if (!finalPrompt.trim()) {
         finalPrompt = `${characterName}:`;
+      }
+
+      // Inject post-history instructions right before the character turn marker
+      if (postHistoryBlock) {
+        finalPrompt += `\n${postHistoryBlock}`;
       }
 
       // Inject ghost suffix to prevent model from writing user's actions/dialogue
@@ -756,8 +762,12 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         }
       }
 
+      const currentUserProfile = ChatStorage.getCurrentUser();
+      const resolvedUserName = currentUserProfile?.name || 'User';
+      const userPersona = currentUserProfile?.description?.trim() || '';
+
       // Get stop sequences from template or use defaults
-      const stopSequences = this.getStopSequences(template, characterName);
+      const stopSequences = PromptHandler.getStopSequences(template, characterName, resolvedUserName);
 
       // Compute excluded fields from field expiration breakdown
       const excludedFields = memoryResult?.fieldBreakdown
@@ -785,10 +795,6 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
           // Explicitly exclude alternate_greetings - only selected greeting is sent in chat_history
         }
       } : null;
-
-      const currentUserProfile = ChatStorage.getCurrentUser();
-      const resolvedUserName = currentUserProfile?.name || 'User';
-      const userPersona = currentUserProfile?.description?.trim() || '';
 
       const payload = {
         api_config: apiConfig,
@@ -1087,23 +1093,23 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
   }
 
   // Get stop sequences from template or use defaults
-  public static getStopSequences(template: Template | null, characterName: string): string[] {
+  public static getStopSequences(template: Template | null, characterName: string, userName: string = 'User'): string[] {
     const defaultStopSequences = [
-      // Provide standard stop sequences for chat models
-      "\n\nUser:",
-      "\n\nAssistant:",
-      "User:",
-      "Assistant:",
-      `${characterName}:`
+      // Stop when the model tries to speak as the user — never on the character's
+      // own name, which was causing premature truncation of multi-paragraph responses.
+      `\n${userName}:`,
+      "\nUser:",
+      "\nAssistant:",
     ];
 
     if (!template || !template.stopSequences || template.stopSequences.length === 0) {
       return defaultStopSequences;
     }
 
-    // Replace {{char}} in stop sequences with actual character name
+    // Replace {{char}} and {{user}} in stop sequences with actual names
     return template.stopSequences.map(seq =>
       seq.replace(/\{\{char\}\}/g, characterName)
+         .replace(/\{\{user\}\}/g, userName)
     );
   }
 }
