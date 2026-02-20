@@ -12,8 +12,9 @@ from backend.sql_models import ChatSession, ChatMessage, Character, UserProfile
 
 
 def format_date_for_jsonl(dt: datetime) -> str:
-    """Format datetime for JSONL display (e.g., 'December 31, 2025 3:12pm')"""
-    return dt.strftime("%B %d, %Y %-I:%M%p").lower()
+    """Format datetime for JSONL display (e.g., 'December 31, 2025 3:12PM')"""
+    hour = dt.strftime("%I").lstrip("0") or "12"
+    return dt.strftime(f"%B %d, %Y {hour}:%M%p")
 
 
 def format_create_date(dt: datetime) -> str:
@@ -49,8 +50,7 @@ def smart_parse_date(date_str: str) -> Optional[datetime]:
     # List of date format patterns to try
     patterns = [
         # SillyTavern/TavernAI formats
-        "%B %d, %Y %I:%M%p",           # December 31, 2025 3:12pm
-        "%B %d, %Y %I:%M%P",           # December 31, 2025 3:12PM
+        "%B %d, %Y %I:%M%p",           # December 31, 2025 3:12PM
         "%Y-%m-%d@%Hh%Mm%Ss",          # 2025-12-31@15h12m05s
 
         # ISO formats
@@ -83,6 +83,17 @@ def smart_parse_date(date_str: str) -> Optional[datetime]:
         return datetime.fromtimestamp(timestamp)
     except (ValueError, TypeError, OSError):
         pass
+
+    # Try .title() normalization for old exports with lowercase month names
+    # e.g., "december 31, 2025 3:12pm" -> "December 31, 2025 3:12Pm"
+    # strptime %p is case-insensitive so "Pm" still parses correctly
+    normalized = date_str.strip().title()
+    if normalized != date_str:
+        for pattern in patterns:
+            try:
+                return datetime.strptime(normalized, pattern)
+            except ValueError:
+                continue
 
     return None
 

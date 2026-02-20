@@ -26,101 +26,36 @@ export interface WordSwapRule {
  * @param text The text content to process
  * @returns The text content with any incomplete sentence at the end removed
  */
-const DEBUG_CONTENT_PROCESSING = process.env.NODE_ENV === 'development';
+export function removeIncompleteSentences(text: string): string {
+  if (!text || typeof text !== 'string') return text;
 
- export function removeIncompleteSentences(text: string): string {
-  if (DEBUG_CONTENT_PROCESSING) {
-    console.debug('[removeIncompleteSentences] Input:', text);
-  }
-   
-   if (!text || typeof text !== 'string') {
-    if (DEBUG_CONTENT_PROCESSING) {
-      console.debug('[removeIncompleteSentences] Empty or invalid input, returning as-is');
-    }
-     return text;
-   }
-  
-  // Trim the text first to remove trailing whitespace
-  const trimmedText = text.trim();
-  
-  // If the text is empty after trimming, return it
-  if (trimmedText.length === 0) {
-    if (DEBUG_CONTENT_PROCESSING) {
-      console.debug('[removeIncompleteSentences] Empty after trimming');
-    }
-    return trimmedText;
-  }
-  
-  // Check if the text already ends with a sentence ending or a complete markdown block (image/link)
-  // This prevents trimming valid markdown content at the end of a message
-  // Allow *, **, and ) as valid endings
-  const endsWithSentence = /(?:[.!?*)]+['"""'']?[)\]"'"""'\s]*|!?\[[^\]]*\]\([^)]*\)\s*)$/.test(trimmedText);
-  if (DEBUG_CONTENT_PROCESSING) {
-    console.debug('[removeIncompleteSentences] Already ends with sentence or markdown:', endsWithSentence);
-  }
-  if (endsWithSentence) {
-    return trimmedText;
-  }
-  
-  // Find the last sentence ending anywhere in the text
-  // We use an enhanced regex that matches:
-  // 1. Markdown images/links: prevents splitting inside URLs and treats them as valid endings
-  // 2. Standard sentence endings: [.!?] followed optionally by quotes, but ONLY if followed by whitespace, EOF, or closing delimiters
-  const safeEndingsRegex = /(?:!?\[[^\]]*\]\([^)]*\)|[.!?*)]+['"""'']?(?=\s|$|['"”’)]))/g;
-  let lastIndex = -1;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return trimmed;
+
+  // A valid sentence ending is terminal punctuation (.!?) followed by zero or more
+  // closing wrappers: any quotation mark (Unicode-aware), asterisks, or brackets.
+  // A bare closing * also counts (RP action blocks like *nods*).
+  // Uses \p{Quotation_Mark} to match ALL Unicode quote variants — no guessing.
+  const CLOSERS = `[*\\p{Quotation_Mark}\\)\\]\\}]*`;
+
+  // 1. Already ends cleanly? Done.
+  const endsCleanly = new RegExp(`(?:[.!?]${CLOSERS}|\\*)$`, 'u').test(trimmed);
+  if (endsCleanly) return trimmed;
+
+  // 2. Find the last valid sentence ending in the text and trim there.
+  //    Anchor on .!? + optional closers, requiring whitespace or EOL after.
+  //    Also match * followed by whitespace (closing an RP action mid-text).
+  const endingPattern = new RegExp(`[.!?]${CLOSERS}(?=\\s|$)|\\*(?=\\s|$)`, 'gu');
+  let lastEnd = -1;
   let match;
-  
-  while ((match = safeEndingsRegex.exec(trimmedText)) !== null) {
-    lastIndex = match.index + match[0].length;
+  while ((match = endingPattern.exec(trimmed)) !== null) {
+    lastEnd = match.index + match[0].length;
   }
 
-  if (DEBUG_CONTENT_PROCESSING) {
-    console.debug('[removeIncompleteSentences] Last safe ending found at index:', lastIndex);
-  }
-  
-  // If we found a sentence ending, trim the text to that point
-  if (lastIndex > 0) {
-    const result = trimmedText.substring(0, lastIndex);
-    if (DEBUG_CONTENT_PROCESSING) {
-      console.debug('[removeIncompleteSentences] Trimmed result:', result);
-    }
-    return result;
-  }
-  
-  // If no sentence ending is found, check if the entire text appears to be an incomplete sentence
-  // This handles cases where the whole response is one incomplete sentence
-  const isEntirelyIncomplete = !/[.!?*)]+['"""'']?[)\]"'"""'\s]*$/.test(trimmedText) &&
-    trimmedText.length > 10 && // Avoid removing very short responses
-    !/^(yes|no|okay?|sure|fine|good|bad|maybe|perhaps?|alright?|thanks?|please|sorry|hello|hi|hey|bye|goodbye|thanks?|welcome)$/i.test(trimmedText.trim()) && // Don't remove common short complete responses
-    /\w$/.test(trimmedText); // Ends with a word character (not punctuation)
+  if (lastEnd > 0) return trimmed.substring(0, lastEnd);
 
-  if (isEntirelyIncomplete) {
-    if (DEBUG_CONTENT_PROCESSING) {
-      console.debug('[removeIncompleteSentences] Detected entire response as incomplete sentence, removing.');
-    }
-    return '';
-  }
-
-  // Legacy cutoff indicators for cases where there might be partial sentences after complete ones
-  // (though this is rare since we already checked for sentence endings above)
-  const cutoffIndicators = [
-    /[;,:]\s*$/,                                            // Ends in non-terminal punctuation
-    /[;,:]\s+\w{1,5}$/,                                     // Ends in punctuation + short word (e.g. ", a")
-    /\s(and|but|or|the|a|an|of|to|in|at|by|for|with)\s*$/i  // Ends in connector/preposition
-  ];
-
-  if (cutoffIndicators.some(regex => regex.test(trimmedText))) {
-    if (DEBUG_CONTENT_PROCESSING) {
-      console.debug('[removeIncompleteSentences] Detected incomplete sentence fragment, removing.');
-    }
-    return '';
-  }
-
-  // Otherwise return the original text (might be a short answer like "Yes" or "Okay" without punctuation)
-  if (DEBUG_CONTENT_PROCESSING) {
-    console.debug('[removeIncompleteSentences] No sentence ending found but seems complete, returning original');
-  }
-  return trimmedText;
+  // 3. No sentence ending found anywhere — return original. Never destroy content.
+  return trimmed;
 }
 
 /**

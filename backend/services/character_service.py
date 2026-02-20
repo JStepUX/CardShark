@@ -71,6 +71,21 @@ class CharacterService:
         self.logger = logger
         self.lore_service = lore_service
 
+    def get_lore_image_paths(self, character_uuid: str, filename: str) -> dict:
+        """Get filesystem and URL paths for a lore image.
+
+        Returns dict with: absolute_image_path, relative_path, base_path
+        Consistent with ImageStorageService lore_images category layout.
+        """
+        from backend.utils.path_utils import get_application_base_path
+        base_dir = get_application_base_path() / "uploads" / "lore_images" / character_uuid
+        base_dir.mkdir(parents=True, exist_ok=True)
+        return {
+            "absolute_image_path": str(base_dir / filename),
+            "relative_path": f"uploads/lore_images/{character_uuid}/{filename}",
+            "base_path": str(base_dir),
+        }
+
     def _safe_json_load(self, json_str: Optional[str], default_value: Any, field_name: str, character_uuid: str) -> Any:
         """
         Safely loads a JSON string, handling JSONDecodeError.

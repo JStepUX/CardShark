@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useChat } from '../../contexts/ChatContext';
+import { isKoboldFormat, convertKoboldToJsonl } from '../../utils/koboldImporter';
 
 import { Plus, RefreshCw, MessageSquare, Trash2, AlertTriangle, X, Search, Filter, Download, Upload, SortAsc, SortDesc, ChevronDown } from 'lucide-react';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
@@ -421,8 +422,11 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     setImportError(null);
 
     try {
-      // Read file content
-      const content = await file.text();
+      // Read file content and convert KoboldAI format if needed
+      const rawContent = await file.text();
+      const content = isKoboldFormat(rawContent)
+        ? convertKoboldToJsonl(rawContent)
+        : rawContent;
 
       // Send to backend
       const response = await fetch('/api/import-chat-jsonl', {
@@ -630,7 +634,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           <input
             ref={fileInputRef}
             type="file"
-            accept=".jsonl"
+            accept=".jsonl,.json"
             onChange={handleImportChat}
             className="hidden"
           />
@@ -638,7 +642,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             onClick={() => fileInputRef.current?.click()}
             className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isImporting}
-            title="Import chat from JSONL"
+            title="Import chat"
           >
             <Upload size={16} className={isImporting ? 'animate-pulse' : ''} />
           </button>

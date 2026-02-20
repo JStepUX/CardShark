@@ -216,7 +216,7 @@ async def upload_lore_image(
         raise http_exc # Re-raise HTTP exceptions from save_lore_image
     except Exception as e:
         logger.log_error(f"Unhandled error in lore image upload: {e}", exc_info=True)
-        raise handle_generic_error(e, logger, "uploading lore image")
+        raise handle_generic_error(e, "uploading lore image")
 
 @router.post("/images/from-url", response_model=DataResponse[dict])
 async def import_lore_image_from_url(
@@ -343,7 +343,7 @@ async def import_lore_image_from_url(
         raise http_exc
     except Exception as e:
         logger.log_error(f"Error importing image from URL: {e}", exc_info=True)
-        raise handle_generic_error(e, logger, "importing image from URL")
+        raise handle_generic_error(e, "importing image from URL")
 
 
 @router.delete("/images/{character_uuid}/{image_uuid_or_filename}", response_model=DataResponse[dict])
@@ -376,7 +376,7 @@ async def delete_lore_image(
         raise ValidationException(str(ve))
     except Exception as e:
         logger.log_error(f"Error getting image path for deletion: {e}")
-        raise handle_generic_error(e, logger, "determining image path for deletion")
+        raise handle_generic_error(e, "determining image path for deletion")
 
 
     if not image_path_to_delete.is_file(): # Check if it's a file, not just if path exists
@@ -410,7 +410,7 @@ async def delete_lore_image(
         raise
     except Exception as e:
         logger.log_error(f"Error deleting lore image {image_path_to_delete}: {e}", exc_info=True)
-        raise handle_generic_error(e, logger, "deleting lore image")
+        raise handle_generic_error(e, "deleting lore image")
 
 
 @router.delete("/images/delete", response_model=DataResponse[dict])
@@ -461,7 +461,7 @@ async def delete_lore_image_with_fallback(
         raise ValidationException(str(ve))
     except Exception as e:
         logger.log_error(f"Error getting base path for deletion: {e}")
-        raise handle_generic_error(e, logger, "determining image directory for deletion")
+        raise handle_generic_error(e, "determining image directory for deletion")
 
     if not image_uuid: # Must have an image_uuid (or filename) to delete
         raise ValidationException("image_uuid (filename) must be provided for deletion.")
@@ -507,7 +507,7 @@ async def delete_lore_image_with_fallback(
         raise
     except Exception as e:
         logger.log_error(f"Error deleting lore image {image_path_to_delete}: {e}", exc_info=True)
-        raise handle_generic_error(e, logger, "deleting lore image")
+        raise handle_generic_error(e, "deleting lore image")
 
 
 # Original /extract-lore endpoint, now prefixed under /api/lore
@@ -549,7 +549,7 @@ async def extract_lore_entries( # Renamed function for clarity
     except Exception as e:
         logger.log_error(f"Error extracting lore: {str(e)}")
         logger.log_error(traceback.format_exc())
-        raise handle_generic_error(e, logger, "extracting lore")
+        raise handle_generic_error(e, "extracting lore")
 
 class LoreBatchRequest(BaseModel):
     lore_entries: List[Dict[str, Any]]
@@ -585,4 +585,4 @@ async def batch_save_lore_entries(
         raise
     except Exception as e:
         logger.log_error(f"Error batch saving lore entries: {e}")
-        raise handle_generic_error(e, logger, "saving lore entries")
+        raise handle_generic_error(e, "saving lore entries")
