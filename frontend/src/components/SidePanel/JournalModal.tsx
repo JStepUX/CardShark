@@ -1,6 +1,7 @@
-import { BookOpen } from 'lucide-react';
+import { BookOpen, RotateCcw } from 'lucide-react';
 import { Dialog } from '../common/Dialog';
 import { SessionNotes } from './SessionNotes';
+import { DEFAULT_JOURNAL_ENTRY } from '../../contexts/ChatSessionContext';
 
 interface JournalModalProps {
   sessionNotes: string;
@@ -9,6 +10,8 @@ interface JournalModalProps {
 }
 
 export function JournalModal({ sessionNotes, setSessionNotes, onClose }: JournalModalProps) {
+  const isDefault = sessionNotes === DEFAULT_JOURNAL_ENTRY;
+
   return (
     <Dialog
       isOpen={true}
@@ -23,10 +26,23 @@ export function JournalModal({ sessionNotes, setSessionNotes, onClose }: Journal
       zIndex="z-[100]"
     >
       <div className="mb-4">
-        <h3 className="text-sm font-medium text-gray-300 mb-2">Session Notes</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-medium text-gray-300">Session Notes</h3>
+          {!isDefault && (
+            <button
+              onClick={() => setSessionNotes(DEFAULT_JOURNAL_ENTRY)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              title="Reset to default instructions"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset to default
+            </button>
+          )}
+        </div>
         <p className="text-xs text-gray-500 mb-4">
           These notes are injected into the AI's context and persist for this session.
           Use them to remind the AI of important details, preferences, or ongoing plot points.
+          Supports <code className="text-gray-400">{`{{char}}`}</code> and <code className="text-gray-400">{`{{user}}`}</code> tokens.
         </p>
       </div>
 

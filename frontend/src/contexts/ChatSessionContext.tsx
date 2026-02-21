@@ -11,6 +11,11 @@ import { ChatStorage } from '../services/chatStorage';
 import { chatService, SessionSettings } from '../services/chat/chatService';
 import { useSettings } from '../contexts/SettingsContext';
 
+/** Default Journal entry applied to new sessions that the user hasn't edited yet.
+ *  Supports {{char}} and {{user}} tokens — resolved at prompt construction time. */
+export const DEFAULT_JOURNAL_ENTRY =
+  "!!Avoid speaking or acting for or as {{user}}!!. Focus entirely on {{char}}'s experience, especially reactions to {{user}}, the world, and the current narrative.";
+
 interface ChatSessionContextType {
   currentChatId: string | null;
   currentUser: UserProfile | null;
@@ -116,7 +121,9 @@ export const ChatSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
     if (currentChatId) {
       settingsSaveTimerRef.current = setTimeout(() => {
-        saveSessionSettings(currentChatId, { session_notes: notes || null });
+        // Save the exact value (including empty string) so we can distinguish
+        // "user cleared" ('') from "never set" (null) on next load
+        saveSessionSettings(currentChatId, { session_notes: notes });
       }, 1500);
     }
   }, [currentChatId, saveSessionSettings]);
@@ -155,11 +162,15 @@ export const ChatSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
       try {
         const loadedSettings = await chatService.getSessionSettings(currentChatId);
-        setSessionNotesState(loadedSettings.session_notes || '');
+        // null = never set by user → apply default; '' = user cleared → keep empty
+        const notes = loadedSettings.session_notes === null || loadedSettings.session_notes === undefined
+          ? DEFAULT_JOURNAL_ENTRY
+          : loadedSettings.session_notes;
+        setSessionNotesState(notes);
         setSessionNameState(loadedSettings.title || '');
       } catch (error) {
         console.error('Failed to load session settings:', error);
-        setSessionNotesState('');
+        setSessionNotesState(DEFAULT_JOURNAL_ENTRY);
         setSessionNameState('');
       }
     };

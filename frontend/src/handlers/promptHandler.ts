@@ -716,6 +716,11 @@ Do not editorialize or add interpretation. Just the facts of what happened.`;
         if (trimmedNotes) parts.push(trimmedNotes);
         // Wrapped in markers so the KoboldCPP backend can extract and reposition them
         postHistoryBlock = `[Session Notes]\n${parts.join('\n')}\n[End Session Notes]`;
+        // Resolve {{char}} and {{user}} tokens in session notes / post-history instructions
+        const currentUserName = ChatStorage.getCurrentUser()?.name || 'User';
+        postHistoryBlock = postHistoryBlock
+          .replace(/\{\{char\}\}/gi, characterName)
+          .replace(/\{\{user\}\}/gi, currentUserName);
         if (DEBUG) console.log('Post-history instructions:', postHistoryBlock);
       }
 

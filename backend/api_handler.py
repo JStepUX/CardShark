@@ -831,7 +831,9 @@ class ApiHandler:
                     post_history_parts = []
                     card_post_history = char_data.get('post_history_instructions', '')
                     if card_post_history and card_post_history.strip():
-                        post_history_parts.append(card_post_history.strip())
+                        resolved = card_post_history.strip()
+                        resolved = resolved.replace('{{char}}', char_name).replace('{{user}}', user_name)
+                        post_history_parts.append(resolved)
                     if session_notes:
                         post_history_parts.append(session_notes.strip())
                     post_history = '\n'.join(post_history_parts)
