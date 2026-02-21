@@ -163,14 +163,17 @@ export const ChatSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       try {
         const loadedSettings = await chatService.getSessionSettings(currentChatId);
         // null = never set by user → apply default; '' = user cleared → keep empty
+        // Settings override takes priority over hardcoded default
+        const effectiveDefault = settingsRef.current?.default_journal_entry ?? DEFAULT_JOURNAL_ENTRY;
         const notes = loadedSettings.session_notes === null || loadedSettings.session_notes === undefined
-          ? DEFAULT_JOURNAL_ENTRY
+          ? effectiveDefault
           : loadedSettings.session_notes;
         setSessionNotesState(notes);
         setSessionNameState(loadedSettings.title || '');
       } catch (error) {
         console.error('Failed to load session settings:', error);
-        setSessionNotesState(DEFAULT_JOURNAL_ENTRY);
+        const effectiveDefault = settingsRef.current?.default_journal_entry ?? DEFAULT_JOURNAL_ENTRY;
+        setSessionNotesState(effectiveDefault);
         setSessionNameState('');
       }
     };

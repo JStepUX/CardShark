@@ -82,6 +82,9 @@ export interface Settings {
   // Content filtering
   wordSwapRules?: WordSwapRule[];
 
+  // Default Journal entry for new chat sessions (supports {{char}} / {{user}} tokens)
+  default_journal_entry?: string;
+
   // Gallery folder management
   gallery_folders?: {
     migrated: boolean;

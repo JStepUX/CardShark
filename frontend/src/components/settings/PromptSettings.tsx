@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../common/Button';
 import { usePrompts } from '../../hooks/usePrompts';
-import { RefreshCw, Save, Plus, Download, Upload, AlertCircle, Info, Trash2 } from 'lucide-react';
+import { RefreshCw, Save, Plus, Download, Upload, AlertCircle, Info, Trash2, BookOpen } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor'; // Import RichTextEditor
 import { StandardPromptKey, PromptVariable, PromptCategory } from '../../types/promptTypes';
 import { Dialog } from '../common/Dialog';
@@ -11,6 +11,8 @@ import {
   PromptExportSchema
 } from '../../types/promptSchemas';
 import { htmlToPlainText } from '../../utils/contentUtils';
+import { useSettings } from '../../contexts/SettingsContext';
+import { DEFAULT_JOURNAL_ENTRY } from '../../contexts/ChatSessionContext';
 
 interface PromptEditorProps {
   promptKey: string;
@@ -468,6 +470,83 @@ const PROMPT_CATEGORIES = [
   }
 ];
 
+/** Editor for the global default Journal entry stored in settings.json */
+const JournalDefaultEditor: React.FC = () => {
+  const { settings, updateSettings } = useSettings();
+  const saved = settings.default_journal_entry ?? DEFAULT_JOURNAL_ENTRY;
+  const [value, setValue] = useState(saved);
+  const [isEdited, setIsEdited] = useState(false);
+
+  // Sync when settings load/change externally
+  useEffect(() => {
+    const current = settings.default_journal_entry ?? DEFAULT_JOURNAL_ENTRY;
+    setValue(current);
+    setIsEdited(false);
+  }, [settings.default_journal_entry]);
+
+  const handleSave = async () => {
+    // Save undefined to clear the override (fall back to hardcoded default)
+    // Save the value as-is when it differs from the hardcoded default
+    await updateSettings({ default_journal_entry: value || undefined });
+    setIsEdited(false);
+  };
+
+  const handleReset = () => {
+    if (window.confirm('Reset to the built-in default Journal entry?')) {
+      setValue(DEFAULT_JOURNAL_ENTRY);
+      setIsEdited(DEFAULT_JOURNAL_ENTRY !== saved);
+    }
+  };
+
+  return (
+    <div className="bg-stone-900 p-6 rounded-lg mb-8">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h3 className="text-sm font-medium flex items-center gap-2">
+            <BookOpen size={14} className="text-blue-400" />
+            Default Journal Entry
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">
+            Pre-populated in every new chat session's Journal. Users can edit per-session.
+            Supports <code className="text-gray-300">{'{{char}}'}</code> and <code className="text-gray-300">{'{{user}}'}</code> tokens.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            onClick={handleReset}
+            className="p-2 rounded-lg flex items-center gap-1 text-gray-300 hover:bg-stone-700"
+            title="Reset to built-in default"
+          >
+            <RefreshCw size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={handleSave}
+            disabled={!isEdited}
+            className="p-2 rounded-lg flex items-center gap-1 text-green-500 hover:bg-stone-700"
+            title="Save changes"
+          >
+            <Save size={16} />
+          </Button>
+        </div>
+      </div>
+
+      <RichTextEditor
+        content={value}
+        onChange={(html) => {
+          const plainText = htmlToPlainText(html);
+          setValue(plainText);
+          setIsEdited(plainText !== saved);
+        }}
+        className="w-full bg-stone-950 rounded-lg h-32 font-mono"
+        placeholder="Enter default Journal instructions..."
+        preserveWhitespace={true}
+      />
+    </div>
+  );
+};
+
 const PromptSettings: React.FC = () => {
   const {
     createCustomPrompt,
@@ -566,6 +645,15 @@ const PromptSettings: React.FC = () => {
             <span>New Prompt</span>
           </Button>
         </div>
+      </div>
+
+      {/* Default Journal entry — stored in settings.json, applied to new sessions */}
+      <div className="mb-12">
+        <div className="border-b border-stone-700 pb-2 mb-6">
+          <h3 className="text-base font-semibold">Journal</h3>
+          <p className="text-gray-400 text-sm">Default instructions pre-populated in every new session's Journal</p>
+        </div>
+        <JournalDefaultEditor />
       </div>
 
       {/* Standard prompt categories */}
