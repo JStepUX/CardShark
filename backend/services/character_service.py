@@ -9,7 +9,6 @@ import contextlib
 import json
 import os
 import re
-import sys
 from pathlib import Path
 import traceback
 from typing import Dict, Any, Optional, List
@@ -18,46 +17,11 @@ import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-# project_root = Path(__file__).resolve().parent.parent.parent # Removed sys.path modification
-
-# Using absolute imports to avoid relative import issues
-import sys
-from pathlib import Path
-
-# Add the project root to sys.path temporarily
-project_root = str(Path(__file__).resolve().parent.parent.parent)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Now import using absolute paths
-from backend.database import SessionLocal # For type hinting, actual session passed in
+from backend.database import SessionLocal
 from backend.sql_models import Character as CharacterModel
 from backend.sql_models import LoreBook as LoreBookModel
 from backend.sql_models import LoreEntry as LoreEntryModel
 from backend.sql_models import LoreImage as LoreImageModel
-
-# Remove project_root from sys.path to avoid affecting other imports
-if project_root in sys.path:
-    sys.path.remove(project_root)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Now import using absolute paths
-from backend.database import SessionLocal # For type hinting, actual session passed in
-from backend.sql_models import Character as CharacterModel
-from backend.sql_models import LoreBook as LoreBookModel
-from backend.sql_models import LoreEntry as LoreEntryModel
-
-# Remove project_root from sys.path to avoid affecting other imports
-if project_root in sys.path:
-    sys.path.remove(project_root)
-# from backend.png_metadata_handler import PngMetadataHandler # Will be used
-# from backend.settings_manager import SettingsManager # Will be used
-# from backend.log_manager import LogManager # For logging
-
-# Placeholder for actual PngMetadataHandler and SettingsManager if needed directly
-# For now, methods will assume these are passed or accessible
-# logger = LogManager() # Assuming a global or passed logger
 
 def _as_json_str(value):
     """Helper to convert a value to a JSON string if it's not already a string."""

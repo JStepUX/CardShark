@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 import logging
 
-from backend.room_endpoints import create_room_for_world
+from backend.endpoints.room_endpoints import create_room_for_world
 from backend.database import get_db
 from backend import schemas as pydantic_models
 from backend import sql_models
@@ -40,7 +40,7 @@ def test_create_room_for_world_success(mock_db_session, mock_logger):
     # It should return an object that can be serialized by Pydantic (like a SQLModel instance)
     mock_created_room_sql = sql_models.Room(**CREATED_ROOM_DATA)
 
-    with patch("backend.room_endpoints.room_service.create_room", return_value=mock_created_room_sql) as mock_create_room_svc:
+    with patch("backend.endpoints.room_endpoints.room_service.create_room", return_value=mock_created_room_sql) as mock_create_room_svc:
         response_room = create_room_for_world(
             world_uuid=WORLD_UUID_FROM_PATH,
             room=room_create_pydantic,
@@ -66,7 +66,7 @@ def test_create_room_for_world_uuid_mismatch(mock_db_session, mock_logger):
     mismatched_room_data["world_uuid"] = "mismatched-uuid"
     room_create_pydantic = pydantic_models.RoomCreate(**mismatched_room_data)
 
-    with patch("backend.room_endpoints.room_service.create_room") as mock_create_room_svc:
+    with patch("backend.endpoints.room_endpoints.room_service.create_room") as mock_create_room_svc:
         with pytest.raises(ValidationException) as exc_info:
             create_room_for_world(
                 world_uuid=WORLD_UUID_FROM_PATH,
@@ -86,7 +86,7 @@ def test_create_room_for_world_service_raises_http_exception(mock_db_session, mo
     room_create_pydantic = pydantic_models.RoomCreate(**VALID_ROOM_CREATE_DATA)
 
     # Simulate room_service.create_room raising a NotFoundException
-    with patch("backend.room_endpoints.room_service.create_room", side_effect=NotFoundException("World not found by service")) as mock_create_room_svc:
+    with patch("backend.endpoints.room_endpoints.room_service.create_room", side_effect=NotFoundException("World not found by service")) as mock_create_room_svc:
         with pytest.raises(NotFoundException) as exc_info:
             create_room_for_world(
                 world_uuid=WORLD_UUID_FROM_PATH,
@@ -102,7 +102,7 @@ def test_create_room_for_world_service_raises_unexpected_exception(mock_db_sessi
     """Test when room_service.create_room raises an unexpected non-HTTP error."""
     room_create_pydantic = pydantic_models.RoomCreate(**VALID_ROOM_CREATE_DATA)
 
-    with patch("backend.room_endpoints.room_service.create_room", side_effect=ValueError("Unexpected service error")) as mock_create_room_svc:
+    with patch("backend.endpoints.room_endpoints.room_service.create_room", side_effect=ValueError("Unexpected service error")) as mock_create_room_svc:
         with pytest.raises(HTTPException) as exc_info:
             create_room_for_world(
                 world_uuid=WORLD_UUID_FROM_PATH,

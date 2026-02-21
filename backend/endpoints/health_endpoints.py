@@ -1,14 +1,17 @@
 """
 @file health_endpoints.py
-@description Health check and LLM status monitoring endpoints.
+@description Health check, LLM status monitoring, and debug utility endpoints.
 @dependencies fastapi, httpx
 @consumers main.py
 """
 import time
-from fastapi import APIRouter, Request
+import traceback
+from fastapi import APIRouter, Request, UploadFile, File
+from fastapi.responses import JSONResponse
 
 from backend.log_manager import LogManager
 from backend.settings_manager import SettingsManager
+from backend.png_debug_handler import PngDebugHandler
 from backend.response_models import (
     HealthCheckResponse,
     STANDARD_RESPONSES
@@ -27,12 +30,16 @@ _settings_manager: SettingsManager = None
 _version: str = "0.1.0"
 
 
+_debug_handler: PngDebugHandler = None
+
+
 def setup_health_router(logger: LogManager, settings_manager: SettingsManager, version: str):
     """Initialize the health router with required dependencies."""
-    global _logger, _settings_manager, _version
+    global _logger, _settings_manager, _version, _debug_handler
     _logger = logger
     _settings_manager = settings_manager
     _version = version
+    _debug_handler = PngDebugHandler(logger)
 
 
 @router.get("/health", response_model=HealthCheckResponse)
@@ -134,3 +141,18 @@ async def get_llm_status(request: Request):
         _logger.log_warning(f"Error getting LLM status: {e}")
 
     return llm_status
+
+
+@router.post("/debug-png")
+async def debug_png(file: UploadFile = File(...)):
+    """Debug a PNG file to extract all chunks and metadata."""
+    try:
+        result = await _debug_handler.debug_png(file)
+        return JSONResponse(content=result)
+    except Exception as e:
+        _logger.log_error(f"Error debugging PNG: {str(e)}")
+        _logger.log_error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to debug PNG: {str(e)}"}
+        )

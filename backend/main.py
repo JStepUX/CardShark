@@ -31,8 +31,8 @@ except ImportError as e:
     print(f"Warning: Failed to import HTTP modules: {e}")
 
 # FastAPI imports
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Query, APIRouter
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse, RedirectResponse, PlainTextResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -42,7 +42,6 @@ from backend.utils.cross_drive_static_files import CrossDriveStaticFiles
 # Internal modules/handlers
 from backend.log_manager import LogManager
 from backend.png_metadata_handler import PngMetadataHandler
-from backend.png_debug_handler import PngDebugHandler
 from backend.errors import CardSharkError, ErrorType
 
 from backend.settings_manager import SettingsManager
@@ -75,35 +74,10 @@ from backend.error_handlers import (
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-# API endpoint modules
-from backend.chat_endpoints import router as chat_session_router # Router for ChatSession CRUD
-# Import routers directly, no need for class instances
-from backend.background_endpoints import router as background_router
-from backend.room_card_endpoint import router as room_card_router
-from backend.endpoints.room_card_endpoints import router as room_card_crud_router # Room card CRUD
-from backend.endpoints.world_card_endpoints_v2 import router as world_card_crud_router # World card CRUD V2
-from backend.character_endpoints import router as character_router
-from backend.dependencies import get_character_service_dependency # Import from new dependencies file
-from backend.user_endpoints import router as user_router
-from backend.settings_endpoints import router as settings_router
-
-from backend.template_endpoints import router as template_router  # Import the new template router
-from backend.lore_endpoints import router as lore_router  # Import the lore router
-from backend.room_endpoints import router as room_router # Import the room_router
-from backend.world_asset_endpoints import router as world_asset_router # Import the world asset router
-from backend.gallery_endpoints import router as gallery_router # Import the gallery router
-from backend.npc_room_assignment_endpoints import router as npc_room_assignment_router # Import the new NPC-Room assignment router
-# from backend.character_inventory_endpoints import router as character_inventory_router # REMOVED - functionality integrated into CharacterService
-# from backend.world_chat_endpoints import router as world_chat_router # Removed, functionality merged into world_router
-from backend.character_image_endpoints import router as character_image_router # Import the character image router
-from backend.generation_endpoints import router as generation_router, setup_generation_router # Import generation router
-from backend.health_endpoints import router as health_router, setup_health_router # Import health router
-from backend.file_upload_endpoints import router as file_upload_router, setup_file_upload_router # Import file upload router
-from backend.endpoints.world_progress_endpoints import router as world_progress_router # Import world progress router
-from backend.endpoints.adventure_log_endpoints import router as adventure_log_router # Import adventure log router
-
-# Import koboldcpp handler & manager
+# API endpoint registry
+from backend.endpoints import ALL_ROUTERS, setup_generation_router, setup_health_router, setup_file_upload_router
 from backend.koboldcpp_handler import router as koboldcpp_router
+from backend.dependencies import get_character_service_dependency
 
 # Import user directory utilities functions
 from backend.utils.user_dirs import get_users_dir # type: ignore
@@ -126,8 +100,6 @@ from backend.services.default_world_service import DefaultWorldService # Import 
 from backend.services.user_profile_service import UserProfileService # Import UserProfileService
 from backend.services.image_storage_service import ImageStorageService # Import ImageStorageService
 from backend.services.character_lore_service import CharacterLoreService # Import CharacterLoreService
-from sqlalchemy.orm import Session # For type hinting in dependency
-from fastapi import Depends # For dependency injection
 
 # Initialize core handlers first (needed for lifespan)
 logger = LogManager(console_verbosity=1)  # INFO level - reduces terminal spam
@@ -334,9 +306,6 @@ app.add_middleware(
 
 # ---------- Initialize Remaining Handlers ----------
 
-# Remaining handler initialization
-debug_handler = PngDebugHandler(logger)
-
 api_handler = ApiHandler(logger)
 
 # Setup generation router with dependencies
@@ -371,66 +340,10 @@ world_card_chat_handler = WorldCardChatHandler(logger, worlds_path=worlds_dir)
 # Store world card chat handler on app.state
 app.state.world_card_chat_handler = world_card_chat_handler
 
-# ---------- Initialize and register endpoints ----------
-# NOTE: Removed initialization and registration of endpoint classes (ChatEndpoints, UserEndpoints, etc.)
-# as routers are included directly below using app.include_router.
-# Removed stray marker and duplicate comment block from previous failed diff
-
-# Cleaned up duplicated lines from previous failed diffs
-
-# Set up and include routers directly
-# setup_background_router call removed as it's no longer needed
-app.include_router(health_router) # Include the health check router
-# app.include_router(chat_router) # This line is now handled by chat_session_router inclusion
+# ---------- Register all endpoint routers ----------
+for router in ALL_ROUTERS:
+    app.include_router(router)
 app.include_router(koboldcpp_router)
-app.include_router(room_card_router)
-app.include_router(room_card_crud_router) # Room card CRUD (PNG-based)
-app.include_router(world_card_crud_router) # World card CRUD V2 (PNG-based)
-app.include_router(world_progress_router) # World user progress (per-user save slots)
-app.include_router(adventure_log_router) # Adventure log for room visit summaries
-app.include_router(character_router)
-app.include_router(user_router)
-app.include_router(settings_router)
-
-app.include_router(template_router)  # Include the new template router
-app.include_router(lore_router)  # Include the lore router
-app.include_router(room_router) # Include the room_router
-app.include_router(npc_room_assignment_router) # Include the new NPC-Room assignment router
-app.include_router(world_asset_router) # Include the world asset router
-app.include_router(gallery_router) # Include the gallery router
-# app.include_router(character_inventory_router) # REMOVED
-# app.include_router(world_chat_router) # Removed, functionality merged into world_router
-app.include_router(character_image_router) # Include the character image router
-app.include_router(background_router)
-app.include_router(chat_session_router) # Include the new chat session router
-app.include_router(generation_router) # Include the generation router
-app.include_router(file_upload_router) # Include the file upload router
-
-# ---------- FastAPI Dependency for Services ----------
-# get_character_service_dependency is now imported from backend.dependencies
-
-# Import content filter router
-from backend.content_filter_endpoints import router as content_filter_router
-app.include_router(content_filter_router)
-
-# ---------- Direct routes that haven't been modularized yet ----------
-
-@app.post("/api/debug-png")
-async def debug_png(file: UploadFile = File(...)):
-    """Debug a PNG file to extract all chunks and metadata."""
-    try:
-        result = await debug_handler.debug_png(file)
-        return JSONResponse(content=result)
-    except Exception as e:
-        logger.log_error(f"Error debugging PNG: {str(e)}")
-        logger.log_error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500, 
-            content={"error": f"Failed to debug PNG: {str(e)}"}
-        )
-
-# NOTE: Removed character-related routes (/api/character-image, /api/character-metadata, /api/character, /api/characters)
-# as they are now handled by the router included from backend.character_endpoints
 
 # ---------- Serve frontend if running in production mode ----------
 
