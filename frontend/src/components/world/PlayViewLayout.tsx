@@ -22,6 +22,7 @@
 import React, { ReactNode } from 'react';
 import { Star, Coins, UserPlus, X, ArrowLeft } from 'lucide-react';
 import dayNightCycleIcon from '../../assets/icons/daynightcycle.png';
+import Button from '../common/Button';
 
 /** Player progression display data */
 interface PlayerProgressProps {
@@ -115,14 +116,15 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                 <header className="flex items-center justify-between px-4 py-2 bg-[#111111] border-b border-gray-800">
                     {/* Breadcrumb */}
                     <div className="flex items-center gap-2 text-sm">
-                        <button
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={onBackToWorld}
-                            className="flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors"
                             title="Return to World"
+                            icon={<ArrowLeft className="w-4 h-4" />}
                         >
-                            <ArrowLeft className="w-4 h-4" />
                             {worldName}
-                        </button>
+                        </Button>
                         <span className="text-gray-600">→</span>
                         <span className="text-white font-medium">{roomName}</span>
                         {inCombat && (
@@ -172,13 +174,14 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                         )}
 
                         {showJournalButton && (
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={onJournalClick}
-                                className="flex items-center gap-2 px-3 py-1 text-sm text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700/50 rounded transition-colors"
                             >
                                 <span>📓</span>
                                 <span>Journal</span>
-                            </button>
+                            </Button>
                         )}
                         {timeDisplay && (
                             <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -228,28 +231,26 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                                     <div className="flex items-center gap-2">
                                         {/* Bond button - only show if no bonded ally */}
                                         {!conversationState.hasBondedAlly && onBondNpc && (
-                                            <button
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
                                                 onClick={onBondNpc}
-                                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium
-                                                         text-green-300 bg-green-900/40 hover:bg-green-800/60
-                                                         border border-green-700/50 rounded transition-colors"
                                                 title={`Bond with ${conversationState.conversationTargetName} (they will follow you)`}
+                                                icon={<UserPlus className="w-3.5 h-3.5" />}
+                                                className="!text-green-300 !border-green-700/50 !bg-green-900/40 hover:!bg-green-800/60"
                                             >
-                                                <UserPlus className="w-3.5 h-3.5" />
                                                 Bond
-                                            </button>
+                                            </Button>
                                         )}
                                         {/* End conversation button */}
                                         {onEndConversation && (
-                                            <button
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
                                                 onClick={onEndConversation}
-                                                className="flex items-center gap-1 px-2 py-1 text-xs
-                                                         text-gray-400 hover:text-gray-200 hover:bg-gray-800/50
-                                                         rounded transition-colors"
                                                 title="End conversation"
-                                            >
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
+                                                icon={<X className="w-3.5 h-3.5" />}
+                                            />
                                         )}
                                     </div>
                                 </div>

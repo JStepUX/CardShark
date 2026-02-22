@@ -1,5 +1,6 @@
 import { BookOpen, RotateCcw } from 'lucide-react';
 import { Dialog } from '../common/Dialog';
+import Button from '../common/Button';
 import { SessionNotes } from './SessionNotes';
 import { DEFAULT_JOURNAL_ENTRY } from '../../contexts/ChatSessionContext';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -32,14 +33,15 @@ export function JournalModal({ sessionNotes, setSessionNotes, onClose }: Journal
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-300">Session Notes</h3>
           {!isDefault && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<RotateCcw className="w-3 h-3" />}
               onClick={() => setSessionNotes(effectiveDefault)}
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
               title="Reset to default instructions"
             >
-              <RotateCcw className="w-3 h-3" />
               Reset to default
-            </button>
+            </Button>
           )}
         </div>
         <p className="text-xs text-gray-500 mb-4">

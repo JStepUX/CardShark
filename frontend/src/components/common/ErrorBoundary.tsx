@@ -1,5 +1,6 @@
 import { Component, ReactNode, ErrorInfo } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import Button from './Button';
 
 /**
  * Props for the ErrorBoundary component
@@ -98,13 +99,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                         {error && (
                             <p className="text-sm text-gray-400 mb-4 break-words">{error.message}</p>
                         )}
-                        <button
+                        <Button
+                            variant="destructive"
                             onClick={this.handleReset}
-                            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white flex items-center gap-2 mx-auto transition-colors"
+                            icon={<RefreshCw size={16} />}
+                            className="mx-auto"
                         >
-                            <RefreshCw size={16} />
-                            <span>Try Again</span>
-                        </button>
+                            Try Again
+                        </Button>
                     </div>
                 </div>
             );

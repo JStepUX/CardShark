@@ -1,6 +1,7 @@
 // src/components/APISettingsView.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Save } from 'lucide-react';
+import Button from '../common/Button';
 import { toast } from 'sonner'; // Import toast
 import DirectoryPicker from '../DirectoryPicker';
 import { APICard } from '../APICard';
@@ -409,13 +410,14 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                     </option>
                   ))}
                 </select>
-                <button
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon={<Plus size={18} />}
                   onClick={handleAddAPI}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  <Plus size={18} />
                   Add API
-                </button>
+                </Button>
               </div>
             </div>
             
@@ -475,14 +477,15 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
           <div className="h-full overflow-y-auto">
             <div className="sticky top-0 z-10 bg-zinc-950 p-4 border-b border-zinc-800 flex justify-between items-center">
               <h2 className="text-lg font-semibold">Syntax Highlighting Settings</h2>
-              <button
+              <Button
+                variant="primary"
+                size="md"
+                icon={<Save size={18} />}
                 onClick={() => {/* Auto-saves when changed */}}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 disabled={true}
               >
-                <Save size={18} />
                 Auto-saved
-              </button>
+              </Button>
             </div>
             <HighlightingSettings
               settings={settings.syntaxHighlighting || DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS}
@@ -495,14 +498,15 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
           <div className="h-full overflow-y-auto">
             <div className="sticky top-0 z-10 bg-zinc-950 p-4 border-b border-zinc-800 flex justify-between items-center">
               <h2 className="text-lg font-semibold">Chat Settings</h2>
-              <button
+              <Button
+                variant="primary"
+                size="md"
+                icon={<Save size={18} />}
                 onClick={() => {/* Auto-saves when changed */}}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 disabled={true}
               >
-                <Save size={18} />
                 Auto-saved
-              </button>
+              </Button>
             </div>
             <div className="p-4">              <ContentFilteringTab                wordSwapRules={wordSwapRules} 
                 onUpdateRules={handleUpdateWordSwapRules}

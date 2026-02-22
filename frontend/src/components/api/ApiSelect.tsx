@@ -3,6 +3,7 @@ import { Server, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner'; // Added
 import { useAPIConfig } from '../../contexts/APIConfigContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import Button from '../common/Button';
 
 interface ApiSelectProps {
   isCollapsed?: boolean;
@@ -107,13 +108,17 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
   const renderApiOptions = () => (
     <div className="py-1" role="menu">
       {enabledApis.map(([id, api]) => (
-        <button
+        <Button
           key={id}
+          variant="ghost"
+          size="md"
+          fullWidth
           onClick={() => handleSelectApi(id)}
           disabled={!!isSwitchingApiTo}
-          className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors ${id === activeApiId ? 'bg-blue-600/20 text-blue-300' : 'text-gray-300 hover:bg-stone-800'
-            } ${isSwitchingApiTo ? 'cursor-not-allowed opacity-70' : ''}`}
           role="menuitem"
+          className={`text-left justify-between rounded-none ${
+            id === activeApiId ? 'bg-blue-600/20 text-blue-300' : 'text-gray-300 hover:bg-stone-800'
+          } ${isSwitchingApiTo ? 'opacity-70' : ''}`}
         >
           {isCollapsed ? (
             <span className="truncate">{api.name || api.provider}</span>
@@ -128,9 +133,9 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
           ) : id === activeApiId ? (
             <Check size={16} className="text-blue-400" aria-hidden="true" />
           ) : (
-            <div style={{ width: '16px' }} /> // Placeholder for alignment
+            <div style={{ width: '16px' }} />
           )}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -139,23 +144,18 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
     // Collapsed version (minimal, icon only)
     return (
       <div className="relative" ref={dropdownRef}>
-        <button
+        <Button
+          variant="ghost"
+          size="md"
+          icon={isSwitchingApiTo && showSpinner ? <LoadingSpinner size={18} aria-hidden="true" /> : <Server size={18} aria-hidden="true" />}
           onClick={() => setIsOpen(!isOpen)}
           disabled={!!isSwitchingApiTo}
-          className={`w-10 h-10 flex items-center justify-center text-gray-300 hover:text-white rounded-lg transition-colors
-                     ${isOpen && !isSwitchingApiTo ? 'bg-stone-700 text-white' : 'hover:bg-stone-700'}
-                     ${isSwitchingApiTo ? 'cursor-not-allowed' : ''}`}
           title="Switch API"
           aria-label="Select API"
           aria-haspopup="true"
           aria-expanded={isOpen}
-        >
-          {isSwitchingApiTo && showSpinner ? (
-            <LoadingSpinner size={18} aria-hidden="true" />
-          ) : (
-            <Server size={18} aria-hidden="true" />
-          )}
-        </button>
+          className={`w-10 h-10 ${isOpen && !isSwitchingApiTo ? 'bg-stone-700 text-white' : 'hover:bg-stone-700'}`}
+        />
 
         <div
           className={`absolute left-12 top-0 z-20 bg-zinc-900 border border-gray-700 rounded-lg shadow-lg min-w-[200px]
@@ -176,14 +176,15 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
   // Full version with names and dropdown
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
+      <Button
+        variant="ghost"
+        size="md"
+        fullWidth
         onClick={() => setIsOpen(!isOpen)}
         disabled={!!isSwitchingApiTo}
-        className={`w-full flex items-center justify-between px-3 py-2 text-gray-300 hover:text-white rounded-lg transition-colors
-                   ${isOpen && !isSwitchingApiTo ? 'bg-stone-700 text-white' : 'hover:bg-stone-700'}
-                   ${isSwitchingApiTo ? 'cursor-not-allowed' : ''}`}
         aria-haspopup="true"
         aria-expanded={isOpen}
+        className={`justify-between ${isOpen && !isSwitchingApiTo ? 'bg-stone-700 text-white' : 'hover:bg-stone-700'}`}
       >
         <div className="flex items-center gap-2">
           <Server size={18} aria-hidden="true" />
@@ -200,7 +201,7 @@ const ApiSelect: React.FC<ApiSelectProps> = ({ isCollapsed = false }) => {
         ) : (
           <ChevronDown size={16} aria-hidden="true" />
         )}
-      </button>
+      </Button>
 
       <div
         className={`absolute top-full left-0 z-20 mt-1 bg-zinc-900 border border-gray-700 rounded-lg shadow-lg w-full

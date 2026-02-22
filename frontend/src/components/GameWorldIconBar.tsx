@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { Map, Package, BookOpen, Swords, Users } from 'lucide-react';
+import Button from './common/Button';
 
 interface GameWorldIconBarProps {
     onMap?: () => void;
@@ -33,15 +34,17 @@ const GameWorldIconBar: React.FC<GameWorldIconBarProps> = ({
     return (
         <div className="flex items-center justify-around gap-2">
             {buttons.map(({ icon: Icon, label, onClick }) => (
-                <button
+                <Button
                     key={label}
+                    variant="ghost"
+                    size="sm"
                     onClick={onClick}
-                    className="flex flex-col items-center gap-1 p-2 hover:bg-stone-800 rounded-lg transition-colors text-stone-400 hover:text-stone-200"
                     title={label}
+                    className="flex flex-col items-center gap-1 text-stone-400 hover:!text-stone-200"
                 >
                     <Icon size={20} />
                     <span className="text-xs">{label}</span>
-                </button>
+                </Button>
             ))}
         </div>
     );

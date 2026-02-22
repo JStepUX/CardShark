@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
 import { roomApi } from '../../api/roomApi';
 import { RoomCardSummary } from '../../types/room';
+import Button from '../common/Button';
 
 interface RoomGalleryPickerProps {
   isOpen: boolean;
@@ -78,13 +79,13 @@ export const RoomGalleryPicker: React.FC<RoomGalleryPickerProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-stone-700">
           <h2 className="text-xl font-bold text-white">Select Room from Gallery</h2>
-          <button
+          <Button
+            variant="ghost"
+            size="md"
             onClick={onClose}
-            className="p-2 hover:bg-stone-800 rounded-lg transition-colors"
             aria-label="Close"
-          >
-            <X className="w-5 h-5 text-stone-400" />
-          </button>
+            icon={<X className="w-5 h-5" />}
+          />
         </div>
 
         {/* Search */}
@@ -110,12 +111,14 @@ export const RoomGalleryPicker: React.FC<RoomGalleryPickerProps> = ({
           ) : error ? (
             <div className="text-center py-12">
               <p className="text-red-400">{error}</p>
-              <button
+              <Button
+                variant="primary"
+                size="md"
                 onClick={loadRooms}
-                className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                className="mt-4 !bg-purple-600 hover:!bg-purple-700"
               >
                 Retry
-              </button>
+              </Button>
             </div>
           ) : filteredRooms.length === 0 ? (
             <div className="text-center py-12">

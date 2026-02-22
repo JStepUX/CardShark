@@ -8,6 +8,7 @@ import type { RoomEditorTool } from '../../types/editorGrid';
 import type { ZoneType } from '../../types/localMap';
 import { ZONE_TYPE_CONFIG } from '../../types/editorGrid';
 import type { GridViewportState, GridViewportHandlers } from '../../hooks/useGridViewport';
+import Button from '../common/Button';
 
 // Icon map for zone types
 const ZONE_ICON_MAP: Record<string, typeof Droplets> = {
@@ -74,72 +75,64 @@ export function EditorToolbar({
                         const Icon = tool.icon;
                         const isActive = activeTool === tool.id;
                         return (
-                            <button
+                            <Button
                                 key={tool.id}
+                                variant="toolbar"
+                                active={isActive}
+                                size="sm"
+                                icon={<Icon size={16} />}
                                 onClick={() => onToolChange(tool.id)}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
-                                    isActive
-                                        ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                        : 'text-gray-400 hover:bg-[#2a2a2a] hover:text-white border border-transparent'
-                                }`}
                                 title={`${tool.label} (${tool.shortcut})`}
                             >
-                                <Icon size={16} />
                                 <span className="hidden sm:inline">{tool.label}</span>
-                            </button>
+                            </Button>
                         );
                     })
                 ) : (
                     // Room tools
                     <>
                         {/* Pan */}
-                        <button
+                        <Button
+                            variant="toolbar"
+                            active={activeRoomTool === 'pan'}
+                            size="sm"
+                            icon={<Hand size={16} />}
                             onClick={() => onRoomToolChange('pan')}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
-                                activeRoomTool === 'pan'
-                                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                    : 'text-gray-400 hover:bg-[#2a2a2a] hover:text-white border border-transparent'
-                            }`}
                             title="Pan (Esc)"
                         >
-                            <Hand size={16} />
                             <span className="hidden sm:inline">Pan</span>
-                        </button>
+                        </Button>
 
                         {/* NPC Place */}
-                        <button
+                        <Button
+                            variant="toolbar"
+                            active={activeRoomTool === 'npc-place'}
+                            size="sm"
+                            icon={<Users size={16} />}
                             onClick={() => onRoomToolChange('npc-place')}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
-                                activeRoomTool === 'npc-place'
-                                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                    : 'text-gray-400 hover:bg-[#2a2a2a] hover:text-white border border-transparent'
-                            }`}
                             title="NPC Place"
                         >
-                            <Users size={16} />
                             <span className="hidden sm:inline">NPC</span>
-                        </button>
+                        </Button>
 
                         {/* Tile Painter with dropdown */}
                         <div className="relative" ref={dropdownRef}>
-                            <button
+                            <Button
+                                variant="toolbar"
+                                active={activeRoomTool === 'tile-paint'}
+                                size="sm"
+                                icon={<Paintbrush size={16} />}
                                 onClick={() => {
                                     onRoomToolChange('tile-paint');
                                     setShowZoneDropdown(prev => !prev);
                                 }}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
-                                    activeRoomTool === 'tile-paint'
-                                        ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                        : 'text-gray-400 hover:bg-[#2a2a2a] hover:text-white border border-transparent'
-                                }`}
                                 title="Tile Painter"
                             >
-                                <Paintbrush size={16} />
                                 <span className="hidden sm:inline">
                                     {selectedZoneConfig?.label || 'Tile'}
                                 </span>
                                 <ChevronDown size={12} />
-                            </button>
+                            </Button>
 
                             {showZoneDropdown && (
                                 <div className="absolute top-full left-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg shadow-xl z-50 min-w-[180px]">
@@ -147,24 +140,23 @@ export function EditorToolbar({
                                         const Icon = ZONE_ICON_MAP[zone.iconName] || Square;
                                         const isSelected = selectedZoneType === zone.type;
                                         return (
-                                            <button
+                                            <Button
                                                 key={zone.type}
+                                                variant="toolbar"
+                                                active={isSelected}
+                                                size="sm"
+                                                fullWidth
                                                 onClick={() => {
                                                     onZoneTypeChange(zone.type);
                                                     onRoomToolChange('tile-paint');
                                                     setShowZoneDropdown(false);
                                                 }}
-                                                className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                                                    isSelected
-                                                        ? 'bg-[#2a2a2a] text-white'
-                                                        : 'text-gray-400 hover:bg-[#222] hover:text-white'
-                                                }`}
                                                 title={zone.description}
                                             >
                                                 <div className={`w-3 h-3 rounded ${zone.colorClass}`} />
                                                 <Icon size={14} />
                                                 <span>{zone.label}</span>
-                                            </button>
+                                            </Button>
                                         );
                                     })}
                                 </div>
@@ -172,18 +164,16 @@ export function EditorToolbar({
                         </div>
 
                         {/* Eraser */}
-                        <button
+                        <Button
+                            variant="toolbar"
+                            active={activeRoomTool === 'eraser'}
+                            size="sm"
+                            icon={<Eraser size={16} />}
                             onClick={() => onRoomToolChange('eraser')}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
-                                activeRoomTool === 'eraser'
-                                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                    : 'text-gray-400 hover:bg-[#2a2a2a] hover:text-white border border-transparent'
-                            }`}
                             title="Eraser"
                         >
-                            <Eraser size={16} />
                             <span className="hidden sm:inline">Erase</span>
-                        </button>
+                        </Button>
                     </>
                 )}
             </div>
@@ -193,26 +183,27 @@ export function EditorToolbar({
                 <span className="text-xs text-gray-500 hidden sm:inline">
                     Zoom: {Math.round(viewport.zoom * 100)}%
                 </span>
-                <button
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<ZoomOut size={16} />}
                     onClick={viewportHandlers.zoomOut}
-                    className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
                     title="Zoom Out"
-                >
-                    <ZoomOut size={16} className="text-gray-400" />
-                </button>
-                <button
+                />
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<ZoomIn size={16} />}
                     onClick={viewportHandlers.zoomIn}
-                    className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors"
                     title="Zoom In"
-                >
-                    <ZoomIn size={16} className="text-gray-400" />
-                </button>
-                <button
+                />
+                <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={viewportHandlers.resetView}
-                    className="px-3 py-1.5 text-xs bg-[#2a2a2a] hover:bg-[#3a3a3a] rounded-lg transition-colors"
                 >
                     Reset View
-                </button>
+                </Button>
             </div>
         </div>
     );

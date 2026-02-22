@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, User, Loader2, Sparkles } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import MoodIndicator from '../MoodIndicator';
+import Button from '../common/Button';
 import { UserProfile } from '../../types/messages';
 import { EmotionState } from '../../hooks/useEmotionDetection';
 import { htmlToPlainText } from '../../utils/contentUtils';
@@ -147,7 +148,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
         {/* Send Button, Impersonate Button & Mood Indicator */}
         <div className="flex flex-col items-center justify-end gap-2 flex-shrink-0">
           <MoodIndicator emotion={emotion} size={20} showLabel={false} />
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Send size={18} />}
             onClick={() => {
               if (inputValue.trim() && !isGenerating && !isCompressing && !isImpersonating) {
                 onSend(inputValue.trim());
@@ -155,16 +159,16 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               }
             }}
             disabled={!inputValue.trim() || isGenerating || isCompressing || isImpersonating}
-            className="p-2 bg-transparent text-white rounded-lg hover:bg-orange-700
-                     transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="hover:bg-orange-700"
             title="Send message"
-          >
-            <Send size={18} />
-          </button>
+          />
 
           {/* Impersonate Button (Sparkles) */}
           {onImpersonate && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={isImpersonating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
               onClick={async () => {
                 if (isGenerating || isCompressing || isImpersonating) return;
 
@@ -192,16 +196,9 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                 setIsImpersonating(false);
               }}
               disabled={isGenerating || isCompressing || isImpersonating}
-              className="p-2 bg-transparent text-white rounded-lg hover:bg-purple-700
-                       transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="hover:bg-purple-700"
               title={inputValue.trim() ? "Continue your message with AI" : "Generate a response as you"}
-            >
-              {isImpersonating ? (
-                <Loader2 size={18} className="animate-spin" />
-              ) : (
-                <Sparkles size={18} />
-              )}
-            </button>
+            />
           )}
         </div>
       </div>

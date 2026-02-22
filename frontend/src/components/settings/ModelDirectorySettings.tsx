@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FolderOpen } from 'lucide-react';
+import Button from '../common/Button';
 
 interface ModelDirectorySettingsProps {
   directory: string | null;
@@ -61,18 +62,20 @@ const ModelDirectorySettings: React.FC<ModelDirectorySettingsProps> = ({
           className="flex-grow px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
           disabled={isLoading}
         />
-        <button
-          onClick={handleSetDirectory}
-          disabled={isLoading || !modelsDirectory.trim()}
-          className="px-4 py-2 bg-purple-800 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {isLoading ? (
+        <Button
+          variant="primary"
+          size="md"
+          icon={isLoading ? (
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
           ) : (
             <FolderOpen size={18} />
           )}
-          <span>Set</span>
-        </button>
+          onClick={handleSetDirectory}
+          disabled={isLoading || !modelsDirectory.trim()}
+          className="!bg-purple-800 hover:!bg-purple-700"
+        >
+          Set
+        </Button>
       </div>
 
       {successMessage && (

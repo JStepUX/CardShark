@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, X, Shield, User, Search, Settings } from 'lucide-react';
 import { RoomNPC } from '../types/room';
 import { NPCSettingsModal } from './NPCSettingsModal';
+import Button from './common/Button';
 
 interface Character {
   id: string;
@@ -46,12 +47,12 @@ function NPCPickerDrawer({ isOpen, onClose, onSelect, availableCharacters, exclu
             <h2 className="text-xl font-bold text-white mb-1">Add NPC to Room</h2>
             <p className="text-sm text-stone-400">Select a character to assign as an NPC</p>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={20} />}
             onClick={onClose}
-            className="p-2 hover:bg-stone-800 rounded-lg transition-colors"
-          >
-            <X size={20} className="text-stone-400" />
-          </button>
+          />
         </div>
 
         {/* Search */}
@@ -191,13 +192,14 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium text-stone-300">NPCs in Room</label>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
+          icon={<Plus size={16} />}
           onClick={() => setShowPicker(true)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
         >
-          <Plus size={16} />
           Add NPC
-        </button>
+        </Button>
       </div>
 
       {npcs.length === 0 ? (
@@ -245,20 +247,20 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
 
                 {/* Action buttons */}
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Settings size={16} />}
                     onClick={() => handleOpenSettings(index)}
-                    className="p-2 hover:bg-stone-700 rounded-lg transition-colors group"
                     title="NPC Settings"
-                  >
-                    <Settings size={16} className="text-stone-400 group-hover:text-blue-400 transition-colors" />
-                  </button>
-                  <button
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<X size={16} />}
                     onClick={() => handleRemoveNPC(index)}
-                    className="p-2 hover:bg-stone-700 rounded-lg transition-colors group"
                     title="Remove NPC"
-                  >
-                    <X size={16} className="text-stone-400 group-hover:text-red-400 transition-colors" />
-                  </button>
+                  />
                 </div>
               </div>
             </div>

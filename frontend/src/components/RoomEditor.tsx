@@ -15,6 +15,7 @@ import { RoomAsCharacterProvider } from '../contexts/RoomAsCharacterContext';
 import MessagesView from './MessagesView';
 import LoreView from './LoreView';
 import { htmlToPlainText } from '../utils/contentUtils';
+import Button from './common/Button';
 
 
 /**
@@ -106,62 +107,56 @@ function RoomEditorContent() {
           <p className="text-sm text-stone-400">{roomData.data.name}</p>
         </div>
 
-        <button
+        <Button
+          variant={hasUnsavedChanges ? 'primary' : 'secondary'}
+          size="lg"
+          icon={
+            isSaving ? <Loader2 className="w-4 h-4 animate-spin" />
+            : saveStatus === 'success' ? <Check className="w-4 h-4" />
+            : <Save className="w-4 h-4" />
+          }
           onClick={handleSave}
           disabled={isSaving || !hasUnsavedChanges}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${hasUnsavedChanges
-            ? 'bg-blue-600 hover:bg-blue-700 text-white'
-            : 'bg-stone-700 text-stone-400 cursor-not-allowed'
-            }`}
         >
-          {isSaving ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Saving...
-            </>
-          ) : saveStatus === 'success' ? (
-            <>
-              <Check className="w-4 h-4" />
-              Saved!
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              Save
-            </>
-          )}
-        </button>
+          {isSaving ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : 'Save'}
+        </Button>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-stone-700 bg-stone-800">
-        <button
+        <Button
+          variant="ghost"
+          size="lg"
           onClick={() => setActiveTab('basic')}
-          className={`px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
+          className={`font-medium rounded-none ${activeTab === 'basic'
             ? 'text-blue-400 border-b-2 border-blue-400'
             : 'text-stone-400 hover:text-white'
             }`}
         >
           Basic Info
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="lg"
           onClick={() => setActiveTab('messages')}
-          className={`px-6 py-3 font-medium transition-colors ${activeTab === 'messages'
+          className={`font-medium rounded-none ${activeTab === 'messages'
             ? 'text-blue-400 border-b-2 border-blue-400'
             : 'text-stone-400 hover:text-white'
             }`}
         >
           Introduction
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="lg"
           onClick={() => setActiveTab('lore')}
-          className={`px-6 py-3 font-medium transition-colors ${activeTab === 'lore'
+          className={`font-medium rounded-none ${activeTab === 'lore'
             ? 'text-blue-400 border-b-2 border-blue-400'
             : 'text-stone-400 hover:text-white'
             }`}
         >
           Lore
-        </button>
+        </Button>
       </div>
 
       {/* Content */}

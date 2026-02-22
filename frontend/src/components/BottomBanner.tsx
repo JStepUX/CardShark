@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import LoadingSpinner from './common/LoadingSpinner'; // Added
+import Button from './common/Button';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { APIConfig } from '../types/api';
@@ -104,33 +105,39 @@ export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '', heal
       {/* API Status indicator and selector */}
       <div className="flex items-center" ref={dropdownRef}>
         <div className={`w-2 h-2 rounded-full ${getStatusColor(currentApiConfig)} mr-2`}></div>
-        <div className="relative">          <button
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          disabled={isSwitching}
-          className="flex items-center text-gray-300 hover:text-white"
-        >
-          <span className="mr-1">
-            {isSwitching ? 'Switching...' : currentApiConfig?.name || 'No API Selected'}
-          </span>
-          {isSwitching ? (
-            <LoadingSpinner size="sm" />
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          )}
-        </button>
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            disabled={isSwitching}
+            className="flex items-center text-gray-300 hover:text-white"
+          >
+            <span className="mr-1">
+              {isSwitching ? 'Switching...' : currentApiConfig?.name || 'No API Selected'}
+            </span>
+            {isSwitching ? (
+              <LoadingSpinner size="sm" />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            )}
+          </Button>
 
           {isDropdownOpen && (
             <div className="absolute bottom-8 left-0 bg-stone-900 border border-stone-700 rounded shadow-lg py-1 min-w-[200px] z-10">
               {availableApis.length > 0 ? (availableApis.map(api => (
-                <button
+                <Button
                   key={api.id}
-                  className={`w-full text-left px-4 py-2 hover:bg-stone-800 ${api.id === activeApiId ? 'bg-stone-800' : ''}`}
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
                   onClick={() => handleApiSelect(api.id)}
                   disabled={isSwitching}
+                  className={`text-left px-4 py-2 ${api.id === activeApiId ? 'bg-stone-800' : ''}`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between w-full">
                     <div className="flex items-center">
                       <div className={`w-2 h-2 rounded-full ${api.lastConnectionStatus?.connected ? 'bg-green-500' : 'bg-stone-400'} mr-2`}></div>
                       {api.name || api.provider}
@@ -139,7 +146,7 @@ export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '', heal
                       <LoadingSpinner size="sm" className="ml-2" />
                     )}
                   </div>
-                </button>
+                </Button>
               ))
               ) : (
                 <div className="px-4 py-2 text-gray-500">No enabled APIs available</div>

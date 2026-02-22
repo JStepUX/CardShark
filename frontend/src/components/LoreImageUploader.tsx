@@ -1,6 +1,7 @@
 import React, { useState, ChangeEvent } from 'react';
 import { UploadCloud, Link, X } from 'lucide-react';
 import { characterInventoryService } from '../services/characterInventoryService';
+import Button from './common/Button';
 
 interface LoreImageUploaderProps {
   loreEntryId: string; // or number, depending on your LoreEntry ID type
@@ -161,13 +162,14 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-stone-800 p-6 rounded-lg shadow-xl w-full max-w-md relative">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<X size={24} />}
           onClick={onClose}
-          className="absolute top-3 right-3 text-gray-400 hover:text-gray-200"
           aria-label="Close"
-        >
-          <X size={24} />
-        </button>
+          className="absolute top-3 right-3"
+        />
         <h3 className="text-xl font-semibold mb-4 text-white">Add/Change Lore Image</h3>        {!characterUuid && (
           <p className="text-yellow-400 bg-yellow-900/30 p-2 rounded mb-3 text-sm">
             A Character UUID is required to associate images. This is currently missing. Please ensure the character is fully saved to obtain a UUID.
@@ -258,34 +260,34 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
 
         {/* Action buttons - clean horizontal layout */}
         <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="md"
             onClick={onClose}
             disabled={isLoading}
-            className="px-4 py-2 rounded-md border border-gray-600 bg-stone-700 text-sm font-medium text-gray-300 hover:bg-stone-600 transition-colors disabled:opacity-50"
           >
             Cancel
-          </button>
+          </Button>
           {currentImageUrl && (
-            <button
-              type="button"
+            <Button
+              variant="destructive"
+              size="md"
               onClick={handleRemoveImage}
               disabled={isLoading || !characterUuid}
-              className="px-4 py-2 rounded-md border border-red-500 bg-red-700 text-sm font-medium text-white hover:bg-red-800 transition-colors disabled:opacity-50"
               title={!characterUuid ? "Character UUID not available" : ""}
             >
               {isLoading ? 'Removing...' : 'Remove'}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleSubmit}
             disabled={isLoading || (!selectedFile && !imageUrl) || !characterUuid}
-            className="px-4 py-2 rounded-md bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title={!characterUuid ? "Character UUID not available" : ""}
           >
             {isLoading ? 'Saving...' : 'Confirm'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

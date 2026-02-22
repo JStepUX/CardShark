@@ -14,6 +14,7 @@ import { Message, UserProfile } from '../../types/messages';
 import RichTextEditor from '../RichTextEditor';
 import { formatUserName } from '../../utils/formatters';
 import { markdownToHtml, htmlToPlainText } from '../../utils/contentUtils';
+import Button from '../common/Button';
 
 interface ChatBubbleProps {
   message: Message;
@@ -274,86 +275,88 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
               {/* Hover-reveal action buttons */}
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                 {/* Copy button */}
-                <button
+                <Button
+                  variant="ghost"
+                  size="md"
+                  icon={<Copy size={16} />}
                   onClick={handleCopy}
-                  className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                   title={copied ? "Copied!" : "Copy message"}
-                >
-                  <Copy size={16} />
-                  {copied && <span className="sr-only">Copied!</span>}
-                </button>
+                  aria-label={copied ? "Copied!" : "Copy message"}
+                />
 
                 {/* Regeneration buttons */}
                 {isFirstMessage && onRegenerateGreeting && !isGenerating && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<Sparkles size={16} />}
                     onClick={onRegenerateGreeting}
                     disabled={isRegeneratingGreeting}
-                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                     title="Regenerate greeting"
-                  >
-                    <Sparkles size={16} />
-                  </button>
+                  />
                 )}
 
                 {/* Try again button for non-greeting messages */}
                 {!isFirstMessage && onTryAgain && !isGenerating && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<RotateCw size={16} />}
                     onClick={onTryAgain}
-                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                     title="Regenerate response"
-                  >
-                    <RotateCw size={16} />
-                  </button>
+                  />
                 )}
 
                 {/* Continue button */}
                 {onContinue && !isGenerating && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<StepForward size={16} />}
                     onClick={onContinue}
-                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                     title="Continue response"
-                  >
-                    <StepForward size={16} />
-                  </button>
+                  />
                 )}
               </div>
 
               {/* Always-visible: Variation controls (pagination) */}
               {hasVariations && !isGenerating && (
                 <div className="flex items-center">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<ArrowLeft size={16} />}
                     onClick={onPrevVariation}
                     disabled={variationIndex <= 0}
-                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
                     title="Previous variation"
-                  >
-                    <ArrowLeft size={16} />
-                  </button>
+                    className="disabled:opacity-30 disabled:hover:bg-transparent"
+                  />
 
                   <span className="text-xs text-stone-500 mx-1">
                     {variationIndex + 1}/{variationCount}
                   </span>
 
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<ArrowRight size={16} />}
                     onClick={onNextVariation}
                     disabled={variationIndex >= variationCount - 1}
-                    className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
                     title="Next variation"
-                  >
-                    <ArrowRight size={16} />
-                  </button>
+                    className="disabled:opacity-30 disabled:hover:bg-transparent"
+                  />
                 </div>
               )}
 
               {/* Always-visible: Stop generation button */}
               {isGenerating && onStop && (
-                <button
+                <Button
+                  variant="destructive"
+                  size="md"
+                  icon={<Pause size={16} />}
                   onClick={onStop}
-                  className="p-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors"
                   title="Stop generation"
-                >
-                  <Pause size={16} />
-                </button>
+                />
               )}
             </>
           )}
@@ -364,56 +367,66 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
               {/* Fork from here dropdown */}
               {onFork && (
                 <div className="relative" ref={forkDropdownRef}>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<GitFork size={16} />}
                     onClick={() => setShowForkDropdown(!showForkDropdown)}
-                    className="p-1.5 text-stone-400 hover:text-purple-400 hover:bg-stone-700 rounded-lg transition-colors"
                     title="Fork chat from here"
-                  >
-                    <GitFork size={16} />
-                  </button>
+                    className="hover:!text-purple-400"
+                  />
                   {showForkDropdown && (
                     <div className="absolute right-0 top-full mt-1 w-36 bg-stone-800 border border-stone-600 rounded-lg shadow-lg py-1 z-50">
                       <div className="px-3 py-1.5 text-xs text-stone-400 border-b border-stone-700">
                         Bring History
                       </div>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="md"
                         onClick={() => {
                           onFork(5);
                           setShowForkDropdown(false);
                         }}
-                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-stone-700 transition-colors"
+                        fullWidth
+                        className="!justify-start !rounded-none px-3 py-2 text-left"
                       >
                         Bring 5
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="md"
                         onClick={() => {
                           onFork(10);
                           setShowForkDropdown(false);
                         }}
-                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-stone-700 transition-colors"
+                        fullWidth
+                        className="!justify-start !rounded-none px-3 py-2 text-left"
                       >
                         Bring 10
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="md"
                         onClick={() => {
                           onFork('all');
                           setShowForkDropdown(false);
                         }}
-                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-stone-700 transition-colors"
+                        fullWidth
+                        className="!justify-start !rounded-none px-3 py-2 text-left"
                       >
                         Bring All
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
               )}
-              <button
+              <Button
+                variant="ghost"
+                size="md"
+                icon={<Trash2 size={16} />}
                 onClick={onDelete}
-                className="p-1.5 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                 title="Delete message"
-              >
-                <Trash2 size={16} />
-              </button>
+              />
             </div>
           )}
         </div>

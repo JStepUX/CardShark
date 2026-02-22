@@ -7,6 +7,7 @@ import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import CharacterAssignDialog from './CharacterAssignDialog';
 import { getApiBaseUrl } from '../../utils/apiConfig';
 import { toast } from 'sonner';
+import Button from '../common/Button';
 
 interface ChatHistoryItem {
     chat_session_uuid: string;
@@ -203,12 +204,12 @@ const ChatHistoryView: React.FC = () => {
             <div className="flex flex-col items-center justify-center h-full text-stone-400 space-y-4">
                 <AlertTriangle className="w-12 h-12 text-red-500" />
                 <p>{error}</p>
-                <button
+                <Button
+                    variant="primary"
                     onClick={loadHistory}
-                    className="px-4 py-2 bg-orange-600 hover:bg-orange-500 rounded-lg text-white transition-colors"
                 >
                     Retry
-                </button>
+                </Button>
             </div>
         );
     }
@@ -221,13 +222,13 @@ const ChatHistoryView: React.FC = () => {
                         <MessageSquare className="w-5 h-5 text-orange-500" />
                         Chat History
                     </h2>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<RefreshCw className="w-5 h-5" />}
                         onClick={loadHistory}
-                        className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                         title="Refresh"
-                    >
-                        <RefreshCw className="w-5 h-5" />
-                    </button>
+                    />
                 </div>
             </div>
 
@@ -285,20 +286,20 @@ const ChatHistoryView: React.FC = () => {
 
                                 {/* Action Buttons */}
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        icon={<UserPlus className="w-4 h-4" />}
                                         onClick={(e) => handleAssignClick(e, item)}
-                                        className="p-2 text-stone-400 hover:text-blue-400 hover:bg-stone-600 rounded-lg transition-colors"
                                         title="Assign to different character"
-                                    >
-                                        <UserPlus className="w-4 h-4" />
-                                    </button>
-                                    <button
+                                    />
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        icon={<Trash2 className="w-4 h-4" />}
                                         onClick={(e) => handleDeleteClick(e, item)}
-                                        className="p-2 text-stone-400 hover:text-red-400 hover:bg-stone-600 rounded-lg transition-colors"
                                         title="Delete chat"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    />
                                 </div>
                             </div>
                         ))}

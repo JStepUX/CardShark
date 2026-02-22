@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LucideIcon } from 'lucide-react';
+import Button from './common/Button';
 
 interface MenuItem {
   icon: LucideIcon;
@@ -63,17 +64,20 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
       {isOpen && (
         <div ref={dropdownRef} className={menuClassName}>
           {items.map((item, index) => (
-            <button
+            <Button
               key={index}
+              variant="ghost"
+              size="md"
+              fullWidth
               onClick={() => {
                 item.onClick();
                 setIsOpen(false);
               }}
-              className="w-full px-4 py-2 text-left flex items-center hover:bg-stone-600 text-white"
+              className="px-4 py-2 text-left text-white hover:!bg-stone-600"
             >
               <item.icon className="w-4 h-4 mr-2" />
               {item.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}

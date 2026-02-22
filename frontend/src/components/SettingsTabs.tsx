@@ -1,5 +1,6 @@
 // src/components/SettingsTabs.tsx
 import React, { useState, useEffect } from 'react';
+import Button from './common/Button';
 
 type Tab = 'general' | 'api' | 'templates' | 'prompts' | 'highlighting' | 'filtering';
 
@@ -48,62 +49,72 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
     <div className="w-full h-full flex flex-col">
       {/* Tab Navigation */}
       <div className="flex border-b border-stone-800">
-        <button
+        <Button
+          variant="ghost"
           onClick={() => handleTabClick('general')}
-          className={`px-6 py-3 text-sm font-medium ${
+          className={`px-6 py-3 font-medium rounded-none ${
             activeTab === 'general'
               ? 'text-blue-500 border-b-2 border-blue-500'
-              : 'text-gray-400 hover:text-gray-200'
+              : 'hover:text-gray-200'
           }`}
         >
           General
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           onClick={() => handleTabClick('api')}
-          className={`px-6 py-3 text-sm font-medium ${
+          className={`px-6 py-3 font-medium rounded-none ${
             activeTab === 'api'
               ? 'text-blue-500 border-b-2 border-blue-500'
-              : 'text-gray-400 hover:text-gray-200'
+              : 'hover:text-gray-200'
           }`}
         >
           API
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
           onClick={() => handleTabClick('templates')}
-          className={`px-6 py-3 text-sm font-medium ${
+          className={`px-6 py-3 font-medium rounded-none ${
             activeTab === 'templates'
               ? 'text-blue-500 border-b-2 border-blue-500'
-              : 'text-gray-400 hover:text-gray-200'
+              : 'hover:text-gray-200'
           }`}
         >
           Templates
-        </button>        <button
+        </Button>
+        <Button
+          variant="ghost"
           onClick={() => handleTabClick('prompts')}
-          className={`px-6 py-3 text-sm font-medium ${
+          className={`px-6 py-3 font-medium rounded-none ${
             activeTab === 'prompts'
               ? 'text-blue-500 border-b-2 border-blue-500'
-              : 'text-gray-400 hover:text-gray-200'
+              : 'hover:text-gray-200'
           }`}
         >
           Prompts
-        </button>        <button
+        </Button>
+        <Button
+          variant="ghost"
           onClick={() => handleTabClick('highlighting')}
-          className={`px-6 py-3 text-sm font-medium ${
+          className={`px-6 py-3 font-medium rounded-none ${
             activeTab === 'highlighting'
               ? 'text-blue-500 border-b-2 border-blue-500'
-              : 'text-gray-400 hover:text-gray-200'
+              : 'hover:text-gray-200'
           }`}
         >
           Highlighting
-        </button>
-        <button
-          onClick={() => handleTabClick('filtering')}          className={`px-6 py-3 text-sm font-medium ${
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => handleTabClick('filtering')}
+          className={`px-6 py-3 font-medium rounded-none ${
             activeTab === 'filtering'
               ? 'text-blue-500 border-b-2 border-blue-500'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}        >
+              : 'hover:text-gray-200'
+          }`}
+        >
           Chat
-        </button>
+        </Button>
       </div>
 
       {/* Tab Content */}

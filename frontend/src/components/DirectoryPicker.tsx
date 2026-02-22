@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FolderOpen } from 'lucide-react';
+import Button from './common/Button';
 
 interface DirectoryPickerProps {
   currentDirectory: string | null;
@@ -85,19 +86,16 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
                    rounded-lg focus:ring-1 focus:ring-blue-500"
           placeholder="e.g., C:\sillytavern\characters or just 'characters'"
         />
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="md"
+          icon={isLoading ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <FolderOpen size={18} />}
           disabled={isLoading || !inputValue.trim()}
-          className="px-4 py-2 bg-purple-800 text-white rounded-lg hover:bg-purple-700 
-                   transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="!bg-purple-800 hover:!bg-purple-700"
         >
-          {isLoading ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-          ) : (
-            <FolderOpen size={18} />
-          )}
-          <span>Set</span>
-        </button>
+          Set
+        </Button>
       </form>
       {error && (
         <p className="text-sm text-red-500">{error}</p>

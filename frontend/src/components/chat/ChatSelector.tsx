@@ -5,6 +5,7 @@ import { isKoboldFormat, convertKoboldToJsonl } from '../../utils/koboldImporter
 
 import { Plus, RefreshCw, MessageSquare, Trash2, AlertTriangle, X, Search, Filter, Download, Upload, SortAsc, SortDesc, ChevronDown } from 'lucide-react';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
+import Button from '../common/Button';
 
 interface ChatInfo {
   id: string;
@@ -577,57 +578,68 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
           </div>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            pill
+            icon={<RefreshCw size={16} className={loading ? 'animate-spin' : ''} />}
             onClick={loadAvailableChats}
-            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors"
             disabled={loading}
             title="Refresh chats"
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            pill
+            active={showFilters}
+            icon={<Filter size={16} />}
             onClick={() => setShowFilters(!showFilters)}
-            className={`p-2 rounded-full transition-colors ${showFilters ? 'bg-orange-700 hover:bg-orange-600' : 'bg-stone-800 hover:bg-stone-700'
-              }`}
             title="Toggle filters"
-          >
-            <Filter size={16} />
-          </button>
+            className={showFilters ? 'bg-orange-700 hover:bg-orange-600 text-white' : ''}
+          />
           <div className="relative" ref={exportDropdownRef}>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              pill
               onClick={() => setShowExportDropdown(!showExportDropdown)}
-              className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
               disabled={isExporting || availableChats.length === 0}
               title="Export chats"
             >
               <Download size={16} className={isExporting ? 'animate-pulse' : ''} />
               <ChevronDown size={12} />
-            </button>
+            </Button>
 
             {showExportDropdown && (
               <div className="absolute right-0 top-full mt-1 bg-stone-800 border border-stone-600 rounded-lg shadow-lg z-50 min-w-[160px]">
-                <button
+                <Button
+                  variant="ghost"
+                  size="md"
+                  fullWidth
+                  icon={<Download size={14} />}
                   onClick={() => {
                     handleExportChats('json');
                     setShowExportDropdown(false);
                   }}
-                  className="w-full px-4 py-2 text-left hover:bg-stone-700 transition-colors flex items-center gap-2 rounded-t-lg"
                   disabled={isExporting}
+                  className="justify-start rounded-t-lg rounded-b-none"
                 >
-                  <Download size={14} />
                   Export as JSON
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  fullWidth
+                  icon={<Download size={14} />}
                   onClick={() => {
                     handleExportChats('jsonl');
                     setShowExportDropdown(false);
                   }}
-                  className="w-full px-4 py-2 text-left hover:bg-stone-700 transition-colors flex items-center gap-2 rounded-b-lg border-t border-stone-600"
                   disabled={isExporting}
+                  className="justify-start rounded-b-lg rounded-t-none border-t border-stone-600"
                 >
-                  <Download size={14} />
                   Export as JSONL
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -638,22 +650,24 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             onChange={handleImportChat}
             className="hidden"
           />
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            pill
+            icon={<Upload size={16} className={isImporting ? 'animate-pulse' : ''} />}
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isImporting}
             title="Import chat"
-          >
-            <Upload size={16} className={isImporting ? 'animate-pulse' : ''} />
-          </button>
-          <button
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            pill
+            icon={<Plus size={16} />}
             onClick={handleCreateNewChat}
-            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
             title="New chat"
-          >
-            <Plus size={16} />
-          </button>
+          />
         </div>
       </div>
 
@@ -688,13 +702,13 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
                   <option value="title">Title</option>
                   <option value="messages">Message Count</option>
                 </select>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={sortOrder === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className="p-2 bg-stone-700 hover:bg-stone-600 rounded transition-colors"
                   title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
-                >
-                  {sortOrder === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
-                </button>
+                />
               </div>
             </div>
 
@@ -747,9 +761,12 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
             <span>{error}</span>
           </div>
-          <button onClick={() => setError(null)} className="text-red-300 hover:text-red-100">
-            <X size={16} />
-          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={16} />}
+            onClick={() => setError(null)}
+          />
         </div>
       )}
 
@@ -759,9 +776,12 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
             <span>Import Error: {importError}</span>
           </div>
-          <button onClick={() => setImportError(null)} className="text-red-300 hover:text-red-100">
-            <X size={16} />
-          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={16} />}
+            onClick={() => setImportError(null)}
+          />
         </div>
       )}
 
@@ -771,9 +791,12 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
             <span><strong>Delete Error:</strong> {deleteError}</span>
           </div>
-          <button onClick={dismissDeleteError} className="text-red-300 hover:text-red-100">
-            <X size={16} />
-          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={16} />}
+            onClick={dismissDeleteError}
+          />
         </div>
       )}
 
@@ -789,13 +812,16 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
               ? "No other chats found for this character"
               : "No previous chats found"}
           </p>
-          <button
+          <Button
+            variant="secondary"
+            size="md"
+            icon={<Plus size={16} />}
             onClick={handleCreateNewChat}
-            className="mt-4 px-4 py-2 bg-orange-700 hover:bg-orange-600 rounded-lg flex items-center gap-2 mx-auto transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
+            className="mt-4 mx-auto"
           >
-            <Plus size={16} /> Start New Chat
-          </button>
+            Start New Chat
+          </Button>
         </div>
       ) : (
         <ul className="chat-list space-y-2 max-h-96 overflow-y-auto pr-1">
@@ -834,15 +860,16 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
                   </div>
 
                   {/* Delete button that shows on hover */}
-                  <button
-                    className={`absolute top-2 right-2 p-1.5 rounded-full bg-stone-700 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 ${isCurrentChat ? 'z-10' : ''
-                      }`}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    pill
+                    icon={<Trash2 size={16} />}
                     onClick={(e) => handleDeleteClick(e, chat)}
                     aria-label="Delete chat"
                     title="Delete chat"
-                  >
-                    <Trash2 size={16} className="text-stone-300 hover:text-white" />
-                  </button>
+                    className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 hover:text-white ${isCurrentChat ? 'z-10' : ''}`}
+                  />
                 </div>
               </li>
             );

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { X, UserPlus, ImagePlus, Trash2 } from 'lucide-react';
 import { Dialog } from './common/Dialog';
 import DeleteConfirmationDialog from './common/DeleteConfirmationDialog';
+import Button from './common/Button';
 import { createEmptyCharacterCard } from '../types/schema';
 import { UserProfile } from '../types/messages'; // *** IMPORT the shared type ***
 
@@ -288,13 +289,14 @@ const UserSelect: React.FC<UserSelectProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-stone-800 flex-none">
           <h2 className="text-lg font-semibold text-white">Select User</h2>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={20} />}
             onClick={onClose}
-            className="p-1 text-gray-400 hover:text-gray-200 transition-colors rounded-full hover:bg-stone-700"
             aria-label="Close user selection"
-          >
-            <X size={20} />
-          </button>
+            pill
+          />
         </div>
 
         {/* Search */}
@@ -313,13 +315,13 @@ const UserSelect: React.FC<UserSelectProps> = ({
         {deleteError && (
             <div className="flex-none p-3 mx-4 mt-4 bg-red-900 border border-red-700 text-white rounded-md text-sm flex justify-between items-center shadow-lg">
             <span className="break-words mr-2"><strong>Deletion Error:</strong> {deleteError}</span>
-            <button onClick={() => setDeleteError(null)} className="ml-auto flex-shrink-0 px-2 py-0.5 bg-red-700 hover:bg-red-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-white" aria-label="Dismiss error">Dismiss</button>
+            <Button variant="destructive" size="sm" onClick={() => setDeleteError(null)} aria-label="Dismiss error" className="ml-auto flex-shrink-0">Dismiss</Button>
             </div>
         )}
         {!deleteError && error && (
             <div className="flex-none p-3 mx-4 mt-4 bg-orange-900 border border-orange-700 text-orange-100 rounded-md text-sm flex justify-between items-center shadow-lg">
             <span className="break-words mr-2"><strong>Notice:</strong> {error}</span>
-            <button onClick={() => setError(null)} className="ml-auto flex-shrink-0 px-2 py-0.5 bg-orange-700 hover:bg-orange-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-white" aria-label="Dismiss notice">Dismiss</button>
+            <Button variant="secondary" size="sm" onClick={() => setError(null)} aria-label="Dismiss notice" className="ml-auto flex-shrink-0 !bg-orange-700 hover:!bg-orange-600">Dismiss</Button>
             </div>
         )}
 
@@ -380,19 +382,21 @@ const UserSelect: React.FC<UserSelectProps> = ({
                     >
                       {/* Delete Button (Conditionally Rendered) */}
                       {!isDeleting && (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Trash2 size={16} />}
                             title="Delete user profile"
                             onClick={(e) => handleTrashIconClick(e, user)}
                             tabIndex={-1}
-                            className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full backdrop-blur-sm
+                            aria-label={`Delete ${user.name}`}
+                            pill
+                            className="absolute top-1.5 right-1.5 z-10 backdrop-blur-sm
                                       bg-black/40 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100
                                       transition-all duration-200 ease-in-out
-                                      hover:bg-red-700/70 hover:scale-110 focus:outline-none
-                                      focus:opacity-100 focus:bg-red-700/70 focus:scale-110 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-stone-800"
-                              aria-label={`Delete ${user.name}`}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                                      hover:!bg-red-700/70 hover:scale-110
+                                      focus:opacity-100 focus:!bg-red-700/70 focus:scale-110 focus:ring-red-500 focus:ring-offset-stone-800"
+                          />
                       )}
 
                       {/* User Image Container */}

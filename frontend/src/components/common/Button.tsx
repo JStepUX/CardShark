@@ -1,55 +1,80 @@
 import React from 'react';
 
-type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'ghost' | 'outline' | 'toolbar';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  icon?: React.ReactNode;
+  active?: boolean;
+  pill?: boolean;
+  fullWidth?: boolean;
 }
+
+const variantStyles: Record<ButtonVariant, string> = {
+  primary: 'bg-blue-600 text-white hover:bg-blue-700',
+  secondary: 'bg-stone-700 text-stone-200 hover:bg-stone-600',
+  destructive: 'bg-red-700 text-white hover:bg-red-600',
+  ghost: 'bg-transparent text-gray-400 hover:text-white',
+  outline: 'bg-transparent border border-stone-600 text-stone-300 hover:bg-stone-800',
+  toolbar: 'bg-stone-700 text-stone-300 hover:bg-stone-600',
+};
+
+const toolbarActiveStyle = 'bg-blue-600 text-white hover:bg-blue-700';
+
+const labelSizeStyles: Record<ButtonSize, string> = {
+  sm: 'px-2.5 py-1 text-xs gap-1.5',
+  md: 'px-3 py-1.5 text-sm gap-2',
+  lg: 'px-4 py-2 text-sm gap-2',
+};
+
+const iconOnlySizeStyles: Record<ButtonSize, string> = {
+  sm: 'p-1',
+  md: 'p-1.5',
+  lg: 'p-2',
+};
+
+const iconSizeMap: Record<ButtonSize, string> = {
+  sm: '[&>svg]:w-4 [&>svg]:h-4',
+  md: '[&>svg]:w-[18px] [&>svg]:h-[18px]',
+  lg: '[&>svg]:w-5 [&>svg]:h-5',
+};
 
 const Button: React.FC<ButtonProps> = ({
   children,
-  onClick,
   type = 'button',
-  disabled,
   className = '',
   variant = 'primary',
   size = 'md',
+  icon,
+  active,
+  pill,
+  fullWidth,
+  disabled,
   ...props
 }) => {
-  const baseStyles = 'font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-md transition-colors duration-150 ease-in-out';
+  const isIconOnly = icon && !children;
 
-  const variantStyles: Record<ButtonVariant, string> = {
-    primary: 'bg-blue-500 hover:bg-blue-600 text-white focus:ring-blue-500',
-    secondary: 'bg-stone-200 hover:bg-stone-300 text-gray-800 focus:ring-gray-400',
-    destructive: 'bg-red-500 hover:bg-red-600 text-white focus:ring-red-500',
-    outline: 'border border-gray-300 hover:bg-stone-100 text-gray-700 focus:ring-blue-500',
-    ghost: 'hover:bg-stone-100 text-gray-700 focus:ring-blue-500',
-  };
+  const base = 'inline-flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed';
+  const shape = pill ? 'rounded-full' : 'rounded-lg';
+  const width = fullWidth ? 'w-full' : '';
+  const variantClass = (variant === 'toolbar' && active) ? toolbarActiveStyle : variantStyles[variant];
+  const sizeClass = isIconOnly ? iconOnlySizeStyles[size] : labelSizeStyles[size];
+  const iconSize = icon ? iconSizeMap[size] : '';
 
-  const sizeStyles: Record<ButtonSize, string> = {
-    sm: 'px-3 py-1.5 text-xs',
-    md: 'px-4 py-2 text-sm',
-    lg: 'px-6 py-3 text-base',
-  };
-
-  const combinedClassName = `
-    ${baseStyles}
-    ${variantStyles[variant]}
-    ${sizeStyles[size]}
-    ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-    ${className}
-  `.trim().replace(/\s+/g, ' ');
+  const combinedClassName = [base, shape, width, variantClass, sizeClass, iconSize, className]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <button
       type={type}
-      onClick={onClick}
       disabled={disabled}
       className={combinedClassName}
       {...props}
     >
+      {icon}
       {children}
     </button>
   );

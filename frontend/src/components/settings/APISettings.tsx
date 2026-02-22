@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Globe2, Key, CheckCircle2, XCircle } from 'lucide-react';
+import Button from '../common/Button';
 import { ChatTemplate, TEMPLATE_NAMES } from '../../types/api';
 
 interface APISettingsProps {
@@ -96,16 +97,14 @@ const APISettings: React.FC<APISettingsProps> = ({ settings, onUpdate }) => {
             </>
           )}
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="md"
           onClick={handleTestConnection}
           disabled={isConnecting}
-          className={`px-4 py-2 rounded-lg transition-colors ${isConnecting
-            ? 'bg-stone-600 text-gray-300 cursor-wait'
-            : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
         >
           {isConnecting ? 'Testing...' : 'Test Connection'}
-        </button>
+        </Button>
       </div>
 
       {/* Form Fields */}

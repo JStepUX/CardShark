@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, FileJson, SplitSquareVertical, AlertTriangle, Save, Globe, Trash2, Copy, MoreHorizontal } from 'lucide-react';
+import Button from '../common/Button';
 import { useNavigate } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
@@ -66,12 +67,14 @@ const JsonViewerModal: React.FC<{
         value={editableJson}
         onChange={handleChange}
       />
-      <button
-        className="mt-4 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded"
+      <Button
+        variant="primary"
+        size="md"
+        className="mt-4 !bg-purple-600 hover:!bg-purple-700"
         onClick={handleSave}
       >
         Save Changes
-      </button>
+      </Button>
     </div>
   );
 };
@@ -449,42 +452,40 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
         <div className="flex items-center gap-3 min-w-0">
           {/* Tools group */}
           <div className="flex items-center gap-1">
-            <button
+            <Button
+              variant="ghost"
+              size="lg"
+              icon={<FileJson />}
               onClick={() => setShowJsonModal(true)}
-              className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
               title="View JSON"
-            >
-              <FileJson className="w-5 h-5" />
-            </button>
+            />
 
-            <button
+            <Button
+              variant="ghost"
+              size="lg"
+              icon={<Search />}
               onClick={() => setShowFindReplace(true)}
-              className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
               title="Find & Replace"
-            >
-              <Search className="w-5 h-5" />
-            </button>
+            />
 
             {!isSecondary && (
               <>
-                <button
-                  onClick={() => {
-                    handleConvertToWorld();
-                  }}
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  icon={<Globe className={isConvertingToWorld ? 'animate-spin' : ''} />}
+                  onClick={handleConvertToWorld}
                   disabled={isConvertingToWorld}
-                  className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Convert to World"
-                >
-                  <Globe className={`w-5 h-5 ${isConvertingToWorld ? 'animate-spin' : ''}`} />
-                </button>
+                />
 
-                <button
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  icon={<Copy />}
                   onClick={handleDuplicate}
-                  className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                   title="Duplicate"
-                >
-                  <Copy className="w-5 h-5" />
-                </button>
+                />
               </>
             )}
           </div>
@@ -495,16 +496,14 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
           {/* Panel toggles */}
           {!isSecondary && (
             <div className="flex items-center gap-1">
-              <button
+              <Button
+                variant="toolbar"
+                size="lg"
+                icon={<SplitSquareVertical />}
+                active={isCompareMode}
                 onClick={toggleCompareMode}
-                className={`p-2 rounded-lg transition-colors ${isCompareMode
-                  ? 'text-white bg-stone-600'
-                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
-                  }`}
                 title={isCompareMode ? "Close Comparison" : "Compare Characters"}
-              >
-                <SplitSquareVertical className="w-5 h-5" />
-              </button>
+              />
             </div>
           )}
 
@@ -513,48 +512,55 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
 
           {/* Delete - destructive action */}
           {!isSecondary && (
-            <button
+            <Button
+              variant="ghost"
+              size="lg"
+              icon={<Trash2 />}
               onClick={() => setIsDeleteConfirmOpen(true)}
-              className="p-2 text-red-400/70 hover:text-red-400 hover:bg-red-900/30 rounded-lg transition-colors"
               title="Delete Character"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
+              className="text-red-400/70 hover:text-red-400 hover:bg-red-900/30"
+            />
           )}
 
           {/* Overflow menu for secondary view or tight spaces */}
           {isSecondary && (
             <div className="relative" ref={overflowMenuRef}>
-              <button
+              <Button
+                variant="ghost"
+                size="lg"
+                icon={<MoreHorizontal />}
                 onClick={() => setShowOverflowMenu(!showOverflowMenu)}
-                className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-lg transition-colors"
                 title="More actions"
-              >
-                <MoreHorizontal className="w-5 h-5" />
-              </button>
+              />
 
               {showOverflowMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-700 rounded-lg shadow-lg z-10 overflow-hidden">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<FileJson />}
+                    fullWidth
+                    className="justify-start px-4 py-3 text-white hover:bg-stone-700 rounded-none"
                     onClick={() => {
                       setShowOverflowMenu(false);
                       setShowJsonModal(true);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"
                   >
-                    <FileJson className="w-4 h-4" />
-                    <span>View JSON</span>
-                  </button>
-                  <button
+                    View JSON
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<Search />}
+                    fullWidth
+                    className="justify-start px-4 py-3 text-white hover:bg-stone-700 rounded-none"
                     onClick={() => {
                       setShowOverflowMenu(false);
                       setShowFindReplace(true);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-stone-700 transition-colors"
                   >
-                    <Search className="w-4 h-4" />
-                    <span>Find & Replace</span>
-                  </button>
+                    Find & Replace
+                  </Button>
                 </div>
               )}
             </div>
@@ -711,25 +717,29 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
             </div>
 
             <div className="flex gap-3 justify-end">
-              <button
+              <Button
+                variant="secondary"
+                size="lg"
                 onClick={handleCancelNavigation}
-                className="px-4 py-2 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="destructive"
+                size="lg"
                 onClick={handleDiscardChanges}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 Discard Changes
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                icon={<Save />}
+                className="!bg-green-600 hover:!bg-green-700"
                 onClick={handleSave}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
               >
-                <Save className="w-4 h-4" />
                 Save
-              </button>
+              </Button>
             </div>
           </div>
         </Dialog>

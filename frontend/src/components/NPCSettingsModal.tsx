@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { X, Shield, Swords, AlertCircle } from 'lucide-react';
 import { RoomNPC } from '../types/room';
+import Button from './common/Button';
 
 interface NPCSettingsModalProps {
     isOpen: boolean;
@@ -53,12 +54,12 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
                         <h2 className="text-xl font-bold text-white mb-1">NPC Settings</h2>
                         <p className="text-sm text-stone-400">{npcName}</p>
                     </div>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<X size={20} />}
                         onClick={handleCancel}
-                        className="p-2 hover:bg-stone-800 rounded-lg transition-colors"
-                    >
-                        <X size={20} className="text-stone-400" />
-                    </button>
+                    />
                 </div>
 
                 {/* Content */}
@@ -156,18 +157,18 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
 
                 {/* Footer */}
                 <div className="p-6 border-t border-stone-700 flex items-center justify-end gap-3">
-                    <button
+                    <Button
+                        variant="secondary"
                         onClick={handleCancel}
-                        className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-white rounded-lg transition-colors"
                     >
                         Cancel
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        variant="primary"
                         onClick={handleSave}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                     >
                         Save Settings
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

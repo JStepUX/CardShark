@@ -10,6 +10,7 @@
 
 import React, { useEffect } from 'react';
 import { Skull, Coins, Star, Heart, LogOut, TrendingUp, Zap, Shield, Swords, Package } from 'lucide-react';
+import Button from '../common/Button';
 import type { GridCombatState, GridCombatant } from '../../types/combat';
 import type { LevelUpInfo } from '../../utils/progressionUtils';
 import { soundManager } from './pixi/SoundManager';
@@ -400,23 +401,24 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                 )}
 
                 {/* Continue Button */}
-                <button
+                <Button
                     onClick={onContinue}
+                    variant="primary"
+                    size="lg"
                     className={`
-                        px-8 py-3 rounded-lg font-semibold text-lg
-                        transition-all transform hover:scale-105
+                        transform hover:scale-105
                         ${isFled
-                            ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                            ? 'bg-blue-600 hover:bg-blue-500'
                             : hasLevelUp
-                                ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                                ? 'bg-purple-600 hover:bg-purple-500'
                                 : isVictory
-                                    ? 'bg-yellow-600 hover:bg-yellow-500 text-white'
-                                    : 'bg-gray-700 hover:bg-gray-600 text-white'
+                                    ? 'bg-yellow-600 hover:bg-yellow-500'
+                                    : 'bg-gray-700 hover:bg-gray-600'
                         }
                     `}
                 >
                     Continue
-                </button>
+                </Button>
             </div>
         </div>
     );

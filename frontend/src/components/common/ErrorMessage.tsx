@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import Button from './Button';
 
 export type ErrorSeverity = 'error' | 'warning' | 'info';
 
@@ -51,13 +52,14 @@ const ErrorMessage: React.FC<ErrorMessageProps> = ({
         <span>{message}</span>
       </div>
       {onDismiss && (
-        <button 
+        <Button
+          variant="ghost"
+          size="sm"
+          pill
+          icon={<X size={16} />}
           onClick={onDismiss}
-          className="p-1 hover:bg-black/20 rounded-full transition-colors"
           aria-label="Dismiss"
-        >
-          <X size={16} />
-        </button>
+        />
       )}
     </div>
   );

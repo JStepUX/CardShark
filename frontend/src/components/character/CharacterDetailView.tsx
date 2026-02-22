@@ -13,6 +13,7 @@ import { useAPIConfig } from '../../contexts/APIConfigContext';
 import { ImageHandlerProvider } from '../../contexts/ImageHandlerContext';
 import HighlightStylesUpdater from '../tiptap/HighlightStylesUpdater';
 import LoadingSpinner from '../common/LoadingSpinner';
+import Button from '../common/Button';
 
 // Lazy load tab content
 const ChatView = lazy(() => import('../chat/ChatView'));
@@ -178,12 +179,13 @@ const CharacterDetailView: React.FC = () => {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4 text-white">
         <p className="text-red-400">{loadError}</p>
-        <button
+        <Button
+          variant="secondary"
+          size="lg"
           onClick={() => navigate(backTo)}
-          className="px-4 py-2 bg-stone-700 hover:bg-stone-600 rounded-lg transition-colors"
         >
           Back to Gallery
-        </button>
+        </Button>
       </div>
     );
   }
@@ -193,40 +195,33 @@ const CharacterDetailView: React.FC = () => {
       {/* Header: back arrow + character name + tabs */}
       <div className="flex-none bg-stone-900 border-b border-stone-700">
         <div className="flex items-center gap-3 px-4 pt-3 pb-0">
-          <button
+          <Button
+            variant="ghost"
+            size="lg"
+            icon={<ArrowLeft size={20} />}
             onClick={() => navigate(backTo)}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-700 transition-colors"
             title={fromFolder ? `Back to ${fromFolder}` : 'Back to Gallery'}
-          >
-            <ArrowLeft size={20} />
-          </button>
+          />
           <h1 className="text-lg font-semibold text-white truncate">{characterName}</h1>
 
           {/* Character-level Save button — always visible, subtle outline when clean, filled when dirty */}
-          <button
+          <Button
+            variant="primary"
+            size="md"
             onClick={() => saveCharacter(apiConfig ? (apiConfig as unknown as Record<string, unknown>) : undefined)}
             disabled={isGeneratingThinFrame}
-            className={`ml-auto flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+            className={`ml-auto ${
               isGeneratingThinFrame
-                ? 'bg-green-800 text-white cursor-wait'
+                ? '!bg-green-800 cursor-wait'
                 : hasUnsavedChanges
-                  ? 'bg-green-700 text-white hover:bg-green-600'
-                  : 'border border-orange-700 text-orange-500 hover:text-orange-400 hover:border-orange-600'
+                  ? '!bg-green-700 hover:!bg-green-600'
+                  : '!bg-transparent !border !border-orange-700 !text-orange-500 hover:!text-orange-400 hover:!border-orange-600'
             }`}
             title={isGeneratingThinFrame ? "Generating character profile..." : "Save character"}
+            icon={isGeneratingThinFrame ? <Loader2 className="animate-spin" /> : <Save />}
           >
-            {isGeneratingThinFrame ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                Save
-              </>
-            )}
-          </button>
+            {isGeneratingThinFrame ? 'Saving...' : 'Save'}
+          </Button>
         </div>
 
         {/* Tab bar */}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Button from '../common/Button';
 import { Image, RefreshCw, ImagePlus } from 'lucide-react';
 import { UnifiedImageGallery, ImageSelection } from '../common/UnifiedImageGallery';
 
@@ -143,23 +144,27 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
                 {localSettings.background.name}
               </p>
             </div>
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => updateSettings({ background: null })}
-              className="px-3 py-1.5 text-xs bg-stone-700 hover:bg-stone-600 rounded flex-shrink-0"
+              className="flex-shrink-0"
             >
               Clear
-            </button>
+            </Button>
           </div>
         )}
 
         {/* Action button */}
-        <button
+        <Button
+          variant="primary"
+          icon={<ImagePlus size={18} />}
           onClick={() => setShowGallery(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+          fullWidth
+          className="bg-purple-600 hover:bg-purple-700 py-2.5"
         >
-          <ImagePlus size={18} />
           {localSettings.background ? 'Change Background' : 'Select Background'}
-        </button>
+        </Button>
       </div>
       
       {/* Transparency Slider */}
@@ -219,27 +224,27 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
       
       {/* Action Buttons */}
       <div className="flex justify-between pt-2 border-t border-stone-800">
-        <button
+        <Button
+          variant="secondary"
+          icon={<RefreshCw size={16} />}
           onClick={handleReset}
-          className="flex items-center gap-1 px-3 py-2 bg-stone-800 hover:bg-stone-700 rounded"
         >
-          <RefreshCw size={16} />
-          <span>Reset</span>
-        </button>
-        
+          Reset
+        </Button>
+
         <div className="flex gap-2">
-          <button
+          <Button
+            variant="secondary"
             onClick={onClose}
-            className="px-3 py-2 bg-stone-800 hover:bg-stone-700 rounded"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleSaveChanges}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
           >
             Apply Changes
-          </button>
+          </Button>
         </div>
       </div>
 

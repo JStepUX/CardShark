@@ -4,6 +4,7 @@ import { useAPIConfig } from '../../contexts/APIConfigContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { DEFAULT_GENERATION_SETTINGS } from '../../types/api';
 import { debounce } from '../../utils/performance';
+import Button from '../common/Button';
 
 interface SamplerSettingsPanelProps {
   onClose: () => void;
@@ -199,20 +200,20 @@ const SamplerOrderItem: React.FC<{
     <span className="text-sm flex-1">{sampler.label}</span>
     <span className="text-xs text-gray-500 mr-4">Order: {index + 1}</span>
     <div className="flex gap-1">
-      <button
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={<ChevronUp size={16} />}
         onClick={onMoveUp}
         disabled={isFirst}
-        className={`p-1 rounded ${isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-700'}`}
-      >
-        <ChevronUp size={16} />
-      </button>
-      <button
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={<ChevronDown size={16} />}
         onClick={onMoveDown}
         disabled={isLast}
-        className={`p-1 rounded ${isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-700'}`}
-      >
-        <ChevronDown size={16} />
-      </button>
+      />
     </div>
   </div>
 );
@@ -358,9 +359,7 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
       <div className="flex flex-col h-full">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
           <h3 className="text-sm font-medium text-white">Generation Settings</h3>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-white transition-colors">
-            <X size={16} />
-          </button>
+          <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={onClose} />
         </div>
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center text-gray-500">
@@ -384,9 +383,7 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
           <h3 className="text-sm font-medium text-white truncate">Generation Settings</h3>
           <div className="text-xs text-gray-500 truncate">{apiConfig.name || 'Unnamed API'} &middot; {apiConfig.model || 'No model'}</div>
         </div>
-        <button onClick={onClose} className="p-1 text-gray-400 hover:text-white transition-colors ml-2 flex-shrink-0">
-          <X size={16} />
-        </button>
+        <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={onClose} className="ml-2 flex-shrink-0" />
       </div>
 
       {/* Scrollable content */}
@@ -578,12 +575,14 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
             {!isDefaultSamplerOrder && (
               <>
                 <div className="flex justify-end">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={handleResetSamplerOrder}
-                    className="text-xs px-2 py-1 bg-amber-900/50 text-amber-400 hover:bg-amber-900/70 rounded transition-colors"
+                    className="bg-amber-900/50 text-amber-400 hover:bg-amber-900/70"
                   >
                     Reset to Recommended
-                  </button>
+                  </Button>
                 </div>
                 <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-800/40 rounded px-3 py-2">
                   Non-default order. Recommended: Rep Pen, Top K, Top A, TFS, Typical, Top P, Temperature

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Upload, Crop, ChevronLeft, ChevronRight, X } from 'lucide-react'; // Added X icon
 import ImageCropperModal from './ImageCropperModal';
 import { AvailablePreviewImage } from '../handlers/loreHandler'; // Import type
+import Button from './common/Button';
 
 interface ImagePreviewProps {
   imageUrl?: string; // Fallback if availableImages is not provided
@@ -190,34 +191,34 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
         {/* Navigation Controls */}
         {availableImages && availableImages.length > 1 && onNavigate && typeof currentIndex === 'number' && (
           <>
-            <button
+            <Button
+              variant="ghost"
+              pill
+              icon={<ChevronLeft size={24} />}
               onClick={() => onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length)}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowLeft') {
                   onNavigate((currentIndex - 1 + availableImages.length) % availableImages.length);
                 }
               }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white hover:bg-black/75"
               aria-label="Previous Image"
-              role="button"
               aria-controls="image-preview-content"
-            >
-              <ChevronLeft size={24} />
-            </button>
-            <button
+            />
+            <Button
+              variant="ghost"
+              pill
+              icon={<ChevronRight size={24} />}
               onClick={() => onNavigate((currentIndex + 1) % availableImages.length)}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowRight') {
                   onNavigate((currentIndex + 1) % availableImages.length);
                 }
               }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 transition-opacity"
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white hover:bg-black/75"
               aria-label="Next Image"
-              role="button"
               aria-controls="image-preview-content"
-            >
-              <ChevronRight size={24} />
-            </button>
+            />
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
               {currentIndex + 1} / {availableImages.length}
             </div>
@@ -234,43 +235,46 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
               <div className="flex flex-col gap-3">                {/* Image editing buttons - only show if onImageChange is available */}
                 {onImageChange && (
                   <>
-                    <button
+                    <Button
+                      variant="primary"
+                      size="md"
+                      icon={<Upload size={16} />}
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                     >
-                      <Upload size={16} />
-                      <span>Replace Image</span>
-                    </button>
+                      Replace Image
+                    </Button>
 
                     {currentImage !== placeholderUrl && ( // Only show adjust if not placeholder
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        icon={<Crop size={16} />}
                         onClick={() => {
                           setTempImageUrl(currentImage); // Use currentImage which reflects the displayed one
                           setShowCropper(true);
                         }}
-                        className="flex items-center gap-2 px-4 py-2 bg-stone-700 hover:bg-stone-600 text-white rounded-lg transition-colors"
                       >
-                        <Crop size={16} />
-                        <span>Adjust Image</span>
-                      </button>
+                        Adjust Image
+                      </Button>
                     )}
                   </>
                 )}
 
                 {/* Character dismiss button - only show when character is loaded */}
                 {hasCharacterLoaded && onUnloadCharacter && (
-                  <button
+                  <Button
+                    variant="destructive"
+                    size="md"
+                    icon={<X size={16} />}
                     onClick={(e) => {
                       e.stopPropagation();
                       onUnloadCharacter();
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
                     title="Switch to Assistant Mode (unload character)"
                     aria-label="Dismiss character"
                   >
-                    <X size={16} />
-                    <span>Dismiss Character</span>
-                  </button>
+                    Dismiss Character
+                  </Button>
                 )}
               </div>
             </div>

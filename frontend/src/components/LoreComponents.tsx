@@ -13,6 +13,7 @@ import { LoreEntry, WorldInfoLogic } from '../types/schema';
 import RichTextEditor from './RichTextEditor';
 import LoreImageUploader from './LoreImageUploader'; // Import the uploader
 import LoadingSpinner from './common/LoadingSpinner'; // Added
+import Button from './common/Button';
 import { useCharacter } from '../contexts/CharacterContext';
 import { useCharacterUuid } from '../hooks/useCharacterUuid';
 import { htmlToPlainText } from '../utils/contentUtils'; // Import HTML to plain text converter
@@ -185,13 +186,13 @@ export const LoreCard: React.FC<LoreCardProps> = ({
             <div className="flex items-center justify-between gap-4 mb-4">
               {/* Left side controls */}
               <div className="flex items-center gap-2">
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={!item.enabled ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}
                   onClick={() => onUpdate(item.id, { enabled: !item.enabled })}
-                  className="text-gray-400 hover:text-blue-400 transition-colors"
                   title={!item.enabled ? 'Enable' : 'Disable'}
-                >
-                  {!item.enabled ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}
-                </button>
+                />
 
                 <select
                   value={item.position}
@@ -237,47 +238,48 @@ export const LoreCard: React.FC<LoreCardProps> = ({
               {/* Right side controls */}
               <div className="flex items-center gap-1">
                 {/* Image Add/Remove Button */}
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={item.has_image ? <FileImage size={18} /> : <ImagePlus size={18} />}
                   onClick={() => setShowImageUploader(true)}
-                  className="p-1 text-gray-400 hover:text-green-400 hover:bg-stone-800 rounded"
                   title={item.has_image ? "Change/Remove Image" : "Add Image"}
-                >
-                  {item.has_image ? <FileImage size={18} /> : <ImagePlus size={18} />}
-                </button>
+                />
 
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<ChevronUp size={18} />}
                   onClick={() => onMoveUp(item.id)}
                   disabled={isFirst}
-                  className={`p-1 rounded ${isFirst ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-800'}`}
                   title="Move up"
-                >
-                  <ChevronUp size={18} />
-                </button>
+                />
 
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<ChevronDown size={18} />}
                   onClick={() => onMoveDown(item.id)}
                   disabled={isLast}
-                  className={`p-1 rounded ${isLast ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-blue-400 hover:bg-stone-800'}`}
                   title="Move down"
-                >
-                  <ChevronDown size={18} />
-                </button>
+                />
 
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Settings size={18} />}
                   onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="p-1 text-gray-400 hover:text-blue-400 hover:bg-stone-800 rounded"
+                  active={showAdvanced}
                   title="Advanced settings"
-                >
-                  <Settings size={18} />
-                </button>
+                />
 
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Trash2 size={18} />}
                   onClick={() => onDelete(item.id)}
-                  className="p-1 text-gray-400 hover:text-red-400 hover:bg-stone-800 rounded"
                   title="Delete entry"
-                >
-                  <Trash2 size={18} />
-                </button>
+                />
               </div>
             </div>
 

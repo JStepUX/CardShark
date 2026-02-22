@@ -21,6 +21,7 @@ import {
     FlaskConical,
     Crosshair,
 } from 'lucide-react';
+import Button from '../common/Button';
 import {
     GridCombatState,
     GridCombatant,
@@ -115,21 +116,19 @@ const ActionButton: React.FC<{
     active?: boolean;
     onClick: () => void;
 }> = ({ icon, label, apCost, disabled, active, onClick }) => (
-    <button
+    <Button
         onClick={onClick}
         disabled={disabled}
-        className={`flex flex-col items-center justify-center px-4 py-2 rounded-lg
-                   transition-all min-w-[70px]
-                   ${disabled
-                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                : active
-                    ? 'bg-yellow-600 text-white ring-2 ring-yellow-400'
-                    : 'bg-gray-800 text-white hover:bg-gray-700'}`}
+        active={active}
+        variant={active ? 'primary' : 'secondary'}
+        className={`flex flex-col items-center justify-center min-w-[70px]
+                   ${active ? 'ring-2 ring-yellow-400 bg-yellow-600 hover:bg-yellow-600' : ''}
+                   ${disabled ? 'bg-gray-700 text-gray-500' : ''}`}
     >
         <div className="text-xl mb-1">{icon}</div>
         <span className="text-xs font-medium">{label}</span>
         <span className="text-[10px] text-gray-400">{apCost} AP</span>
-    </button>
+    </Button>
 );
 
 /** Combat log entry */
@@ -409,12 +408,14 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
                             {targetingMode === 'attack' && 'Click an enemy to attack'}
                             {targetingMode === 'aoe' && 'Click a tile to target AoE'}
                             {targetingMode === 'item' && 'Select an item to use'}
-                            <button
+                            <Button
                                 onClick={onCancelTargeting}
-                                className="ml-2 text-gray-400 hover:text-white underline"
+                                variant="ghost"
+                                size="sm"
+                                className="ml-2 underline"
                             >
                                 Cancel
-                            </button>
+                            </Button>
                         </div>
                     )}
                 </div>

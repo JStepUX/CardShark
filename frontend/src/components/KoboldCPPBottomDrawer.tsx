@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Play, AlertCircle } from 'lucide-react';
 import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { useSettings } from '../contexts/SettingsContext';
+import Button from './common/Button';
 
 interface Model {
   name: string;
@@ -160,12 +161,13 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-zinc-700">
           <h2 className="text-lg font-medium text-white">KoboldCPP Model Launcher</h2>
-          <button 
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={20} />}
             onClick={onDismiss}
-            className="p-1 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
-          >
-            <X size={20} />
-          </button>
+            pill
+          />
         </div>
 
         <div className="p-4 flex-grow overflow-y-auto">
@@ -302,34 +304,21 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
 
         {/* Footer with buttons */}
         <div className="p-4 border-t border-zinc-700 flex justify-end gap-3">
-          <button
+          <Button
+            variant="secondary"
             onClick={onDismiss}
-            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors"
           >
             Dismiss
-          </button>
-          
-          <button
+          </Button>
+
+          <Button
+            variant="primary"
+            icon={isLaunching ? <LoadingSpinner size="sm" /> : <Play size={18} />}
             onClick={launchKoboldCPP}
             disabled={!selectedModel || isLaunching || !settings.models_directory}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              !selectedModel || isLaunching || !settings.models_directory
-                ? 'bg-blue-800/50 text-blue-300/50 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
           >
-            {isLaunching ? (
-              <>
-                <LoadingSpinner size="sm" />
-                <span>Starting...</span>
-              </>
-            ) : (
-              <>
-                <Play size={18} />
-                <span>Start KoboldCPP</span>
-              </>
-            )}
-          </button>
+            {isLaunching ? 'Starting...' : 'Start KoboldCPP'}
+          </Button>
         </div>
       </div>
     </div>

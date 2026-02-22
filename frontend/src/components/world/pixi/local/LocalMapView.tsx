@@ -9,6 +9,7 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo, useImperativeHandle } from 'react';
 import * as PIXI from 'pixi.js';
 import { Plus, Minus, RotateCcw, Hand, MousePointer, Music, Volume2 } from 'lucide-react';
+import Button from '../../../common/Button';
 import { LocalMapStage } from './LocalMapStage';
 import {
     LocalMapState,
@@ -1565,44 +1566,46 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             {!isLoading && (
                 <div className="absolute top-2 right-2 flex flex-col gap-1 z-20">
                     {/* Pan/Navigate mode toggle */}
-                    <button
+                    <Button
                         onClick={() => setIsPanMode(!isPanMode)}
-                        className={`w-8 h-8 flex items-center justify-center rounded transition-colors shadow-lg border ${isPanMode
-                                ? 'bg-blue-600/90 text-white border-blue-500/50'
-                                : 'bg-stone-800/80 hover:bg-stone-700/90 text-white border-stone-600/50'
+                        variant="ghost"
+                        size="sm"
+                        active={isPanMode}
+                        icon={isPanMode ? <Hand size={16} /> : <MousePointer size={16} />}
+                        className={`w-8 h-8 shadow-lg border ${isPanMode
+                                ? 'bg-blue-600/90 border-blue-500/50'
+                                : 'bg-stone-800/80 hover:bg-stone-700/90 border-stone-600/50'
                             }`}
                         title={isPanMode ? 'Pan mode (P) - click to switch to navigate' : 'Navigate mode (P) - click to switch to pan'}
-                    >
-                        {isPanMode ? <Hand size={16} /> : <MousePointer size={16} />}
-                    </button>
+                    />
 
                     {/* Divider */}
                     <div className="h-px bg-stone-600/30 my-0.5" />
 
-                    <button
+                    <Button
                         onClick={handleZoomIn}
-                        className="w-8 h-8 flex items-center justify-center rounded bg-stone-800/80 hover:bg-stone-700/90
-                                   text-white border border-stone-600/50 transition-colors shadow-lg"
+                        variant="ghost"
+                        size="sm"
+                        icon={<Plus size={16} />}
+                        className="w-8 h-8 bg-stone-800/80 hover:bg-stone-700/90 border border-stone-600/50 shadow-lg"
                         title="Zoom in"
-                    >
-                        <Plus size={16} />
-                    </button>
-                    <button
+                    />
+                    <Button
                         onClick={handleZoomOut}
-                        className="w-8 h-8 flex items-center justify-center rounded bg-stone-800/80 hover:bg-stone-700/90
-                                   text-white border border-stone-600/50 transition-colors shadow-lg"
+                        variant="ghost"
+                        size="sm"
+                        icon={<Minus size={16} />}
+                        className="w-8 h-8 bg-stone-800/80 hover:bg-stone-700/90 border border-stone-600/50 shadow-lg"
                         title="Zoom out"
-                    >
-                        <Minus size={16} />
-                    </button>
-                    <button
+                    />
+                    <Button
                         onClick={handleResetZoom}
-                        className="w-8 h-8 flex items-center justify-center rounded bg-stone-800/80 hover:bg-stone-700/90
-                                   text-white border border-stone-600/50 transition-colors shadow-lg"
+                        variant="ghost"
+                        size="sm"
+                        icon={<RotateCcw size={14} />}
+                        className="w-8 h-8 bg-stone-800/80 hover:bg-stone-700/90 border border-stone-600/50 shadow-lg"
                         title="Reset zoom"
-                    >
-                        <RotateCcw size={14} />
-                    </button>
+                    />
                     {/* Zoom level indicator */}
                     <div className="text-xs text-center text-gray-400 mt-1">
                         {Math.round(currentZoom * 100)}%

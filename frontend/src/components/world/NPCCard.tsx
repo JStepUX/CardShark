@@ -1,8 +1,9 @@
 import { ImageWithFallback } from '../shared/ImageWithFallback';
 import { DisplayNPC } from '../../utils/worldStateApi';
-import { Skull, Link } from 'lucide-react';
+import { Skull, Link, X } from 'lucide-react';
 import { AffinityHearts } from './AffinityHearts';
 import type { NPCRelationship } from '../../types/worldRuntime';
+import Button from '../common/Button';
 
 interface NPCCardProps {
   npc: DisplayNPC & { hostile?: boolean; monster_level?: number };
@@ -61,16 +62,18 @@ export function NPCCard({ npc, isActive, onClick, onDismiss, relationship }: NPC
 
       {/* Dismiss button for bound allies */}
       {isBound && onDismiss && (
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          pill
           onClick={(e) => {
             e.stopPropagation(); // Prevent triggering the card's onClick
             onDismiss();
           }}
-          className="absolute top-1 left-1 bg-gray-700 hover:bg-gray-600 rounded-full p-1 transition-colors"
           title="Dismiss"
-        >
-          <span className="text-white text-xs leading-none">×</span>
-        </button>
+          icon={<X className="w-3 h-3" />}
+          className="absolute top-1 left-1 !bg-gray-700 hover:!bg-gray-600"
+        />
       )}
 
       <span className={`text-xs truncate max-w-[80px] ${isHostile ? 'text-red-400 font-medium' : isBound ? 'text-blue-400 font-medium' : 'text-gray-300'

@@ -7,6 +7,7 @@ import RichTextEditor from './RichTextEditor'; // Import the RichTextEditor
 import { ChatStorage } from '../services/chatStorage'; // Service to call backend
 import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { htmlToPlainText } from '../utils/contentUtils'; // Import HTML to plain text converter
+import Button from './common/Button';
 
 // Interface defining the structure of a message within this component's state
 interface Message {
@@ -40,23 +41,27 @@ const MessageCard: React.FC<{
       </label>
       <div className="flex items-center gap-1">
         {/* Per-card Generate button */}
-        <button
+        <Button
+          variant="ghost"
+          size="md"
+          pill
+          icon={<Sparkles className="h-5 w-5" />}
           onClick={() => onGenerate(message.id)}
           disabled={isGenerating}
-          className="p-1.5 text-gray-400 hover:text-purple-400 rounded-full hover:bg-purple-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label={message.content.trim() ? "Continue greeting from current text" : "Generate greeting"}
           title={message.content.trim() ? "Continue from current text" : "Generate greeting"}
-        >
-          <Sparkles className="h-5 w-5" />
-        </button>
+          className="hover:text-purple-400 hover:bg-purple-900/30"
+        />
         {/* Delete button */}
-        <button
+        <Button
+          variant="ghost"
+          size="md"
+          pill
+          icon={<Trash2 className="h-5 w-5" />}
           onClick={() => onDelete(message.id)}
-          className="p-1.5 text-gray-400 hover:text-red-400 rounded-full hover:bg-red-900/30 transition-colors"
           aria-label="Delete message"
-        >
-          <Trash2 className="h-5 w-5" />
-        </button>
+          className="hover:text-red-400 hover:bg-red-900/30"
+        />
       </div>
     </div>
     {/* Rich text editor for editing the message content */}
@@ -357,33 +362,32 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
             {/* Generate Greeting Button */}
-            <button
+            <Button
+              variant="ghost"
+              size="lg"
+              icon={isGeneratingGreeting ? <LoadingSpinner size="sm" /> : <Sparkles size={18} />}
               onClick={() => handleGenerateGreeting()}
               disabled={isGeneratingGreeting || !apiConfig?.enabled}
-              className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 ${isGeneratingGreeting || !apiConfig?.enabled
-                ? 'bg-stone-600 text-gray-400 cursor-not-allowed'
-                : 'bg-purple-600 text-white hover:bg-purple-700 focus:ring-purple-500'
-                }`}
               title={!apiConfig?.enabled ? "API is not enabled in Settings" : "Generate a new greeting using AI"}
+              className={
+                isGeneratingGreeting || !apiConfig?.enabled
+                  ? 'bg-stone-600 text-gray-400'
+                  : 'bg-purple-600 text-white hover:bg-purple-700'
+              }
             >
-              {/* Loading Spinner/Icon */}
-              {isGeneratingGreeting ? (
-                <LoadingSpinner size="sm" />
-              ) : (
-                <Sparkles size={18} />
-              )}
-              <span>{isGeneratingGreeting ? 'Generating...' : 'Generate'}</span>
-            </button>
+              {isGeneratingGreeting ? 'Generating...' : 'Generate'}
+            </Button>
 
             {/* Add New Manual Message Button */}
-            <button
+            <Button
+              variant="primary"
+              size="lg"
+              icon={<Plus size={18} />}
               onClick={handleAddMessage}
-              className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-900 bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500"
               title="Add a blank greeting card to write manually"
             >
-              <Plus size={18} />
-              <span>New Manual</span>
-            </button>
+              New Manual
+            </Button>
           </div>
         </div>
       </div>
@@ -393,11 +397,19 @@ const MessagesView: React.FC<MessagesViewProps> = ({ isSecondary = false }) => {
         <div className="px-6 py-3 mx-6 mt-4 bg-red-800/40 border border-red-700/60 text-red-200 rounded-md flex justify-between items-center text-sm" role="alert">
           <span>Error: {error}</span>
           {/* Button to dismiss the error */}
-          <button onClick={() => setError(null)} className="p-1 text-red-100 hover:text-white rounded-full hover:bg-red-700/50" aria-label="Dismiss error">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            pill
+            icon={
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            }
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+            className="text-red-100 hover:text-white hover:bg-red-700/50"
+          />
         </div>
       )}
 

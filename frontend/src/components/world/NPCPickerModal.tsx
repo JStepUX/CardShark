@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, Check } from 'lucide-react';
 import { Dialog } from '../common/Dialog';
 import { RoomNPC } from '../../types/room';
+import Button from '../common/Button';
 
 interface Character {
   id: string;
@@ -123,25 +124,28 @@ export function NPCPickerModal({
 
       {/* Footer */}
       <div className="pt-6 mt-6 border-t border-[#2a2a2a] -mx-6 px-6 flex items-center justify-between">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setTempSelected([])}
-          className="text-sm text-gray-400 hover:text-white transition-colors"
         >
           Clear Selection
-        </button>
+        </Button>
         <div className="flex gap-3">
-          <button
+          <Button
+            variant="secondary"
+            size="md"
             onClick={onClose}
-            className="px-4 py-2 bg-[#2a2a2a] hover:bg-[#3a3a3a] rounded-lg transition-colors text-sm"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleConfirm}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-sm"
           >
             Add {tempSelected.length} NPC{tempSelected.length !== 1 ? 's' : ''}
-          </button>
+          </Button>
         </div>
       </div>
     </Dialog>

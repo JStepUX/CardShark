@@ -3,6 +3,7 @@ import { Plus, X, Loader2, ImageIcon } from 'lucide-react';
 import { CharacterImageService, CharacterImage } from '../../services/characterImageService';
 import ImageCropperModal from '../ImageCropperModal';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
+import Button from '../common/Button';
 
 interface CharacterImageGalleryProps {
   characterUuid: string | undefined;
@@ -213,13 +214,15 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
 
               {/* Delete button on hover */}
               {hoveredImageId === image.id && (
-                <button
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  pill
+                  icon={<X className="w-4 h-4" />}
                   onClick={(e) => handleDeleteClick(image, e)}
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center shadow-lg transition-colors z-10"
                   title="Delete image"
-                >
-                  <X className="w-4 h-4 text-white" />
-                </button>
+                  className="absolute -top-2 -right-2 w-6 h-6 shadow-lg z-10"
+                />
               )}
             </div>
           ))}

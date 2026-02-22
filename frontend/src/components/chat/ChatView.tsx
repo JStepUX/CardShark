@@ -22,6 +22,7 @@ import { useScrollToBottom } from '../../hooks/useScrollToBottom';
 import { useChat } from '../../contexts/ChatContext';
 
 import { ArrowDown } from 'lucide-react';
+import Button from '../common/Button';
 
 // New Components
 import ChatBackgroundLayer from './ChatBackgroundLayer';
@@ -535,17 +536,19 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
 
             {/* Scroll to Bottom Button */}
             {showScrollButton && (
-              <button
+              <Button
+                variant="ghost"
+                pill
                 onClick={() => scrollToBottomUnified()}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 
-                           bg-stone-950/80 hover:bg-purple-500 backdrop-blur-sm text-white 
-                           px-4 py-1.5 rounded-full shadow-lg border border-purple-400/30
-                           flex items-center gap-2 transition-all duration-300 animate-in fade-in zoom-in-95 group"
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 group
+                           bg-stone-950/80 hover:bg-purple-500 text-white
+                           px-4 py-1.5 backdrop-blur-sm shadow-lg border border-purple-400/30
+                           animate-in fade-in zoom-in-95"
                 title="Scroll to bottom"
               >
                 <ArrowDown size={14} className="group-hover:translate-y-0.5 transition-transform" />
                 <span className="text-xs font-bold uppercase tracking-tight">Recent Messages</span>
-              </button>
+              </Button>
             )}
           </div>
 

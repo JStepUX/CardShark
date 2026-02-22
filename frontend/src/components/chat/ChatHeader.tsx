@@ -6,6 +6,7 @@
  */
 import React from 'react';
 import { Eye, Wallpaper, MessageSquare, Plus, SlidersHorizontal } from 'lucide-react';
+import Button from '../common/Button';
 // CharacterCard import removed
 
 interface ChatHeaderProps {
@@ -58,30 +59,43 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         )} */}
         {/* End Reasoning Toggle */}
         {onToggleSamplerPanel && (
-          <button
+          <Button
+            variant="toolbar"
+            size="md"
+            icon={<SlidersHorizontal size={18} />}
+            active={isSamplerPanelActive}
             onClick={onToggleSamplerPanel}
-            className={`p-1 transition-colors ${
-              isSamplerPanelActive
-                ? 'text-blue-400 hover:text-blue-300'
-                : 'text-gray-400 hover:text-white'
-            }`}
             title="Generation Settings"
-          >
-            <SlidersHorizontal size={18} />
-          </button>
+          />
         )}
-        <button onClick={onShowContextWindow} className="p-1 text-gray-400 hover:text-white" title="View Context Window">
-          <Eye size={18} />
-        </button>
-        <button onClick={onShowBackgroundSettings} className="p-1 text-gray-400 hover:text-white" title="Background Settings">
-          <Wallpaper size={18} />
-        </button>
-        <button onClick={onShowChatSelector} className="p-1 text-gray-400 hover:text-white" title="Select Chat">
-          <MessageSquare size={18} />
-        </button>
-        <button onClick={onNewChat} className="p-1 text-gray-400 hover:text-white" title="New Chat">
-          <Plus size={18} />
-        </button>
+        <Button
+          variant="ghost"
+          size="md"
+          icon={<Eye size={18} />}
+          onClick={onShowContextWindow}
+          title="View Context Window"
+        />
+        <Button
+          variant="ghost"
+          size="md"
+          icon={<Wallpaper size={18} />}
+          onClick={onShowBackgroundSettings}
+          title="Background Settings"
+        />
+        <Button
+          variant="ghost"
+          size="md"
+          icon={<MessageSquare size={18} />}
+          onClick={onShowChatSelector}
+          title="Select Chat"
+        />
+        <Button
+          variant="ghost"
+          size="md"
+          icon={<Plus size={18} />}
+          onClick={onNewChat}
+          title="New Chat"
+        />
       </div>
     </div>
   );

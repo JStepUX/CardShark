@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Copy, Pencil, Trash2, Plus, FileDown as Download, FileInput as Upload } from 'lucide-react';
 import { Template } from '../types/templateTypes';
 import { useTemplates } from '../contexts/TemplateContext';
+import Button from './common/Button';
 
 interface TemplateListProps {
   onEditTemplate: (template: Template) => void;
@@ -122,27 +123,27 @@ const TemplateList: React.FC<TemplateListProps> = ({ onEditTemplate, onNewTempla
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-medium">Templates</h3>
           <div className="flex gap-2">
-            <button 
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Upload size={16} />}
               onClick={handleImport}
-              className="p-2 hover:bg-stone-700 rounded-lg transition-colors"
               title="Import Templates"
-            >
-              <Upload size={16} />
-            </button>
-            <button 
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Download size={16} />}
               onClick={handleExport}
-              className="p-2 hover:bg-stone-700 rounded-lg transition-colors"
               title="Export Templates"
-            >
-              <Download size={16} />
-            </button>
-            <button 
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Plus size={16} />}
               onClick={onNewTemplate}
-              className="p-2 hover:bg-stone-700 rounded-lg transition-colors"
               title="New Template"
-            >
-              <Plus size={16} />
-            </button>
+            />
           </div>
         </div>
         
@@ -250,38 +251,39 @@ const TemplateItem: React.FC<TemplateItemProps> = ({
           <p className="text-sm text-gray-400 truncate">{template.description || 'No description'}</p>
         </div>
         <div className="flex items-center space-x-1 ml-4">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Pencil size={14} className={!template.isEditable ? 'opacity-30' : ''} />}
             onClick={(e) => {
               e.stopPropagation();
               onEdit();
             }}
-            className="p-1 text-gray-400 hover:text-white rounded-md transition-colors"
             title="Edit"
             disabled={!template.isEditable}
-          >
-            <Pencil size={14} className={!template.isEditable ? 'opacity-30' : ''} />
-          </button>
-          <button
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Copy size={14} />}
             onClick={(e) => {
               e.stopPropagation();
               onDuplicate();
             }}
-            className="p-1 text-gray-400 hover:text-white rounded-md transition-colors"
             title="Duplicate"
-          >
-            <Copy size={14} />
-          </button>
+          />
           {!template.isBuiltIn && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Trash2 size={14} />}
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete();
               }}
-              className="p-1 text-gray-400 hover:text-red-400 rounded-md transition-colors"
               title="Delete"
-            >
-              <Trash2 size={14} />
-            </button>
+              className="hover:text-red-400"
+            />
           )}
         </div>
       </div>

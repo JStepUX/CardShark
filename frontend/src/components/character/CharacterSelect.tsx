@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, User } from 'lucide-react';
 import { NpcGridItem } from '../../types/world';
+import Button from '../common/Button';
 
 interface CharacterProfile {
     character_uuid: string;
@@ -88,13 +89,14 @@ const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-stone-800 flex-none">
                     <h2 className="text-lg font-semibold text-white">Select Character</h2>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        pill
+                        icon={<X size={20} />}
                         onClick={onClose}
-                        className="p-1 text-gray-400 hover:text-gray-200 transition-colors rounded-full hover:bg-stone-700"
                         aria-label="Close character selection"
-                    >
-                        <X size={20} />
-                    </button>
+                    />
                 </div>
 
                 {/* Search */}
@@ -113,7 +115,7 @@ const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 {error && (
                     <div className="flex-none p-3 mx-4 mt-4 bg-orange-900 border border-orange-700 text-orange-100 rounded-md text-sm flex justify-between items-center shadow-lg">
                         <span className="break-words mr-2"><strong>Notice:</strong> {error}</span>
-                        <button onClick={() => setError(null)} className="ml-auto flex-shrink-0 px-2 py-0.5 bg-orange-700 hover:bg-orange-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-white" aria-label="Dismiss notice">Dismiss</button>
+                        <Button variant="secondary" size="sm" onClick={() => setError(null)} className="ml-auto flex-shrink-0" aria-label="Dismiss notice">Dismiss</Button>
                     </div>
                 )}
 

@@ -2,6 +2,7 @@
 // Breadcrumb header for the world editor with back, save, and dirty indicator.
 
 import { ArrowLeft, Save, ChevronRight } from 'lucide-react';
+import Button from '../common/Button';
 
 interface EditorHeaderProps {
     worldName: string;
@@ -27,23 +28,26 @@ export function EditorHeader({
     return (
         <div className="bg-[#141414] border-b border-[#2a2a2a] px-3 md:px-6 py-3 md:py-4 flex items-center justify-between gap-2 shrink-0 z-30 relative">
             <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
-                <button
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<ArrowLeft size={20} />}
                     onClick={editorView === 'room' && onNavigateToWorld ? onNavigateToWorld : onBack}
-                    className="p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors shrink-0"
                     title={editorView === 'room' ? 'Back to world grid' : 'Go back'}
-                >
-                    <ArrowLeft size={20} className="text-gray-400" />
-                </button>
+                    className="shrink-0"
+                />
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-sm md:text-base font-medium">
                         {editorView === 'room' ? (
                             <>
-                                <button
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={onNavigateToWorld}
-                                    className="text-gray-400 hover:text-white transition-colors truncate max-w-[200px]"
+                                    className="truncate max-w-[200px]"
                                 >
                                     {worldName}
-                                </button>
+                                </Button>
                                 <ChevronRight size={14} className="text-gray-600 shrink-0" />
                                 <span className="truncate">{roomName || 'Untitled Room'}</span>
                             </>
@@ -61,13 +65,14 @@ export function EditorHeader({
                 {isDirty && (
                     <span className="text-xs text-yellow-500 mr-2">Unsaved</span>
                 )}
-                <button
+                <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<Save size={16} />}
                     onClick={onSave}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                 >
-                    <Save size={16} />
-                    <span className="text-sm">Save</span>
-                </button>
+                    Save
+                </Button>
             </div>
         </div>
     );

@@ -1,5 +1,6 @@
 import { X, Plus, Image as ImageIcon, Users, Upload, Maximize2, Settings, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
+import Button from '../common/Button';
 import { GridRoom } from '../../utils/worldStateApi';
 import { RoomNPC } from '../../types/room';
 import type { RoomLayoutData } from '../../types/localMap';
@@ -46,22 +47,22 @@ function TextEditorModal({
           <h3 className="text-lg font-medium text-white">{title}</h3>
           <div className="flex items-center gap-2">
             {onWriteForMe && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleWriteForMe}
                 disabled={isGenerating}
-                className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="!text-purple-400 hover:!text-purple-300 hover:!bg-purple-900/30"
                 title={text.trim() ? "Continue writing with AI" : "Generate content with AI"}
-              >
-                {isGenerating ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <Sparkles size={18} />
-                )}
-              </button>
+                icon={isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+              />
             )}
-            <button onClick={onClose} className="text-gray-400 hover:text-white">
-              <X size={20} />
-            </button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              icon={<X size={20} />}
+            />
           </div>
         </div>
         <div className="flex-1 p-4 min-h-[300px]">
@@ -74,18 +75,19 @@ function TextEditorModal({
           />
         </div>
         <div className="p-4 border-t border-[#2a2a2a] flex justify-end gap-3">
-          <button
+          <Button
+            variant="secondary"
             onClick={onClose}
-            className="px-4 py-2 hover:bg-[#2a2a2a] rounded-lg text-gray-300 transition-colors"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => { onSave(text); onClose(); }}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
+            className="!bg-purple-600 hover:!bg-purple-700"
           >
             Apply Changes
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -346,12 +348,12 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
         {/* Header */}
         <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
           <h3 className="text-sm font-medium text-white">Room Properties</h3>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClose}
-            className="p-1 hover:bg-[#2a2a2a] rounded transition-colors"
-          >
-            <X size={16} className="text-gray-400" />
-          </button>
+            icon={<X size={16} />}
+          />
         </div>
 
         {!room ? (
@@ -382,30 +384,29 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-gray-400">Description</label>
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => room && setEditingField({
                         field: 'description',
                         title: 'Room Description',
                         value: room.description
                       })}
-                      className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      icon={<Maximize2 size={12} />}
+                      className="!text-blue-400 hover:!text-blue-300 text-xs"
                     >
-                      <Maximize2 size={12} />
                       Expand
-                    </button>
+                    </Button>
                     {apiConfig && (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleInlineWriteForMe('description')}
                         disabled={isGenerating}
-                        className="p-1 text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="!text-purple-400 hover:!text-purple-300 hover:!bg-purple-900/30"
                         title={room.description.trim() ? "Continue writing with AI" : "Generate description with AI"}
-                      >
-                        {isGenerating && generatingField === 'description' ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Sparkles size={12} />
-                        )}
-                      </button>
+                        icon={isGenerating && generatingField === 'description' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      />
                     )}
                   </div>
                 </div>
@@ -423,30 +424,29 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-gray-400">Introduction Text</label>
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => room && setEditingField({
                         field: 'introduction_text',
                         title: 'Introduction Text',
                         value: room.introduction_text
                       })}
-                      className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      icon={<Maximize2 size={12} />}
+                      className="!text-blue-400 hover:!text-blue-300 text-xs"
                     >
-                      <Maximize2 size={12} />
                       Expand
-                    </button>
+                    </Button>
                     {apiConfig && (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleInlineWriteForMe('introduction_text')}
                         disabled={isGenerating}
-                        className="p-1 text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="!text-purple-400 hover:!text-purple-300 hover:!bg-purple-900/30"
                         title={room.introduction_text.trim() ? "Continue writing with AI" : "Generate introduction with AI"}
-                      >
-                        {isGenerating && generatingField === 'introduction_text' ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Sparkles size={12} />
-                        )}
-                      </button>
+                        icon={isGenerating && generatingField === 'introduction_text' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      />
                     )}
                   </div>
                 </div>
@@ -479,14 +479,15 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
 
                 {/* Action Buttons */}
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    variant="primary"
                     onClick={() => setShowGalleryModal(true)}
                     disabled={uploading}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+                    className="flex-1 !bg-purple-600 hover:!bg-purple-700 disabled:!bg-purple-800"
+                    icon={<ImageIcon size={16} />}
                   >
-                    <ImageIcon size={16} />
                     {uploading ? 'Uploading...' : 'Choose from Gallery'}
-                  </button>
+                  </Button>
 
                   <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#2a2a2a] hover:bg-[#3a3a3a] cursor-pointer rounded-lg text-sm transition-colors">
                     <Upload size={16} />
@@ -507,10 +508,15 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-gray-400">NPCs</label>
-                  <button className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors" onClick={onOpenNPCPicker}>
-                    <Plus size={14} />
-                    <span>Add NPC</span>
-                  </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onOpenNPCPicker}
+                    icon={<Plus size={14} />}
+                    className="!text-blue-400 hover:!text-blue-300 text-xs"
+                  >
+                    Add NPC
+                  </Button>
                 </div>
                 {room.npcs.length === 0 ? (
                   <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-6 text-center text-xs text-gray-500">
@@ -538,20 +544,22 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            className="p-1 text-gray-500 hover:text-blue-400 transition-colors"
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setEditingNPC(npc)}
                             title="NPC Settings"
-                          >
-                            <Settings size={14} />
-                          </button>
-                          <button
-                            className="p-1 text-gray-500 hover:text-red-400 transition-colors"
+                            icon={<Settings size={14} />}
+                            className="hover:!text-blue-400"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleRemoveNPC(npc.character_uuid)}
                             title="Remove NPC"
-                          >
-                            <X size={14} />
-                          </button>
+                            icon={<X size={14} />}
+                            className="hover:!text-red-400"
+                          />
                         </div>
                       </div>
                     ))}
@@ -570,13 +578,15 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
               {/* Remove from Cell */}
               {onRemoveFromCell && (
                 <div className="pt-4 border-t border-[#2a2a2a]">
-                  <button
+                  <Button
+                    variant="destructive"
+                    fullWidth
                     onClick={onRemoveFromCell}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-800/50 hover:border-red-700 rounded-lg text-red-400 hover:text-red-300 transition-colors text-sm"
+                    icon={<Trash2 size={16} />}
+                    className="!bg-red-900/30 hover:!bg-red-900/50 !border !border-red-800/50 hover:!border-red-700 !text-red-400 hover:!text-red-300"
                   >
-                    <Trash2 size={16} />
                     Remove from Cell
-                  </button>
+                  </Button>
                   <p className="text-xs text-gray-500 text-center mt-2">
                     Unlinks the room from this cell. The room card is preserved.
                   </p>

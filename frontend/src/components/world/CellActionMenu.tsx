@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import { Plus, Upload, Edit, Trash2, X } from 'lucide-react';
+import Button from '../common/Button';
 
 interface CellActionMenuProps {
   position: { x: number; y: number }; // Screen coordinates
@@ -46,12 +47,12 @@ export const CellActionMenu: React.FC<CellActionMenuProps> = ({
           <span className="text-sm font-medium text-stone-300">
             {isOccupied ? 'Room Actions' : 'Add Room'}
           </span>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClose}
-            className="p-1 hover:bg-stone-700 rounded transition-colors"
-          >
-            <X className="w-3 h-3 text-stone-400" />
-          </button>
+            icon={<X className="w-3 h-3" />}
+          />
         </div>
 
         {/* Actions */}

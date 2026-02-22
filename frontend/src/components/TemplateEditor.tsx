@@ -4,6 +4,7 @@ import { Save, X, Info, Plus, Trash2 } from 'lucide-react';
 import { Template } from '../types/templateTypes';
 import { generateUUID } from '../utils/generateUUID';
 import HighlightedTextArea from './HighlightedTextArea';
+import Button from './common/Button';
 
 interface TemplateEditorProps {
   template: Template | null;
@@ -111,25 +112,29 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
         </h2>
         
         <div className="flex gap-2">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={16} />}
             onClick={onCancel}
-            className="p-2 rounded-lg flex items-center gap-1 hover:bg-red-900/50 transition-colors performance-transform"
+            className="hover:bg-red-900/50 performance-transform"
           >
-            <X size={16} />
-            <span>Cancel</span>
-          </button>
-          <button
+            Cancel
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Save size={16} />}
             onClick={handleSave}
             disabled={isDisabled}
-            className={`p-2 rounded-lg flex items-center gap-1 ${
-              isDisabled 
-                ? 'bg-green-900/30 text-green-500/50 cursor-not-allowed' 
+            className={`performance-transform ${
+              isDisabled
+                ? 'bg-green-900/30 text-green-500/50'
                 : 'bg-green-900/50 hover:bg-green-900 text-green-500'
-            } transition-colors performance-transform`}
+            }`}
           >
-            <Save size={16} />
-            <span>Save</span>
-          </button>
+            Save
+          </Button>
         </div>
       </div>
       
@@ -268,17 +273,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     <div className="flex-1 font-mono text-sm">
                       {sequence}
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<Trash2 size={14} />}
                       onClick={() => handleRemoveStopSequence(index)}
                       disabled={isDisabled}
-                      className={`p-1 rounded-md ${
-                        isDisabled 
-                          ? 'text-gray-500 cursor-not-allowed' 
-                          : 'text-gray-400 hover:text-red-400 hover:bg-stone-700'
-                      } transition-colors`}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                      className="hover:text-red-400 hover:bg-stone-700"
+                    />
                   </div>
                 ))
               )}
@@ -299,12 +301,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     }
                   }}
                 />
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Plus size={16} />}
                   onClick={handleAddStopSequence}
-                  className="p-2 rounded-lg bg-stone-800 hover:bg-stone-700 transition-colors"
-                >
-                  <Plus size={16} />
-                </button>
+                />
               </div>
             )}
           </div>
@@ -331,17 +333,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     <div className="flex-1 font-mono text-sm">
                       {pattern}
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<Trash2 size={14} />}
                       onClick={() => handleRemoveDetectionPattern(index)}
                       disabled={isDisabled}
-                      className={`p-1 rounded-md ${
-                        isDisabled 
-                          ? 'text-gray-500 cursor-not-allowed' 
-                          : 'text-gray-400 hover:text-red-400 hover:bg-stone-700'
-                      } transition-colors`}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                      className="hover:text-red-400 hover:bg-stone-700"
+                    />
                   </div>
                 ))
               )}
@@ -362,12 +361,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     }
                   }}
                 />
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Plus size={16} />}
                   onClick={handleAddDetectionPattern}
-                  className="p-2 rounded-lg bg-stone-800 hover:bg-stone-700 transition-colors"
-                >
-                  <Plus size={16} />
-                </button>
+                />
               </div>
             )}
             

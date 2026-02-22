@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import Button from './Button';
 
 interface LazyRouteErrorBoundaryProps {
   children: ReactNode;
@@ -60,13 +61,14 @@ class LazyRouteErrorBoundary extends Component<LazyRouteErrorBoundaryProps, Lazy
                 <code className="text-red-400">{error.message}</code>
               </div>
             )}
-            <button
+            <Button
+              variant="primary"
               onClick={this.handleRetry}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center justify-center gap-2 mx-auto"
+              icon={<RefreshCw size={16} />}
+              className="mx-auto"
             >
-              <RefreshCw size={16} />
-              <span>Retry</span>
-            </button>
+              Retry
+            </Button>
           </div>
         </div>
       );

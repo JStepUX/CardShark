@@ -1,5 +1,6 @@
 // frontend/src/components/CharacterCard.tsx
 import React from "react";
+import Button from '../common/Button';
 
 interface CharacterCardProps {
   character: {
@@ -34,12 +35,14 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ character, onClick, onDel
         Modified: {new Date(character.modified).toLocaleString()}
       </div>
       {onDelete && (
-        <button
-          className="btn btn-sm btn-error mt-2"
+        <Button
+          variant="destructive"
+          size="sm"
           onClick={e => { e.stopPropagation(); onDelete(); }}
+          className="mt-2"
         >
           {confirmDelete ? "Confirm Delete" : "Delete"}
-        </button>
+        </Button>
       )}
     </div>
   );

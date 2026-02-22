@@ -5,6 +5,7 @@ import { ImageUploader } from '../media/ImageUploader';
 import { ImageEditor } from '../media/ImageEditor';
 import { BackgroundService } from '../../services/backgroundService';
 import { toast } from 'sonner';
+import Button from './Button';
 
 interface GalleryImage {
   filename: string;
@@ -358,37 +359,35 @@ export function UnifiedImageGallery({
                 Select from themed gallery or upload custom image
               </p>
             </div>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<X className="w-6 h-6" />}
               onClick={onClose}
-              className="p-2 hover:bg-stone-800 rounded-lg transition-colors"
               aria-label="Close"
-            >
-              <X className="w-6 h-6 text-stone-400" />
-            </button>
+            />
           </div>
 
           {/* Tab Selector */}
           {showGallery && showUserLibrary && mode === 'background' && (
             <div className="px-6 pt-4 border-b border-stone-700">
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant="secondary"
+                  size="md"
                   onClick={() => setActiveTab('gallery')}
-                  className={`px-4 py-2 rounded-t-lg transition-colors ${activeTab === 'gallery'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                    }`}
+                  className={`rounded-t-lg rounded-b-none ${activeTab === 'gallery' ? 'bg-purple-600 text-white hover:bg-purple-700' : ''}`}
                 >
                   Themed Gallery ({themes.reduce((sum, t) => sum + t.count, 0)})
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
                   onClick={() => setActiveTab('library')}
-                  className={`px-4 py-2 rounded-t-lg transition-colors ${activeTab === 'library'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                    }`}
+                  className={`rounded-t-lg rounded-b-none ${activeTab === 'library' ? 'bg-purple-600 text-white hover:bg-purple-700' : ''}`}
                 >
                   Your Library ({userImages.length})
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -396,13 +395,14 @@ export function UnifiedImageGallery({
           {/* Action Buttons */}
           {mode === 'background' && (
             <div className="p-4 border-b border-stone-700 flex gap-3">
-              <button
+              <Button
+                variant="primary"
+                size="md"
+                icon={<Upload size={18} />}
                 onClick={() => setShowUploadModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors"
               >
-                <Upload size={18} />
                 Upload Custom Image
-              </button>
+              </Button>
             </div>
           )}
 
@@ -413,18 +413,19 @@ export function UnifiedImageGallery({
               <div className="p-4 border-b border-stone-700 space-y-3">
                 {/* Theme Selector */}
                 <div className="flex gap-2 overflow-x-auto pb-2">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="md"
                     onClick={handleAllThemesToggle}
-                    className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${searchAllThemes
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                      }`}
+                    className={`whitespace-nowrap ${searchAllThemes ? 'bg-purple-600 text-white hover:bg-purple-700' : ''}`}
                   >
                     All ({themes.reduce((sum, t) => sum + t.count, 0)})
-                  </button>
+                  </Button>
                   {themes.map(theme => (
-                    <button
+                    <Button
                       key={theme.name}
+                      variant="secondary"
+                      size="md"
                       onClick={() => {
                         if (searchAllThemes) {
                           setSearchAllThemes(false);
@@ -433,13 +434,10 @@ export function UnifiedImageGallery({
                         setSelectedTheme(theme.name);
                         setSearchQuery('');
                       }}
-                      className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${selectedTheme === theme.name && !searchAllThemes
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                        }`}
+                      className={`whitespace-nowrap ${selectedTheme === theme.name && !searchAllThemes ? 'bg-purple-600 text-white hover:bg-purple-700' : ''}`}
                     >
                       {theme.name.replace('_', ' ')} ({theme.count})
-                    </button>
+                    </Button>
                   ))}
                 </div>
 
@@ -465,12 +463,14 @@ export function UnifiedImageGallery({
                 ) : error ? (
                   <div className="text-center py-12">
                     <p className="text-red-400">{error}</p>
-                    <button
+                    <Button
+                      variant="primary"
+                      size="md"
                       onClick={loadThemes}
-                      className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                      className="mt-4 bg-purple-600 hover:bg-purple-700"
                     >
                       Retry
-                    </button>
+                    </Button>
                   </div>
                 ) : filteredGalleryImages.length === 0 ? (
                   <div className="text-center py-12">
@@ -482,10 +482,11 @@ export function UnifiedImageGallery({
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {filteredGalleryImages.map((image) => (
-                      <button
+                      <Button
                         key={`${image.theme}-${image.filename}`}
+                        variant="ghost"
                         onClick={() => handleGalleryImageSelect(image.url)}
-                        className="group relative aspect-video bg-stone-800 rounded-lg overflow-hidden border-2 border-transparent hover:border-purple-500 transition-all"
+                        className="group relative aspect-video bg-stone-800 rounded-lg overflow-hidden border-2 border-transparent hover:border-purple-500 p-0"
                       >
                         <img
                           src={image.url}
@@ -498,7 +499,7 @@ export function UnifiedImageGallery({
                             <p className="text-xs text-white truncate">{image.filename}</p>
                           </div>
                         </div>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 )}

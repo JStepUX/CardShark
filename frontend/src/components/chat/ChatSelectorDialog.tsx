@@ -1,4 +1,5 @@
 import React from 'react';
+import Button from '../common/Button';
 import { X } from 'lucide-react';
 import { CharacterCard } from '../../types/schema';
 import ChatSelector from './ChatSelector';
@@ -36,13 +37,14 @@ const ChatSelectorDialog: React.FC<ChatSelectorDialogProps> = ({
           <h2 className="text-xl font-semibold text-white">
             {characterData?.data?.name ? `Manage Chats with ${characterData.data.name}` : 'Manage Chats'}
           </h2>
-          <button 
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={20} />}
             onClick={onClose}
-            className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-full transition-colors"
+            pill
             aria-label="Close"
-          >
-            <X size={20} />
-          </button>
+          />
         </div>
 
         <div className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">

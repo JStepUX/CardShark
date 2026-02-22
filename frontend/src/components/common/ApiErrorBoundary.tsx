@@ -1,4 +1,5 @@
 import React, { ErrorInfo, ReactNode } from 'react';
+import Button from './Button';
 
 interface ApiErrorBoundaryProps {
   /**
@@ -73,12 +74,12 @@ class ApiErrorBoundary extends React.Component<ApiErrorBoundaryProps, ApiErrorBo
         <div className="p-4 border border-red-300 rounded bg-red-50 text-red-800">
           <h3 className="text-lg font-semibold mb-2">Something went wrong with the API</h3>
           <p className="mb-3">{this.state.error?.message || 'Unknown error'}</p>
-          <button
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+          <Button
+            variant="destructive"
             onClick={this.resetError}
           >
             Try Again
-          </button>
+          </Button>
         </div>
       );
     }

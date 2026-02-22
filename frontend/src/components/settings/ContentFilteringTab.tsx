@@ -2,6 +2,7 @@ import React from 'react';
 import { WordSwapRule } from '../../utils/contentProcessing';
 import { SubstitutionManager } from '../SubstitutionManager';
 import { Info, ToggleLeft, ToggleRight, Edit, Trash2 } from 'lucide-react';
+import Button from '../common/Button';
 import LoadingSpinner from '../common/LoadingSpinner'; // Added
 import { useFilterPackages } from '../../hooks/useFilterPackages';
 import { useContentFilterRules } from '../../hooks/useContentFilterRules';
@@ -132,13 +133,14 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
         <div className="bg-stone-800 border border-stone-700 p-4 rounded-lg mb-6">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-md font-medium">Filter Packages</h3>
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={handleCreatePackage}
-              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 transition-colors rounded"
               disabled={isLoadingPackages}
             >
               Create New Package
-            </button>
+            </Button>
           </div>
 
           {isLoadingPackages ? (
@@ -159,31 +161,32 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleTogglePackage(pkg.id, pkg.is_active)}
-                      className="p-1 text-gray-400 hover:text-white"
-                      title={pkg.is_active ? "Deactivate package" : "Activate package"}
-                    >
-                      {pkg.is_active ?
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={pkg.is_active ?
                         <ToggleRight className="h-5 w-5 text-green-400" /> :
                         <ToggleLeft className="h-5 w-5" />
                       }
-                    </button>
-                    <button
+                      onClick={() => handleTogglePackage(pkg.id, pkg.is_active)}
+                      title={pkg.is_active ? "Deactivate package" : "Activate package"}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<Edit className="h-5 w-5" />}
                       onClick={() => handleEditPackage(pkg.id)}
-                      className="p-1 text-gray-400 hover:text-white"
                       title="Edit package rules"
-                    >
-                      <Edit className="h-5 w-5" />
-                    </button>
+                    />
                     {!pkg.is_builtin && (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Trash2 className="h-5 w-5" />}
                         onClick={() => handleDeletePackage(pkg.id)}
-                        className="p-1 text-gray-400 hover:text-red-400"
                         title="Delete package"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
+                        className="hover:!text-red-400"
+                      />
                     )}
                   </div>
                 </div>
@@ -209,31 +212,34 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
             </h3>
 
             <div className="flex flex-wrap gap-2">
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleImport}
-                className="px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 transition-colors rounded"
                 title="Import word substitution rules from a JSON file"
                 disabled={isLoading}
               >
                 Import Rules
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => handleExport(wordSwapRules)}
-                className="px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 transition-colors rounded"
                 disabled={wordSwapRules.length === 0 || isLoading}
                 title="Export word substitution rules to a JSON file"
               >
                 Export Rules
-              </button>
+              </Button>
 
               {selectedPackageId && (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={clearSelectedPackage}
-                  className="px-3 py-1.5 text-sm bg-stone-700 hover:bg-stone-600 transition-colors rounded"
                   title="Back to all rules"
                 >
                   ← Back to All Rules
-                </button>
+                </Button>
               )}
             </div>
           </div>

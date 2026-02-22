@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
+import Button from './common/Button';
 
 const JsonViewer = () => {
   const { characterData, setCharacterData } = useCharacter();
@@ -47,12 +48,13 @@ const JsonViewer = () => {
         value={editableJson}
         onChange={handleChange}
       />
-      <button
-        className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+      <Button
+        variant="primary"
         onClick={handleSave}
+        className="mt-4"
       >
         Save Changes
-      </button>
+      </Button>
     </div>
   );
 };

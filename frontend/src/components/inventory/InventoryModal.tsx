@@ -15,6 +15,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { X, Swords, Shield, Package, UserMinus, FlaskConical } from 'lucide-react';
+import Button from '../common/Button';
 import type {
   CharacterInventory,
   InventoryItem,
@@ -210,20 +211,22 @@ function ItemSlot({
 
       {/* Use button for consumable meds (hover reveal) */}
       {showUseButton && (
-        <button
+        <Button
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
             onUseItem!(item);
           }}
+          variant="primary"
+          size="sm"
+          icon={<FlaskConical className="w-3 h-3" />}
           className="absolute -bottom-1 left-1/2 -translate-x-1/2 translate-y-full
                      opacity-0 group-hover:opacity-100 transition-opacity duration-150
-                     px-2 py-0.5 bg-green-700 hover:bg-green-600 border border-green-500/50
-                     text-xs font-medium text-green-100 rounded whitespace-nowrap z-10"
+                     bg-green-700 hover:bg-green-600 border border-green-500/50
+                     text-green-100 whitespace-nowrap z-10 py-0.5 px-2"
         >
-          <FlaskConical className="w-3 h-3 inline mr-0.5" />
           Use
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -365,13 +368,13 @@ export function InventoryModal({
             <Package className="w-5 h-5 text-amber-400" />
             <h2 className="text-lg font-semibold text-white">{characterName}'s Inventory</h2>
           </div>
-          <button
+          <Button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+            variant="ghost"
+            size="sm"
+            icon={<X className="w-5 h-5" />}
             aria-label="Close inventory"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         {/* Content */}
@@ -479,15 +482,15 @@ export function InventoryModal({
           {/* Ally Dismiss Button */}
           {isAlly && onDismissAlly && (
             <div className="pt-2 border-t border-gray-700">
-              <button
+              <Button
                 onClick={onDismissAlly}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5
-                           bg-red-900/50 hover:bg-red-800/60 border border-red-700/50
-                           text-red-300 hover:text-red-200 rounded-lg transition-colors"
+                variant="destructive"
+                fullWidth
+                icon={<UserMinus className="w-4 h-4" />}
+                className="bg-red-900/50 hover:bg-red-800/60 border border-red-700/50 text-red-300 hover:text-red-200"
               >
-                <UserMinus className="w-4 h-4" />
-                <span>Dismiss {characterName}</span>
-              </button>
+                Dismiss {characterName}
+              </Button>
               <p className="text-xs text-gray-500 text-center mt-2">
                 This ally will remain here while you continue alone.
               </p>

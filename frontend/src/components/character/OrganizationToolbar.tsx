@@ -5,6 +5,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CheckSquare, Square, FolderInput, X, ChevronDown } from 'lucide-react';
 import { FolderDefinition } from '../../types/gallery';
+import Button from '../common/Button';
 
 interface OrganizationToolbarProps {
   selectedCount: number;
@@ -58,64 +59,73 @@ const OrganizationToolbar: React.FC<OrganizationToolbarProps> = ({
       <div className="h-4 w-px bg-stone-600" />
 
       {/* Select / Deselect */}
-      <button
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onSelectAll}
-        className="text-xs text-slate-300 hover:text-white transition-colors px-2 py-1 rounded hover:bg-stone-700"
       >
         Select All
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onDeselectAll}
-        className="text-xs text-slate-300 hover:text-white transition-colors px-2 py-1 rounded hover:bg-stone-700"
         disabled={selectedCount === 0}
       >
         Deselect
-      </button>
+      </Button>
 
       <div className="h-4 w-px bg-stone-600" />
 
       {/* Move to dropdown */}
       <div className="relative" ref={dropdownRef}>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => setIsMoveDropdownOpen(!isMoveDropdownOpen)}
           disabled={selectedCount === 0}
-          className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-stone-700 hover:bg-stone-600 border border-stone-600 rounded-lg text-slate-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          icon={<FolderInput size={14} />}
         >
-          <FolderInput size={14} />
-          Move to
-          <ChevronDown size={12} />
-        </button>
+          Move to <ChevronDown size={12} />
+        </Button>
 
         {isMoveDropdownOpen && (
           <div className="absolute left-0 mt-1 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
             <div className="py-1">
               {/* Unfiled option */}
               {currentFolder !== null && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
                   onClick={() => {
                     onMoveToFolder(null);
                     setIsMoveDropdownOpen(false);
                   }}
-                  className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-stone-700 flex items-center gap-2"
+                  icon={<span className="text-slate-500">--</span>}
+                  className="justify-start px-4"
                 >
-                  <span className="text-slate-500">--</span> Unfiled
-                </button>
+                  Unfiled
+                </Button>
               )}
               {/* Folder options (exclude current) */}
               {folders
                 .filter(f => f.name !== currentFolder)
                 .map(folder => (
-                  <button
+                  <Button
                     key={folder.id}
+                    variant="ghost"
+                    size="sm"
+                    fullWidth
                     onClick={() => {
                       onMoveToFolder(folder.name);
                       setIsMoveDropdownOpen(false);
                     }}
-                    className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-stone-700 flex items-center gap-2"
+                    icon={<FolderInput size={14} className="text-slate-500" />}
+                    className="justify-start px-4"
                   >
-                    <FolderInput size={14} className="text-slate-500" />
                     {folder.name}
-                  </button>
+                  </Button>
                 ))}
             </div>
           </div>
@@ -126,13 +136,14 @@ const OrganizationToolbar: React.FC<OrganizationToolbarProps> = ({
       <div className="flex-grow" />
 
       {/* Exit org mode */}
-      <button
+      <Button
+        variant="outline"
+        size="sm"
+        icon={<X size={14} />}
         onClick={onExit}
-        className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-stone-700 hover:bg-stone-600 border border-stone-600 rounded-lg text-slate-300 hover:text-white transition-colors"
       >
-        <X size={14} />
         Done
-      </button>
+      </Button>
     </div>
   );
 };

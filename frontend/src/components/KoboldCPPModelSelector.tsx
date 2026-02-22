@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FolderOpen, Rocket, Lightbulb } from 'lucide-react';
+import { FolderOpen, Rocket, Lightbulb, X } from 'lucide-react';
 import { useKoboldCPP } from '../hooks/useKoboldCPP';
+import Button from './common/Button';
 
 interface Model {
   name: string;
@@ -283,24 +284,17 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
           className="flex-grow px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
           disabled={isScanning || isFetchingDirectory}
         />
-        <button 
-          onClick={scanModelsDirectory} 
+        <Button
+          variant="secondary"
+          icon={isScanning || isFetchingDirectory
+            ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            : <FolderOpen className="h-4 w-4" />}
+          onClick={scanModelsDirectory}
           disabled={isScanning || !modelsDirectory || isFetchingDirectory}
           title="Scan directory for models"
-          className="px-4 py-2 bg-stone-700 text-white rounded-lg hover:bg-stone-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          {isScanning || isFetchingDirectory ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span>{isScanning ? 'Scanning...' : 'Loading...'}</span>
-            </>
-          ) : (
-            <>
-              <FolderOpen className="h-4 w-4" />
-              <span>Scan</span>
-            </>
-          )}
-        </button>
+          {isScanning ? 'Scanning...' : isFetchingDirectory ? 'Loading...' : 'Scan'}
+        </Button>
       </div>
       
       {/* Models List */}
@@ -332,14 +326,15 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
         <div className="p-4 space-y-4 border border-stone-800 rounded-lg bg-stone-950">
           <div className="flex justify-between items-center">
             <h4 className="text-lg font-medium">Model Configuration</h4>
-            <button 
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Lightbulb className="h-3.5 w-3.5" />}
               onClick={() => getRecommendedConfig(selectedModel.size_gb)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-800 hover:bg-stone-700 rounded text-sm"
               title="Get recommended settings"
             >
-              <Lightbulb className="h-3.5 w-3.5" />
-              <span>Auto-Configure</span>
-            </button>
+              Auto-Configure
+            </Button>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -413,23 +408,19 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
           </div>
           
           {/* Launch Button */}
-          <button 
-            onClick={launchModel} 
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            icon={loading
+              ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              : <Rocket className="h-4 w-4" />}
+            onClick={launchModel}
             disabled={loading || !selectedModel}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="!bg-purple-600 hover:!bg-purple-700"
           >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                <span>Launching...</span>
-              </>
-            ) : (
-              <>
-                <Rocket className="h-4 w-4" />
-                <span>Launch Model</span>
-              </>
-            )}
-          </button>
+            {loading ? 'Launching...' : 'Launch Model'}
+          </Button>
         </div>
       )}
       
@@ -438,12 +429,13 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
         <div className="bg-red-900/40 border border-red-700 text-white px-4 py-3 rounded-lg flex items-start gap-2">
           <div className="flex-shrink-0 mt-0.5">⚠️</div>
           <div className="flex-grow">{error}</div>
-          <button 
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={14} />}
             onClick={() => setError(null)}
-            className="ml-auto text-red-300 hover:text-white flex-shrink-0"
-          >
-            ✕
-          </button>
+            className="ml-auto flex-shrink-0"
+          />
         </div>
       )}
       
@@ -451,12 +443,13 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
         <div className="bg-green-900/40 border border-green-700 text-white px-4 py-3 rounded-lg flex items-start gap-2">
           <div className="flex-shrink-0 mt-0.5">✓</div>
           <div className="flex-grow">{success}</div>
-          <button 
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={14} />}
             onClick={() => setSuccess(null)}
-            className="ml-auto text-green-300 hover:text-white flex-shrink-0"
-          >
-            ✕
-          </button>
+            className="ml-auto flex-shrink-0"
+          />
         </div>
       )}
     </div>

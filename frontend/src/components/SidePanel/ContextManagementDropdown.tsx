@@ -1,6 +1,7 @@
 import { ChevronUp, Edit3 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { CompressionLevel } from '../../services/chat/chatTypes';
+import Button from '../common/Button';
 
 interface ContextManagementDropdownProps {
   compressionLevel: CompressionLevel;
@@ -77,17 +78,13 @@ export function ContextManagementDropdown({ compressionLevel, onLevelChange, dis
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Compact Button - Similar to Token Counter */}
-      <button
+      <Button
+        variant="outline"
+        fullWidth
         onClick={() => !disabled && setShowDropdown(!showDropdown)}
         disabled={disabled}
-        className={`
-          flex items-center justify-between w-full px-3 py-2
-          bg-stone-900/50 hover:bg-stone-800/50
-          border border-gray-700 rounded
-          transition-colors duration-150
-          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        `}
         title="Click to change context management level"
+        className="justify-between px-3 py-2 bg-stone-900/50 hover:bg-stone-800/50 border-gray-700 rounded"
       >
         <div className="flex items-center gap-2">
           <Edit3 className="w-4 h-4 text-gray-400" />
@@ -99,21 +96,18 @@ export function ContextManagementDropdown({ compressionLevel, onLevelChange, dis
           </span>
           <ChevronUp className={`w-4 h-4 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
         </div>
-      </button>
+      </Button>
 
       {/* Drop-UP Menu */}
       {showDropdown && !disabled && (
         <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#0a0a0a] border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
           {COMPRESSION_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.level}
+              variant="ghost"
+              fullWidth
               onClick={() => handleSelect(option.level)}
-              className={`
-                w-full px-4 py-3 text-left
-                hover:bg-stone-800 transition-colors
-                border-b border-gray-800 last:border-b-0
-                ${option.level === compressionLevel ? 'bg-stone-800/50' : ''}
-              `}
+              className={`px-4 py-3 text-left border-b border-gray-800 last:border-b-0 ${option.level === compressionLevel ? 'bg-stone-800/50' : ''}`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className={`font-medium text-sm ${option.color}`}>
@@ -128,7 +122,7 @@ export function ContextManagementDropdown({ compressionLevel, onLevelChange, dis
               <div className="text-xs text-gray-500">
                 {option.description}
               </div>
-            </button>
+            </Button>
           ))}
         </div>
       )}

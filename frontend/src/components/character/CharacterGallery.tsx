@@ -12,6 +12,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { CharacterFile } from '../../types/schema';
 import { GalleryFolderSettings, DEFAULT_GALLERY_FOLDER_SETTINGS, getFolderForCard } from '../../types/gallery';
 import { Trash2, AlertTriangle, X, ArrowUpDown, Calendar, ChevronDown, Map as MapIcon, Info, RefreshCw, DoorOpen, Download, ArrowLeft, Settings2, ImagePlus } from 'lucide-react';
+import Button from '../common/Button';
 import LoadingSpinner from '../common/LoadingSpinner';
 import GalleryGrid from '../GalleryGrid';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
@@ -143,17 +144,23 @@ const GalleryCard = React.memo<GalleryCardProps>(({
       {/* Action buttons - hidden in org mode */}
       {!isSecondarySelector && !organizationMode && (
         <>
-          <button onClick={(e) => onTrashClick(e, character)}
-            className="absolute top-2 right-2 z-10 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-            aria-label={`Delete ${character.name}`}><Trash2 size={16} /></button>
+          <Button variant="ghost" size="sm" pill
+            icon={<Trash2 size={16} />}
+            onClick={(e) => onTrashClick(e, character)}
+            className="absolute top-2 right-2 z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-red-600"
+            aria-label={`Delete ${character.name}`} />
           {isWorld && (
-            <button onClick={(e) => onExportClick(e, character)}
-              className="absolute top-2 right-10 z-10 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-600"
-              aria-label={`Export ${character.name}`} title="Export as .cardshark.zip"><Download size={16} /></button>
+            <Button variant="ghost" size="sm" pill
+              icon={<Download size={16} />}
+              onClick={(e) => onExportClick(e, character)}
+              className="absolute top-2 right-10 z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-emerald-600"
+              aria-label={`Export ${character.name}`} title="Export as .cardshark.zip" />
           )}
-          <button onClick={(e) => onInfoClick(e, character)}
-            className={`absolute top-2 ${isWorld ? 'right-[4.5rem]' : 'right-10'} z-10 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600`}
-            aria-label={`Info for ${character.name}`} title={isWorld ? "World Builder" : isRoom ? "Room Editor" : "Basic Info"}><Info size={16} /></button>
+          <Button variant="ghost" size="sm" pill
+            icon={<Info size={16} />}
+            onClick={(e) => onInfoClick(e, character)}
+            className={`absolute top-2 ${isWorld ? 'right-[4.5rem]' : 'right-10'} z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-blue-600`}
+            aria-label={`Info for ${character.name}`} title={isWorld ? "World Builder" : isRoom ? "Room Editor" : "Basic Info"} />
         </>
       )}
 
@@ -756,11 +763,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             <div className="flex items-center gap-3">
               {/* Back button when inside a folder */}
               {galFolders.currentFolder !== null && (
-                <button onClick={galFolders.navigateBack}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-stone-700 transition-colors"
-                  title="Back to gallery">
-                  <ArrowLeft size={20} />
-                </button>
+                <Button variant="ghost" size="sm"
+                  icon={<ArrowLeft size={20} />}
+                  onClick={galFolders.navigateBack}
+                  title="Back to gallery" />
               )}
               <div>
                 <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -778,60 +784,65 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               {/* Import buttons */}
               {!isSecondarySelector && (
                 <>
-                  <button onClick={() => navigate('/import')}
-                    className="p-2 rounded-lg border bg-orange-800 border-orange-600 text-orange-100 hover:text-white hover:bg-orange-700 transition-all"
-                    title="Import Character PNG"><ImagePlus size={16} /></button>
-                  <button onClick={handleImportWorld}
-                    className="p-2 rounded-lg border bg-emerald-800 border-emerald-600 text-emerald-100 hover:text-white hover:bg-emerald-700 transition-all"
-                    title="Import World"><MapIcon size={16} /></button>
+                  <Button variant="outline" size="md"
+                    icon={<ImagePlus size={16} />}
+                    onClick={() => navigate('/import')}
+                    className="!bg-orange-800 !border-orange-600 !text-orange-100 hover:!text-white hover:!bg-orange-700"
+                    title="Import Character PNG" />
+                  <Button variant="outline" size="md"
+                    icon={<MapIcon size={16} />}
+                    onClick={handleImportWorld}
+                    className="!bg-emerald-800 !border-emerald-600 !text-emerald-100 hover:!text-white hover:!bg-emerald-700"
+                    title="Import World" />
                 </>
               )}
 
               {/* Context-specific buttons */}
               {isInRoomsFolder && (
-                <button onClick={handleCleanupOrphanedRooms}
-                  className="p-2 rounded-lg border bg-red-900 border-red-700 text-red-200 hover:text-white hover:bg-red-800 transition-all"
-                  title="Cleanup orphaned rooms"><Trash2 size={16} /></button>
+                <Button variant="destructive" size="md"
+                  icon={<Trash2 size={16} />}
+                  onClick={handleCleanupOrphanedRooms}
+                  className="!bg-red-900 !border-red-700 border hover:!bg-red-800"
+                  title="Cleanup orphaned rooms" />
               )}
 
               {/* Org mode toggle - hidden in comparison selector */}
               {!isSecondarySelector && (
-                <button onClick={galFolders.toggleOrganizationMode}
-                  className={`p-2 rounded-lg border transition-all ${galFolders.organizationMode
-                    ? 'bg-blue-700 border-blue-500 text-white'
-                    : 'bg-stone-800 border-stone-600 text-slate-400 hover:text-slate-200 hover:bg-stone-700'}`}
-                  title="Organization mode">
-                  <Settings2 size={16} />
-                </button>
+                <Button variant="toolbar" size="md"
+                  icon={<Settings2 size={16} />}
+                  active={galFolders.organizationMode}
+                  onClick={galFolders.toggleOrganizationMode}
+                  title="Organization mode" />
               )}
 
               {/* Refresh */}
-              <button onClick={handleManualRefresh} disabled={isRefreshing || !currentDirectory}
-                className={`p-2 rounded-lg border transition-all ${isRefreshing
-                  ? 'bg-stone-700 border-stone-600 text-slate-500 cursor-wait'
-                  : 'bg-stone-800 border-stone-600 text-slate-400 hover:text-slate-200 hover:bg-stone-700'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-                title="Refresh gallery"><RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} /></button>
+              <Button variant="outline" size="md"
+                icon={<RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />}
+                onClick={handleManualRefresh}
+                disabled={isRefreshing || !currentDirectory}
+                className={isRefreshing ? 'cursor-wait' : ''}
+                title="Refresh gallery" />
 
               {/* Sort */}
               <div className="relative" ref={sortDropdownRef}>
-                <button onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                  className="flex items-center space-x-2 px-3 py-2 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded-lg text-sm text-slate-200 transition-colors">
+                <Button variant="outline" size="md"
+                  onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}>
                   <ArrowUpDown size={16} className="text-slate-400" />
                   <span>{sortLabel}</span>
                   <ChevronDown size={14} className="text-slate-500" />
-                </button>
+                </Button>
                 {isSortDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-stone-800 border border-stone-600 rounded-lg shadow-xl z-50 overflow-hidden">
                     <div className="py-1">
                       {(['name_asc', 'name_desc', 'date_newest', 'date_oldest'] as const).map(opt => (
-                        <button key={opt} onClick={() => { setSortOption(opt); setIsSortDropdownOpen(false); }}
-                          className={`w-full px-4 py-2 text-left text-sm flex items-center hover:bg-stone-700 ${sortOption === opt ? 'text-blue-400 bg-stone-700/50' : 'text-slate-300'}`}>
+                        <Button key={opt} variant="ghost" size="md" fullWidth
+                          onClick={() => { setSortOption(opt); setIsSortDropdownOpen(false); }}
+                          className={`!justify-start px-4 rounded-none ${sortOption === opt ? '!text-blue-400 !bg-stone-700/50' : '!text-slate-300'} hover:!bg-stone-700`}>
                           {opt === 'name_asc' && <><span className="w-5 mr-2 text-center">A</span> Name (A-Z)</>}
                           {opt === 'name_desc' && <><span className="w-5 mr-2 text-center">Z</span> Name (Z-A)</>}
                           {opt === 'date_newest' && <><Calendar size={14} className="mr-2" /> Newest First</>}
                           {opt === 'date_oldest' && <><Calendar size={14} className="mr-2" /> Oldest First</>}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </div>
@@ -867,7 +878,10 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             <AlertTriangle className="flex-shrink-0 w-5 h-5 mr-2 mt-0.5" />
             <span className="break-words"><strong>Deletion Error:</strong> {deleteError}</span>
           </div>
-          <button onClick={() => setDeleteError(null)} className="ml-4 flex-shrink-0 p-1 bg-red-800 hover:bg-red-700 rounded text-xs"><X size={16} /></button>
+          <Button variant="ghost" size="sm"
+            icon={<X size={16} />}
+            onClick={() => setDeleteError(null)}
+            className="ml-4 flex-shrink-0 !bg-red-800 hover:!bg-red-700" />
         </div>
       )}
 
@@ -887,22 +901,18 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                 new character creation will then occur in that folder.
               </p>
               <label className="flex items-center gap-2 mt-3 cursor-pointer text-slate-400 hover:text-slate-300 select-none">
-                <button
+                <Button variant="ghost" size="sm"
                   onClick={() => updateSettings({ gallery_sync_dismissed: true })}
-                  className="w-4 h-4 rounded border border-stone-500 hover:border-blue-400 flex items-center justify-center transition-colors"
-                >
-                  {/* empty — clicking dismisses */}
-                </button>
+                  className="!w-4 !h-4 !p-0 !rounded border border-stone-500 hover:!border-blue-400"
+                />
                 Never show again
               </label>
             </div>
-            <button
+            <Button variant="ghost" size="sm"
+              icon={<X size={16} />}
               onClick={() => updateSettings({ gallery_sync_dismissed: true })}
-              className="flex-shrink-0 p-1 text-slate-500 hover:text-slate-300 rounded transition-colors"
-              title="Dismiss"
-            >
-              <X size={16} />
-            </button>
+              className="flex-shrink-0 !text-slate-500"
+              title="Dismiss" />
           </div>
         </div>
       )}

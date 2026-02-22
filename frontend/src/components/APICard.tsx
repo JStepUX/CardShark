@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Globe2, Key, CheckCircle2, XCircle, Trash2, Star, Save, AlertTriangle, Eye, EyeOff, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import Button from './common/Button';
 import {
   APIProvider,
   APIConfig,
@@ -438,25 +439,24 @@ export const APICard: React.FC<APICardProps> = ({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="primary"
+            size="md"
+            icon={<Save size={16} />}
             onClick={handleSave}
             disabled={!hasChanges || isLoading}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-colors
-              ${hasChanges && !isLoading
-                ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                : 'bg-stone-700 text-stone-400 cursor-not-allowed'}`}
             title={hasChanges ? "Save API configuration" : "No changes to save"}
           >
-            <Save size={16} />
             Save
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="md"
+            icon={<Trash2 size={18} />}
             onClick={onRemove}
-            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-stone-800 rounded"
             title="Remove API"
-          >
-            <Trash2 size={18} />
-          </button>
+            className="hover:text-red-400"
+          />
         </div>
       </div>
 
@@ -526,46 +526,50 @@ export const APICard: React.FC<APICardProps> = ({
             </div>
             {koboldStatus?.status === 'missing' && (
               <div className="flex items-center gap-1">
-                <button
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon={<Download className="w-4 h-4" />}
                   onClick={handleDownloadKoboldCPP}
                   disabled={isDownloading}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   title="Download the latest version of KoboldCPP from GitHub with progress tracking"
                 >
-                  <Download className="w-4 h-4" />
                   {isDownloading ? 'Downloading...' : 'Download KoboldCPP'}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  icon={<Globe2 className="w-4 h-4" />}
                   onClick={handleBrowserDownload}
                   disabled={isDownloading}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   title="Download KoboldCPP in browser (manual installation)"
                 >
-                  <Globe2 className="w-4 h-4" />
                   Browser
-                </button>
+                </Button>
               </div>
             )}
             {(koboldStatus?.status === 'present' || koboldStatus?.status === 'running') && (
               <div className="flex items-center gap-1">
-                <button
+                <Button
+                  variant="secondary"
+                  size="md"
+                  icon={<Download className="w-4 h-4" />}
                   onClick={handleDownloadKoboldCPP}
                   disabled={isDownloading}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   title="Download the latest version of KoboldCPP from GitHub (will replace current version)"
                 >
-                  <Download className="w-4 h-4" />
                   {isDownloading ? 'Downloading...' : 'Update'}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  icon={<Globe2 className="w-4 h-4" />}
                   onClick={handleBrowserDownload}
                   disabled={isDownloading}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-stone-600 hover:bg-stone-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   title="Download KoboldCPP in browser (manual installation)"
                 >
-                  <Globe2 className="w-4 h-4" />
                   Browser
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -588,14 +592,15 @@ export const APICard: React.FC<APICardProps> = ({
               placeholder="Enter API key"
               className="w-full px-3 py-2 pr-10 bg-stone-900 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="md"
+              icon={showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
               onClick={() => setShowApiKey(!showApiKey)}
-              className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200"
               title={showApiKey ? "Hide API Key" : "Show API Key"}
-            >
-              {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
+              className="absolute inset-y-0 right-0 px-3"
+            />
           </div>
         </div>
       )}
@@ -679,32 +684,38 @@ export const APICard: React.FC<APICardProps> = ({
       {/* Action Buttons */}
       <div className="flex justify-end gap-3 pt-2">
         {!isActive && editableApi.enabled && (
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={onSetActive}
             disabled={isLoading || hasChanges}
-            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title={hasChanges ? "Save changes before setting active" : (editableApi.enabled ? "Set as active API" : "You must connect the API first")}
+            className="!bg-sky-600 hover:!bg-sky-700"
           >
             Set Active
-          </button>
+          </Button>
         )}
         {editableApi.enabled ? (
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={handleDisconnect}
             disabled={isLoading}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="!bg-orange-600 hover:!bg-orange-700"
           >
             Disconnect
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={handleTest}
             disabled={isLoading || !editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title={(!editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)) ? "URL and API Key (if required) must be set to test" : "Test Connection"}
+            className="!bg-green-600 hover:!bg-green-700"
           >
             {isLoading ? 'Testing...' : 'Test Connection'}
-          </button>
+          </Button>
         )}
       </div>
 

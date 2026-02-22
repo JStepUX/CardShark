@@ -1,4 +1,5 @@
 import { AlertTriangle, RefreshCw, ArrowLeft } from 'lucide-react';
+import Button from '../common/Button';
 
 /**
  * Props for the WorldLoadError component
@@ -65,22 +66,25 @@ export function WorldLoadError({
                 {/* Action Buttons */}
                 <div className="flex gap-3 justify-center">
                     {onRetry && (
-                        <button
+                        <Button
+                            variant="primary"
+                            size="lg"
                             onClick={onRetry}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg flex items-center gap-2 transition-colors"
+                            icon={<RefreshCw size={16} />}
+                            className="!bg-purple-600 hover:!bg-purple-700"
                         >
-                            <RefreshCw size={16} />
-                            <span>Retry</span>
-                        </button>
+                            Retry
+                        </Button>
                     )}
                     {onBack && (
-                        <button
+                        <Button
+                            variant="secondary"
+                            size="lg"
                             onClick={onBack}
-                            className="px-4 py-2 bg-stone-700 hover:bg-stone-600 rounded-lg flex items-center gap-2 transition-colors"
+                            icon={<ArrowLeft size={16} />}
                         >
-                            <ArrowLeft size={16} />
-                            <span>Go Back</span>
-                        </button>
+                            Go Back
+                        </Button>
                     )}
                 </div>
             </div>

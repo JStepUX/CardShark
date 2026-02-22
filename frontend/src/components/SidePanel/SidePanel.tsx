@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll, Save, Check, Loader2 } from 'lucide-react';
+import Button from '../common/Button';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { DayNightSphere } from '../world/DayNightSphere';
 import { SidePanelProps } from './types';
@@ -115,13 +116,13 @@ export function SidePanel({
     if (!showExpanded) {
         return (
             <div className="w-12 bg-[#1a1a1a] border-l border-gray-800 flex flex-col items-center py-4">
-                <button
+                <Button
+                    variant="ghost"
+                    size="lg"
+                    icon={<ChevronLeft size={20} />}
                     onClick={handleToggle}
-                    className="text-gray-500 hover:text-white transition-colors"
                     title="Expand panel"
-                >
-                    <ChevronLeft className="w-5 h-5" />
-                </button>
+                />
             </div>
         );
     }
@@ -136,13 +137,14 @@ export function SidePanel({
 
             {/* Header */}
             <div className="border-b border-gray-800 px-4 py-4 flex items-start justify-between">
-                <button
+                <Button
+                    variant="ghost"
+                    size="lg"
+                    icon={<ChevronRight size={20} />}
                     onClick={handleToggle}
-                    className="text-gray-500 hover:text-white transition-colors mr-2 flex-shrink-0"
                     title="Collapse panel"
-                >
-                    <ChevronRight className="w-5 h-5" />
-                </button>
+                    className="mr-2 flex-shrink-0"
+                />
                 <div className="flex-1 min-w-0">
                     {/* Editable Session Name with Save Button */}
                     <div className="relative flex items-center gap-2">
@@ -160,21 +162,15 @@ export function SidePanel({
                             title="Click to edit session name"
                         />
                         {(hasChanges || justSaved) && (
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                icon={justSaved ? <Check size={16} /> : <Save size={16} />}
                                 onClick={handleSave}
-                                className={`flex-shrink-0 transition-colors ${justSaved
-                                    ? 'text-green-400'
-                                    : 'text-blue-400 hover:text-blue-300'
-                                    }`}
                                 title={justSaved ? "Saved!" : "Save session name"}
                                 disabled={justSaved}
-                            >
-                                {justSaved ? (
-                                    <Check className="w-4 h-4" />
-                                ) : (
-                                    <Save className="w-4 h-4" />
-                                )}
-                            </button>
+                                className={`flex-shrink-0 ${justSaved ? 'text-green-400' : 'text-blue-400 hover:text-blue-300'}`}
+                            />
                         )}
                     </div>
                 </div>
@@ -214,17 +210,20 @@ export function SidePanel({
                 {/* Journal Button */}
                 {onOpenJournal && (
                     <div className="px-4 pt-4 pb-6">
-                        <button
+                        <Button
+                            variant="ghost"
+                            size="lg"
+                            fullWidth
+                            icon={<BookOpen className="w-5 h-5 text-blue-400" />}
                             onClick={onOpenJournal}
-                            className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
                             title="Journal - Session notes and memories"
+                            className="bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 px-4 py-3 gap-3 justify-start"
                         >
-                            <BookOpen className="w-5 h-5 text-blue-400" />
                             <div className="text-left flex-1">
                                 <div className="text-sm text-white">Journal</div>
                                 <div className="text-xs text-gray-500">Session notes and memories</div>
                             </div>
-                        </button>
+                        </Button>
                     </div>
                 )}
 
@@ -314,17 +313,20 @@ function WorldModeContent({
 
             {/* Map Button */}
             <div className="px-4 py-4 border-b border-gray-800">
-                <button
+                <Button
+                    variant="ghost"
+                    size="lg"
+                    fullWidth
+                    icon={<Map className="w-5 h-5 text-blue-400" />}
                     onClick={onOpenMap}
-                    className="w-full bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
                     title="World Map - Navigate between rooms"
+                    className="bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-gray-700 px-4 py-3 gap-3 justify-start"
                 >
-                    <Map className="w-5 h-5 text-blue-400" />
                     <div className="text-left flex-1">
                         <div className="text-sm text-white">Map</div>
                         <div className="text-xs text-gray-500">Navigate between rooms</div>
                     </div>
-                </button>
+                </Button>
             </div>
 
             {/* Future Features - Placeholder */}
@@ -407,12 +409,14 @@ function CharacterModeContent({
                                 className="w-full h-full object-cover"
                             />
                             {/* Back to main button */}
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={handleBackToMain}
-                                className="absolute top-2 left-2 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded transition-colors"
+                                className="absolute top-2 left-2 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 !rounded"
                             >
                                 ← Main
-                            </button>
+                            </Button>
                         </div>
                     ) : (
                         <ImagePreview
@@ -438,11 +442,13 @@ function CharacterModeContent({
                         ) : (
                             <div className="grid grid-cols-3 gap-2">
                                 {secondaryImages.map((image) => (
-                                    <button
+                                    <Button
                                         key={image.id}
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => handleSecondaryImageClick(image)}
                                         className={`
-                                            aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all
+                                            aspect-[3/4] overflow-hidden border-2 p-0
                                             ${selectedSecondaryImage?.id === image.id
                                                 ? 'border-blue-500 ring-2 ring-blue-500/50'
                                                 : 'border-stone-700 hover:border-stone-500'
@@ -455,7 +461,7 @@ function CharacterModeContent({
                                             className="w-full h-full object-cover"
                                             loading="lazy"
                                         />
-                                    </button>
+                                    </Button>
                                 ))}
                             </div>
                         )}
@@ -478,13 +484,15 @@ function AssistantModeContent() {
 // Placeholder Button Component
 function PlaceholderButton({ icon: Icon, label }: { icon: any; label: string }) {
     return (
-        <button
+        <Button
+            variant="ghost"
+            size="lg"
             disabled
-            className="bg-[#0a0a0a] border border-gray-800 rounded-lg px-3 py-3 flex flex-col items-center gap-2 opacity-50 cursor-not-allowed group"
             title="Coming Soon"
+            className="bg-[#0a0a0a] border border-gray-800 px-3 py-3 !flex-col gap-2"
         >
             <Icon className="w-5 h-5 text-gray-600" />
             <span className="text-xs text-gray-600">{label}</span>
-        </button>
+        </Button>
     );
 }

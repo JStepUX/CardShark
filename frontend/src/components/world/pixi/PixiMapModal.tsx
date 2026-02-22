@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { X, Map as MapIcon, ZoomIn, ZoomOut, Home, Hand, MousePointer } from 'lucide-react';
+import Button from '../../common/Button';
 import { GridWorldState } from '../../../types/worldGrid';
 import { WorldMapStage } from './WorldMapStage';
 import { MapCamera } from './MapCamera';
@@ -337,15 +338,14 @@ export function PixiMapModal({
                 </div>
 
                 {/* Close button */}
-                <button
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<X className="w-6 h-6" />}
                     onClick={onClose}
                     disabled={isAnimating}
-                    className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 
-                               transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Close map"
-                >
-                    <X className="w-6 h-6" />
-                </button>
+                />
             </div>
 
             {/* PixiJS Canvas Container (fills remaining space) */}
@@ -356,47 +356,44 @@ export function PixiMapModal({
                 {/* Mode toggle + Zoom controls (bottom-right corner) */}
                 <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
                     {/* Mode toggle */}
-                    <button
+                    <Button
+                        variant="toolbar"
+                        active={isPanMode}
+                        icon={isPanMode ? <Hand className="w-5 h-5" /> : <MousePointer className="w-5 h-5" />}
                         onClick={() => setIsPanMode(!isPanMode)}
-                        className={`p-2 rounded-lg transition-colors backdrop-blur-sm ${
-                            isPanMode
-                                ? 'bg-blue-600/80 text-white'
-                                : 'bg-gray-800/80 text-gray-300 hover:bg-gray-700 hover:text-white'
-                        }`}
                         aria-label={isPanMode ? 'Switch to navigate mode' : 'Switch to pan mode'}
                         title={isPanMode ? 'Pan mode (click to switch to navigate)' : 'Navigate mode (click to switch to pan)'}
-                    >
-                        {isPanMode ? <Hand className="w-5 h-5" /> : <MousePointer className="w-5 h-5" />}
-                    </button>
+                        className="backdrop-blur-sm"
+                    />
 
                     {/* Divider */}
                     <div className="h-px bg-gray-600/50 my-1" />
 
                     {/* Zoom controls */}
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<ZoomIn className="w-5 h-5" />}
                         onClick={() => cameraRef.current?.setZoom((cameraRef.current?.getZoom() || 1) + 0.25)}
-                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700
-                                   hover:text-white transition-colors backdrop-blur-sm"
                         aria-label="Zoom in"
-                    >
-                        <ZoomIn className="w-5 h-5" />
-                    </button>
-                    <button
+                        className="backdrop-blur-sm"
+                    />
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<ZoomOut className="w-5 h-5" />}
                         onClick={() => cameraRef.current?.setZoom((cameraRef.current?.getZoom() || 1) - 0.25)}
-                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700
-                                   hover:text-white transition-colors backdrop-blur-sm"
                         aria-label="Zoom out"
-                    >
-                        <ZoomOut className="w-5 h-5" />
-                    </button>
-                    <button
+                        className="backdrop-blur-sm"
+                    />
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Home className="w-5 h-5" />}
                         onClick={() => cameraRef.current?.reset()}
-                        className="p-2 rounded-lg bg-gray-800/80 text-gray-300 hover:bg-gray-700
-                                   hover:text-white transition-colors backdrop-blur-sm"
                         aria-label="Reset view"
-                    >
-                        <Home className="w-5 h-5" />
-                    </button>
+                        className="backdrop-blur-sm"
+                    />
                 </div>
             </div>
 

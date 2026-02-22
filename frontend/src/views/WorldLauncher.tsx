@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import Button from '../components/common/Button';
 import { ArrowLeft, Play, Hammer, Download } from 'lucide-react';
 import { CharacterData } from '../types/character';
 import { worldApi } from '../api/worldApi';
@@ -132,20 +133,23 @@ const WorldLauncher: React.FC = () => {
    return (
       <div className="flex flex-col h-full bg-stone-950 text-white p-8 overflow-y-auto">
          <div className="flex justify-between items-center mb-6">
-            <button
+            <Button
+               variant="ghost"
+               icon={<ArrowLeft size={20} />}
                onClick={() => navigate('/gallery')}
-               className="flex items-center text-stone-400 hover:text-white transition-colors"
+               className="flex items-center"
             >
-               <ArrowLeft className="mr-2" size={20} /> Back to Gallery
-            </button>
-            <button
+               Back to Gallery
+            </Button>
+            <Button
+               variant="primary"
+               icon={<Download size={18} />}
                onClick={handleExportWorld}
-               className="flex items-center gap-2 px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 hover:text-white rounded-lg transition-colors border border-emerald-600"
                title="Export world as ZIP file"
+               className="!bg-emerald-800 hover:!bg-emerald-700 !text-emerald-100 hover:!text-white border border-emerald-600"
             >
-               <Download size={18} />
                Export World
-            </button>
+            </Button>
          </div>
 
          <div className="flex flex-col md:flex-row gap-8 max-w-6xl mx-auto w-full">
@@ -216,7 +220,7 @@ const WorldLauncher: React.FC = () => {
                      const hasLocations = locationCount > 0 || roomCount > 0;
 
                      return (
-                        <button
+                        <Button
                            onClick={() => hasLocations && handlePlayWorld()}
                            disabled={!hasLocations}
                            className={`group flex flex-col items-center justify-center p-8 border rounded-xl transition-all shadow-lg
@@ -232,11 +236,11 @@ const WorldLauncher: React.FC = () => {
                            <span className={`${hasLocations ? "text-emerald-400/60" : "text-stone-600"} text-sm mt-2`}>
                               {hasLocations ? "Select user and enter" : "No locations to play"}
                            </span>
-                        </button>
+                        </Button>
                      );
                   })()}
 
-                  <button
+                  <Button
                      onClick={() => navigate(`/world/${uuid}/builder`)}
                      className="group flex flex-col items-center justify-center p-8 bg-gradient-to-br from-blue-900/50 to-stone-900 border border-blue-800/50 rounded-xl hover:border-blue-500/50 hover:from-blue-900/80 transition-all shadow-lg hover:shadow-blue-900/20"
                   >
@@ -245,7 +249,7 @@ const WorldLauncher: React.FC = () => {
                      </div>
                      <span className="text-xl font-bold text-blue-100">World Builder</span>
                      <span className="text-blue-400/60 text-sm mt-2">Edit rooms, NPCs, and events</span>
-                  </button>
+                  </Button>
                </div>
 
                <div className="bg-stone-900 p-6 rounded-xl border border-stone-800 flex-grow">

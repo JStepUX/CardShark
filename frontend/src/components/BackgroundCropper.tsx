@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Dialog } from './common/Dialog';
 import { Ratio } from 'lucide-react';
 import ImageCropperModal from './ImageCropperModal';
+import Button from './common/Button';
 
 interface BackgroundCropperProps {
   isOpen: boolean;
@@ -52,10 +53,12 @@ const BackgroundCropper: React.FC<BackgroundCropperProps> = ({
           
           <div className="space-y-4">
             {aspectRatioOptions.map((ratio) => (
-              <button
+              <Button
                 key={ratio.label}
+                variant="secondary"
+                fullWidth
                 onClick={() => handleRatioSelect(ratio)}
-                className="w-full flex items-center gap-4 p-4 bg-stone-800 hover:bg-stone-700 rounded-lg transition-colors"
+                className="flex items-center gap-4 p-4"
               >
                 <div className="flex-shrink-0 p-2 bg-blue-900/40 rounded-lg">
                   <Ratio size={24} />
@@ -64,7 +67,7 @@ const BackgroundCropper: React.FC<BackgroundCropperProps> = ({
                   <div className="font-medium">{ratio.label}</div>
                   <div className="text-sm text-gray-400">{ratio.description}</div>
                 </div>
-              </button>
+              </Button>
             ))}
           </div>
         </div>

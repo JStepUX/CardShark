@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Trash2, Check, ImageOff } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
+import Button from '../common/Button';
 
 export interface MediaItem {
     id: string;
@@ -47,7 +48,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
         <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 ${className}`}>
             {/* "Add New" Button */}
             {onAdd && (
-                <button
+                <Button
+                    variant="ghost"
                     onClick={onAdd}
                     className="
             flex flex-col items-center justify-center gap-2
@@ -61,12 +63,13 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                         <Plus size={24} />
                     </div>
                     <span className="text-sm font-medium">Add New</span>
-                </button>
+                </Button>
             )}
 
             {/* "None" Option */}
             {allowNone && (
-                <button
+                <Button
+                    variant="ghost"
                     onClick={() => onSelect(null)}
                     className={`
             relative flex flex-col items-center justify-center gap-2
@@ -88,7 +91,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                             <Check size={12} strokeWidth={3} />
                         </div>
                     )}
-                </button>
+                </Button>
             )}
 
             {/* Items */}
@@ -141,21 +144,22 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
                             {/* Delete Action */}
                             {onDelete && !item.isDefault && (
-                                <button
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon={<Trash2 size={16} />}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onDelete(item);
                                     }}
+                                    title="Delete"
                                     className="
-                    p-2 rounded-lg bg-red-500/10 text-red-400 
+                    bg-red-500/10 text-red-400
                     opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white
                     transition-all transform translate-y-2 group-hover:translate-y-0
                     focus:opacity-100
                   "
-                                    title="Delete"
-                                >
-                                    <Trash2 size={16} />
-                                </button>
+                                />
                             )}
                         </div>
                     </div>

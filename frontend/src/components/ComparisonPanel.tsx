@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { X, ArrowLeft, Save } from 'lucide-react';
 import { useComparison } from '../contexts/ComparisonContext';
+import Button from './common/Button';
 import CharacterInfoView from './character/CharacterInfoView';
 import CharacterGallery from './character/CharacterGallery';
 
@@ -37,13 +38,15 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({ settingsChangeCount }
       <div className="p-4 flex justify-between items-center border-b border-stone-800">
         <div className="flex items-center">
           {!showGallery && secondaryCharacterData && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<ArrowLeft size={18} />}
               onClick={handleBackToGallery}
-              className="mr-3 p-1 rounded-full hover:bg-stone-800 transition-colors"
               title="Back to gallery"
-            >
-              <ArrowLeft size={18} />
-            </button>
+              pill
+              className="mr-3"
+            />
           )}
           <h2 className="text-lg font-semibold">
             {showGallery 
@@ -53,21 +56,23 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({ settingsChangeCount }
         </div>
         <div className="flex items-center gap-2">
           {!showGallery && secondaryCharacterData && (
-            <button
-              className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Save size={16} />}
               title="Save changes to compared character"
             >
-              <Save size={16} />
-              <span className="text-sm">Save</span>
-            </button>
+              Save
+            </Button>
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X size={18} />}
             onClick={handleCloseComparison}
-            className="p-1 rounded-full hover:bg-stone-800 transition-colors"
             title="Close comparison"
-          >
-            <X size={18} />
-          </button>
+            pill
+          />
         </div>
       </div>
 

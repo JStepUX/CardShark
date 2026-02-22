@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Dialog } from '../common/Dialog';
+import Button from '../common/Button';
 import { Copy, FileText, MessageSquare, Settings } from 'lucide-react';
 import { z } from 'zod';
 
@@ -423,36 +424,39 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
       <div className="w-full h-[70vh] flex flex-col performance-contain performance-transform">
         {/* Tab Controls */}
         <div className="flex border-b border-stone-700 mb-4 performance-contain">
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setActiveTab('analysis')}
             className={`px-4 py-2 performance-transform ${activeTab === 'analysis'
               ? 'border-b-2 border-blue-500 text-blue-400'
-              : 'text-gray-400 hover:text-gray-300'
+              : ''
               }`}
           >
             Analysis
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             onClick={() => setActiveTab('payload')}
             className={`px-4 py-2 performance-transform ${activeTab === 'payload'
               ? 'border-b-2 border-blue-500 text-blue-400'
-              : 'text-gray-400 hover:text-gray-300'
+              : ''
               }`}
           >
             Raw Payload
-          </button>
+          </Button>
 
           {/* Copy button aligned to the right */}
           <div className="ml-auto performance-contain">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Copy size={14} />}
               onClick={handleCopy}
-              className="flex items-center gap-1 px-3 py-1 my-1 bg-stone-800 hover:bg-stone-700 
-                         rounded text-sm transition-colors performance-transform"
+              className="my-1 performance-transform"
               title="Copy raw data to clipboard"
             >
-              <Copy size={14} />
-              <span>{copySuccess ? "Copied!" : "Copy"}</span>
-            </button>
+              {copySuccess ? "Copied!" : "Copy"}
+            </Button>
           </div>
         </div>
 

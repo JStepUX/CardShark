@@ -27,6 +27,7 @@ import { roomCardToGridRoom } from '../utils/roomCardAdapter';
 import { useGridViewport } from '../hooks/useGridViewport';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { WorldLoadError } from '../components/world/WorldLoadError';
+import Button from '../components/common/Button';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 
 interface WorldEditorProps {
@@ -501,9 +502,13 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
       <div className="flex items-center justify-center h-screen bg-[#0a0a0a] text-white">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
-          <button onClick={handleBack} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg">
+          <Button
+            variant="primary"
+            onClick={handleBack}
+            className="!bg-purple-600 hover:!bg-purple-700"
+          >
             Go Back
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -525,12 +530,13 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           <span className="text-amber-200 text-sm">
             {missingRoomCount} room{missingRoomCount !== 1 ? 's were' : ' was'} not found and removed from the grid. Save to update.
           </span>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setShowMissingRoomWarning(false)}
-            className="text-amber-200 hover:text-white px-2 py-1 text-sm"
           >
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
 

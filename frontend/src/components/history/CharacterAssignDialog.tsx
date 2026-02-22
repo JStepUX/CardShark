@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Loader2, Search } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 import { getApiBaseUrl } from '../../utils/apiConfig';
+import Button from '../common/Button';
 
 interface ChatHistoryItem {
     chat_session_uuid: string;
@@ -143,14 +144,15 @@ const CharacterAssignDialog: React.FC<CharacterAssignDialogProps> = ({
                             Select a character to transfer "{chatItem.title || 'this chat'}" to
                         </p>
                     </div>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        pill
+                        icon={<X size={20} />}
                         onClick={onClose}
                         disabled={assigning}
-                        className="p-2 text-stone-400 hover:text-white hover:bg-stone-700 rounded-full transition-colors disabled:opacity-50"
                         aria-label="Close"
-                    >
-                        <X size={20} />
-                    </button>
+                    />
                 </div>
 
                 {/* Content */}
@@ -162,12 +164,13 @@ const CharacterAssignDialog: React.FC<CharacterAssignDialogProps> = ({
                     ) : error ? (
                         <div className="text-center text-red-400 py-8">
                             <p>{error}</p>
-                            <button
+                            <Button
+                                variant="secondary"
                                 onClick={loadCharacters}
-                                className="mt-4 px-4 py-2 bg-stone-700 hover:bg-stone-600 rounded-lg text-white"
+                                className="mt-4"
                             >
                                 Retry
-                            </button>
+                            </Button>
                         </div>
                     ) : characters.length === 0 ? (
                         <div className="text-center text-stone-400 py-8">
@@ -247,13 +250,13 @@ const CharacterAssignDialog: React.FC<CharacterAssignDialogProps> = ({
 
                 {/* Footer */}
                 <div className="flex justify-end gap-3 p-4 border-t border-stone-800">
-                    <button
+                    <Button
+                        variant="secondary"
                         onClick={onClose}
                         disabled={assigning}
-                        className="px-4 py-2 bg-stone-700 hover:bg-stone-600 rounded-lg text-white transition-colors disabled:opacity-50"
                     >
                         Cancel
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

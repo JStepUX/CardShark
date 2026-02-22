@@ -3,6 +3,7 @@ import { Save, X, RotateCw, RefreshCw } from 'lucide-react';
 import Cropper, { ReactCropperElement } from 'react-cropper';
 import 'cropperjs/dist/cropper.css';
 import LoadingSpinner from '../common/LoadingSpinner';
+import Button from '../common/Button';
 
 export interface ImageEditorProps {
     imageUrl: string;
@@ -108,37 +109,41 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             {/* Controls */}
             <div className="flex justify-between items-center bg-stone-900/50 p-2 rounded-lg border border-stone-800">
                 <div className="flex gap-2">
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<RotateCw size={18} />}
                         onClick={handleRotate}
-                        className="p-2 hover:bg-stone-700 rounded-lg text-stone-400 hover:text-white transition-colors tooltip-trigger"
                         title="Rotate 90°"
-                    >
-                        <RotateCw size={18} />
-                    </button>
-                    <button
+                        className="tooltip-trigger"
+                    />
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<RefreshCw size={18} />}
                         onClick={handleReset}
-                        className="p-2 hover:bg-stone-700 rounded-lg text-stone-400 hover:text-white transition-colors"
                         title="Reset"
-                    >
-                        <RefreshCw size={18} />
-                    </button>
+                    />
                 </div>
 
                 <div className="flex gap-2">
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="md"
+                        icon={<X size={18} />}
                         onClick={onCancel}
-                        className="flex items-center gap-2 px-4 py-2 hover:bg-stone-800 rounded-lg text-stone-300 transition-colors"
                     >
-                        <X size={18} />
-                        <span>Cancel</span>
-                    </button>
-                    <button
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="primary"
+                        size="md"
+                        icon={<Save size={18} />}
                         onClick={handleSave}
-                        className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-lg hover:shadow-blue-500/20 transition-all"
+                        className="px-6 shadow-lg hover:shadow-blue-500/20"
                     >
-                        <Save size={18} />
-                        <span>Save Changes</span>
-                    </button>
+                        Save Changes
+                    </Button>
                 </div>
             </div>
         </div>

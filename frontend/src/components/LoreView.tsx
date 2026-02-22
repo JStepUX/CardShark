@@ -3,6 +3,7 @@ import { Plus, BookOpen, FileJson, FileText, Image, Settings, ChevronDown, Chevr
 import { useCharacter } from '../contexts/CharacterContext';
 import { LoreCard } from './LoreComponents';
 import DropdownMenu from './DropDownMenu';
+import Button from './common/Button';
 import { LoreEntry, createEmptyLoreEntry, CharacterCard } from '../types/schema';
 import { importJson, importTsv, importPng } from '../handlers/importHandlers';
 
@@ -273,28 +274,31 @@ const LoreView: React.FC = () => {
               ]}
               buttonClassName="p-2 hover:bg-stone-700 rounded-lg transition-colors"
             />
-            <button
+            <Button
+              variant="primary"
+              icon={<Plus size={18} />}
               onClick={handleAddEntry}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              <Plus size={18} />
               New
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Book-Level Settings */}
         <div className="bg-stone-950 rounded-lg border border-stone-800">
-          <button
+          <Button
+            variant="ghost"
+            fullWidth
+            active={showBookSettings}
             onClick={() => setShowBookSettings(!showBookSettings)}
-            className="w-full flex items-center justify-between p-3 hover:bg-stone-900 rounded-lg transition-colors"
+            className="flex items-center justify-between p-3"
           >
             <div className="flex items-center gap-2">
               <Settings size={18} className="text-gray-400" />
               <span className="text-sm font-medium text-gray-300">Book Settings</span>
             </div>
             {showBookSettings ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
-          </button>
+          </Button>
 
           {showBookSettings && (
             <div className="p-4 border-t border-stone-800 space-y-4">

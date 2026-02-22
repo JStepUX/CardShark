@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { WordSwapRule } from '../utils/contentProcessing';
 import { AlertCircle, Plus, Trash, Check, X, ArrowUpDown } from 'lucide-react';
 import { Dialog } from './common/Dialog';
+import Button from './common/Button';
 
 interface SubstitutionManagerProps {
   rules: WordSwapRule[];
@@ -80,13 +81,15 @@ export const SubstitutionManager: React.FC<SubstitutionManagerProps> = ({ rules,
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-md font-medium text-white">Content Filtering Rules</h2>
-        <button
+        <Button
+          variant="primary"
+          size="sm"
+          icon={<Plus size={16} />}
           onClick={handleAddClick}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-700 hover:bg-purple-600 transition-colors rounded"
+          className="!bg-purple-700 hover:!bg-purple-600"
         >
-          <Plus size={16} />
           Add Rule
-        </button>
+        </Button>
       </div>
       
       <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
@@ -111,17 +114,14 @@ export const SubstitutionManager: React.FC<SubstitutionManagerProps> = ({ rules,
               {rules.map((rule, index) => (
                 <tr key={index} className={rule.enabled ? "" : "opacity-50"}>
                   <td className="px-4 py-2">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={rule.enabled ? <Check size={14} /> : <X size={14} />}
                       onClick={() => handleToggleEnabled(index)}
-                      className={`w-6 h-6 rounded-md flex items-center justify-center ${
-                        rule.enabled
-                          ? "bg-green-600 text-white"
-                          : "bg-zinc-600 text-zinc-400"
-                      }`}
                       title={rule.enabled ? "Disable" : "Enable"}
-                    >
-                      {rule.enabled ? <Check size={14} /> : <X size={14} />}
-                    </button>
+                      className={rule.enabled ? "!bg-green-600 !text-white" : "!bg-zinc-600 !text-zinc-400"}
+                    />
                   </td>
                   <td className="px-4 py-2 font-mono text-sm">
                     {rule.original.length > 20 
@@ -142,43 +142,43 @@ export const SubstitutionManager: React.FC<SubstitutionManagerProps> = ({ rules,
                      rule.strategy === 'client-replace' ? 'Client Replace' : 'Auto'}
                   </td>
                   <td className="px-4 py-2 text-right space-x-1">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<ArrowUpDown size={14} />}
                       onClick={() => handleMoveRule(index, 'up')}
                       disabled={index === 0}
-                      className={`p-1 rounded ${
-                        index === 0 ? "text-zinc-600" : "text-zinc-400 hover:bg-zinc-700"
-                      }`}
                       title="Move Up"
-                    >
-                      <ArrowUpDown size={14} />
-                    </button>
-                    <button
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      }
                       onClick={() => handleEditClick(rule, index)}
-                      className="p-1 rounded text-blue-400 hover:bg-zinc-700"
                       title="Edit"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
-                    <button
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<Trash size={14} />}
                       onClick={() => handleDeleteClick(index)}
-                      className="p-1 rounded text-red-400 hover:bg-zinc-700"
                       title="Delete"
-                    >
-                      <Trash size={14} />
-                    </button>
+                    />
                   </td>
                 </tr>
               ))}
@@ -352,12 +352,12 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
                         className="bg-zinc-800 px-2 py-1 rounded flex items-center gap-1.5"
                       >
                         <span className="text-sm">{sub}</span>
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={<X size={14} />}
                           onClick={() => handleRemoveSubstitution(idx)}
-                          className="text-zinc-400 hover:text-red-400"
-                        >
-                          <X size={14} />
-                        </button>
+                        />
                       </div>
                     ))}
                   </div>
@@ -378,12 +378,13 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
                     }
                   }}
                 />
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={handleAddSubstitution}
-                  className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-sm"
                 >
                   Add
-                </button>
+                </Button>
               </div>
               
               <p className="mt-2 text-xs text-gray-500">

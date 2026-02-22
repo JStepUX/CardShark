@@ -50,6 +50,7 @@ import { useRoomTransition } from '../hooks/useRoomTransition';
 import { useCombatManager } from '../hooks/useCombatManager';
 import { LoadingScreen } from '../components/transition';
 import { soundManager } from '../components/combat/pixi/SoundManager';
+import Button from '../components/common/Button';
 import type { AdventureContext } from '../types/adventureLog';
 import type { UserProfile } from '../types/messages';
 
@@ -660,12 +661,14 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       <div className="flex items-center justify-center h-screen bg-[#0a0a0a] text-white">
         <div className="text-center">
           <p className="text-red-500 mb-4">{worldLoader.error}</p>
-          <button
+          <Button
             onClick={handleBack}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
+            variant="ghost"
+            size="lg"
+            className="bg-purple-600 hover:bg-purple-700 text-white"
           >
             Go Back
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -677,12 +680,14 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       <div className="flex items-center justify-center h-screen bg-[#0a0a0a] text-white">
         <div className="text-center">
           <p className="text-gray-500">World not found</p>
-          <button
+          <Button
             onClick={handleBack}
-            className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg"
+            variant="ghost"
+            size="lg"
+            className="mt-4 bg-purple-600 hover:bg-purple-700 text-white"
           >
             Go Back
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -705,12 +710,14 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
           <span className="text-amber-200 text-sm">
             ⚠️ {missingRoomCount} room{missingRoomCount !== 1 ? 's' : ''} could not be loaded (may have been deleted).
           </span>
-          <button
+          <Button
             onClick={() => setShowMissingRoomWarning(false)}
-            className="text-amber-200 hover:text-white px-2 py-1 text-sm"
+            variant="ghost"
+            size="sm"
+            className="text-amber-200 hover:text-white"
           >
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
 
@@ -799,16 +806,15 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
             )}
             {/* DEV: Reset Enemies Button (toggle with Ctrl+Shift+D) */}
             {showDevTools && !isInCombat && (
-              <button
+              <Button
                 onClick={handleDevResetEnemies}
-                className="absolute top-4 left-4 z-40 px-3 py-1.5 text-xs font-mono
-                           bg-red-900/80 border border-red-600 text-red-300
-                           hover:bg-red-800 hover:text-red-200
-                           rounded transition-colors backdrop-blur-sm"
+                variant="destructive"
+                size="sm"
                 title="DEV: Reset all enemies in this room (restore dead, heal incapacitated) — Ctrl+Shift+D to hide"
+                className="absolute top-4 left-4 z-40 font-mono bg-red-900/80 border border-red-600 text-red-300 hover:bg-red-800 hover:text-red-200 backdrop-blur-sm"
               >
                 DEV: Reset Enemies
-              </button>
+              </Button>
             )}
           </div>
         }

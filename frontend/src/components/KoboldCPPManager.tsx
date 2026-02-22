@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Download, AlertCircle, X, CheckCircle, RefreshCw, ArrowUpCircle } from 'lucide-react';
 import LoadingSpinner from './common/LoadingSpinner'; // Added
 import { useKoboldCPP } from '../hooks/useKoboldCPP';
+import Button from './common/Button';
 
 interface DownloadProgress {
   bytes_downloaded: number;
@@ -285,18 +286,14 @@ const KoboldCPPManager: React.FC = () => {
     <div className="p-4 bg-zinc-800 rounded-lg">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-white">KoboldCPP Integration</h2>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={isLoading ? <LoadingSpinner size="sm" /> : <RefreshCw className="h-5 w-5" />}
           onClick={() => fetchStatus()}
-          className="text-gray-300 hover:text-white"
           title="Refresh Status"
           disabled={isLoading}
-        >
-          {isLoading ? (
-            <LoadingSpinner size="sm" />
-          ) : (
-            <RefreshCw className="h-5 w-5" />
-          )}
-        </button>
+        />
       </div>
 
       {isLoading && !status ? (
@@ -341,18 +338,15 @@ const KoboldCPPManager: React.FC = () => {
                     </span>
                   )}
 
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={checkingForUpdates ? <LoadingSpinner size={12} /> : <RefreshCw className="h-3 w-3" />}
                     onClick={() => checkForUpdates(true)}
                     disabled={checkingForUpdates}
-                    className="ml-2 text-xs text-gray-400 hover:text-gray-300"
                     title="Check for updates"
-                  >
-                    {checkingForUpdates ? (
-                      <LoadingSpinner size={12} />
-                    ) : (
-                      <RefreshCw className="h-3 w-3" />
-                    )}
-                  </button>
+                    className="ml-2"
+                  />
                 </div>
               )}
             </div>
@@ -396,66 +390,49 @@ const KoboldCPPManager: React.FC = () => {
           {/* Action buttons based on status */}
           <div className="flex flex-col sm:flex-row gap-2 justify-center mb-4">
             {status.status === 'missing' && (
-              <button
+              <Button
+                variant="primary"
+                icon={isDownloading ? <LoadingSpinner size="sm" /> : <Download className="h-4 w-4" />}
                 onClick={downloadKoboldCPP}
                 disabled={isDownloading}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isDownloading ? (
-                  <>
-                    <LoadingSpinner size="sm" />
-                    Downloading...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    Download KoboldCPP
-                  </>
-                )}
-              </button>
+                {isDownloading ? 'Downloading...' : 'Download KoboldCPP'}
+              </Button>
             )}
 
             {/* Launch button - Added to use the launchKoboldCPP function */}
             {status.status === 'present' && !status.is_running && (
-              <button
+              <Button
+                variant="primary"
+                icon={<RefreshCw className="h-4 w-4" />}
                 onClick={launchKoboldCPP}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                className="!bg-green-600 hover:!bg-green-700"
               >
-                <RefreshCw className="h-4 w-4" />
                 Launch KoboldCPP
-              </button>
+              </Button>
             )}
 
             {/* Update button */}
             {versionInfo && versionInfo.update_available && status.status !== 'missing' && (
-              <button
+              <Button
+                variant="primary"
+                icon={isDownloading ? <LoadingSpinner size="sm" /> : <ArrowUpCircle className="h-4 w-4" />}
                 onClick={downloadKoboldCPP}
                 disabled={isDownloading}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isDownloading ? (
-                  <>
-                    <LoadingSpinner size="sm" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <ArrowUpCircle className="h-4 w-4" />
-                    Update to v{versionInfo.latest_version}
-                  </>
-                )}
-              </button>
+                {isDownloading ? 'Updating...' : `Update to v${versionInfo.latest_version}`}
+              </Button>
             )}
 
             {/* Recheck button */}
             {!status.is_running && (
-              <button
+              <Button
+                variant="secondary"
+                icon={<RefreshCw className="h-4 w-4" />}
                 onClick={recheckStatus}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-stone-600 text-white rounded-lg hover:bg-stone-700"
               >
-                <RefreshCw className="h-4 w-4" />
                 Recheck Status
-              </button>
+              </Button>
             )}
           </div>
 
@@ -498,12 +475,13 @@ const KoboldCPPManager: React.FC = () => {
         <div className="mt-4 p-3 bg-red-900/40 border border-red-700 rounded-lg flex items-start gap-2 text-red-200">
           <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
           <div className="text-sm">{error}</div>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<X className="h-4 w-4" />}
             onClick={() => setError(null)}
-            className="ml-auto text-red-300 hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
+            className="ml-auto"
+          />
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { AlertCircle as AlertCircleIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { APIProvider, ModelInfo, FeatherlessModelInfo } from '../types/api';
 import LoadingSpinner from './common/LoadingSpinner';
+import Button from './common/Button';
 import { useKoboldCPP } from '../hooks/useKoboldCPP';
 
 // --- Interfaces ---
@@ -585,23 +586,27 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </select>
               {/* Use is_running from the hook's status */}
               {koboldHookStatus?.is_running ? (
-                <button
+                <Button
+                  variant="destructive"
+                  size="md"
                   onClick={handleDisconnectKobold}
-                  disabled={isLoading} // Disable button during connect/disconnect actions
-                  className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-stone-500 disabled:cursor-not-allowed text-sm flex-shrink-0"
+                  disabled={isLoading}
                   title="Stop KoboldCPP Server (via backend)"
+                  className="flex-shrink-0"
                 >
                   Stop
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
+                  variant="primary"
+                  size="md"
                   onClick={handleConnectKobold}
                   disabled={!selectedModel || !modelsDirectory || isLoading}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-stone-500 disabled:cursor-not-allowed text-sm flex-shrink-0"
                   title={!selectedModel || !modelsDirectory ? "Select a model and set model directory first" : "Start KoboldCPP Server with selected model (via backend)"}
+                  className="flex-shrink-0 !bg-green-600 hover:!bg-green-700"
                 >
                   Start
-                </button>
+                </Button>
               )}
             </div>
             {/* Display running status - removed model name check as it's not available from hook */}

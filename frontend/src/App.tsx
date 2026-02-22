@@ -3,6 +3,7 @@ import ApiErrorBoundary from './components/common/ApiErrorBoundary';
 import ResilientApiProvider from './contexts/ResilientApiContext';
 import AppRoutes from './components/AppRoutes';
 import { Toaster } from 'sonner'; // Import Toaster
+import Button from './components/common/Button';
 import './styles/fonts.css';
 
 function App() {
@@ -21,12 +22,12 @@ function App() {
                 {error.message}
               </p>
               <div className="flex justify-center">
-                <button
+                <Button
+                  variant="primary"
                   onClick={resetError}
-                  className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   Try Again
-                </button>
+                </Button>
               </div>
             </div>
           </div>

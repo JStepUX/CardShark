@@ -3,6 +3,7 @@ import { Dialog } from './common/Dialog';
 import { Save, X } from 'lucide-react';
 import Cropper, { ReactCropperElement } from 'react-cropper';
 import 'cropperjs/dist/cropper.css';
+import Button from './common/Button';
 
 interface ImageCropperModalProps {
   isOpen: boolean;
@@ -146,22 +147,26 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           </div>
           
           <div className="flex gap-3">
-            <button
+            <Button
+              variant="secondary"
+              size="md"
+              icon={<X size={16} />}
               onClick={onClose}
-              className="flex items-center gap-2 px-4 py-2 bg-stone-800 hover:bg-stone-700 rounded-lg performance-transform"
+              className="performance-transform"
             >
-              <X size={16} />
-              <span>Cancel</span>
-            </button>
-            
-            <button
+              Cancel
+            </Button>
+
+            <Button
+              variant="primary"
+              size="md"
+              icon={<Save size={16} />}
               onClick={handleSave}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg performance-transform"
               disabled={loading}
+              className="performance-transform"
             >
-              <Save size={16} />
-              <span>Save Crop</span>
-            </button>
+              Save Crop
+            </Button>
           </div>
         </div>
       </div>
