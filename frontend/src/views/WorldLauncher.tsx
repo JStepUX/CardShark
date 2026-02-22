@@ -26,15 +26,10 @@ const WorldLauncher: React.FC = () => {
       // Close the modal
       setShowUserSelect(false);
 
-      // Navigate to play view with user info in route state
-      // user_uuid is provided by the database-backed user service
+      // Navigate to play view with full user profile in route state
       navigate(`/world/${uuid}/play`, {
          state: {
-            userProfile: {
-               user_uuid: user.user_uuid,
-               name: user.name,
-               filename: user.filename,
-            }
+            userProfile: user
          }
       });
    }, [navigate, uuid]);

@@ -24,9 +24,8 @@ import type { GridRoom, CombatDisplayNPC } from '../types/worldGrid';
 import { checkLevelUp, type LevelUpInfo, type PlayerProgression } from '../utils/progressionUtils';
 import { buildCombatNarrativeSummary, buildPostCombatPrompt, buildDefeatPrompt } from '../services/combat/postCombatNarrative';
 import { generateCombatLoot } from '../services/loot/lootGenerator';
-import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
 import { soundManager } from '../components/world/pixi/local';
-import { removeIncompleteSentences } from '../utils/contentProcessing';
+import { executeWorldGeneration, streamToMessage } from '../services/worldGenerationService';
 
 
 interface GridCombatHandle {
@@ -68,6 +67,10 @@ interface UseCombatManagerOptions {
   currentUser: { id?: string; name?: string } | null;
   // For defeat respawn: navigate to starting room
   onDefeatRespawn?: () => Promise<void>;
+  /** Chat session UUID — enables LogitShaper + session tracking for combat narratives */
+  chatSessionUuid?: string;
+  /** Session notes (Journal) — injected into combat narrative prompts */
+  sessionNotes?: string;
 }
 
 interface UseCombatManagerReturn {
@@ -103,6 +106,8 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
     setMessages,
     currentUser,
     onDefeatRespawn,
+    chatSessionUuid,
+    sessionNotes,
   } = options;
 
   // Ref for gridCombat — set by the view after useGridCombat is called to break circular dependency
@@ -110,6 +115,9 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
 
   // Respawn HP penalty: fraction of max HP for next combat after defeat (1.0 = full, 0.25 = 25%)
   const respawnHpPercentRef = useRef<number>(1.0);
+
+  // Abort controller for in-flight combat narrative generation
+  const narrativeAbortRef = useRef<AbortController | null>(null);
 
   // Combat end screen state (tracks result until player clicks Continue)
   const [combatEndState, setCombatEndState] = useState<CombatEndState | null>(null);
@@ -180,16 +188,28 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
     // Determine narrator: bonded ally (if present) or world narrator
     const hasAllyNarrator = activeNpcId && activeNpcCard && summary.ally;
 
-    // Build the appropriate prompt
-    const prompt = combatState.phase === 'defeat'
+    // Build the appropriate prompt (system instruction for the LLM)
+    const systemInstruction = combatState.phase === 'defeat'
       ? buildDefeatPrompt(summary)
       : buildPostCombatPrompt(summary, !!hasAllyNarrator);
 
     console.log('[PostCombat] Generating narrative, ally narrator:', hasAllyNarrator);
 
+    // Use ally's character card if available, otherwise world character
+    const narratorCard = hasAllyNarrator && activeNpcCard
+      ? activeNpcCard
+      : characterData;
+
+    if (!narratorCard) {
+      console.warn('[PostCombat] No narrator card available');
+      return;
+    }
+
+    const narratorName = hasAllyNarrator ? activeNpcName : (narratorCard.data?.name || 'Narrator');
+
     // Create placeholder message for streaming
     const narrativeMessageId = crypto.randomUUID();
-    const placeholderMessage = {
+    addMessage({
       id: narrativeMessageId,
       role: 'assistant' as const,
       content: '...',
@@ -200,93 +220,48 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
         outcome: combatState.phase,
         isAllyNarrator: !!hasAllyNarrator,
       }
-    };
+    });
 
-    addMessage(placeholderMessage);
+    // Cancel any previous in-flight narrative
+    narrativeAbortRef.current?.abort();
 
     try {
-      // Use ally's character card if available, otherwise world character
-      const narratorCard = hasAllyNarrator && activeNpcCard
-        ? activeNpcCard
-        : characterData;
-
-      if (!narratorCard) {
-        console.warn('[PostCombat] No narrator card available');
-        return;
-      }
-
-      // Call generate-greeting with custom prompt
-      const response = await fetch('/api/generate-greeting', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: narratorCard,
-          api_config: apiConfig,
-          custom_prompt: prompt,
-        })
+      const { response, abortController } = await executeWorldGeneration({
+        characterData: narratorCard,
+        apiConfig: apiConfig as Record<string, unknown>,
+        systemInstruction,
+        characterName: narratorName,
+        userName: currentUser?.name || 'User',
+        chatSessionUuid,
+        sessionNotes,
+        generationType: 'combat_narrative',
       });
+      narrativeAbortRef.current = abortController;
 
       if (!response.ok) {
         throw new Error('Failed to generate post-combat narrative');
       }
 
-      // Stream the response
-      const { PromptHandler } = await import('../handlers/promptHandler');
-
-      let generatedNarrative = '';
-      const bufferInterval = 50;
-      let buffer = '';
-      let bufTimer: NodeJS.Timeout | null = null;
-
-      const updateNarrativeContent = (chunk: string, isFinal = false) => {
-        buffer += chunk;
-
-        if (bufTimer) clearTimeout(bufTimer);
-        bufTimer = setTimeout(() => {
-          const curBuf = buffer;
-          buffer = '';
-          generatedNarrative += curBuf;
-
-          (setMessages as any)((prev: any) => prev.map((msg: any) =>
-            msg.id === narrativeMessageId
-              ? { ...msg, content: generatedNarrative }
-              : msg
-          ));
-
-          dispatchScrollToBottom();
-        }, isFinal ? 0 : bufferInterval);
-      };
-
-      // Stream with narrator name for ghost suffix stripping
-      const narratorName = hasAllyNarrator ? activeNpcName : undefined;
-      for await (const chunk of PromptHandler.streamResponse(response, narratorName)) {
-        updateNarrativeContent(chunk);
-      }
-
-      // Flush remaining buffer
-      if (buffer.length > 0) {
-        updateNarrativeContent('', true);
-      }
-
-      // Final update
-      (setMessages as any)((prev: any) => prev.map((msg: any) =>
-        msg.id === narrativeMessageId
-          ? { ...msg, content: removeIncompleteSentences(generatedNarrative.trim()) || '*The battle is over.*' }
-          : msg
-      ));
+      await streamToMessage({
+        response,
+        messageId: narrativeMessageId,
+        characterName: hasAllyNarrator ? activeNpcName : undefined,
+        setMessages: setMessages as any,
+        fallbackText: '*The battle is over.*',
+        signal: abortController.signal,
+      });
 
       console.log('[PostCombat] Narrative generated successfully');
-
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
       console.error('[PostCombat] Error generating narrative:', err);
-      // Fallback to simple message
       (setMessages as any)((prev: any) => prev.map((msg: any) =>
         msg.id === narrativeMessageId
           ? { ...msg, content: '*The dust settles as the battle ends.*' }
           : msg
       ));
     }
-  }, [apiConfig, currentRoom, activeNpcId, activeNpcCard, activeNpcName, characterData, addMessage, setMessages]);
+  }, [apiConfig, currentRoom, activeNpcId, activeNpcCard, activeNpcName, characterData, addMessage, setMessages, currentUser, chatSessionUuid, sessionNotes]);
 
   // Handle player clicking Continue on combat end screen
   const handleCombatContinue = useCallback(async () => {

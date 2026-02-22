@@ -170,7 +170,7 @@ export function useGridCombat(
         return reachable.map(r => r.position);
     }, [combatState, isPlayerTurn, targetingMode, getPathfindingGrid]);
 
-    // Calculate valid attack targets
+    // Calculate valid attack targets (all living enemies - range check happens in reducer)
     const validAttackTargets = useMemo(() => {
         if (!combatState || !isPlayerTurn || targetingMode !== 'attack') {
             if (DEBUG) console.log('[GridCombat] validAttackTargets: empty (conditions not met)', {

@@ -49,7 +49,9 @@ import { useNPCInteraction } from '../hooks/useNPCInteraction';
 import { useRoomTransition } from '../hooks/useRoomTransition';
 import { useCombatManager } from '../hooks/useCombatManager';
 import { LoadingScreen } from '../components/transition';
+import { soundManager } from '../components/combat/pixi/SoundManager';
 import type { AdventureContext } from '../types/adventureLog';
+import type { UserProfile } from '../types/messages';
 
 
 
@@ -59,11 +61,7 @@ interface WorldPlayViewProps {
 
 // Route state type for user profile passed from WorldLauncher
 interface WorldPlayRouteState {
-  userProfile?: {
-    user_uuid?: string;
-    name?: string;
-    filename?: string;
-  };
+  userProfile?: UserProfile;
 }
 
 export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
@@ -76,8 +74,10 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     addMessage,
     setCharacterDataOverride,
     currentUser,
+    setCurrentUser,
     sessionNotes,
-    setSessionNotes
+    setSessionNotes,
+    currentChatId
   } = useChat();
   const { characterData } = useCharacter();
   const { apiConfig } = useAPIConfig();
@@ -86,6 +86,14 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   // Get user profile from route state (passed from WorldLauncher)
   const routeState = location.state as WorldPlayRouteState | null;
   const selectedUserUuid = routeState?.userProfile?.user_uuid;
+
+  // Sync selected user into ChatContext on world entry so that currentUser
+  // matches the player the user chose in WorldLauncher (not the last-used user from localStorage)
+  useEffect(() => {
+    if (routeState?.userProfile && routeState.userProfile.user_uuid !== currentUser?.user_uuid) {
+      setCurrentUser(routeState.userProfile);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount only
 
   // State
   const [worldCard, setWorldCard] = useState<WorldCard | null>(null);
@@ -142,6 +150,11 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
   // Accumulated per-room runtime state (NPC alive/dead/incapacitated).
   // Uses a ref to avoid re-renders on every combat result; only read at save time.
   const roomStatesRef = useRef<Record<string, RoomInstanceState>>({});
+
+  // Stop combat music when leaving world play (e.g. clicking Gallery icon mid-combat)
+  useEffect(() => {
+    return () => { soundManager.stopMusic(); };
+  }, []);
 
   // Dev tools keyboard shortcut (Ctrl+Shift+D to toggle)
   useEffect(() => {
@@ -237,6 +250,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
       setCombatInitData(initData);
       setIsInCombat(true);
     }, []),
+    chatSessionUuid: currentChatId || undefined,
+    sessionNotes,
   });
 
   // Destructure for easier access throughout the view
@@ -263,6 +278,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     activeNpcId, activeNpcName, activeNpcCard,
     characterData, apiConfig, addMessage, setMessages,
     currentUser,
+    chatSessionUuid: currentChatId || undefined,
+    sessionNotes,
     onDefeatRespawn: useCallback(async () => {
       // Fast travel to starting room after defeat
       const startPos = worldState?.starting_position;
@@ -832,7 +849,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
               }))}
             />
           ) : (
-            <ChatView disableSidePanel={true} hideHeader={true} />
+            <ChatView disableSidePanel={true} hideHeader={true} disableUserSelect={true} />
           )
         }
       />

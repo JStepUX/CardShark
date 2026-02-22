@@ -2,7 +2,6 @@
 Gallery image endpoints for serving themed room images.
 """
 import os
-import sys
 import json
 from pathlib import Path
 from typing import Dict, List
@@ -12,6 +11,7 @@ from fastapi.responses import FileResponse
 from backend.log_manager import LogManager
 from backend.dependencies import get_logger_dependency
 from backend.response_models import DataResponse, create_data_response
+from backend.utils.path_utils import get_application_base_path
 
 router = APIRouter(
     prefix="/api/gallery",
@@ -20,13 +20,7 @@ router = APIRouter(
 
 def get_asset_path(relative_path: str) -> Path:
     """Resolve asset path for both dev and frozen modes"""
-    if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle
-        base_path = sys._MEIPASS
-    else:
-        # Running in development - use the project root (two levels up from this file)
-        base_path = Path(__file__).parent.parent
-    return Path(base_path) / relative_path
+    return get_application_base_path() / relative_path
 
 @router.get("/themes", response_model=DataResponse[Dict])
 async def get_gallery_themes(

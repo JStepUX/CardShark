@@ -20,8 +20,7 @@ import {
 import { createDefaultRelationship, updateRelationshipAffinity, resetDailyAffinity } from '../utils/affinityUtils';
 import { calculateSentimentAffinity, updateSentimentHistory, resetSentimentAfterGain } from '../utils/sentimentAffinityCalculator';
 import { advanceTime } from '../utils/timeUtils';
-import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
-import { removeIncompleteSentences } from '../utils/contentProcessing';
+import { executeWorldGeneration, streamToMessage, buildNPCGreetingInstruction } from '../services/worldGenerationService';
 import type { EmotionState } from '../hooks/useEmotionDetection';
 
 
@@ -55,6 +54,10 @@ export interface UseNPCInteractionOptions {
   currentEmotion: EmotionState | null;
   // Combat trigger callback: view initiates combat when hostile NPC clicked
   onHostileNpcClicked: (initData: CombatInitData) => void;
+  /** Chat session UUID — enables LogitShaper + session tracking for world generations */
+  chatSessionUuid?: string;
+  /** Session notes (Journal) — injected into world generation prompts */
+  sessionNotes?: string;
 }
 
 export interface UseNPCInteractionReturn {
@@ -91,6 +94,8 @@ export function useNPCInteraction({
   setNpcRelationships,
   currentEmotion,
   onHostileNpcClicked,
+  chatSessionUuid,
+  sessionNotes,
 }: UseNPCInteractionOptions): UseNPCInteractionReturn {
   // Conversation target state (for talking to NPCs WITHOUT bonding)
   const [conversationTargetId, setConversationTargetId] = useState<string | undefined>();
@@ -104,6 +109,9 @@ export function useNPCInteraction({
 
   // Track processed message IDs for multi-speaker parsing
   const processedMultiSpeakerIds = useRef<Set<string>>(new Set());
+
+  // Abort controller for in-flight NPC greeting generation
+  const greetingAbortRef = useRef<AbortController | null>(null);
 
   // ============================================
   // CONTEXT INJECTION - 4 modes
@@ -423,62 +431,44 @@ export function useNPCInteraction({
         }
       } as ChatMessage);
 
-      const greetingResponse = await fetch('/api/generate-greeting', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_data: thinContextCard,
-          api_config: apiConfig
-        })
-      });
-
-      if (!greetingResponse.ok) {
-        console.error('Failed to generate NPC greeting');
-        (setMessages as any)((prev: any) => prev.map((msg: any) =>
-          msg.id === introMessageId
-            ? { ...msg, content: `*${npc.name} looks up as you approach*` }
-            : msg
-        ));
-        return;
-      }
-
-      const { PromptHandler } = await import('../handlers/promptHandler');
-
-      let generatedIntro = '';
-      const bufferInterval = 50;
-      let buffer = '';
-      let bufTimer: NodeJS.Timeout | null = null;
-
-      const updateIntroContent = (chunk: string, isFinal = false) => {
-        buffer += chunk;
-        if (bufTimer) clearTimeout(bufTimer);
-        bufTimer = setTimeout(() => {
-          const curBuf = buffer;
-          buffer = '';
-          generatedIntro += curBuf;
-          (setMessages as any)((prev: any) => prev.map((msg: any) =>
-            msg.id === introMessageId
-              ? { ...msg, content: generatedIntro }
-              : msg
-          ));
-          dispatchScrollToBottom();
-        }, isFinal ? 0 : bufferInterval);
-      };
+      // Cancel any previous in-flight greeting
+      greetingAbortRef.current?.abort();
 
       try {
-        for await (const chunk of PromptHandler.streamResponse(greetingResponse, npc.name)) {
-          updateIntroContent(chunk);
-        }
-        if (buffer.length > 0) updateIntroContent('', true);
+        const { response: greetingResponse, abortController } = await executeWorldGeneration({
+          characterData: thinContextCard,
+          apiConfig: apiConfig as Record<string, unknown>,
+          systemInstruction: buildNPCGreetingInstruction(npc.name),
+          characterName: npc.name,
+          userName: currentUser?.name || 'User',
+          chatSessionUuid,
+          sessionNotes,
+          generationType: 'greeting',
+        });
+        greetingAbortRef.current = abortController;
 
-        (setMessages as any)((prev: any) => prev.map((msg: any) =>
-          msg.id === introMessageId
-            ? { ...msg, content: removeIncompleteSentences(generatedIntro.trim()) || `*${npc.name} looks up as you approach*` }
-            : msg
-        ));
+        if (!greetingResponse.ok) {
+          console.error('Failed to generate NPC greeting');
+          (setMessages as any)((prev: any) => prev.map((msg: any) =>
+            msg.id === introMessageId
+              ? { ...msg, content: `*${npc.name} looks up as you approach*` }
+              : msg
+          ));
+          return;
+        }
+
+        await streamToMessage({
+          response: greetingResponse,
+          messageId: introMessageId,
+          characterName: npc.name,
+          setMessages: setMessages as any,
+          fallbackText: `*${npc.name} looks up as you approach*`,
+          signal: abortController.signal,
+        });
 
         console.log(`Started conversation with ${npc.name} (thin context, not bonded)`);
       } catch (streamErr) {
+        if ((streamErr as Error).name === 'AbortError') return;
         console.error('Error streaming NPC greeting:', streamErr);
         (setMessages as any)((prev: any) => prev.map((msg: any) =>
           msg.id === introMessageId
@@ -489,7 +479,7 @@ export function useNPCInteraction({
     } catch (err) {
       console.error('Error starting conversation with NPC:', err);
     }
-  }, [roomNpcs, currentRoom, addMessage, characterData, worldId, apiConfig, currentUser, activeNpcId, activeNpcName, conversationTargetId, clearConversationTarget, setMessages, onHostileNpcClicked]);
+  }, [roomNpcs, currentRoom, addMessage, characterData, worldId, apiConfig, currentUser, activeNpcId, activeNpcName, conversationTargetId, clearConversationTarget, setMessages, onHostileNpcClicked, chatSessionUuid, sessionNotes]);
 
   const handleBondNpc = useCallback(async () => {
     if (!conversationTargetId || !currentRoom) {

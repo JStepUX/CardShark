@@ -411,7 +411,16 @@ if getattr(sys, 'frozen', False):
             else:
                 logger.log_warning(f"pngPlaceholder.png not found at {placeholder_path}")
                 raise HTTPException(status_code=404, detail="pngPlaceholder.png not found")
-        
+
+        @app.get("/sounds/{file_path:path}")
+        async def serve_sounds(file_path: str):
+            sound_path = static_dir / "sounds" / file_path
+            if sound_path.exists():
+                logger.log_step(f"Serving sound: {sound_path}")
+                return FileResponse(sound_path, media_type="audio/mpeg")
+            logger.log_warning(f"Sound not found: {file_path}")
+            raise HTTPException(status_code=404, detail="Sound not found")
+
         # Mount static files for all other assets
         app.mount("/", CrossDriveStaticFiles(directory=static_dir, html=True), name="frontend")
         

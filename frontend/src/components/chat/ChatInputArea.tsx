@@ -13,6 +13,7 @@ interface ChatInputAreaProps {
   isCompressing?: boolean;
   currentUser: UserProfile | null;
   onUserSelect: () => void;
+  disableUserSelect?: boolean;
   emotion: EmotionState;
   hideUserAvatar?: boolean; // Optional prop to hide user avatar
 }
@@ -27,6 +28,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   isCompressing = false,
   currentUser,
   onUserSelect,
+  disableUserSelect = false,
   emotion,
   hideUserAvatar = false,
 }) => {
@@ -105,8 +107,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
         {/* User Image - conditionally rendered */}
         {!hideUserAvatar && (
           <div
-            onClick={onUserSelect}
-            className="w-24 h-32 rounded-lg cursor-pointer overflow-hidden flex-shrink-0"
+            onClick={disableUserSelect ? undefined : onUserSelect}
+            className={`w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 ${disableUserSelect ? '' : 'cursor-pointer'}`}
           >
             {currentUser && !imageError ? (
               <img

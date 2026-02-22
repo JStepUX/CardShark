@@ -84,10 +84,11 @@ export const useStallDetection = (
 interface ChatViewProps {
   disableSidePanel?: boolean;
   hideHeader?: boolean;
+  disableUserSelect?: boolean;
 }
 
 // Main ChatView component
-const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeader = false }) => {
+const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeader = false, disableUserSelect = false }) => {
   const navigate = useNavigate();
   const { characterData, setCharacterData, setImageUrl, handleImageChange } = useCharacter();
   const [showUserSelect, setShowUserSelect] = useState(false);
@@ -557,6 +558,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
               isCompressing={isCompressing}
               currentUser={currentUser}
               onUserSelect={() => setShowUserSelect(true)}
+              disableUserSelect={disableUserSelect}
               emotion={emotion}
             />
           </div>
@@ -579,14 +581,16 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
       </div>
 
       {/* Modals and Dialogs */}
-      <UserSelect
-        isOpen={showUserSelect}
-        onClose={() => setShowUserSelect(false)}
-        onSelect={(user) => {
-          setCurrentUser(user);
-          setShowUserSelect(false);
-        }}
-      />
+      {!disableUserSelect && (
+        <UserSelect
+          isOpen={showUserSelect}
+          onClose={() => setShowUserSelect(false)}
+          onSelect={(user) => {
+            setCurrentUser(user);
+            setShowUserSelect(false);
+          }}
+        />
+      )}
       <ChatSelectorDialog
         isOpen={showChatSelector}
         onClose={() => setShowChatSelector(false)}
