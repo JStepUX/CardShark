@@ -15,6 +15,7 @@
  */
 
 import * as PIXI from 'pixi.js';
+import { getCurrentFont } from '../../../../utils/fontConfig';
 
 // Animation state enum
 type AnimationState = 'idle' | 'moving' | 'attacking' | 'entrance' | 'death' | 'incapacitation' | 'revival';
@@ -24,8 +25,8 @@ const CARD_WIDTH = 100;
 const CARD_HEIGHT = 140;
 const PIVOT_Y_OFFSET = CARD_HEIGHT - 40;
 
-// Font (mirrored from EntityCardSprite)
-const FONT_FAMILY = 'Poppins, system-ui, -apple-system, sans-serif';
+// Font — read from CSS variable at construction time; updates on next sprite creation
+const FONT_FAMILY = getCurrentFont();
 const TEXT_RESOLUTION = Math.max(window.devicePixelRatio || 1, 2);
 
 // ZZZ sleep effect configuration

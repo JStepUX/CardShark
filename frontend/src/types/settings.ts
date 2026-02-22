@@ -1,6 +1,7 @@
 // types/settings.ts
 import { APIConfig, APIProvider, createAPIConfig } from './api';
 import { WordSwapRule } from '../utils/contentProcessing';
+import { AppFont } from '../utils/fontConfig';
 
 export interface ReasoningSettings {
   enabled: boolean;
@@ -43,6 +44,7 @@ export interface Settings {
   model_directory?: string;   // Legacy field for backward compatibility
   show_koboldcpp_launcher?: boolean; // Whether to show KoboldCPP launcher on startup
   remove_incomplete_sentences?: boolean; // Whether to remove incomplete sentences from chat responses
+  fontFamily?: AppFont;
   theme: 'dark' | 'light';
   version: string;
 
@@ -139,6 +141,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model_directory: '',  // Explicitly initialize
   show_koboldcpp_launcher: false, // Default to not showing KoboldCPP launcher on startup
   remove_incomplete_sentences: true, // Default to removing incomplete sentences
+  fontFamily: 'Poppins',
   theme: 'dark',
   version: '1.0',
 

@@ -24,6 +24,7 @@ import {
 } from '../../../../types/localMap';
 import { TextureCache } from '../../../combat/pixi/TextureCache';
 import { CardAnimationController, CardSpriteInterface } from './CardAnimationController';
+import { getCurrentFont } from '../../../../utils/fontConfig';
 
 // Card dimensions from centralized constants
 const CARD_WIDTH = LOCAL_MAP_CARD_WIDTH;
@@ -48,8 +49,8 @@ const STATUS_BADGE_SIZE = 22;
 // Hit area padding for better touch targets on mobile
 const HIT_AREA_PADDING = 8;
 
-// Font
-const FONT_FAMILY = 'Poppins, system-ui, -apple-system, sans-serif';
+// Font — read from CSS variable at construction time; updates on next sprite creation
+const FONT_FAMILY = getCurrentFont();
 
 // Text resolution multiplier for crisp text on high-DPI displays
 // Using a minimum of 2 ensures text is never blurry even on 1x displays

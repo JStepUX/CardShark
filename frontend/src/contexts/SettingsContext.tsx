@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Settings, DEFAULT_SETTINGS } from "../types/settings";
 import { useResilientApi } from "./ResilientApiContext"; // Keep for retryAllConnections
 import { ContentFilterClient } from "../services/contentFilterClient";
+import { applyFont, AppFont } from "../utils/fontConfig";
 // Removed unused import: WordSwapRule
 
 interface SettingsContextType {
@@ -57,6 +58,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return target;
         };        // Start with a deep copy of defaults, then merge fetched settings onto it
         const merged = deepMerge(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), data.data.settings);        setSettings(merged);
+        // Apply persisted font on initial load
+        applyFont((merged.fontFamily || 'Poppins') as AppFont);
         console.log("[SettingsContext] Settings loaded successfully");
       } else {
         throw new Error(data.message || 'Failed to parse settings from response');
@@ -113,6 +116,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
          // This ensures consistency if the backend modifies/merges data
          const merged = { ...DEFAULT_SETTINGS, ...result.data.settings }; // Re-merge with defaults
          setSettings(merged);
+         // Re-apply font if it changed
+         if (updates.fontFamily) {
+           applyFont(updates.fontFamily as AppFont);
+         }
          console.log("[SettingsContext] Settings updated successfully. New models_directory:", merged.models_directory);
       } else {
         throw new Error(result.message || 'Backend reported failure updating settings');

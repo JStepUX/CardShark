@@ -34,6 +34,7 @@ import {
 import { LocalMapTile } from './LocalMapTile';
 import { EntityCardSprite } from './EntityCardSprite';
 import { CombatParticleSystem, EFFECT_COLORS, PROJECTILE_PRESETS } from './CombatParticleSystem';
+import { getCurrentFont } from '../../../../utils/fontConfig';
 
 // Default grid configuration - uses shared grid size from localMap.ts
 const DEFAULT_GRID_WIDTH = DEFAULT_LAYOUT_GRID_SIZE.cols;
@@ -921,7 +922,7 @@ export class LocalMapStage extends PIXI.Container {
         const damageText = new PIXI.Text({
             text: `-${damage}`,
             style: {
-                fontFamily: 'Poppins, system-ui, sans-serif',
+                fontFamily: getCurrentFont(),
                 fontSize: isCritical ? 28 : 22,
                 fontWeight: 'bold',
                 fill: isCritical ? 0xFFD700 : 0xFF4444,
@@ -995,7 +996,7 @@ export class LocalMapStage extends PIXI.Container {
         const missText = new PIXI.Text({
             text: 'MISS',
             style: {
-                fontFamily: 'Poppins, system-ui, sans-serif',
+                fontFamily: getCurrentFont(),
                 fontSize: 18,
                 fontWeight: 'bold',
                 fill: 0xAAAAAA,

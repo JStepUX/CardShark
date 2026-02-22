@@ -14,6 +14,7 @@
 import * as PIXI from 'pixi.js';
 import { GridRoom } from '../../../types/worldGrid';
 import { TextureCache } from '../../combat/pixi/TextureCache';
+import { getCurrentFont } from '../../../utils/fontConfig';
 
 // Tile dimensions (larger for better visibility)
 const TILE_WIDTH = 140;
@@ -27,8 +28,8 @@ const CURRENT_BG = 0x1E3A8A; // blue-900
 const CURRENT_BORDER = 0x3B82F6; // blue-500
 const HOVER_BG = 0x3a3a3a;
 
-// Font
-const FONT_FAMILY = 'Poppins, system-ui, -apple-system, sans-serif';
+// Font — read from CSS variable at construction time; updates on next tile creation
+const FONT_FAMILY = getCurrentFont();
 const NAME_FONT_SIZE = 13;
 const NPC_FONT_SIZE = 11;
 

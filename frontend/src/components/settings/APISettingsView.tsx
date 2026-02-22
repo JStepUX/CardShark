@@ -10,7 +10,8 @@ import {
   createAPIConfig
 } from '../../types/api';
 import { useScrollToBottom } from '../../hooks/useScrollToBottom';
-import { Settings, SyntaxHighlightSettings, DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS } from '../../types/settings'; // Import Settings type
+import { Settings, SyntaxHighlightSettings, DEFAULT_SYNTAX_HIGHLIGHT_SETTINGS } from '../../types/settings';
+import { APP_FONTS, AppFont } from '../../utils/fontConfig';
 import { SettingsTabs, SettingsTab } from '../SettingsTabs';
 import TemplateManager from '../TemplateManager';
 import { TemplateProvider } from '../../contexts/TemplateContext';
@@ -348,6 +349,23 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                 onDirectoryChange={handleModelDirectoryChange}
               />
             </div>            {/* Content filtering settings have been moved to the Content Filter tab */}
+
+            {/* Font Settings */}
+            <div className="mb-8">
+              <h3 className="text-md font-medium mb-4">Font</h3>
+              <select
+                value={settings.fontFamily || 'Poppins'}
+                onChange={(e) => updateSettings({ fontFamily: e.target.value as AppFont })}
+                className="px-3 py-2 bg-stone-800 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 text-sm text-white"
+              >
+                {APP_FONTS.map(f => (
+                  <option key={f.id} value={f.id}>{f.label}</option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-gray-400">
+                OpenDyslexic is designed to improve readability for users with dyslexia.
+              </p>
+            </div>
 
             {/* KoboldCPP Settings */}
             <div className="mb-8">

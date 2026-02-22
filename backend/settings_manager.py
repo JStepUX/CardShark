@@ -61,6 +61,7 @@ class SettingsManager:
             "remove_incomplete_sentences": True,  # Default: enable incomplete sentence removal
             "sfxVolume": 50,    # Sound effects volume 0-100
             "musicVolume": 30,  # Music volume 0-100
+            "font_family": "Poppins",
             "theme": "dark",
             "version": "1.2",
             "api": {

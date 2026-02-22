@@ -13,7 +13,7 @@ module.exports = {
         border: '#303030',
       },
       fontFamily: {
-        sans: ['Poppins', 'sans-serif'],
+        sans: ['var(--font-app)', 'sans-serif'],
       }, animation: {
         'blink-caret': 'blink-caret 0.75s step-end infinite',
         'blink': 'blink 1s infinite',
