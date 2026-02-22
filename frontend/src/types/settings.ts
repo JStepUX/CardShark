@@ -85,6 +85,9 @@ export interface Settings {
   // Default Journal entry for new chat sessions (supports {{char}} / {{user}} tokens)
   default_journal_entry?: string;
 
+  // Dismissal flags for one-time banners
+  gallery_sync_dismissed?: boolean; // "Never show again" for character directory sync tip
+
   // Gallery folder management
   gallery_folders?: {
     migrated: boolean;

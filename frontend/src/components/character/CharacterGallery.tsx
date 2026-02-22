@@ -5,7 +5,7 @@
  * @consumers AppRoutes.tsx, WorldCreationModal.tsx
  */
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useCharacter } from '../../contexts/CharacterContext';
 import { useComparison } from '../../contexts/ComparisonContext';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -868,6 +868,42 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             <span className="break-words"><strong>Deletion Error:</strong> {deleteError}</span>
           </div>
           <button onClick={() => setDeleteError(null)} className="ml-4 flex-shrink-0 p-1 bg-red-800 hover:bg-red-700 rounded text-xs"><X size={16} /></button>
+        </div>
+      )}
+
+      {/* Character directory sync tip - shows when no directory configured and not dismissed */}
+      {!settings.character_directory && !settings.gallery_sync_dismissed && !isSecondarySelector && (
+        <div className="flex-none mx-4 mt-3 p-4 bg-stone-800 border border-stone-600 rounded-lg text-sm text-slate-300">
+          <div className="flex items-start gap-3">
+            <Info className="flex-shrink-0 w-5 h-5 mt-0.5 text-blue-400" />
+            <div className="flex-1">
+              <p>
+                CardShark can sync with your existing character directory if you have one.
+                Simply go to{' '}
+                <Link to="/settings" className="text-blue-400 hover:text-blue-300 underline">
+                  Settings
+                </Link>{' '}
+                and set the path to your character folder. All character modifications and
+                new character creation will then occur in that folder.
+              </p>
+              <label className="flex items-center gap-2 mt-3 cursor-pointer text-slate-400 hover:text-slate-300 select-none">
+                <button
+                  onClick={() => updateSettings({ gallery_sync_dismissed: true })}
+                  className="w-4 h-4 rounded border border-stone-500 hover:border-blue-400 flex items-center justify-center transition-colors"
+                >
+                  {/* empty — clicking dismisses */}
+                </button>
+                Never show again
+              </label>
+            </div>
+            <button
+              onClick={() => updateSettings({ gallery_sync_dismissed: true })}
+              className="flex-shrink-0 p-1 text-slate-500 hover:text-slate-300 rounded transition-colors"
+              title="Dismiss"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
       )}
 

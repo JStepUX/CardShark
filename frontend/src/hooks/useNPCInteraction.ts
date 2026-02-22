@@ -385,7 +385,7 @@ export function useNPCInteraction({
       setConversationTargetCard(thinContextCard);
 
       if (!apiConfig) {
-        console.error('No API configuration available for greeting generation');
+        console.warn('No API configuration available yet — greeting generation skipped. Click again once your API is connected.');
         addMessage({
           id: crypto.randomUUID(),
           role: 'assistant' as const,
@@ -401,6 +401,8 @@ export function useNPCInteraction({
             speakerName: npc.name,
           }
         } as ChatMessage);
+        // Clear conversation target so clicking again retries with a live API
+        clearConversationTarget();
         return;
       }
 

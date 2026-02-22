@@ -48,22 +48,14 @@ const WorldLauncher: React.FC = () => {
    }, []);
 
    const handleExportWorld = async () => {
-      if (!worldCard) return;
+      if (!worldCard || !uuid) return;
 
       try {
-         const worldName = worldCard.data.name;
-         const response = await fetch(`/api/world-cards/${encodeURIComponent(worldName)}/export`);
-
-         if (!response.ok) {
-            throw new Error(`Export failed: ${response.statusText}`);
-         }
-
-         // Create a download link
-         const blob = await response.blob();
+         const blob = await worldApi.exportWorld(uuid);
          const url = window.URL.createObjectURL(blob);
          const a = document.createElement('a');
          a.href = url;
-         a.download = `world_${worldName}.zip`;
+         a.download = `${worldCard.data.name}.cardshark.zip`;
          document.body.appendChild(a);
          a.click();
          window.URL.revokeObjectURL(url);
