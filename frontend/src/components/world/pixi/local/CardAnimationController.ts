@@ -24,6 +24,19 @@ const CARD_WIDTH = 100;
 const CARD_HEIGHT = 140;
 const PIVOT_Y_OFFSET = CARD_HEIGHT - 40;
 
+// Font (mirrored from EntityCardSprite)
+const FONT_FAMILY = 'Poppins, system-ui, -apple-system, sans-serif';
+const TEXT_RESOLUTION = Math.max(window.devicePixelRatio || 1, 2);
+
+// ZZZ sleep effect configuration
+const ZZZ_SIZES = [9, 12, 16];
+const ZZZ_BASE_Y = [0, -16, -34];
+const ZZZ_BASE_X = [0, 8, 16];
+const ZZZ_CYCLE_DURATION = 2.5;     // seconds per Z loop
+const ZZZ_PHASE_OFFSET = 0.8;       // stagger between each Z
+const ZZZ_FLOAT_DISTANCE = 20;      // how far up each Z floats
+const ZZZ_SWAY_AMOUNT = 3;          // horizontal sway in pixels
+
 /**
  * Configuration for an EntityCardSprite that the controller can manipulate.
  * This is the minimal interface the controller needs from its parent sprite.
@@ -69,6 +82,10 @@ export class CardAnimationController {
     private bobTime: number = Math.random() * Math.PI * 2; // Random start phase
     private bobEnabled: boolean = true;
 
+    // ZZZ sleep effect state
+    private zzzContainer: PIXI.Container | null = null;
+    private zzzTime: number = 0;
+
     constructor(sprite: CardSpriteInterface) {
         this.sprite = sprite;
     }
@@ -95,9 +112,31 @@ export class CardAnimationController {
     }
 
     /**
-     * Update idle bob animation (call from ticker)
+     * Update idle bob animation and ZZZ sleep effect (call from ticker)
      */
     updateBob(deltaTime: number): void {
+        // Update ZZZ sleep effect if active (runs regardless of bob state)
+        if (this.zzzContainer && !this.isDestroyed) {
+            this.zzzTime += deltaTime;
+            const children = this.zzzContainer.children;
+            for (let i = 0; i < children.length; i++) {
+                const z = children[i];
+                const phase = this.zzzTime + i * ZZZ_PHASE_OFFSET;
+                const cycleProgress = (phase % ZZZ_CYCLE_DURATION) / ZZZ_CYCLE_DURATION;
+
+                // Float upward from base position
+                z.y = ZZZ_BASE_Y[i] - cycleProgress * ZZZ_FLOAT_DISTANCE;
+
+                // Gentle horizontal sway
+                z.x = ZZZ_BASE_X[i] + Math.sin(phase * 2) * ZZZ_SWAY_AMOUNT;
+
+                // Fade: full alpha at start, fade out toward end of cycle
+                z.alpha = cycleProgress < 0.7
+                    ? 0.85
+                    : 0.85 * (1 - (cycleProgress - 0.7) / 0.3);
+            }
+        }
+
         if (!this.bobEnabled || this.isAnimating()) return;
 
         this.bobTime += deltaTime * 2;
@@ -548,12 +587,63 @@ export class CardAnimationController {
                 this.sprite.tint = 0x666666;
                 this.sprite.alpha = 0.7;
                 this.state = 'idle';
+                // Show floating ZZZ to indicate knocked out (not dead)
+                this.showSleepEffect();
                 onComplete?.();
             }
         };
 
         const frameId = requestAnimationFrame(animate);
         this.pendingAnimationFrames.add(frameId);
+    }
+
+    // =========================================================================
+    // ZZZ SLEEP EFFECT
+    // =========================================================================
+
+    /**
+     * Show floating ZZZ above the incapacitated card.
+     * Counter-rotated so Z's appear upright when the card is toppled.
+     */
+    showSleepEffect(): void {
+        if (this.isDestroyed || this.zzzContainer) return;
+
+        this.zzzContainer = new PIXI.Container();
+        // Counter-rotate to cancel the card's 90° topple so Z's stay upright
+        this.zzzContainer.rotation = -Math.PI / 2;
+        // Position at upper-body area of the card in local space
+        this.zzzContainer.x = CARD_WIDTH / 2;
+        this.zzzContainer.y = CARD_HEIGHT * 0.3;
+
+        for (let i = 0; i < 3; i++) {
+            const z = new PIXI.Text({
+                text: 'z',
+                style: {
+                    fontFamily: FONT_FAMILY,
+                    fontSize: ZZZ_SIZES[i],
+                    fontWeight: 'bold',
+                    fill: 0xCCCCFF,
+                },
+                resolution: TEXT_RESOLUTION,
+            });
+            z.anchor.set(0.5);
+            z.x = ZZZ_BASE_X[i];
+            z.y = ZZZ_BASE_Y[i];
+            this.zzzContainer.addChild(z);
+        }
+
+        this.sprite.addChild(this.zzzContainer);
+        this.zzzTime = 0;
+    }
+
+    /**
+     * Hide and destroy the ZZZ sleep effect.
+     */
+    hideSleepEffect(): void {
+        if (!this.zzzContainer) return;
+        this.sprite.removeChild(this.zzzContainer);
+        this.zzzContainer.destroy({ children: true });
+        this.zzzContainer = null;
     }
 
     // =========================================================================
@@ -572,6 +662,8 @@ export class CardAnimationController {
         }
 
         this.state = 'revival';
+        // Remove ZZZ before standing back up
+        this.hideSleepEffect();
         const duration = 800;
         const startTime = performance.now();
         const startRotation = this.sprite.rotation;
@@ -729,6 +821,7 @@ export class CardAnimationController {
      * Reset from incapacitated state (for dev reset)
      */
     resetFromIncapacitation(): void {
+        this.hideSleepEffect();
         this.sprite.rotation = 0;
         this.sprite.tint = 0xFFFFFF;
         this.sprite.alpha = 1;
@@ -801,6 +894,9 @@ export class CardAnimationController {
      */
     destroy(): void {
         this.isDestroyed = true;
+
+        // Clean up ZZZ effect
+        this.hideSleepEffect();
 
         // Cancel any running movement animation
         if (this.moveAnimationId !== null) {

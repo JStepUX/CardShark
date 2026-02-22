@@ -371,6 +371,8 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                     hostile: rawNpc.hostile ?? false,
                     imagePath: isResolved ? resolvedNpc.imageUrl : undefined,
                     level: resolvedNpc.monster_level ?? rawNpc.monster_level ?? 1,
+                    isIncapacitated: rawNpc.isIncapacitated ?? false,
+                    isDead: rawNpc.isDead ?? false,
                 };
             });
 

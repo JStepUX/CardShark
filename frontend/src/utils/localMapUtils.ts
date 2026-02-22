@@ -191,7 +191,7 @@ export function calculateThreatZones(
  * @param layoutData - Optional room layout data with configured spawn positions
  */
 export function autoPlaceEntities(
-    npcs: Array<{ id: string; name: string; hostile: boolean; imagePath?: string; level?: number }>,
+    npcs: Array<{ id: string; name: string; hostile: boolean; imagePath?: string; level?: number; isIncapacitated?: boolean; isDead?: boolean }>,
     playerPosition: TilePosition,
     config: LocalMapConfig,
     layoutData?: RoomLayoutData
@@ -351,6 +351,8 @@ export function autoPlaceEntities(
                 currentHp: baseHp,
                 maxHp: baseHp,
                 threatRange,
+                isIncapacitated: npc.isIncapacitated || false,
+                isDead: npc.isDead || false,
             });
         }
     }

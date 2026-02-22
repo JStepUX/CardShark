@@ -410,7 +410,7 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
     console.log('Entered threat zone, hostile IDs:', hostileIds, 'at position:', currentPosition);
 
     // Find hostile NPCs
-    const hostiles = roomNpcs.filter(npc => hostileIds.includes(npc.id) && npc.hostile);
+    const hostiles = roomNpcs.filter(npc => hostileIds.includes(npc.id) && npc.hostile && !npc.isIncapacitated);
     if (hostiles.length === 0) return;
 
     // Use the map state passed from LocalMapView (has correct player position)

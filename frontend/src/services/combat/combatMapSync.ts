@@ -295,12 +295,14 @@ export function syncPositionsToMap(
         const combatant = combatState.combatants[entity.id];
         if (!combatant) return entity;
 
-        // Update position from combat state
+        // Update position and status from combat state
         return {
             ...entity,
             position: combatant.position,
             currentHp: combatant.currentHp,
             maxHp: combatant.maxHp,
+            isDead: combatant.isDead || false,
+            isIncapacitated: combatant.isKnockedOut || false,
         };
     });
 
