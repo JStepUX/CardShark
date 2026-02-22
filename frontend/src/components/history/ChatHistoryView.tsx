@@ -102,47 +102,31 @@ const ChatHistoryView: React.FC = () => {
         try {
             const baseUrl = getApiBaseUrl();
 
-            // First, check if the character exists
-            try {
-                const metadataResponse = await fetch(`${baseUrl}/api/character/${item.character_uuid}/metadata`);
+            // Check if the character exists using the correct endpoint
+            const charResponse = await fetch(`${baseUrl}/api/character/${item.character_uuid}`);
 
-                if (!metadataResponse.ok) {
-                    // Try alternative endpoint
-                    const altResponse = await fetch(`${baseUrl}/api/characters/${item.character_uuid}`);
-                    if (!altResponse.ok) {
-                        // Character not found - this is an orphaned chat
-                        // Open the assignment dialog instead of loading
-                        console.warn('Character not found for chat, opening assignment dialog');
-                        toast.warning(`Character "${item.character_name || 'Unknown'}" not found. Please assign this chat to a character.`);
-                        setAssignTarget(item);
-                        return; // Don't navigate, let user assign first
-                    }
-                    const altData = await altResponse.json();
-                    const metadata = altData.data || altData;
-                    setCharacterData(metadata);
-                } else {
-                    const data = await metadataResponse.json();
-                    const metadata = data.data || data;
-                    setCharacterData(metadata);
-                }
-
-                // Load character image
-                const imageResponse = await fetch(`${baseUrl}/api/character-image/${item.character_uuid}`);
-                if (imageResponse.ok) {
-                    const blob = await imageResponse.blob();
-                    const imageUrl = URL.createObjectURL(blob);
-                    setImageUrl(imageUrl);
-                }
-
-                // Navigate to character detail view with session param
-                navigate(`/character/${item.character_uuid}?session=${item.chat_session_uuid}`);
-            } catch (charErr) {
-                // Character loading failed - this is an orphaned chat
-                console.warn('Character not found for chat, opening assignment dialog:', charErr);
+            if (!charResponse.ok) {
+                // Character not found - this is an orphaned chat
+                console.warn('Character not found for chat, opening assignment dialog');
                 toast.warning(`Character "${item.character_name || 'Unknown'}" not found. Please assign this chat to a character.`);
                 setAssignTarget(item);
-                return; // Don't navigate, let user assign first
+                return;
             }
+
+            const charData = await charResponse.json();
+            const metadata = charData.data || charData;
+            setCharacterData(metadata);
+
+            // Load character image
+            const imageResponse = await fetch(`${baseUrl}/api/character-image/${item.character_uuid}`);
+            if (imageResponse.ok) {
+                const blob = await imageResponse.blob();
+                const imageUrl = URL.createObjectURL(blob);
+                setImageUrl(imageUrl);
+            }
+
+            // Navigate to character detail view with session param
+            navigate(`/character/${item.character_uuid}?session=${item.chat_session_uuid}`);
         } catch (err) {
             console.error('Failed to load chat:', err);
             toast.error('Failed to load this chat');
