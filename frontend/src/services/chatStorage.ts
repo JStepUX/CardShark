@@ -598,49 +598,12 @@ export class ChatStorage {
         };
       }
 
-      // Handle empty success responses from Featherless
-      // This check should now be safe as 'data' is confirmed not to be null.
-      if (data.success === true && (!data.messages || (Array.isArray(data.messages) && data.messages.length === 0))) {
-        console.log('API returned success but no messages, treating as "no chats found"');
-        return {
-          success: false,
-          error: "No chats found (API returned empty success response)",
-          isRecoverable: true,
-          // Add first_mes status information to improve error handling
-          first_mes_available: character?.data?.first_mes ? true : false
-        };
-      }
-
-      // Log message details for debugging
-      if (data.success && data.messages) {
-        console.log(`Successfully loaded chat with ${data.messages.length} messages`);
-
-        // Log a summary of the messages
-        if (data.messages.length > 0) {
-          console.debug('First message:', {
-            role: data.messages[0].role,
-            content: data.messages[0].content?.substring(0, 50) + '...',
-            id: data.messages[0].id
-          });
-
-          if (data.messages.length > 1) {
-            console.debug('Last message:', {
-              role: data.messages[data.messages.length - 1].role,
-              content: data.messages[data.messages.length - 1].content?.substring(0, 50) + '...',
-              id: data.messages[data.messages.length - 1].id
-            });
-          }
-        } else {
-          console.warn('Loaded chat contains no messages');
-        }
-      } else {
-        console.warn('Chat loading response format:', data);
-      }
-
       // Check if we have a chat_session_uuid and handle response appropriately
+      // DataResponse format: { success: true, data: { chat_session_uuid, messages, ... } }
       if (data.data && data.data.chat_session_uuid) {
         // If we have messages from the updated endpoint, return success
         if (data.success && data.data.messages && Array.isArray(data.data.messages) && data.data.messages.length > 0) {
+          console.log(`Successfully loaded chat ${data.data.chat_session_uuid} with ${data.data.messages.length} messages`);
           return { success: true, ...data.data };
         } else {
           // If we only have session metadata (no messages or empty messages array),

@@ -393,6 +393,13 @@ const ChatInitializer: React.FC<{
 
     const isCharacterChanged = session.lastCharacterId.current !== null && session.lastCharacterId.current !== currentCharacterFileId;
 
+    // Skip reload if same character is already loaded (e.g. metadata-only save)
+    // This prevents overwriting the active chat session when characterData changes
+    // but the character UUID hasn't changed
+    if (!isCharacterChanged && session.lastCharacterId.current !== null) {
+      return;
+    }
+
     session.hasMountedRef.current = true;
 
     if (isCharacterChanged) {
