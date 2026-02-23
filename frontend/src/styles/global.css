@@ -8,6 +8,12 @@
   box-sizing: border-box;
 }
 
+@layer components {
+  .heading-primary {
+    @apply text-lg font-light text-white;
+  }
+}
+
 @layer base {
   body {
     @apply bg-background text-foreground;

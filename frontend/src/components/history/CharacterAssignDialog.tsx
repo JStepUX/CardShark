@@ -139,7 +139,7 @@ const CharacterAssignDialog: React.FC<CharacterAssignDialogProps> = ({
                 {/* Header */}
                 <div className="flex justify-between items-center p-4 border-b border-stone-800">
                     <div>
-                        <h2 className="text-xl font-semibold text-white">Assign Chat to Character</h2>
+                        <h2 className="heading-primary">Assign Chat to Character</h2>
                         <p className="text-sm text-stone-400 mt-1">
                             Select a character to transfer "{chatItem.title || 'this chat'}" to
                         </p>

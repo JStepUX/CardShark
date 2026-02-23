@@ -352,7 +352,7 @@ export function UnifiedImageGallery({
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-stone-700">
             <div>
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="heading-primary">
                 {mode === 'background' ? 'Background Gallery' : 'Room Image Gallery'}
               </h2>
               <p className="text-sm text-stone-400 mt-1">
@@ -557,19 +557,51 @@ export function UnifiedImageGallery({
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <ImageUploader
-          onFileSelect={handleFileSelect}
-          isLoading={isUploading}
-        />
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+          <div className="bg-stone-900 rounded-xl w-full max-w-lg border border-stone-700 shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-stone-700">
+              <h3 className="text-lg font-medium text-white">Upload Image</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<X className="w-5 h-5" />}
+                onClick={() => setShowUploadModal(false)}
+                aria-label="Close"
+              />
+            </div>
+            <div className="p-6">
+              <ImageUploader
+                onFileSelect={handleFileSelect}
+                isLoading={isUploading}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Image Editor */}
       {showEditor && tempImageUrl && (
-        <ImageEditor
-          imageUrl={tempImageUrl}
-          onSave={handleEditorSave}
-          onCancel={closeEditor}
-        />
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+          <div className="bg-stone-900 rounded-xl w-full max-w-3xl border border-stone-700 shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-stone-700">
+              <h3 className="text-lg font-medium text-white">Edit Image</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<X className="w-5 h-5" />}
+                onClick={closeEditor}
+                aria-label="Close"
+              />
+            </div>
+            <div className="p-6">
+              <ImageEditor
+                imageUrl={tempImageUrl}
+                onSave={handleEditorSave}
+                onCancel={closeEditor}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

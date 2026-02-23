@@ -202,7 +202,7 @@ const CharacterDetailView: React.FC = () => {
             onClick={() => navigate(backTo)}
             title={fromFolder ? `Back to ${fromFolder}` : 'Back to Gallery'}
           />
-          <h1 className="text-lg font-semibold text-white truncate">{characterName}</h1>
+          <h1 className="heading-primary truncate">{characterName}</h1>
 
           {/* Character-level Save button — always visible, subtle outline when clean, filled when dirty */}
           <Button

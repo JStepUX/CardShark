@@ -82,7 +82,7 @@ export function Dialog({
             <div className={`px-6 py-4 border-b ${borderColor} performance-contain flex items-center justify-between`}>
               <div className="flex items-center gap-3">
                 {icon}
-                <h2 id="dialog-title" className="text-lg font-medium text-white">
+                <h2 id="dialog-title" className="heading-primary">
                   {title}
                 </h2>
               </div>

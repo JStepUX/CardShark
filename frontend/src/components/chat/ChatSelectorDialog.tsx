@@ -34,7 +34,7 @@ const ChatSelectorDialog: React.FC<ChatSelectorDialogProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
       <div className="relative bg-stone-900 rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
         <div className="flex justify-between items-center p-4 border-b border-stone-800">
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="heading-primary">
             {characterData?.data?.name ? `Manage Chats with ${characterData.data.name}` : 'Manage Chats'}
           </h2>
           <Button

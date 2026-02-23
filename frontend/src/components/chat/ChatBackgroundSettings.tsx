@@ -82,7 +82,7 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
   
   return (
     <div className="p-6 bg-stone-900 rounded-lg space-y-6 w-full max-w-2xl">
-      <h2 className="text-lg font-medium flex items-center gap-2">
+      <h2 className="heading-primary flex items-center gap-2">
         <Image size={20} />
         Background Settings
       </h2>

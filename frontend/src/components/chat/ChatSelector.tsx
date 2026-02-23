@@ -569,7 +569,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
     <div className="chat-selector p-4 bg-stone-900 text-white rounded-lg max-w-3xl mx-auto">
       <div className="flex justify-between items-center mb-2">
         <div>
-          <h2 className="text-xl font-semibold">
+          <h2 className="heading-primary">
             {characterData?.data?.name ? `Chats with ${characterData.data.name}` : 'Character Chats'}
           </h2>
           <div className="flex items-center gap-2 mt-1">

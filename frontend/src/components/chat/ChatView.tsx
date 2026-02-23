@@ -146,6 +146,9 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
     triggeredLoreImages,
     forkChat,
     characterDataOverride,
+    sessionName,
+    setSessionName,
+    saveSessionNameNow,
   } = useChat();
 
   // Use NPC override name if active, otherwise base character
@@ -457,12 +460,18 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
       {!hideHeader && (
         <ChatHeader
           characterName={effectiveCharacterName}
+          sessionName={sessionName}
+          setSessionName={setSessionName}
+          saveSessionNameNow={saveSessionNameNow}
+          mode={sidePanelMode}
           onShowContextWindow={() => setShowContextWindow(true)}
           onShowBackgroundSettings={() => setShowBackgroundSettings(true)}
           onShowChatSelector={() => setShowChatSelector(true)}
           onNewChat={handleNewChat}
           onToggleSamplerPanel={!disableSidePanel ? handleToggleSamplerPanel : undefined}
           isSamplerPanelActive={showSamplerPanel}
+          onToggleSidePanel={!disableSidePanel ? handleToggleSidePanel : undefined}
+          isSidePanelExpanded={!sidePanelCollapsed}
         />
       )}
 
@@ -567,13 +576,10 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
           </div>
         </div>
 
-        {/* Side Panel - only render if not disabled */}
-        {!disableSidePanel && (
+        {/* Side Panel - only render when not disabled and not collapsed */}
+        {!disableSidePanel && !sidePanelCollapsed && (
           <SidePanel
             mode={sidePanelMode}
-            isCollapsed={sidePanelCollapsed}
-            onToggleCollapse={handleToggleSidePanel}
-            characterName={effectiveCharacterName}
             onImageChange={handleImageChange}
             onUnloadCharacter={handleUnloadCharacter}
             onOpenJournal={() => setShowJournal(true)}

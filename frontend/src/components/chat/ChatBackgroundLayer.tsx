@@ -39,14 +39,6 @@ const ChatBackgroundLayer: React.FC<ChatBackgroundLayerProps> = ({
           }}
         />
       ) : null}
-      
-      {/* Fade Overlay - Conditionally render */}
-      {!backgroundSettings.moodEnabled && backgroundSettings.background?.url && !backgroundSettings.disableAnimation && (
-        <div
-          className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/80 to-transparent"
-          style={{ bottom: '70%' }} /* Fixed extent for gradient */
-        />
-      )}
     </div>
   );
 };

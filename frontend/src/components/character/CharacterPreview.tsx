@@ -23,7 +23,7 @@ const CharacterPreview: React.FC<CharacterPreviewProps> = ({ data, imageFile }) 
 
   return (
     <div className="mt-6 p-4 bg-white rounded-lg shadow">
-      <h2 className="text-xl font-bold mb-4">Character Preview</h2>
+      <h2 className="heading-primary mb-4">Character Preview</h2>
       
       {imageFile && (
         <div className="mb-4">

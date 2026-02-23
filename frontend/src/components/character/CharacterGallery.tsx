@@ -769,7 +769,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   title="Back to gallery" />
               )}
               <div>
-                <h2 className="text-lg font-semibold flex items-center gap-2">
+                <h2 className="heading-primary flex items-center gap-2">
                   {isSecondarySelector
                     ? 'Select Character for Comparison'
                     : galFolders.currentFolder ?? 'Gallery'}

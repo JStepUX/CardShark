@@ -48,7 +48,7 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({ settingsChangeCount }
               className="mr-3"
             />
           )}
-          <h2 className="text-lg font-semibold">
+          <h2 className="heading-primary">
             {showGallery 
               ? "Select Character to Compare" 
               : `Compare: ${secondaryCharacterData?.data?.name || 'Character'}`}

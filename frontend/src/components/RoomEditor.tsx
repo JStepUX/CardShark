@@ -103,7 +103,7 @@ function RoomEditorContent() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-stone-800 border-b border-stone-700">
         <div>
-          <h2 className="text-xl font-bold text-white">Room Editor</h2>
+          <h2 className="heading-primary">Room Editor</h2>
           <p className="text-sm text-stone-400">{roomData.data.name}</p>
         </div>
 

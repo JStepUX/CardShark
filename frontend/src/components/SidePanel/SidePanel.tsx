@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Map, ChevronLeft, ChevronRight, Package, BookOpen, Scroll, Save, Check, Loader2 } from 'lucide-react';
+import { Map, Package, BookOpen, Scroll, Loader2 } from 'lucide-react';
 import Button from '../common/Button';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { DayNightSphere } from '../world/DayNightSphere';
@@ -15,8 +15,6 @@ import { CharacterImageService, CharacterImage } from '../../services/characterI
 
 export function SidePanel({
     mode,
-    isCollapsed,
-    onToggleCollapse,
     currentRoom,
     npcs = [],
     activeNpcId,
@@ -24,7 +22,6 @@ export function SidePanel({
     onDismissNpc,
     onOpenMap,
     worldId,
-    characterName,
     onImageChange,
     onUnloadCharacter,
     onOpenJournal,
@@ -34,147 +31,16 @@ export function SidePanel({
     showSamplerOverlay,
     onCloseSamplerOverlay,
 }: SidePanelProps) {
-    const { compressionLevel, setCompressionLevel, sessionName, setSessionName, saveSessionNameNow } = useChat();
+    const { compressionLevel, setCompressionLevel } = useChat();
     const { panelWidth, resizeHandleProps } = usePanelResize();
-    const [animationClass, setAnimationClass] = useState('');
-    const [isAnimating, setIsAnimating] = useState(false);
-    const [showExpanded, setShowExpanded] = useState(!isCollapsed);
-    const [localSessionName, setLocalSessionName] = useState(sessionName);
-    const [justSaved, setJustSaved] = useState(false);
-
-    // Auto-expand when sampler overlay opens while collapsed
-    useEffect(() => {
-        if (showSamplerOverlay && isCollapsed) {
-            onToggleCollapse();
-        }
-    }, [showSamplerOverlay]);
-
-    // Simple change detection
-    const hasChanges = localSessionName !== sessionName;
-
-    // Sync local state when sessionName changes from context (e.g., loading a new chat)
-    useEffect(() => {
-        setLocalSessionName(sessionName);
-    }, [sessionName]);
-
-    // Sync showExpanded with isCollapsed prop when it changes externally
-    // But only when not animating (to avoid interrupting our animation)
-    if (!isAnimating && showExpanded === isCollapsed) {
-        setShowExpanded(!isCollapsed);
-    }
-
-    // Handle collapse/expand with animation
-    const handleToggle = () => {
-        if (isAnimating) return; // Prevent double-clicks during animation
-
-        setIsAnimating(true);
-
-        if (isCollapsed) {
-            // Expanding: first change state to show the panel, then animate it in
-            onToggleCollapse(); // This makes isCollapsed = false
-            setShowExpanded(true);
-            setAnimationClass('panel-venetian-expand');
-            setTimeout(() => {
-                setAnimationClass('');
-                setIsAnimating(false);
-            }, 350);
-        } else {
-            // Collapsing: first animate out, then change state
-            setAnimationClass('panel-venetian-collapse');
-            setTimeout(() => {
-                setAnimationClass('');
-                setShowExpanded(false);
-                onToggleCollapse(); // This makes isCollapsed = true
-                setIsAnimating(false);
-            }, 350);
-        }
-    };
-
-    // Handle save - update context and save to database
-    const handleSave = async () => {
-        if (!hasChanges) return;
-
-        // Update context state
-        setSessionName(localSessionName);
-
-        // Save to database - pass the value directly to avoid stale state closure
-        try {
-            await saveSessionNameNow(localSessionName);
-            console.log('Session name saved:', localSessionName);
-
-            // Show checkmark feedback
-            setJustSaved(true);
-            setTimeout(() => setJustSaved(false), 2000);
-
-            // Dispatch event to notify ChatSelector to refresh
-            window.dispatchEvent(new Event('sessionNameUpdated'));
-        } catch (error) {
-            console.error('Failed to save session name:', error);
-        }
-    };
-
-    if (!showExpanded) {
-        return (
-            <div className="w-12 bg-[#1a1a1a] border-l border-gray-800 flex flex-col items-center py-4">
-                <Button
-                    variant="ghost"
-                    size="lg"
-                    icon={<ChevronLeft size={20} />}
-                    onClick={handleToggle}
-                    title="Expand panel"
-                />
-            </div>
-        );
-    }
 
     return (
-        <div className={`relative bg-[#1a1a1a] border-l border-gray-800 flex flex-col ${animationClass}`} style={{ width: panelWidth }}>
+        <div className="relative bg-[#1a1a1a] border-l border-gray-800 flex flex-col" style={{ width: panelWidth }}>
             {/* Resize Handle */}
             <div
                 {...resizeHandleProps}
                 className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-blue-500/40 active:bg-blue-500/60 transition-colors"
             />
-
-            {/* Header */}
-            <div className="border-b border-gray-800 px-4 py-4 flex items-start justify-between">
-                <Button
-                    variant="ghost"
-                    size="lg"
-                    icon={<ChevronRight size={20} />}
-                    onClick={handleToggle}
-                    title="Collapse panel"
-                    className="mr-2 flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                    {/* Editable Session Name with Save Button */}
-                    <div className="relative flex items-center gap-2">
-                        <input
-                            type="text"
-                            value={localSessionName || ''}
-                            onChange={(e) => setLocalSessionName(e.target.value)}
-                            placeholder={
-                                mode === 'world' && currentRoom ? currentRoom.name :
-                                    mode === 'character' && characterName ? `Chat with ${characterName}` :
-                                        mode === 'assistant' ? 'Session' :
-                                            'Untitled Chat'
-                            }
-                            className="flex-1 bg-transparent text-white border border-gray-700 outline-none focus:ring-1 focus:ring-gray-600 rounded px-2 py-1 truncate"
-                            title="Click to edit session name"
-                        />
-                        {(hasChanges || justSaved) && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                icon={justSaved ? <Check size={16} /> : <Save size={16} />}
-                                onClick={handleSave}
-                                title={justSaved ? "Saved!" : "Save session name"}
-                                disabled={justSaved}
-                                className={`flex-shrink-0 ${justSaved ? 'text-green-400' : 'text-blue-400 hover:text-blue-300'}`}
-                            />
-                        )}
-                    </div>
-                </div>
-            </div>
 
             {/* Mode-specific content OR sampler overlay */}
             <div className="flex-1 overflow-y-auto">

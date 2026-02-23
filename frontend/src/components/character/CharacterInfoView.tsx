@@ -441,7 +441,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-none px-8 pt-8 pb-4 flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold whitespace-nowrap">
+        <h2 className="heading-primary whitespace-nowrap">
           {isSecondary ? "Comparison View" : "Primary Character Info"}
           {totalTokens > 0 && (
             <span className="ml-2 text-sm font-normal text-stone-500">~{totalTokens.toLocaleString()} tokens</span>
