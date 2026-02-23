@@ -13,8 +13,8 @@ import json
 try:
     import psutil
 except ImportError as e:
-    print(f"Failed to import psutil: {e}")
-    # Create a minimal mock for psutil for executable mode
+    # psutil is optional - only needed for KoboldCPP process management.
+    # Falls back to a mock that returns empty results gracefully.
     class MockPsutil:
         def __init__(self):
             pass

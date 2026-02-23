@@ -18,7 +18,7 @@ class WorldRead(WorldBase):
     updated_at: dt.datetime
 
     class Config:
-        orm_mode = True # Compatibility with SQLAlchemy models
+        from_attributes = True # Compatibility with SQLAlchemy models
 
 # Pydantic models for Room
 class RoomBase(BaseModel):
@@ -42,7 +42,7 @@ class RoomRead(RoomBase):
     room_id: int    # world_uuid is already in RoomBase
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Pydantic models for Character (minimal for now, expand as needed)
 class CharacterBase(BaseModel):
@@ -57,7 +57,7 @@ class CharacterRead(CharacterBase):
     updated_at: dt.datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Pydantic models for NPCInRoom (Character-Room Assignment)
 class NPCInRoomBase(BaseModel):
@@ -71,7 +71,7 @@ class NPCInRoomCreate(BaseModel): # Request body for adding/updating NPC role in
 class NPCInRoomRead(NPCInRoomBase): # Response for a specific assignment    id: int # The ID of the NPCsInRooms record
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Response model for listing characters in a room, including their role
 class CharacterInRoomResponse(CharacterRead):
@@ -140,7 +140,7 @@ class ChatSessionRead(ChatSessionBase):
     success: Optional[bool] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Pydantic models for ChatMessage (Phase 1 database transition)
 class ChatMessageBase(BaseModel):
@@ -168,7 +168,7 @@ class ChatMessageRead(ChatMessageBase):
     updated_at: dt.datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Enhanced ChatSession schemas for database transition
 class ChatSessionCreateV2(BaseModel):
@@ -202,7 +202,7 @@ class ChatSessionReadV2(BaseModel):
     messages: Optional[List[ChatMessageRead]] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ChatForkPayload(BaseModel):
@@ -226,7 +226,7 @@ class ChatHistoryItem(BaseModel):
     character_thumbnail: Optional[str] = None  # Path to PNG file
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ChatHistoryReassign(BaseModel):
