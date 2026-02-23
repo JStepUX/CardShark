@@ -5,7 +5,6 @@ import { apiService } from '../../services/apiService';
 import { useCharacter } from '../../contexts/CharacterContext';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import CharacterAssignDialog from './CharacterAssignDialog';
-import { getApiBaseUrl } from '../../utils/apiConfig';
 import { toast } from 'sonner';
 import Button from '../common/Button';
 
@@ -84,15 +83,14 @@ const ChatHistoryView: React.FC = () => {
 
     // Get thumbnail URL - prefer UUID-based endpoint for reliability
     const getThumbnailUrl = (item: ChatHistoryItem): string => {
-        const baseUrl = getApiBaseUrl();
         // Prefer UUID-based image loading (more reliable)
         if (item.character_uuid) {
-            return `${baseUrl}/api/character-image/${item.character_uuid}`;
+            return `/api/character-image/${item.character_uuid}`;
         }
         // Fallback to path-based if no UUID
         if (item.character_thumbnail) {
             const encodedPath = encodeURIComponent(item.character_thumbnail.replace(/\\/g, '/'));
-            return `${baseUrl}/api/character-image/${encodedPath}`;
+            return `/api/character-image/${encodedPath}`;
         }
         return '';
     };
@@ -100,10 +98,8 @@ const ChatHistoryView: React.FC = () => {
     // Handle clicking on a chat row to load it
     const handleLoadChat = async (item: ChatHistoryItem) => {
         try {
-            const baseUrl = getApiBaseUrl();
-
             // Check if the character exists using the correct endpoint
-            const charResponse = await fetch(`${baseUrl}/api/character/${item.character_uuid}`);
+            const charResponse = await fetch(`/api/character/${item.character_uuid}`);
 
             if (!charResponse.ok) {
                 // Character not found - this is an orphaned chat
@@ -118,7 +114,7 @@ const ChatHistoryView: React.FC = () => {
             setCharacterData(metadata);
 
             // Load character image
-            const imageResponse = await fetch(`${baseUrl}/api/character-image/${item.character_uuid}`);
+            const imageResponse = await fetch(`/api/character-image/${item.character_uuid}`);
             if (imageResponse.ok) {
                 const blob = await imageResponse.blob();
                 const imageUrl = URL.createObjectURL(blob);

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Loader2, Search } from 'lucide-react';
 import { apiService } from '../../services/apiService';
-import { getApiBaseUrl } from '../../utils/apiConfig';
 import Button from '../common/Button';
 
 interface ChatHistoryItem {
@@ -53,8 +52,7 @@ const CharacterAssignDialog: React.FC<CharacterAssignDialogProps> = ({
         setLoading(true);
         setError(null);
         try {
-            const baseUrl = getApiBaseUrl();
-            const response = await fetch(`${baseUrl}/api/characters`);
+            const response = await fetch(`/api/characters`);
             if (!response.ok) throw new Error('Failed to load characters');
             const data = await response.json();
             const charList = data.characters || data.data || [];
@@ -84,15 +82,14 @@ const CharacterAssignDialog: React.FC<CharacterAssignDialogProps> = ({
 
     // Get character thumbnail URL - prefer UUID-based endpoint for reliability
     const getThumbnailUrl = (character: CharacterInfo): string => {
-        const baseUrl = getApiBaseUrl();
         // Prefer UUID-based image loading (more reliable)
         if (character.character_uuid) {
-            return `${baseUrl}/api/character-image/${character.character_uuid}`;
+            return `/api/character-image/${character.character_uuid}`;
         }
         // Fallback to path-based if no UUID
         if (character.png_file_path) {
             const encodedPath = encodeURIComponent(character.png_file_path.replace(/\\/g, '/'));
-            return `${baseUrl}/api/character-image/${encodedPath}`;
+            return `/api/character-image/${encodedPath}`;
         }
         return '';
     };
