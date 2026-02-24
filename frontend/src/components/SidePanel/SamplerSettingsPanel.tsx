@@ -247,6 +247,9 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
     }, 1500)
   );
 
+  // Flag to distinguish local user changes from external context syncs
+  const isLocalChangeRef = useRef(false);
+
   const buildSettings = (gen?: Record<string, unknown>) => ({
     max_length: (gen?.max_length as number) ?? d.max_length!,
     max_context_length: (gen?.max_context_length as number) ?? d.max_context_length!,
@@ -274,42 +277,38 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
     buildSettings(apiConfig?.generation_settings as Record<string, unknown>)
   );
 
-  // Sync when active API changes
+  // Sync when active API changes (external change — don't propagate back)
   useEffect(() => {
     if (apiConfig?.generation_settings) {
       setSettings(buildSettings(apiConfig.generation_settings as Record<string, unknown>));
     }
   }, [apiConfig?.generation_settings]);
 
-  // Two-phase write helper: updates both context and debounced persist
-  const commitSettings = useCallback((newSettings: Record<string, unknown>) => {
-    if (apiConfig) {
-      setAPIConfig({ ...apiConfig, generation_settings: newSettings });
+  // Propagate local settings changes to API config context + debounced persistence.
+  // Runs after render, avoiding the "setState during render" warning.
+  useEffect(() => {
+    if (isLocalChangeRef.current) {
+      isLocalChangeRef.current = false;
+      if (apiConfig && activeApiId) {
+        setAPIConfig({ ...apiConfig, generation_settings: settings });
+        debouncedPersistRef.current(activeApiId, { ...apiConfig, generation_settings: settings });
+      }
     }
-    if (activeApiId && apiConfig) {
-      debouncedPersistRef.current(activeApiId, { ...apiConfig, generation_settings: newSettings });
-    }
-  }, [apiConfig, activeApiId, setAPIConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
-  // Two-phase write: immediate context update + debounced persistence
   const handleSettingChange = useCallback((key: string, value: unknown) => {
-    setSettings(prev => {
-      const newSettings = { ...prev, [key]: value };
-      commitSettings(newSettings);
-      return newSettings;
-    });
-  }, [commitSettings]);
+    isLocalChangeRef.current = true;
+    setSettings(prev => ({ ...prev, [key]: value }));
+  }, []);
 
-  // Bulk setting change (for macro sliders and reasoning model toggle)
   const handleBulkSettingChange = useCallback((updates: Record<string, unknown>) => {
-    setSettings(prev => {
-      const newSettings = { ...prev, ...updates };
-      commitSettings(newSettings);
-      return newSettings;
-    });
-  }, [commitSettings]);
+    isLocalChangeRef.current = true;
+    setSettings(prev => ({ ...prev, ...updates }));
+  }, []);
 
   const handleMoveSampler = useCallback((index: number, direction: 'up' | 'down') => {
+    isLocalChangeRef.current = true;
     setSettings(prev => {
       const newOrder = [...prev.sampler_order];
       if (direction === 'up' && index > 0) {
@@ -317,11 +316,9 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
       } else if (direction === 'down' && index < newOrder.length - 1) {
         [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
       }
-      const newSettings = { ...prev, sampler_order: newOrder };
-      commitSettings(newSettings);
-      return newSettings;
+      return { ...prev, sampler_order: newOrder };
     });
-  }, [commitSettings]);
+  }, []);
 
   const handleResetSamplerOrder = useCallback(() => {
     handleSettingChange('sampler_order', [...RECOMMENDED_SAMPLER_ORDER]);

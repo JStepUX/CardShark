@@ -14,7 +14,7 @@
 import type { CharacterCard } from '../types/schema';
 import type { GenerationSettings } from '../types/api';
 import { DEFAULT_GENERATION_SETTINGS } from '../types/api';
-import { PromptHandler } from '../handlers/promptHandler';
+import { streamResponse } from './generation/streamParser';
 import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
 import { removeIncompleteSentences } from '../utils/contentProcessing';
 
@@ -242,7 +242,7 @@ export async function streamToMessage(options: StreamToMessageOptions): Promise<
   };
 
   try {
-    for await (const chunk of PromptHandler.streamResponse(response, characterName)) {
+    for await (const chunk of streamResponse(response, characterName)) {
       if (signal?.aborted) break;
       scheduleFlush(chunk);
     }

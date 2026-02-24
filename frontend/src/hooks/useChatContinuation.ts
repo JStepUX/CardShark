@@ -3,7 +3,7 @@ import { useState, useRef, useContext } from 'react';
 import { Message } from '../types/messages';
 import { CharacterData } from '../contexts/CharacterContext';
 import { APIConfigContext } from '../contexts/APIConfigContext';
-import { PromptHandler } from '../handlers/promptHandler';
+import { streamResponse, generateChatResponse } from '../services/generation';
 import { APIConfig, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 
 export function useChatContinuation(
@@ -102,13 +102,14 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       const formattedAPIConfig = prepareAPIConfig(apiConfig);
       
       const abortController = new AbortController();
-      currentGenerationRef.current = abortController;      const response = await PromptHandler.generateChatResponse(
-        chatSessionId, // chat session UUID
+      currentGenerationRef.current = abortController;
+      const response = await generateChatResponse({
+        chatSessionUuid: chatSessionId,
         contextMessages,
-        formattedAPIConfig, 
-        abortController.signal,
-        characterData // Optional character card parameter
-      );
+        apiConfig: formattedAPIConfig,
+        signal: abortController.signal,
+        characterCard: characterData,
+      });
 
       if (!response.ok) {
         throw new Error("Continuation failed - check API settings");
@@ -120,7 +121,7 @@ Continue the response from exactly that point. Do not repeat the existing text. 
       let bufferTimer: NodeJS.Timeout | null = null;
       
       // During streaming, ONLY update the current message content - don't modify variations yet
-      for await (const chunk of PromptHandler.streamResponse(response)) {
+      for await (const chunk of streamResponse(response)) {
         // Batch updates for smoother performance
         if (!bufferTimer) {
           bufferTimer = setInterval(() => {

@@ -1,5 +1,5 @@
 // chatUtils.ts - Chat utility functions and helpers
-import { PromptHandler } from '../../handlers/promptHandler';
+import { stripHtmlTags } from '../context/ContextSerializer';
 import { generateUUID } from '../../utils/generateUUID';
 import { CharacterCard } from '../../types/schema';
 import { Message } from './chatTypes';
@@ -13,8 +13,7 @@ import { Message } from './chatTypes';
  */
 export const sanitizeMessageContent = (html: string): string => {
   if (!html) return '';
-  // Use PromptHandler's stripHtmlTags to completely remove HTML markup
-  return PromptHandler.stripHtmlTags(html);
+  return stripHtmlTags(html);
 };
 
 /**

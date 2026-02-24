@@ -3,7 +3,7 @@
 // Handles real-time message streaming, timeouts, and abort control
 
 import { useRef, useCallback } from 'react';
-import { PromptHandler } from '../../handlers/promptHandler';
+import { streamResponse } from '../../services/generation/streamParser';
 import { STREAM_SETTINGS } from '../../services/chat/chatTypes';
 
 // --- Types ---
@@ -101,7 +101,7 @@ export function useStreamProcessor(): StreamProcessor {
     
     try {
       // Process each chunk from the stream
-      for await (const chunk of PromptHandler.streamResponse(response)) {
+      for await (const chunk of streamResponse(response)) {
         console.log(`[processStream] Received chunk ${receivedChunks + 1}: "${chunk}" (length: ${chunk.length})`);
         
         // Check if stream was aborted

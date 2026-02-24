@@ -17,7 +17,7 @@
 
 import { Message, PromptContextMessage, CompressionLevel, CompressedContextCache } from '../services/chat/chatTypes';
 import { buildContextMessages } from './contextBuilder';
-import { PromptHandler } from '../handlers/promptHandler';
+import { streamResponse, generateChatResponse } from '../services/generation';
 import { CharacterCard } from '../types/schema';
 
 /**
@@ -227,21 +227,20 @@ export async function executeGeneration(
     // Thread generation type to backend for LogitShaper (regenerate/continue = non-advancing)
     const enrichedApiConfig = { ...apiConfig, _generation_type: config.type };
 
-    // Use PromptHandler to generate the response
-    const response = await PromptHandler.generateChatResponse(
+    const response = await generateChatResponse({
         chatSessionUuid,
-        context.contextMessages,
-        enrichedApiConfig,
+        contextMessages: context.contextMessages,
+        apiConfig: enrichedApiConfig,
         signal,
-        characterData,
-        effectiveSessionNotes,
-        compressionLevel, // Changed from compressionEnabled
-        compressedContextCache, // Added cache parameter
+        characterCard: characterData,
+        sessionNotes: effectiveSessionNotes,
+        compressionLevel,
+        compressedContextCache,
         onCompressionStart,
         onCompressionEnd,
         onPayloadReady,
-        context.continuationText // For continue: partial text used as generation prefix
-    );
+        continuationText: context.continuationText,
+    });
 
     return response;
 }
@@ -273,7 +272,7 @@ export async function* streamWithBuffering(
     let buffer = '';
     let lastYieldTime = Date.now();
 
-    for await (const chunk of PromptHandler.streamResponse(response)) {
+    for await (const chunk of streamResponse(response)) {
         buffer += chunk;
         fullContent += chunk;
 

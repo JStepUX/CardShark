@@ -7,7 +7,7 @@
 // useChatMessages.ts (refactored)
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { CharacterData } from '../contexts/CharacterContext';
-import { PromptHandler } from '../handlers/promptHandler';
+import { streamResponse, generateChatResponse, formatPromptWithContextMessages } from '../services/generation';
 import { useAPIConfig } from '../contexts/APIConfigContext';
 import { APIConfig, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 import { ChatStorage } from '../services/chatStorage';
@@ -415,7 +415,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
 
     try {
       // Use the stream processor's abort controller and timeout functionality
-      for await (const chunk of PromptHandler.streamResponse(response)) {
+      for await (const chunk of streamResponse(response)) {
         console.log(`[processStream] Received chunk ${receivedChunks + 1}: "${chunk}" (length: ${chunk.length})`);
         console.log(`[processStream] About to call ${isThinking ? 'updateThinkingMessageContent' : 'updateGeneratingMessageContent'} with messageId: ${messageId}`);
 
@@ -487,7 +487,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     const { signal } = currentAbortController;
 
     try {
-      const reasoningPromptString = PromptHandler.formatPromptWithContextMessages(
+      const reasoningPromptString = formatPromptWithContextMessages(
         effectiveCharacterData,
         `${state.reasoningSettings.instructions}\nUser asks: ${userInput}`,
         baseContextMessages.filter(msg => msg.role !== 'thinking') as Message[], // Pass Message[]
@@ -504,7 +504,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       setState(prev => ({ ...prev, lastContextWindow: { ...prev.lastContextWindow, type: 'reasoning_start', prompt: reasoningPromptString, timestamp: new Date().toISOString(), characterName: effectiveCharacterData.data.name, messageId: reasoningMessage.id } }));
       resetStreamTimeout();
 
-      // PromptHandler.generateChatResponse expects PromptContextMessage[], so filter and cast
+      // generateChatResponse expects PromptContextMessage[], so filter and cast
       const reasoningContextForApi = [{ role: 'user', content: reasoningPromptString }].filter(
         (msg): msg is PromptContextMessage => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'
       );
@@ -513,13 +513,13 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         console.error("generateReasoning: chatSessionUuid is null. Cannot generate reasoning.");
         throw new Error("Chat session UUID is missing, cannot generate reasoning.");
       }
-      const response = await PromptHandler.generateChatResponse(
-        currentChatSessionUuidForReasoning,
-        reasoningContextForApi,
-        reasoningApiConfig,
+      const response = await generateChatResponse({
+        chatSessionUuid: currentChatSessionUuidForReasoning,
+        contextMessages: reasoningContextForApi,
+        apiConfig: reasoningApiConfig,
         signal,
-        effectiveCharacterData
-      );
+        characterCard: effectiveCharacterData,
+      });
 
       let finalReasoning: string | null = null;
       await processStream(
@@ -607,7 +607,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         reasoning: reasoningText
       });
 
-      console.log(`[generateResponse] About to call PromptHandler.generateChatResponse with:`, {
+      console.log(`[generateResponse] About to call generateChatResponse with:`, {
         currentChatSessionUuid,
         apiContextMessagesLength: apiContextMessages.length,
         preparedApiConfig: preparedApiConfig?.provider,
@@ -617,30 +617,25 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
       // Log state immediately before calling processStream for the main response
       console.log(`[generateResponse] PRE-STREAM state check for assistantMessage.id: ${assistantMessage.id}. isGenerating: ${state.isGenerating}, generatingId: ${state.generatingId}`);
 
-      const response = await PromptHandler.generateChatResponse(
-        currentChatSessionUuid,
-        apiContextMessages, // This context needs to be correct
-        preparedApiConfig,
+      const response = await generateChatResponse({
+        chatSessionUuid: currentChatSessionUuid,
+        contextMessages: apiContextMessages,
+        apiConfig: preparedApiConfig,
         signal,
-        effectiveCharacterData,
-        undefined, // sessionNotes - not implemented yet
-        'none', // compressionLevel - default to no compression
-        null, // compressedContextCache - not used in this hook
-        undefined, // onCompressionStart
-        undefined, // onCompressionEnd
-        (payload) => {
-          // Capture the actual payload for the context window modal
+        characterCard: effectiveCharacterData,
+        compressionLevel: 'none',
+        onPayloadReady: (payload) => {
           const contextWindow = {
             type: 'generation_start',
             timestamp: new Date().toISOString(),
             characterName: effectiveCharacterData.data?.name || 'Unknown',
             messageId: assistantMessage.id,
-            ...payload // Include the full payload structure
+            ...payload,
           };
           setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
           localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
-        }
-      );
+        },
+      });
 
       // Log state immediately before calling processStream for the main response
       console.log(`[generateResponse] PRE-STREAM state check for assistantMessage.id: ${assistantMessage.id}. isGenerating: ${state.isGenerating}, generatingId: ${state.generatingId}`);
@@ -727,30 +722,25 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         reasoning: reasoningText
       });
 
-      const response = await PromptHandler.generateChatResponse(
-        currentChatSessionUuid,
-        contextMessagesForAPI,
-        preparedApiConfig,
+      const response = await generateChatResponse({
+        chatSessionUuid: currentChatSessionUuid,
+        contextMessages: contextMessagesForAPI,
+        apiConfig: preparedApiConfig,
         signal,
-        effectiveCharacterData,
-        undefined, // sessionNotes
-        'none', // compressionLevel - default to no compression
-        null, // compressedContextCache - not used in this hook
-        undefined, // onCompressionStart
-        undefined, // onCompressionEnd
-        (payload) => {
-          // Capture the actual payload for the context window modal
+        characterCard: effectiveCharacterData,
+        compressionLevel: 'none',
+        onPayloadReady: (payload) => {
           const contextWindow = {
             type: 'regeneration_start',
             timestamp: new Date().toISOString(),
             characterName: effectiveCharacterData.data?.name || 'Unknown',
             messageId: messageToRegenerate.id,
-            ...payload
+            ...payload,
           };
           setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
           localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
-        }
-      );
+        },
+      });
 
       await processStream(
         response, messageToRegenerate.id, false,
@@ -878,30 +868,25 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         reasoning: reasoningText
       });
 
-      const response = await PromptHandler.generateChatResponse(
-        currentChatSessionUuid,
-        contextMessagesForAPI,
-        preparedApiConfig,
+      const response = await generateChatResponse({
+        chatSessionUuid: currentChatSessionUuid,
+        contextMessages: contextMessagesForAPI,
+        apiConfig: preparedApiConfig,
         signal,
-        effectiveCharacterData,
-        undefined, // sessionNotes
-        'none', // compressionLevel - default to no compression
-        null, // compressedContextCache - not used in this hook
-        undefined, // onCompressionStart
-        undefined, // onCompressionEnd
-        (payload) => {
-          // Capture the actual payload for the context window modal
+        characterCard: effectiveCharacterData,
+        compressionLevel: 'none',
+        onPayloadReady: (payload) => {
           const contextWindow = {
             type: 'variation_start',
             timestamp: new Date().toISOString(),
             characterName: effectiveCharacterData.data?.name || 'Unknown',
             messageId: messageToVary.id,
-            ...payload
+            ...payload,
           };
           setState(prev => ({ ...prev, lastContextWindow: contextWindow }));
           localStorage.setItem(CONTEXT_WINDOW_KEY, JSON.stringify(contextWindow));
-        }
-      );
+        },
+      });
 
       await processStream(
         response,
@@ -1024,7 +1009,7 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
     try {
       const apiConfigToUse = prepareAPIConfig(globalApiConfig);
 
-      const introPromptString = PromptHandler.formatPromptWithContextMessages(
+      const introPromptString = formatPromptWithContextMessages(
         npcCharacterData,
         (encounterContext || `Introduce ${npcCharacterData.data.name}.`) + (worldInfo ? `\nWorld: ${worldInfo.worldName}\nSetting: ${worldInfo.settingDescription}` : ""),
         [],
@@ -1047,13 +1032,13 @@ export function useChatMessages(characterData: CharacterData | null, _options?: 
         console.error("generateNpcIntroduction: chatSessionUuid is null. Cannot generate NPC introduction.");
         throw new Error("Chat session UUID is missing, cannot generate NPC introduction.");
       }
-      const response = await PromptHandler.generateChatResponse(
-        currentChatSessionUuidForNpc,
-        introContextForApi,
-        apiConfigToUse,
+      const response = await generateChatResponse({
+        chatSessionUuid: currentChatSessionUuidForNpc,
+        contextMessages: introContextForApi,
+        apiConfig: apiConfigToUse,
         signal,
-        npcCharacterData
-      );
+        characterCard: npcCharacterData,
+      });
 
       let finalIntro: string | null = null;
       await processStream(

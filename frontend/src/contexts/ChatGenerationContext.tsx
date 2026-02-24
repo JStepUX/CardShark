@@ -7,7 +7,7 @@ import React, { createContext, useContext, useState, useCallback, useRef } from 
 import { Message } from '../types/messages';
 import { APIConfig, APIProvider, DEFAULT_GENERATION_SETTINGS } from '../types/api';
 import { APIConfigContext } from '../contexts/APIConfigContext';
-import { PromptHandler } from '../handlers/promptHandler';
+import { streamResponse, generateChatResponse } from '../services/generation';
 import { ChatStorage } from '../services/chatStorage';
 import { MessageUtils } from '../utils/messageUtils';
 import { useContentFilter } from '../hooks/useContentFilter';
@@ -225,7 +225,7 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
 
       const charName = (session.characterDataOverride || characterData)?.data?.name || '';
 
-      for await (const chunk of PromptHandler.streamResponse(response, charName)) {
+      for await (const chunk of streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
           if (bufTimer) clearTimeout(bufTimer);
           bufTimer = null;
@@ -322,12 +322,18 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
       });
       const fmtAPIConfig = prepareAPIConfig(apiConfig);
       const effectiveCharData = session.characterDataOverride || characterData;
-      const response = await PromptHandler.generateChatResponse(
-        effectiveChatId, ctxMsgs, fmtAPIConfig, abortCtrl.signal, effectiveCharData,
-        session.sessionNotes, compression.compressionLevel, compression.compressedContextCache,
-        () => compression.setIsCompressing(true),
-        () => compression.setIsCompressing(false),
-        (payload) => {
+      const response = await generateChatResponse({
+        chatSessionUuid: effectiveChatId,
+        contextMessages: ctxMsgs,
+        apiConfig: fmtAPIConfig,
+        signal: abortCtrl.signal,
+        characterCard: effectiveCharData,
+        sessionNotes: session.sessionNotes,
+        compressionLevel: compression.compressionLevel,
+        compressedContextCache: compression.compressedContextCache,
+        onCompressionStart: () => compression.setIsCompressing(true),
+        onCompressionEnd: () => compression.setIsCompressing(false),
+        onPayloadReady: (payload) => {
           if (payload.compressedContextCache) {
             compression.setCompressedContextCache(payload.compressedContextCache as import('../services/chat/chatTypes').CompressedContextCache);
           }
@@ -338,8 +344,8 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
             messageId: assistantMsgId,
             ...payload
           });
-        }
-      );
+        },
+      });
 
       let fullContent = ''; let buffer = ''; const bufferInterval = 50;
       let bufTimer: NodeJS.Timeout | null = null;
@@ -360,7 +366,7 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
 
       const charName = (session.characterDataOverride || characterData)?.data?.name || '';
 
-      for await (const chunk of PromptHandler.streamResponse(response, charName)) {
+      for await (const chunk of streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
           if (bufTimer) clearTimeout(bufTimer);
           bufTimer = null;
@@ -584,7 +590,7 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
 
       const charName = (session.characterDataOverride || characterData)?.data?.name || '';
 
-      for await (const chunk of PromptHandler.streamResponse(response, charName)) {
+      for await (const chunk of streamResponse(response, charName)) {
         if (abortCtrl.signal.aborted) {
           if (bufTimer) clearTimeout(bufTimer);
           bufTimer = null;
