@@ -19,13 +19,14 @@ import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import WorldDeleteConfirmationDialog from '../common/WorldDeleteConfirmationDialog';
 import FolderDeleteConfirmationDialog from '../common/FolderDeleteConfirmationDialog';
 import KoboldCPPDrawerManager from '../KoboldCPPDrawerManager';
-import { GalleryFolderTile, NewFolderTile } from './GalleryFolderTile';
+import { GalleryFolderTile, NewFolderTile, NewCardTile } from './GalleryFolderTile';
 import NewFolderDialog from './NewFolderDialog';
 import OrganizationToolbar from './OrganizationToolbar';
 import { useCharacterSort } from '../../hooks/useCharacterSort';
 import { useGalleryFolders } from '../../hooks/useGalleryFolders';
 import { worldApi } from '../../api/worldApi';
 import { roomApi } from '../../api/roomApi';
+import { characterApi } from '../../api/characterApi';
 import { bulkUpdateFolder } from '../../api/galleryApi';
 
 // Track API calls across component instances - simplified
@@ -215,6 +216,9 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
   // Folder dialogs
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
   const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
+
+  // Card creation state
+  const [isCreating, setIsCreating] = useState(false);
 
   const loadingRef = useRef<{ currentSettingsCount: number; isLoading: boolean }>({
     currentSettingsCount: -1, isLoading: false
@@ -686,6 +690,42 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
     });
   }, [galFolders.selectedCards, galFolders.deselectAll, invalidateCharacterCache, currentDirectory, loadFromDirectory]);
 
+  // --- Card creation handlers ---
+  const handleCreateCharacter = useCallback(async () => {
+    setIsCreating(true);
+    try {
+      const result = await characterApi.createCharacter('New Character');
+      invalidateCharacterCache();
+      navigate(`/character/${result.character_uuid}?tab=info`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create character');
+    } finally {
+      setIsCreating(false);
+    }
+  }, [invalidateCharacterCache, navigate]);
+
+  const handleCreateWorld = useCallback(async () => {
+    setIsCreating(true);
+    try {
+      const world = await worldApi.createWorld({ name: 'New World' });
+      invalidateCharacterCache();
+      navigate(`/world/${world.uuid}/launcher`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create world');
+    } finally {
+      setIsCreating(false);
+    }
+  }, [invalidateCharacterCache, navigate]);
+
+  const createTile = useMemo(() => {
+    if (isSecondarySelector) return undefined;
+    if (galFolders.currentFolder === 'Characters')
+      return <NewCardTile label="New Character" color="stone" onClick={handleCreateCharacter} isCreating={isCreating} />;
+    if (galFolders.currentFolder === 'Worlds')
+      return <NewCardTile label="New World" color="emerald" onClick={handleCreateWorld} isCreating={isCreating} />;
+    return undefined;
+  }, [galFolders.currentFolder, isSecondarySelector, isCreating, handleCreateCharacter, handleCreateWorld]);
+
   // Pre-compute folder card counts once (instead of O(n) per folder per render)
   const folderCardCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -975,11 +1015,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
         )}
 
         {/* Card grid */}
-        {(sortedDisplayCards.length > 0 || (searchTerm && !isLoading)) && (
+        {(sortedDisplayCards.length > 0 || createTile || (searchTerm && !isLoading)) && (
           <GalleryGrid
             items={sortedDisplayCards.slice(0, displayedCount)}
             emptyMessage={searchTerm ? 'No matching cards found.' : 'No cards in this folder.'}
             renderItem={renderCharacterCard}
+            prependElement={createTile}
           />
         )}
 

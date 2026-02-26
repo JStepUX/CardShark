@@ -3,7 +3,7 @@
  * @description Folder tile component for the gallery. Same 3/5 aspect ratio as character cards.
  */
 import React, { useState, useRef } from 'react';
-import { Folder, Users, Map as MapIcon, DoorOpen, Swords, Plus, Trash2 } from 'lucide-react';
+import { Folder, Users, Map as MapIcon, DoorOpen, Swords, Plus, Trash2, Loader2 } from 'lucide-react';
 import { FolderDefinition, DEFAULT_FOLDER_IDS } from '../../types/gallery';
 
 interface GalleryFolderTileProps {
@@ -145,6 +145,57 @@ export const NewFolderTile: React.FC<NewFolderTileProps> = React.memo(({ onClick
     >
       <Plus size={32} className="text-stone-500 group-hover:text-blue-400 transition-colors" />
       <span className="text-sm font-medium text-stone-500">New Folder</span>
+    </button>
+  );
+});
+
+interface NewCardTileProps {
+  label: string;
+  onClick: () => void;
+  color?: string;
+  isCreating?: boolean;
+}
+
+const CARD_COLOR_MAP: Record<string, { border: string; borderHover: string; bg: string; bgHover: string; text: string; icon: string }> = {
+  stone: {
+    border: 'border-stone-600',
+    borderHover: 'hover:border-stone-400',
+    bg: 'bg-stone-800/30',
+    bgHover: 'hover:bg-stone-800/50',
+    text: 'text-stone-400',
+    icon: 'text-stone-500',
+  },
+  emerald: {
+    border: 'border-emerald-700/50',
+    borderHover: 'hover:border-emerald-500/60',
+    bg: 'bg-emerald-900/20',
+    bgHover: 'hover:bg-emerald-900/30',
+    text: 'text-emerald-400',
+    icon: 'text-emerald-500',
+  },
+};
+
+export const NewCardTile: React.FC<NewCardTileProps> = React.memo(({ label, onClick, color = 'stone', isCreating = false }) => {
+  const colors = CARD_COLOR_MAP[color] || CARD_COLOR_MAP.stone;
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={isCreating}
+      className={`
+        flex flex-col items-center justify-center gap-3
+        rounded-lg overflow-hidden shadow-lg aspect-[3/5]
+        border-2 border-dashed transition-all duration-300
+        ${colors.border} ${colors.bg}
+        ${isCreating ? 'opacity-60 cursor-wait' : `${colors.borderHover} ${colors.bgHover} hover:scale-[1.05] hover:shadow-xl`}
+      `}
+    >
+      {isCreating ? (
+        <Loader2 size={32} className={`${colors.icon} animate-spin`} />
+      ) : (
+        <Plus size={32} className={colors.icon} />
+      )}
+      <span className={`text-sm font-medium ${colors.text}`}>{label}</span>
     </button>
   );
 });

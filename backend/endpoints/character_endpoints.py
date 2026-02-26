@@ -470,6 +470,81 @@ async def update_character_endpoint(
         logger.error(f"Error updating character {character_uuid}: {str(e)}")
         raise handle_generic_error(e, "updating character")
 
+@router.post("/characters/create", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Create a new blank character card")
+async def create_character_endpoint(
+    name: str = Form("New Character"),
+    image: Optional[UploadFile] = File(None),
+    char_service: CharacterService = Depends(get_character_service_dependency),
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    settings_manager: SettingsManager = Depends(get_settings_manager_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Create a new blank character card with a default image."""
+    try:
+        from backend.character_validator import CharacterValidator
+        from backend.utils.path_utils import get_character_base_directory
+        import re as _re
+
+        # Generate UUID
+        character_uuid = str(uuid.uuid4())
+
+        # Build empty V2 card
+        validator = CharacterValidator(logger)
+        card_data = validator.create_empty_character(card_type="character")
+        card_data["data"]["name"] = name
+        card_data["name"] = name
+        card_data["data"]["extensions"]["character_uuid"] = character_uuid
+
+        # Get image bytes
+        if image:
+            image_bytes = await image.read()
+            if not image_bytes or not image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                raise ValidationException("Invalid image file: must be a PNG")
+        else:
+            from PIL import Image as PILImage
+            from io import BytesIO
+            img = PILImage.new('RGB', (512, 768), color=(64, 64, 72))
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            image_bytes = buffer.getvalue()
+
+        # Determine save path
+        char_dir = get_character_base_directory(settings_manager)
+        safe_name = _re.sub(r'[<>:"/\\|?*]', '_', name).strip() or "character"
+        file_path = char_dir / f"{safe_name}.png"
+
+        # Handle filename collisions
+        counter = 1
+        while file_path.exists():
+            file_path = char_dir / f"{safe_name}_{counter}.png"
+            counter += 1
+
+        # Save PNG with embedded metadata
+        png_handler.save_card_png(
+            image_bytes=image_bytes,
+            metadata=card_data,
+            output_path=file_path,
+            sync_fn=lambda path: char_service.sync_character_file(path)
+        )
+
+        logger.info(f"Created new character '{name}' with UUID {character_uuid} at {file_path}")
+
+        return create_data_response({
+            "character": {
+                "character_uuid": character_uuid,
+                "name": name,
+                "png_file_path": str(file_path),
+            },
+            "message": f"Character '{name}' created successfully"
+        })
+
+    except ValidationException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating character: {e}")
+        raise handle_generic_error(e, "creating character")
+
+
 @router.post("/characters/save-card", response_model=DataResponse, responses=STANDARD_RESPONSES, summary="Save/Update character card (PNG+DB)")
 async def save_character_card_endpoint(
     file: UploadFile = File(...),

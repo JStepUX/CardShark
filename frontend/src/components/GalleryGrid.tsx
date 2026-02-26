@@ -7,10 +7,13 @@ interface GalleryGridProps<T> {
   emptyMessage?: string;
   className?: string;
   columns?: number; // Optional fixed column count
+  prependElement?: React.ReactNode;
 }
 
-function GalleryGridInner<T>({ items, renderItem, emptyMessage, className, columns }: GalleryGridProps<T>) {
-  if (!items.length) {
+function GalleryGridInner<T>({ items, renderItem, emptyMessage, className, columns, prependElement }: GalleryGridProps<T>) {
+  const hasContent = items.length > 0 || prependElement;
+
+  if (!hasContent) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
         {emptyMessage || "No items found."}
@@ -22,6 +25,7 @@ function GalleryGridInner<T>({ items, renderItem, emptyMessage, className, colum
     : `grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-6 px-6 pt-6 ${className || ""}`;
   return (
     <div className={gridClass}>
+      {prependElement}
       {items.map((item, idx) => renderItem(item, idx))}
     </div>
   );
