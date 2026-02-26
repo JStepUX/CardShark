@@ -102,7 +102,8 @@ class SettingsManager:
                 "folders": [
                     {"id": "default-characters", "name": "Characters", "isDefault": True, "color": "stone", "sortOrder": 0},
                     {"id": "default-worlds", "name": "Worlds", "isDefault": True, "color": "emerald", "sortOrder": 1},
-                    {"id": "default-rooms", "name": "Rooms", "isDefault": True, "color": "purple", "sortOrder": 2}
+                    {"id": "default-rooms", "name": "Rooms", "isDefault": True, "color": "purple", "sortOrder": 2},
+                    {"id": "default-npcs", "name": "NPCs", "isDefault": True, "color": "amber", "sortOrder": 3}
                 ]
             }
         }

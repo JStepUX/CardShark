@@ -2,7 +2,6 @@
 
 import json
 import uuid
-import contextlib
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from datetime import datetime
@@ -247,35 +246,10 @@ class CharacterDeduplicationService:
             self.logger.log_error(f"Error extracting UUID from {file_path}: {e}")
             return None
     
-    @contextlib.contextmanager
     def _get_session_context(self):
-        """
-        Robustly handle both factory (SessionLocal) and generator (get_db) patterns.
-        """
-        session = self.db_session_generator()
-        
-        # Check if it's a generator (has __next__)
-        if hasattr(session, '__next__') or hasattr(session, 'send'):
-            try:
-                # Yield the session from the generator
-                yield next(session)
-            finally:
-                # Close/cleanup generator
-                try:
-                    next(session) # Should raise StopIteration
-                except StopIteration:
-                    pass
-                except Exception as e:
-                    self.logger.log_error(f"Error closing session generator: {e}")
-        else:
-            # It's a direct session object (or context manager)
-            # If it's a context manager (SessionLocal often isn't, but the result of SessionLocal() is a Session which IS)
-            # SessionLocal() returns a Session, which is a context manager.
-            # But here 'session' IS the Session object.
-            try:
-                yield session
-            finally:
-                 session.close()
+        """Get a database session context manager."""
+        from backend.utils.db_utils import get_session_context
+        return get_session_context(self.db_session_generator, self.logger)
 
     def cleanup_duplicates(self, characters: List[CharacterModel]) -> Tuple[int, int]:
         """

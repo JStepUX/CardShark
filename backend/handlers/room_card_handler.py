@@ -43,16 +43,8 @@ class RoomCardHandler:
 
     def _get_rooms_directory(self) -> Path:
         """Get the rooms directory, creating it if needed."""
-        character_dir = self.settings_manager.get_setting("character_directory")
-        if not character_dir:
-            # Fallback to default characters directory
-            character_dir = Path(__file__).resolve().parent.parent.parent / "characters"
-        else:
-            character_dir = Path(character_dir)
-
-        rooms_dir = character_dir / "rooms"
-        rooms_dir.mkdir(parents=True, exist_ok=True)
-        return rooms_dir
+        from backend.utils.path_utils import get_rooms_directory
+        return get_rooms_directory(self.settings_manager)
 
     def _get_default_room_image(self) -> bytes:
         """Load the default room image or create a blank one."""
@@ -108,24 +100,15 @@ class RoomCardHandler:
         # Convert to character card format for PNG embedding
         card_dict = room_card.model_dump(mode='json')
 
-        # Embed metadata in PNG
-        png_with_metadata = self.png_handler.write_metadata(image_bytes, card_dict)
-
-        # Save PNG to rooms directory
+        # Save to rooms directory
         rooms_dir = self._get_rooms_directory()
-        filename = f"{room_uuid}.png"
-        file_path = rooms_dir / filename
+        file_path = rooms_dir / f"{room_uuid}.png"
 
-        with open(file_path, "wb") as f:
-            f.write(png_with_metadata)
-
+        self.png_handler.save_card_png(
+            image_bytes, card_dict, file_path,
+            sync_fn=self.character_service.sync_character_file
+        )
         self.logger.log_step(f"Created room card: {file_path}")
-
-        # Index in database for gallery integration
-        try:
-            self.character_service.sync_character_file(str(file_path))
-        except Exception as e:
-            self.logger.log_warning(f"Failed to sync character directory after room creation: {e}")
 
         # Return summary
         return RoomCardSummary(
@@ -319,20 +302,12 @@ class RoomCardHandler:
         with open(png_path, "rb") as f:
             image_bytes = f.read()
 
-        # Write updated metadata
-        png_with_metadata = self.png_handler.write_metadata(image_bytes, card_dict)
-
-        # Save updated PNG
-        with open(png_path, "wb") as f:
-            f.write(png_with_metadata)
-
+        # Write updated card PNG and sync to database
+        self.png_handler.save_card_png(
+            image_bytes, card_dict, png_path,
+            sync_fn=self.character_service.sync_character_file
+        )
         self.logger.log_step(f"Updated room card: {png_path}")
-
-        # Resync to update database
-        try:
-            self.character_service.sync_character_file(str(png_path))
-        except Exception as e:
-            self.logger.log_warning(f"Failed to sync after update: {e}")
 
         # Return updated summary
         return RoomCardSummary(
@@ -437,20 +412,12 @@ class RoomCardHandler:
             with open(png_path, "rb") as f:
                 image_bytes = f.read()
 
-            # Write updated metadata back to PNG
-            png_with_metadata = self.png_handler.write_metadata(image_bytes, metadata)
-
-            # Save updated PNG
-            with open(png_path, "wb") as f:
-                f.write(png_with_metadata)
-
+            # Write updated card PNG and sync to database
+            self.png_handler.save_card_png(
+                image_bytes, metadata, png_path,
+                sync_fn=self.character_service.sync_character_file
+            )
             self.logger.log_step(f"Updated world {world_uuid} after room removal")
-
-            # Resync database to reflect changes
-            try:
-                self.character_service.sync_character_file(png_path)
-            except Exception as e:
-                self.logger.log_warning(f"Failed to sync after world update: {e}")
 
         except Exception as e:
             self.logger.log_error(f"Error updating world {world_uuid} after room deletion: {e}")

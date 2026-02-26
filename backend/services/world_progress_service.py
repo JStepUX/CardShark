@@ -11,8 +11,6 @@ Design Philosophy:
 import json
 from datetime import datetime, timezone
 from typing import Optional, List
-from contextlib import contextmanager
-
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
@@ -43,25 +41,10 @@ class WorldUserProgressService:
         self.db_session_generator = db_session_generator
         self.logger = logger
 
-    @contextmanager
     def _get_session_context(self):
         """Get a database session context manager."""
-        session = self.db_session_generator()
-        if hasattr(session, '__next__') or hasattr(session, 'send'):
-            # It's a generator (from get_db dependency)
-            try:
-                yield next(session)
-            finally:
-                try:
-                    next(session)
-                except StopIteration:
-                    pass
-        else:
-            # It's a direct session
-            try:
-                yield session
-            finally:
-                session.close()
+        from backend.utils.db_utils import get_session_context
+        return get_session_context(self.db_session_generator, self.logger)
 
     def get_progress(
         self,

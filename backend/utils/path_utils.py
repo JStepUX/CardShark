@@ -133,6 +133,58 @@ def get_application_base_path() -> Path:
         return Path(__file__).resolve().parent.parent.parent
 
 
+def get_character_base_dir(settings_manager) -> Path:
+    """
+    Resolve the character directory from settings with fallback.
+
+    Args:
+        settings_manager: SettingsManager instance
+
+    Returns:
+        Path to the character base directory
+    """
+    char_dir = settings_manager.get_setting("character_directory")
+    if char_dir:
+        p = Path(char_dir)
+        if not p.is_absolute():
+            p = get_application_base_path() / char_dir
+        ensure_directory_exists(p)
+        return p
+    default = get_application_base_path() / "characters"
+    ensure_directory_exists(default)
+    return default
+
+
+def get_worlds_directory(settings_manager) -> Path:
+    """
+    Get the worlds subdirectory under the character directory.
+
+    Args:
+        settings_manager: SettingsManager instance
+
+    Returns:
+        Path to the worlds directory
+    """
+    d = get_character_base_dir(settings_manager) / "worlds"
+    ensure_directory_exists(d)
+    return d
+
+
+def get_rooms_directory(settings_manager) -> Path:
+    """
+    Get the rooms subdirectory under the character directory.
+
+    Args:
+        settings_manager: SettingsManager instance
+
+    Returns:
+        Path to the rooms directory
+    """
+    d = get_character_base_dir(settings_manager) / "rooms"
+    ensure_directory_exists(d)
+    return d
+
+
 def resolve_directory_path(directory_path: str) -> str:
     """
     Resolve a directory path, supporting both absolute and relative paths.

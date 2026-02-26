@@ -301,86 +301,42 @@ class WorldExportService:
 
     def _save_character_card(self, png_bytes: bytes, metadata: dict, character_uuid: str):
         """Save a character card PNG with updated metadata"""
-        # Get character directory
-        character_dir = self.world_handler.settings_manager.get_setting("character_directory")
-        if not character_dir:
-            character_dir = Path(__file__).resolve().parent.parent.parent / "characters"
-        else:
-            character_dir = Path(character_dir)
+        from backend.utils.path_utils import get_character_base_dir
+        character_dir = get_character_base_dir(self.world_handler.settings_manager)
 
-        character_dir.mkdir(parents=True, exist_ok=True)
-
-        # Write metadata to PNG
-        png_with_metadata = self.png_handler.write_metadata(png_bytes, metadata)
-
-        # Save file
+        # Save card PNG and sync to database
         file_path = character_dir / f"{character_uuid}.png"
-        with open(file_path, 'wb') as f:
-            f.write(png_with_metadata)
-
+        self.png_handler.save_card_png(
+            png_bytes, metadata, file_path,
+            sync_fn=self.character_service.sync_character_file
+        )
         self.logger.log_step(f"Saved character card: {file_path}")
-
-        # Sync to database
-        try:
-            self.character_service.sync_character_file(str(file_path))
-        except Exception as e:
-            self.logger.log_warning(f"Failed to sync after character import: {e}")
 
     def _save_room_card(self, png_bytes: bytes, metadata: dict, room_uuid: str):
         """Save a room card PNG with updated metadata"""
-        # Get rooms directory
-        character_dir = self.world_handler.settings_manager.get_setting("character_directory")
-        if not character_dir:
-            character_dir = Path(__file__).resolve().parent.parent.parent / "characters"
-        else:
-            character_dir = Path(character_dir)
+        from backend.utils.path_utils import get_rooms_directory
+        rooms_dir = get_rooms_directory(self.world_handler.settings_manager)
 
-        rooms_dir = character_dir / "rooms"
-        rooms_dir.mkdir(parents=True, exist_ok=True)
-
-        # Write metadata to PNG
-        png_with_metadata = self.png_handler.write_metadata(png_bytes, metadata)
-
-        # Save file
+        # Save card PNG and sync to database
         file_path = rooms_dir / f"{room_uuid}.png"
-        with open(file_path, 'wb') as f:
-            f.write(png_with_metadata)
-
+        self.png_handler.save_card_png(
+            png_bytes, metadata, file_path,
+            sync_fn=self.character_service.sync_character_file
+        )
         self.logger.log_step(f"Saved room card: {file_path}")
-
-        # Sync to database
-        try:
-            self.character_service.sync_character_file(str(file_path))
-        except Exception as e:
-            self.logger.log_warning(f"Failed to sync after room import: {e}")
 
     def _save_world_card(self, png_bytes: bytes, metadata: dict, world_uuid: str):
         """Save a world card PNG with updated metadata"""
-        # Get worlds directory
-        character_dir = self.world_handler.settings_manager.get_setting("character_directory")
-        if not character_dir:
-            character_dir = Path(__file__).resolve().parent.parent.parent / "characters"
-        else:
-            character_dir = Path(character_dir)
+        from backend.utils.path_utils import get_worlds_directory
+        worlds_dir = get_worlds_directory(self.world_handler.settings_manager)
 
-        worlds_dir = character_dir / "worlds"
-        worlds_dir.mkdir(parents=True, exist_ok=True)
-
-        # Write metadata to PNG
-        png_with_metadata = self.png_handler.write_metadata(png_bytes, metadata)
-
-        # Save file
+        # Save card PNG and sync to database
         file_path = worlds_dir / f"{world_uuid}.png"
-        with open(file_path, 'wb') as f:
-            f.write(png_with_metadata)
-
+        self.png_handler.save_card_png(
+            png_bytes, metadata, file_path,
+            sync_fn=self.character_service.sync_character_file
+        )
         self.logger.log_step(f"Saved world card: {file_path}")
-
-        # Sync to database
-        try:
-            self.character_service.sync_character_file(str(file_path))
-        except Exception as e:
-            self.logger.log_warning(f"Failed to sync after world import: {e}")
 
 
 # Backward compatibility alias

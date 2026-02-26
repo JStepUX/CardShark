@@ -3,7 +3,7 @@
  * @description Folder tile component for the gallery. Same 3/5 aspect ratio as character cards.
  */
 import React, { useState, useRef } from 'react';
-import { Folder, Users, Map as MapIcon, DoorOpen, Plus, Trash2 } from 'lucide-react';
+import { Folder, Users, Map as MapIcon, DoorOpen, Swords, Plus, Trash2 } from 'lucide-react';
 import { FolderDefinition, DEFAULT_FOLDER_IDS } from '../../types/gallery';
 
 interface GalleryFolderTileProps {
@@ -19,6 +19,7 @@ const FOLDER_ICON_MAP: Record<string, React.ReactNode> = {
   [DEFAULT_FOLDER_IDS.CHARACTERS]: <Users size={32} />,
   [DEFAULT_FOLDER_IDS.WORLDS]: <MapIcon size={32} />,
   [DEFAULT_FOLDER_IDS.ROOMS]: <DoorOpen size={32} />,
+  [DEFAULT_FOLDER_IDS.NPCS]: <Swords size={32} />,
 };
 
 const COLOR_MAP: Record<string, { border: string; bg: string; text: string; glow: string; badge: string }> = {

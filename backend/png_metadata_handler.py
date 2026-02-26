@@ -274,6 +274,24 @@ class PngMetadataHandler:
         
         self.logger.log_step(f"Successfully wrote metadata to {path}")
 
+    def save_card_png(
+        self,
+        image_bytes: bytes,
+        metadata: Dict,
+        output_path: Union[str, Path],
+        sync_fn: Optional[callable] = None
+    ) -> None:
+        """Embed metadata into image, write to disk, optionally sync to database."""
+        png_bytes = self.write_metadata(image_bytes, metadata)
+        path = Path(output_path)
+        with open(path, "wb") as f:
+            f.write(png_bytes)
+        if sync_fn:
+            try:
+                sync_fn(str(path))
+            except Exception as e:
+                self.logger.log_warning(f"Failed to sync after writing {path}: {e}")
+
     def write_metadata(self, image_data: bytes, metadata: Dict) -> bytes:
         """Write character metadata to a PNG file with improved error handling and metadata preservation."""
         try:

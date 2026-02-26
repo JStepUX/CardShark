@@ -68,27 +68,9 @@ class UserProfileService:
         return self.png_handler.write_metadata(image_data, metadata)
     
     def _get_session_context(self):
-        """Get a database session context."""
-        import contextlib
-        
-        @contextlib.contextmanager
-        def session_context():
-            session = self.db_session_generator()
-            if hasattr(session, '__next__') or hasattr(session, 'send'):
-                try:
-                    yield next(session)
-                finally:
-                    try:
-                        next(session)
-                    except StopIteration:
-                        pass
-            else:
-                try:
-                    yield session
-                finally:
-                    session.close()
-        
-        return session_context()
+        """Get a database session context manager."""
+        from backend.utils.db_utils import get_session_context
+        return get_session_context(self.db_session_generator, self.logger)
     
     def sync_users_directory(self):
         """

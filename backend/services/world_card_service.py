@@ -46,16 +46,8 @@ class WorldCardService:
 
     def _get_worlds_directory(self) -> Path:
         """Get the worlds directory, creating it if needed."""
-        character_dir = self.settings_manager.get_setting("character_directory")
-        if not character_dir:
-            # Fallback to default characters directory
-            character_dir = Path(__file__).resolve().parent.parent.parent / "characters"
-        else:
-            character_dir = Path(character_dir)
-
-        worlds_dir = character_dir / "worlds"
-        worlds_dir.mkdir(parents=True, exist_ok=True)
-        return worlds_dir
+        from backend.utils.path_utils import get_worlds_directory
+        return get_worlds_directory(self.settings_manager)
 
     def _get_default_world_image(self) -> bytes:
         """Load the default world image or create a blank one."""
@@ -108,24 +100,15 @@ class WorldCardService:
         # Convert to character card format for PNG embedding
         card_dict = world_card.model_dump(mode='json')
 
-        # Embed metadata in PNG
-        png_with_metadata = self.png_handler.write_metadata(image_bytes, card_dict)
-
-        # Save PNG to worlds directory
+        # Save to worlds directory
         worlds_dir = self._get_worlds_directory()
-        filename = f"{world_uuid}.png"
-        file_path = worlds_dir / filename
+        file_path = worlds_dir / f"{world_uuid}.png"
 
-        with open(file_path, "wb") as f:
-            f.write(png_with_metadata)
-
+        self.png_handler.save_card_png(
+            image_bytes, card_dict, file_path,
+            sync_fn=self.character_service.sync_character_file
+        )
         self.logger.log_step(f"Created world card: {file_path}")
-
-        # Index in database for gallery integration
-        try:
-            self.character_service.sync_character_file(str(file_path))
-        except Exception as e:
-            self.logger.log_warning(f"Failed to sync character file after world creation: {e}")
 
         # Return summary
         return WorldCardSummary(
@@ -426,20 +409,22 @@ class WorldCardService:
         with open(png_path, "rb") as f:
             image_bytes = f.read()
 
-        # Write updated metadata
-        png_with_metadata = self.png_handler.write_metadata(image_bytes, card_dict)
-
-        # Save updated PNG
-        with open(png_path, "wb") as f:
-            f.write(png_with_metadata)
-
+        # Write updated card PNG and sync to database
+        self.png_handler.save_card_png(
+            image_bytes, card_dict, png_path,
+            sync_fn=self.character_service.sync_character_file
+        )
         self.logger.log_step(f"Updated world card: {png_path}")
 
-        # Resync to update database
-        try:
-            self.character_service.sync_character_file(str(png_path))
-        except Exception as e:
-            self.logger.log_warning(f"Failed to sync after update: {e}")
+        # Sync room card images from assigned backgrounds
+        if request.rooms is not None:
+            try:
+                self._sync_room_card_images(
+                    world_uuid,
+                    world_card.data.extensions.world_data.rooms
+                )
+            except Exception as e:
+                self.logger.log_warning(f"Room card image sync failed: {e}")
 
         # Return updated summary
         return WorldCardSummary(
@@ -451,6 +436,103 @@ class WorldCardService:
             room_count=len(world_card.data.extensions.world_data.rooms),
             updated_at=datetime.now(timezone.utc).isoformat()
         )
+
+    def _load_room_card_meta(self, room_uuid: str) -> tuple:
+        """
+        Load a room card's raw metadata dict and PNG file path.
+
+        Returns:
+            (metadata_dict, png_path) or (None, None) if not found
+        """
+        with self.character_service._get_session_context() as db:
+            character = self.character_service.get_character_by_uuid(room_uuid, db)
+            if not character or not character.png_file_path:
+                return None, None
+            png_path = character.png_file_path
+
+        try:
+            metadata = self.png_handler.read_metadata(png_path)
+            if metadata.get("data", {}).get("extensions", {}).get("card_type") != "room":
+                return None, None
+            return metadata, png_path
+        except Exception as e:
+            self.logger.log_warning(f"Failed to read room card {room_uuid}: {e}")
+            return None, None
+
+    @staticmethod
+    def _crop_to_card(image_bytes: bytes, target_ratio: float = 3 / 5) -> bytes:
+        """Center-crop image to 3:5 card aspect ratio, resize to 512x853."""
+        from PIL import Image
+        from io import BytesIO
+
+        with Image.open(BytesIO(image_bytes)) as img:
+            img = img.convert("RGB")
+            w, h = img.size
+            current_ratio = w / h
+
+            if current_ratio > target_ratio:
+                # Wider than target — crop width
+                new_w = int(h * target_ratio)
+                left = (w - new_w) // 2
+                img = img.crop((left, 0, left + new_w, h))
+            elif current_ratio < target_ratio:
+                # Taller than target — crop height
+                new_h = int(w / target_ratio)
+                top = (h - new_h) // 2
+                img = img.crop((0, top, w, top + new_h))
+
+            img = img.resize((512, 853), Image.LANCZOS)
+
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue()
+
+    def _sync_room_card_images(self, world_uuid: str, room_placements: list):
+        """Sync room card PNG images from assigned background images."""
+        from backend.utils.path_utils import get_application_base_path
+
+        assets_base = get_application_base_path() / "world_assets"
+
+        for placement in room_placements:
+            image_path = getattr(placement, 'instance_image_path', None)
+            if not image_path:
+                continue
+
+            room_uuid = placement.room_uuid
+
+            # Load existing room card metadata + PNG path
+            room_meta, png_path = self._load_room_card_meta(room_uuid)
+            if not room_meta or not png_path:
+                continue
+
+            # Check if already up-to-date
+            extensions = room_meta.get("data", {}).get("extensions", {})
+            if extensions.get("_card_image_source") == image_path:
+                continue
+
+            # Resolve background file
+            bg_path = assets_base / image_path
+            if not bg_path.exists():
+                self.logger.log_warning(f"Room {room_uuid}: background not found: {bg_path}")
+                continue
+
+            # Crop to 3:5 card aspect ratio
+            try:
+                card_image_bytes = self._crop_to_card(bg_path.read_bytes())
+            except Exception as e:
+                self.logger.log_warning(f"Room {room_uuid}: crop failed: {e}")
+                continue
+
+            # Store the source reference so we can skip next time
+            room_meta["data"]["extensions"]["_card_image_source"] = image_path
+
+            # Write cropped image + existing metadata to room PNG and sync
+            self.png_handler.save_card_png(
+                card_image_bytes, room_meta, png_path,
+                sync_fn=self.character_service.sync_character_file
+            )
+
+            self.logger.log_step(f"Updated room card image: {room_uuid}")
 
     def delete_world_card(self, world_uuid: str) -> bool:
         """

@@ -296,7 +296,9 @@ backend_datas = [
     ('backend/models/*', 'backend/models'),    ('backend/utils/*', 'backend/utils'),
     ('backend/services/*.py', 'backend/services'),  # Add services directory for character_service
     ('backend/default_room.png', 'backend'),         # Add default room image
-    ('backend/assets/defaults/*', 'backend/assets/defaults'),  # Default demo world NPC assets
+    ('backend/assets/defaults/worlds/*', 'backend/assets/defaults/worlds'),
+    ('backend/assets/defaults/rooms/*', 'backend/assets/defaults/rooms'),
+    ('backend/assets/defaults/npcs/*', 'backend/assets/defaults/npcs'),
     ('backend/gallery_metadata.json', 'backend'),    # Add gallery manifest
     ('content_filters/*.json', 'content_filters'),   # Add content filters JSON files
     ('content_filters/builtin/*.json', 'content_filters/builtin'),  # Add builtin filter packages
@@ -438,7 +440,6 @@ hidden_imports = [    # Core FastAPI and dependencies
     'backend.services.chat_models',
     'backend.services.chat_service',
     'backend.services.database_chat_endpoint_adapters',
-    'backend.services.default_world_service',
     'backend.services.image_storage_service',
     'backend.services.lore_activation_tracker',
     'backend.services.npc_room_assignment_service',

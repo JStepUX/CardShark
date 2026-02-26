@@ -21,12 +21,14 @@ export const DEFAULT_FOLDER_IDS = {
   CHARACTERS: 'default-characters',
   WORLDS: 'default-worlds',
   ROOMS: 'default-rooms',
+  NPCS: 'default-npcs',
 } as const;
 
 export const DEFAULT_FOLDERS: FolderDefinition[] = [
   { id: DEFAULT_FOLDER_IDS.CHARACTERS, name: 'Characters', isDefault: true, color: 'stone', sortOrder: 0 },
   { id: DEFAULT_FOLDER_IDS.WORLDS, name: 'Worlds', isDefault: true, color: 'emerald', sortOrder: 1 },
   { id: DEFAULT_FOLDER_IDS.ROOMS, name: 'Rooms', isDefault: true, color: 'purple', sortOrder: 2 },
+  { id: DEFAULT_FOLDER_IDS.NPCS, name: 'NPCs', isDefault: true, color: 'amber', sortOrder: 3 },
 ];
 
 export const DEFAULT_GALLERY_FOLDER_SETTINGS: GalleryFolderSettings = {

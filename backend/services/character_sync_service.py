@@ -1,4 +1,3 @@
-import contextlib
 import os
 import time
 import datetime
@@ -26,60 +25,13 @@ class CharacterSyncService:
 
     def _get_characters_dir(self) -> Path:
         """Get the characters directory from settings or default."""
-        from backend.utils.path_utils import get_application_base_path
+        from backend.utils.path_utils import get_character_base_dir
+        return get_character_base_dir(self.settings_manager)
 
-        character_dir = self.settings_manager.get_setting("character_directory")
-        if character_dir:
-            p = Path(character_dir)
-            if p.is_absolute():
-                p.mkdir(parents=True, exist_ok=True)
-                return p
-            # Relative paths resolve against application base
-            p = get_application_base_path() / character_dir
-            p.mkdir(parents=True, exist_ok=True)
-            return p
-
-        # Fallback to default
-        default_dir = get_application_base_path() / "characters"
-        default_dir.mkdir(parents=True, exist_ok=True)
-        return default_dir
-
-    def sync_characters(self):
-        """
-        Main synchronization method.
-        Scans the characters directory and updates the database.
-        """
-        self.logger.log_step("Starting character synchronization...")
-        
-    @contextlib.contextmanager
     def _get_session_context(self):
-        """
-        Robustly handle both factory (SessionLocal) and generator (get_db) patterns.
-        """
-        session = self.db_session_generator()
-        
-        # Check if it's a generator (has __next__)
-        if hasattr(session, '__next__') or hasattr(session, 'send'):
-            try:
-                # Yield the session from the generator
-                yield next(session)
-            finally:
-                # Close/cleanup generator
-                try:
-                    next(session) # Should raise StopIteration
-                except StopIteration:
-                    pass
-                except Exception as e:
-                    self.logger.log_error(f"Error closing session generator: {e}")
-        else:
-            # It's a direct session object (or context manager)
-            # If it's a context manager (SessionLocal often isn't, but the result of SessionLocal() is a Session which IS)
-            # SessionLocal() returns a Session, which is a context manager.
-            # But here 'session' IS the Session object.
-            try:
-                yield session
-            finally:
-                 session.close()
+        """Get a database session context manager."""
+        from backend.utils.db_utils import get_session_context
+        return get_session_context(self.db_session_generator, self.logger)
 
     def sync_characters(self):
         """
@@ -121,7 +73,7 @@ class CharacterSyncService:
 
         # Get all PNG files (top-level characters + worlds/ and rooms/ subdirs)
         png_files = list(self.characters_dir.glob("*.png"))
-        for subdir in ("worlds", "rooms"):
+        for subdir in ("worlds", "rooms", "npcs"):
             sub_path = self.characters_dir / subdir
             if sub_path.exists():
                 png_files.extend(sub_path.glob("*.png"))
@@ -209,6 +161,8 @@ class CharacterSyncService:
                 extensions["cardshark_folder"] = "Worlds"
             elif extensions.get("room_data"):
                 extensions["cardshark_folder"] = "Rooms"
+            elif file_path.parent.name == "npcs":
+                extensions["cardshark_folder"] = "NPCs"
             else:
                 extensions["cardshark_folder"] = "Characters"
 
@@ -290,6 +244,8 @@ class CharacterSyncService:
                 extensions["cardshark_folder"] = "Worlds"
             elif extensions.get("room_data"):
                 extensions["cardshark_folder"] = "Rooms"
+            elif file_path.parent.name == "npcs":
+                extensions["cardshark_folder"] = "NPCs"
 
         # Update fields
         db_char.name = data_section.get("name", db_char.name)

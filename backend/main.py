@@ -96,7 +96,6 @@ from backend.database import init_db, SessionLocal, get_db # Import SessionLocal
 from contextlib import asynccontextmanager
 from backend.services.character_service import CharacterService # Import CharacterService
 from backend.services.character_sync_service import CharacterSyncService # Import CharacterSyncService
-from backend.services.default_world_service import DefaultWorldService # Import DefaultWorldService
 from backend.services.user_profile_service import UserProfileService # Import UserProfileService
 from backend.services.image_storage_service import ImageStorageService # Import ImageStorageService
 from backend.services.character_lore_service import CharacterLoreService # Import CharacterLoreService
@@ -108,6 +107,52 @@ settings_manager._load_settings()
 content_filter_manager = ContentFilterManager(logger)
 validator = CharacterValidator(logger)
 png_handler = PngMetadataHandler(logger)
+
+def _deploy_bundled_defaults(settings_manager, logger):
+    """Copy bundled default assets to character directory tree (skip existing)."""
+    from backend.utils.path_utils import get_application_base_path
+
+    # Resolve bundled assets (PyInstaller-aware)
+    if getattr(sys, "frozen", False):
+        assets_dir = Path(sys._MEIPASS) / "backend" / "assets" / "defaults"
+    else:
+        assets_dir = Path(__file__).resolve().parent / "assets" / "defaults"
+
+    if not assets_dir.exists():
+        return
+
+    # Resolve character directory from settings
+    char_dir = settings_manager.get_setting("character_directory")
+    if not char_dir:
+        char_dir = get_application_base_path() / "characters"
+    else:
+        char_dir = Path(char_dir)
+        if not char_dir.is_absolute():
+            char_dir = get_application_base_path() / char_dir
+
+    # Map asset subdirectories to character directory targets
+    deploy_map = {
+        "worlds": char_dir / "worlds",
+        "rooms": char_dir / "rooms",
+        "npcs": char_dir / "npcs",
+    }
+
+    deployed = 0
+    for subdir_name, target_dir in deploy_map.items():
+        source_dir = assets_dir / subdir_name
+        if not source_dir.exists():
+            continue
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for src_file in source_dir.glob("*.png"):
+            dest = target_dir / src_file.name
+            if dest.exists():
+                continue
+            dest.write_bytes(src_file.read_bytes())
+            deployed += 1
+
+    if deployed:
+        logger.log_step(f"Deployed {deployed} bundled default asset(s).")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -143,20 +188,11 @@ async def lifespan(app: FastAPI):
             logger=logger
         )
         
-        # Initialize DefaultWorldService (needed before sync for bundled asset deployment)
-        default_world_service = DefaultWorldService(
-            character_service=app.state.character_service,
-            world_card_service=app.state.world_card_handler,
-            png_handler=png_handler,
-            settings_manager=settings_manager,
-            logger=logger,
-        )
-
-        # Deploy bundled character PNGs from assets/defaults/ before sync
+        # Deploy bundled default assets (before sync so they get picked up)
         try:
-            default_world_service.deploy_bundled_characters()
+            _deploy_bundled_defaults(settings_manager, logger)
         except Exception as e:
-            logger.log_warning(f"Bundled character deployment failed: {e}")
+            logger.log_warning(f"Bundled asset deployment failed: {e}")
 
         # Synchronize character directories using the initialized service
         try:
@@ -173,12 +209,6 @@ async def lifespan(app: FastAPI):
             logger.log_error(f"Character sync failed: {sync_exc}")
             raise
         logger.log_info("Initial character directory synchronization complete.")
-
-        # Ensure default demo world exists
-        try:
-            default_world_service.ensure_default_world()
-        except Exception as e:
-            logger.log_warning(f"Default world provisioning failed: {e}")
 
         # Initialize and run user profile synchronization
         try:
