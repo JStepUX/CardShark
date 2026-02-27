@@ -230,7 +230,7 @@ const CharacterDetailView: React.FC = () => {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-none border-x-0 border-t-0 border-b-2 transition-colors ${
                 activeTab === id
                   ? 'border-blue-500 text-white'
                   : 'border-transparent text-stone-400 hover:text-stone-200 hover:border-stone-600'

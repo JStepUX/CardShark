@@ -37,13 +37,9 @@
   }
 
   button {
-    @apply rounded-lg border border-transparent bg-background cursor-pointer transition-colors;
+    @apply border border-transparent cursor-pointer transition-colors;
     padding: 0.6em 1.2em;
     font-family: inherit;
-  }
-
-  button:hover {
-    @apply border-stone-600;
   }
 }
 

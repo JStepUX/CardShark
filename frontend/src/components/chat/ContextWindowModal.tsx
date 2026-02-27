@@ -427,7 +427,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           <Button
             variant="ghost"
             onClick={() => setActiveTab('analysis')}
-            className={`px-4 py-2 performance-transform ${activeTab === 'analysis'
+            className={`px-4 py-2 rounded-none border-x-0 border-t-0 performance-transform ${activeTab === 'analysis'
               ? 'border-b-2 border-blue-500 text-blue-400'
               : ''
               }`}
@@ -437,7 +437,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
           <Button
             variant="ghost"
             onClick={() => setActiveTab('payload')}
-            className={`px-4 py-2 performance-transform ${activeTab === 'payload'
+            className={`px-4 py-2 rounded-none border-x-0 border-t-0 performance-transform ${activeTab === 'payload'
               ? 'border-b-2 border-blue-500 text-blue-400'
               : ''
               }`}

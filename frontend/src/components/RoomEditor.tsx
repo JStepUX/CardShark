@@ -128,7 +128,7 @@ function RoomEditorContent() {
           variant="ghost"
           size="lg"
           onClick={() => setActiveTab('basic')}
-          className={`font-medium rounded-none ${activeTab === 'basic'
+          className={`font-medium rounded-none border-x-0 border-t-0 ${activeTab === 'basic'
             ? 'text-blue-400 border-b-2 border-blue-400'
             : 'text-stone-400 hover:text-white'
             }`}
@@ -139,7 +139,7 @@ function RoomEditorContent() {
           variant="ghost"
           size="lg"
           onClick={() => setActiveTab('messages')}
-          className={`font-medium rounded-none ${activeTab === 'messages'
+          className={`font-medium rounded-none border-x-0 border-t-0 ${activeTab === 'messages'
             ? 'text-blue-400 border-b-2 border-blue-400'
             : 'text-stone-400 hover:text-white'
             }`}
@@ -150,7 +150,7 @@ function RoomEditorContent() {
           variant="ghost"
           size="lg"
           onClick={() => setActiveTab('lore')}
-          className={`font-medium rounded-none ${activeTab === 'lore'
+          className={`font-medium rounded-none border-x-0 border-t-0 ${activeTab === 'lore'
             ? 'text-blue-400 border-b-2 border-blue-400'
             : 'text-stone-400 hover:text-white'
             }`}

@@ -52,7 +52,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
         <Button
           variant="ghost"
           onClick={() => handleTabClick('general')}
-          className={`px-6 py-3 font-medium rounded-none ${
+          className={`px-6 py-3 font-medium rounded-none border-x-0 border-t-0 ${
             activeTab === 'general'
               ? 'text-blue-500 border-b-2 border-blue-500'
               : 'hover:text-gray-200'
@@ -63,7 +63,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
         <Button
           variant="ghost"
           onClick={() => handleTabClick('api')}
-          className={`px-6 py-3 font-medium rounded-none ${
+          className={`px-6 py-3 font-medium rounded-none border-x-0 border-t-0 ${
             activeTab === 'api'
               ? 'text-blue-500 border-b-2 border-blue-500'
               : 'hover:text-gray-200'
@@ -74,7 +74,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
         <Button
           variant="ghost"
           onClick={() => handleTabClick('templates')}
-          className={`px-6 py-3 font-medium rounded-none ${
+          className={`px-6 py-3 font-medium rounded-none border-x-0 border-t-0 ${
             activeTab === 'templates'
               ? 'text-blue-500 border-b-2 border-blue-500'
               : 'hover:text-gray-200'
@@ -85,7 +85,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
         <Button
           variant="ghost"
           onClick={() => handleTabClick('prompts')}
-          className={`px-6 py-3 font-medium rounded-none ${
+          className={`px-6 py-3 font-medium rounded-none border-x-0 border-t-0 ${
             activeTab === 'prompts'
               ? 'text-blue-500 border-b-2 border-blue-500'
               : 'hover:text-gray-200'
@@ -96,7 +96,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
         <Button
           variant="ghost"
           onClick={() => handleTabClick('highlighting')}
-          className={`px-6 py-3 font-medium rounded-none ${
+          className={`px-6 py-3 font-medium rounded-none border-x-0 border-t-0 ${
             activeTab === 'highlighting'
               ? 'text-blue-500 border-b-2 border-blue-500'
               : 'hover:text-gray-200'
@@ -107,7 +107,7 @@ export const SettingsTabs: React.FC<SettingsTabsProps> = ({
         <Button
           variant="ghost"
           onClick={() => handleTabClick('filtering')}
-          className={`px-6 py-3 font-medium rounded-none ${
+          className={`px-6 py-3 font-medium rounded-none border-x-0 border-t-0 ${
             activeTab === 'filtering'
               ? 'text-blue-500 border-b-2 border-blue-500'
               : 'hover:text-gray-200'

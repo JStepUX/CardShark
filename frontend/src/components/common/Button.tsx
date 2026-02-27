@@ -57,7 +57,7 @@ const Button: React.FC<ButtonProps> = ({
   const isIconOnly = icon && !children;
 
   const base = 'inline-flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed';
-  const shape = pill ? 'rounded-full' : 'rounded-lg';
+  const shape = pill ? 'rounded-full' : (className.includes('rounded-') ? '' : 'rounded-lg');
   const width = fullWidth ? 'w-full' : '';
   const variantClass = (variant === 'toolbar' && active) ? toolbarActiveStyle : variantStyles[variant];
   const sizeClass = isIconOnly ? iconOnlySizeStyles[size] : labelSizeStyles[size];
