@@ -52,7 +52,7 @@ def get_room_card_handler(
 
 
 @router.post(
-    "/",
+    "",
     response_model=DataResponse,
     summary="Create a new room card",
     description="Creates a new room card PNG file with embedded metadata"
@@ -102,7 +102,7 @@ async def create_room_card(
 
 
 @router.get(
-    "/",
+    "",
     response_model=ListResponse,
     summary="List all room cards",
     description="Returns a list of all room card PNG files"

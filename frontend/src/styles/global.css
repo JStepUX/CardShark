@@ -19,13 +19,31 @@
     @apply bg-background text-foreground;
   }
 
+  h1 {
+    @apply text-3xl font-serif leading-tight text-white;
+  }
+
+  h2 {
+    @apply text-xl font-semibold text-white;
+  }
+
+  h3 {
+    @apply text-sm font-medium text-stone-300;
+  }
+
   input,
   textarea {
     @apply bg-input border-border;
   }
 
   button {
-    @apply transition-colors;
+    @apply rounded-lg border border-transparent bg-background cursor-pointer transition-colors;
+    padding: 0.6em 1.2em;
+    font-family: inherit;
+  }
+
+  button:hover {
+    @apply border-stone-600;
   }
 }
 

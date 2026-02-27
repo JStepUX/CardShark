@@ -482,7 +482,7 @@ async def create_character_endpoint(
     """Create a new blank character card with a default image."""
     try:
         from backend.character_validator import CharacterValidator
-        from backend.utils.path_utils import get_character_base_directory
+        from backend.utils.path_utils import get_character_base_dir
         import re as _re
 
         # Generate UUID
@@ -509,7 +509,7 @@ async def create_character_endpoint(
             image_bytes = buffer.getvalue()
 
         # Determine save path
-        char_dir = get_character_base_directory(settings_manager)
+        char_dir = get_character_base_dir(settings_manager)
         safe_name = _re.sub(r'[<>:"/\\|?*]', '_', name).strip() or "character"
         file_path = char_dir / f"{safe_name}.png"
 

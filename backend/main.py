@@ -500,13 +500,10 @@ if getattr(sys, 'frozen', False):
         except Exception as e:
             logger.log_error(f"Error checking root directory: {str(e)}")
 else:
-    # Running as script - serve from frontend/dist if exists
-    static_dir = Path(__file__).parent.parent / "frontend" / "dist"
-    if static_dir.exists():
-        logger.log_step(f"Serving frontend from {static_dir}")
-        app.mount("/", CrossDriveStaticFiles(directory=static_dir, html=True), name="frontend")
-    else:
-        logger.log_warning(f"Frontend build directory not found at {static_dir}, API endpoints only")
+    # Dev mode: Vite serves the frontend on :6969, no need to mount static files here.
+    # Mounting with html=True would create a catch-all that intercepts unmatched API routes
+    # (e.g. trailing-slash mismatches) and returns index.html instead of proper errors.
+    logger.log_step("Running in dev mode, frontend served by Vite — no static mount")
 
 # Also mount the uploads directory to serve uploaded files
 # Use get_application_base_path() for correct handling in both dev and PyInstaller

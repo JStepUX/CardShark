@@ -154,6 +154,24 @@ export const worldApi = {
   },
 
   /**
+   * Replace a world card's image while preserving metadata
+   */
+  async updateWorldImage(uuid: string, file: File): Promise<void> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${BASE_URL}/${uuid}/image`, {
+      method: 'PUT',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to update world image' }));
+      throw new Error(error.detail || 'Failed to update world image');
+    }
+  },
+
+  /**
    * Get world card image URL
    */
   getWorldImageUrl(uuid: string): string {

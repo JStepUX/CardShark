@@ -1,13 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacter } from '../contexts/CharacterContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import Button from '../components/common/Button';
-import { ArrowLeft, Play, Hammer, Download } from 'lucide-react';
+import ImagePreview from '../components/ImagePreview';
+import { ArrowLeft, Play, Hammer, Download, Save, Pencil, MapPin, Users, Swords } from 'lucide-react';
 import { CharacterData } from '../types/character';
+import { htmlToPlainText } from '../utils/contentUtils';
 import { worldApi } from '../api/worldApi';
 import UserSelect from '../components/UserSelect';
 import { UserProfile } from '../types/messages';
+
+interface RoomNPCLike {
+   hostile?: boolean;
+}
 
 const WorldLauncher: React.FC = () => {
    const { uuid } = useParams<{ uuid: string }>();
@@ -19,33 +25,36 @@ const WorldLauncher: React.FC = () => {
    const [imageUrl, setImageUrl] = useState<string | null>(null);
    const [showUserSelect, setShowUserSelect] = useState(false);
 
-   /**
-    * Handle user selection from UserSelect modal.
-    * Navigates to the play view with user_uuid in route state.
-    */
-   const handleUserSelect = useCallback((user: UserProfile) => {
-      // Close the modal
-      setShowUserSelect(false);
+   // Editing state
+   const [draftName, setDraftName] = useState('');
+   const [draftDesc, setDraftDesc] = useState('');
+   const [dirty, setDirty] = useState(false);
+   const [saving, setSaving] = useState(false);
+   const [editingName, setEditingName] = useState(false);
+   const nameInputRef = useRef<HTMLInputElement>(null);
 
-      // Navigate to play view with full user profile in route state
+   // Image cache-busting
+   const [imageVersion, setImageVersion] = useState(0);
+
+   // Track saved values to compute dirty
+   const [savedName, setSavedName] = useState('');
+   const [savedDesc, setSavedDesc] = useState('');
+
+   // ── Handlers ──
+
+   const handleUserSelect = useCallback((user: UserProfile) => {
+      setShowUserSelect(false);
       navigate(`/world/${uuid}/play`, {
-         state: {
-            userProfile: user
-         }
+         state: { userProfile: user }
       });
    }, [navigate, uuid]);
 
-   /**
-    * Handle Play World button click.
-    * Opens UserSelect modal instead of navigating directly.
-    */
    const handlePlayWorld = useCallback(() => {
       setShowUserSelect(true);
    }, []);
 
    const handleExportWorld = async () => {
       if (!worldCard || !uuid) return;
-
       try {
          const blob = await worldApi.exportWorld(uuid);
          const url = window.URL.createObjectURL(blob);
@@ -62,16 +71,101 @@ const WorldLauncher: React.FC = () => {
       }
    };
 
+   const handleSave = async () => {
+      if (!uuid || !worldCard || !dirty) return;
+      setSaving(true);
+      try {
+         await worldApi.updateWorld(uuid, {
+            name: draftName,
+            description: draftDesc,
+         });
+
+         const updated = {
+            ...worldCard,
+            data: { ...worldCard.data, name: draftName, description: draftDesc }
+         };
+         setWorldCard(updated);
+         setSavedName(draftName);
+         setSavedDesc(draftDesc);
+         setDirty(false);
+
+         setCharacterData((prev: any) => prev ? {
+            ...prev,
+            name: draftName,
+            data: { ...prev.data, name: draftName, description: draftDesc }
+         } : prev);
+      } catch (err) {
+         console.error('Save failed:', err);
+         alert('Failed to save: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      } finally {
+         setSaving(false);
+      }
+   };
+
+   // ── Image replacement (delegates to ImagePreview) ──
+
+   const handleImageChange = useCallback(async (imageData: string | File) => {
+      if (!uuid) return;
+      try {
+         let file: File;
+         if (imageData instanceof File) {
+            file = imageData;
+         } else {
+            const res = await fetch(imageData);
+            const blob = await res.blob();
+            file = new File([blob], 'world-image.png', { type: 'image/png' });
+         }
+         await worldApi.updateWorldImage(uuid, file);
+         setImageVersion(v => v + 1);
+      } catch (err) {
+         console.error('Image update failed:', err);
+         alert('Failed to update image: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      }
+   }, [uuid]);
+
+   // ── Inline name editing ──
+
+   const startEditingName = () => {
+      setEditingName(true);
+      setTimeout(() => nameInputRef.current?.focus(), 0);
+   };
+
+   const commitName = () => {
+      setEditingName(false);
+      const trimmed = draftName.trim();
+      if (!trimmed) {
+         setDraftName(savedName);
+         return;
+      }
+      setDirty(trimmed !== savedName || draftDesc !== savedDesc);
+   };
+
+   const handleNameKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') commitName();
+      if (e.key === 'Escape') {
+         setDraftName(savedName);
+         setEditingName(false);
+      }
+   };
+
+   // ── Description editing ──
+
+   const handleDescChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const text = e.target.value;
+      setDraftDesc(text);
+      setDirty(draftName !== savedName || text !== savedDesc);
+   };
+
+   // ── Load world card ──
+
    useEffect(() => {
       const loadWorldCard = async () => {
          if (!uuid) return;
 
          try {
             setLoading(true);
-            // Use worldApi V2 to get consistent data with WorldEditor
             const worldCard = await worldApi.getWorld(uuid);
 
-            // Map WorldCard to CharacterData structure for compatibility
             const mappedData: CharacterData = {
                spec: worldCard.spec,
                spec_version: worldCard.spec_version,
@@ -92,7 +186,12 @@ const WorldLauncher: React.FC = () => {
 
             setWorldCard(mappedData);
 
-            // Convert to CharacterCard format for Context (Schema mismatch adapter)
+            const plainDesc = htmlToPlainText(mappedData.data.description || '');
+            setDraftName(mappedData.data.name);
+            setDraftDesc(plainDesc);
+            setSavedName(mappedData.data.name);
+            setSavedDesc(plainDesc);
+
             const contextData = {
                name: mappedData.data.name,
                description: mappedData.data.description || '',
@@ -112,8 +211,6 @@ const WorldLauncher: React.FC = () => {
                create_date: new Date().toISOString()
             };
             setCharacterData(contextData as any);
-
-            // Fetch Image using V2 API
             setImageUrl(worldApi.getWorldImageUrl(uuid));
 
          } catch (err) {
@@ -126,151 +223,190 @@ const WorldLauncher: React.FC = () => {
       loadWorldCard();
    }, [uuid, setCharacterData]);
 
+   // ── Loading / Error states ──
+
    if (loading) return <div className="flex h-full items-center justify-center"><LoadingSpinner text="Loading World..." /></div>;
    if (error) return <div className="flex h-full items-center justify-center text-red-500">Error: {error}</div>;
    if (!worldCard) return <div className="flex h-full items-center justify-center">World not found</div>;
 
+   // ── Computed values ──
+
+   const resolvedImageUrl = imageUrl ? `${imageUrl}?v=${imageVersion}` : null;
+
+   const worldData = ((worldCard.data.extensions as any)?.world_data || {}) as any;
+   const rooms: any[] = worldData.rooms || [];
+   const locationCount = rooms.length;
+
+   let friendlyCount = 0;
+   let hostileCount = 0;
+   for (const room of rooms) {
+      const npcs: RoomNPCLike[] = room.instance_npcs || [];
+      for (const npc of npcs) {
+         if (npc.hostile) hostileCount++;
+         else friendlyCount++;
+      }
+   }
+
+   const hasLocations = locationCount > 0;
+
+   // ── Render ──
+
    return (
-      <div className="flex flex-col h-full bg-stone-950 text-white p-8 overflow-y-auto">
-         <div className="flex justify-between items-center mb-6">
-            <Button
-               variant="ghost"
-               icon={<ArrowLeft size={20} />}
+      <div className="flex flex-col h-full bg-stone-950 text-white overflow-y-auto">
+
+         {/* ─── Header bar ─── */}
+         <div className="flex justify-between items-center px-8 pt-6 pb-2">
+            <button
                onClick={() => navigate('/gallery')}
-               className="flex items-center"
+               className="flex items-center gap-2 text-stone-400 hover:text-white transition-colors text-sm"
             >
-               Back to Gallery
-            </Button>
-            <Button
-               variant="primary"
-               icon={<Download size={18} />}
-               onClick={handleExportWorld}
-               title="Export world as ZIP file"
-               className="!bg-emerald-800 hover:!bg-emerald-700 !text-emerald-100 hover:!text-white border border-emerald-600"
-            >
-               Export World
-            </Button>
+               <ArrowLeft size={16} />
+               Gallery
+            </button>
+
+            <div className="flex items-center gap-3">
+               {dirty && (
+                  <Button
+                     variant="primary"
+                     icon={saving ? undefined : <Save size={16} />}
+                     onClick={handleSave}
+                     disabled={saving}
+                     className="!bg-emerald-600 hover:!bg-emerald-500 !text-white text-sm"
+                  >
+                     {saving ? 'Saving...' : 'Save'}
+                  </Button>
+               )}
+               <button
+                  onClick={handleExportWorld}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-stone-700 text-stone-300 hover:text-white hover:border-stone-500 transition-all text-sm"
+               >
+                  <Download size={16} />
+                  Export
+               </button>
+            </div>
          </div>
 
-         <div className="flex flex-col md:flex-row gap-8 max-w-6xl mx-auto w-full">
-            {/* Left Column: Image & Stats */}
-            <div className="w-full md:w-1/3 flex flex-col gap-4">
-               <div className="aspect-[2/3] w-full rounded-xl overflow-hidden shadow-2xl border border-stone-800 bg-stone-900 relative group">
-                  {imageUrl ? (
-                     <img
-                        src={imageUrl}
-                        alt={worldCard.data.name}
-                        className="w-full h-full object-cover"
+         {/* ─── Main content ─── */}
+         <div className="flex-1 flex flex-col items-center px-8 pb-12">
+            <div className="w-full max-w-4xl">
+
+               {/* ─── Hero: Cover image + Info ─── */}
+               <div className="flex gap-10 mt-6 mb-10">
+
+                  {/* Cover image — delegates upload/crop to ImagePreview */}
+                  <div className="w-72 flex-shrink-0">
+                     <div className="aspect-[3/4] rounded-xl overflow-hidden border border-stone-800">
+                        <ImagePreview
+                           imageUrl={resolvedImageUrl || undefined}
+                           onImageChange={handleImageChange}
+                        />
+                     </div>
+                  </div>
+
+                  {/* Info column */}
+                  <div className="flex-1 flex flex-col pt-1">
+
+                     {/* Editable title (h1 styled by global base) */}
+                     <div className="group/name mb-5">
+                        {editingName ? (
+                           <input
+                              ref={nameInputRef}
+                              type="text"
+                              value={draftName}
+                              onChange={e => setDraftName(e.target.value)}
+                              onBlur={commitName}
+                              onKeyDown={handleNameKeyDown}
+                              className="w-full text-4xl bg-transparent border-b-2 border-emerald-500 text-white outline-none pb-1"
+                              maxLength={100}
+                           />
+                        ) : (
+                           <h1
+                              className="text-4xl cursor-text flex items-center gap-3 hover:text-stone-100 transition-colors"
+                              onClick={startEditingName}
+                           >
+                              {draftName}
+                              <Pencil size={14} className="text-stone-700 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                           </h1>
+                        )}
+                     </div>
+
+                     {/* Description label (h3 base + page-specific overrides) */}
+                     <h3 className="text-xs uppercase tracking-widest text-stone-500 mb-3">Description</h3>
+
+                     {/* Editable description (styled as plain text) */}
+                     <textarea
+                        value={draftDesc}
+                        onChange={handleDescChange}
+                        className="w-full bg-transparent resize-none text-stone-400 leading-relaxed outline-none placeholder:text-stone-700 flex-1 min-h-[80px]"
+                        placeholder="Describe your world..."
+                        rows={4}
                      />
-                  ) : (
-                     <div className="w-full h-full flex items-center justify-center text-stone-600">No Image</div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60"></div>
-                  <div className="absolute bottom-4 left-4 right-4">
-                     <h1 className="text-3xl font-bold text-white mb-1 drop-shadow-md">{worldCard.data.name}</h1>
-                     <p className="text-stone-300 text-sm">{worldCard.data.creator}</p>
+
+                     {/* Stat pills */}
+                     <div className="flex gap-3 mt-auto pt-4">
+                        <div className="flex items-center gap-2 bg-stone-800/40 border border-stone-700/40 rounded-full px-4 py-2">
+                           <MapPin size={15} className="text-stone-400" />
+                           <span className="text-white font-bold text-sm">{locationCount}</span>
+                           <span className="text-stone-500 text-sm">Locations</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-stone-800/40 border border-stone-700/40 rounded-full px-4 py-2">
+                           <Users size={15} className="text-amber-500" />
+                           <span className="text-white font-bold text-sm">{friendlyCount}</span>
+                           <span className="text-stone-500 text-sm">Friendly</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-stone-800/40 border border-stone-700/40 rounded-full px-4 py-2">
+                           <Swords size={15} className="text-violet-400" />
+                           <span className="text-white font-bold text-sm">{hostileCount}</span>
+                           <span className="text-stone-500 text-sm">Hostile</span>
+                        </div>
+                     </div>
                   </div>
                </div>
 
-               <div className="bg-stone-900 p-4 rounded-xl border border-stone-800">
-                  <h3 className="text-stone-400 text-xs uppercase tracking-wider font-bold mb-3">World Stats</h3>
+               {/* ─── Action cards ─── */}
+               <div className="grid grid-cols-2 gap-5">
 
-                  {/* Calculate stats helper */}
-                  {(() => {
-                     const worldData = ((worldCard.data.extensions as any)?.world_data || {}) as any;
-                     const locations = worldData.locations || {};
-                     const rooms = worldData.rooms || [];
-                     const locationCount = Object.keys(locations).length || rooms.length || 0;
-
-                     // Check both legacy 'npcs' field and new 'instance_npcs' field
-                     const npcCount = Object.keys(locations).length > 0
-                        ? Object.values(locations).reduce((acc: number, loc: any) => acc + (loc.npcs?.length || 0), 0)
-                        : rooms.reduce((acc: number, room: any) => acc + (room.instance_npcs?.length || room.npcs?.length || 0), 0);
-
-                     return (
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                           <div>
-                              <span className="text-stone-500 block">Locations</span>
-                              <span className="text-xl font-mono text-emerald-400">
-                                 {locationCount}
-                              </span>
-                           </div>
-                           <div>
-                              <span className="text-stone-500 block">NPCs</span>
-                              <span className="text-xl font-mono text-blue-400">
-                                 {npcCount}
-                              </span>
-                           </div>
-                        </div>
-                     );
-                  })()}
-               </div>
-            </div>
-
-            {/* Right Column: Actions & Details */}
-            <div className="w-full md:w-2/3 flex flex-col gap-6">
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {(() => {
-                     const worldData = ((worldCard.data.extensions as any)?.world_data || {}) as any;
-                     const locations = worldData.locations || {};
-                     const rooms = worldData.rooms || [];
-                     // Check both locations (object) and rooms (array) for presence
-                     const locationCount = Object.keys(locations).length;
-                     const roomCount = Array.isArray(rooms) ? rooms.length : 0;
-                     const hasLocations = locationCount > 0 || roomCount > 0;
-
-                     return (
-                        <Button
-                           onClick={() => hasLocations && handlePlayWorld()}
-                           disabled={!hasLocations}
-                           className={`group flex flex-col items-center justify-center p-8 border rounded-xl transition-all shadow-lg
-                            ${hasLocations
-                                 ? "bg-gradient-to-br from-emerald-900/50 to-stone-900 border-emerald-800/50 hover:border-emerald-500/50 hover:from-emerald-900/80 hover:shadow-emerald-900/20 cursor-pointer"
-                                 : "bg-stone-900/50 border-stone-800 opacity-50 cursor-not-allowed"
-                              }`}
-                        >
-                           <div className={`p-4 rounded-full mb-4 transition-transform ${hasLocations ? "bg-emerald-500/20 group-hover:scale-110" : "bg-stone-800"}`}>
-                              <Play size={32} className={hasLocations ? "text-emerald-400" : "text-stone-600"} />
-                           </div>
-                           <span className={`text-xl font-bold ${hasLocations ? "text-emerald-100" : "text-stone-500"}`}>Play World</span>
-                           <span className={`${hasLocations ? "text-emerald-400/60" : "text-stone-600"} text-sm mt-2`}>
-                              {hasLocations ? "Select user and enter" : "No locations to play"}
-                           </span>
-                        </Button>
-                     );
-                  })()}
-
-                  <Button
+                  {/* World Builder */}
+                  <button
                      onClick={() => navigate(`/world/${uuid}/builder`)}
-                     className="group flex flex-col items-center justify-center p-8 bg-gradient-to-br from-blue-900/50 to-stone-900 border border-blue-800/50 rounded-xl hover:border-blue-500/50 hover:from-blue-900/80 transition-all shadow-lg hover:shadow-blue-900/20"
+                     className="group relative flex flex-col items-center justify-center py-10 rounded-xl border border-emerald-800/30 bg-stone-900/50 hover:border-emerald-600/50 transition-all cursor-pointer overflow-hidden"
                   >
-                     <div className="bg-blue-500/20 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform">
-                        <Hammer size={32} className="text-blue-400" />
+                     <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-emerald-500/0 group-hover:from-emerald-500/10 transition-all duration-300 pointer-events-none" />
+                     <div className="bg-emerald-900/50 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform relative">
+                        <Hammer size={28} className="text-emerald-400" />
                      </div>
-                     <span className="text-xl font-bold text-blue-100">World Builder</span>
-                     <span className="text-blue-400/60 text-sm mt-2">Edit rooms, NPCs, and events</span>
-                  </Button>
-               </div>
+                     <span className="text-lg font-bold text-white relative">World Builder</span>
+                     <span className="text-stone-500 text-sm mt-1 relative">Edit rooms, NPCs, and events</span>
+                  </button>
 
-               <div className="bg-stone-900 p-6 rounded-xl border border-stone-800 flex-grow">
-                  <h2 className="text-xl font-bold text-white mb-4">About this World</h2>
-                  <p className="text-stone-300 leading-relaxed whitespace-pre-wrap">
-                     {worldCard.data.description || "No description provided."}
-                  </p>
-
-                  {worldCard.data.scenario && (
-                     <div className="mt-6">
-                        <h3 className="text-stone-400 text-sm font-bold uppercase tracking-wider mb-2">Scenario</h3>
-                        <p className="text-stone-400 italic border-l-2 border-stone-700 pl-4">
-                           {worldCard.data.scenario}
-                        </p>
+                  {/* Play World */}
+                  <button
+                     onClick={() => hasLocations && handlePlayWorld()}
+                     disabled={!hasLocations}
+                     className={`group relative flex flex-col items-center justify-center py-10 rounded-xl border transition-all overflow-hidden
+                        ${hasLocations
+                           ? 'border-blue-800/30 bg-stone-900/50 hover:border-blue-600/50 cursor-pointer'
+                           : 'border-stone-800/50 bg-stone-900/30 opacity-50 cursor-not-allowed'
+                        }`}
+                  >
+                     {hasLocations && (
+                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-blue-500/0 group-hover:from-blue-500/10 transition-all duration-300 pointer-events-none" />
+                     )}
+                     <div className={`p-4 rounded-full mb-4 transition-transform relative ${hasLocations ? 'bg-blue-900/50 group-hover:scale-110' : 'bg-stone-800/50'}`}>
+                        <Play size={28} className={hasLocations ? 'text-blue-400' : 'text-stone-600'} />
                      </div>
-                  )}
+                     <span className={`text-lg font-bold relative ${hasLocations ? 'text-white' : 'text-stone-500'}`}>
+                        Play World
+                     </span>
+                     <span className={`text-sm mt-1 relative ${hasLocations ? 'text-stone-500' : 'text-stone-600'}`}>
+                        {hasLocations ? `${locationCount} locations ready` : 'No locations to play'}
+                     </span>
+                  </button>
                </div>
             </div>
          </div>
 
-         {/* UserSelect Modal for choosing which user profile to play as */}
+         {/* ─── Modals ─── */}
          <UserSelect
             isOpen={showUserSelect}
             onClose={() => setShowUserSelect(false)}

@@ -77,7 +77,7 @@ def get_export_handler(
 
 
 @router.post(
-    "/",
+    "",
     response_model=DataResponse,
     summary="Create a new world card",
     description="Creates a new world card PNG file with embedded metadata"
@@ -163,7 +163,7 @@ async def convert_character_to_world(
 
 
 @router.get(
-    "/",
+    "",
     response_model=ListResponse,
     summary="List all world cards",
     description="Returns a list of all world card PNG files"
@@ -334,6 +334,56 @@ async def delete_world_card(
     except Exception as e:
         logger.log_error(f"Error deleting world card {world_uuid}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete world: {str(e)}")
+
+
+@router.put(
+    "/{world_uuid}/image",
+    response_model=DataResponse,
+    summary="Replace world card image",
+    description="Replaces the world card PNG image while preserving embedded metadata"
+)
+async def update_world_card_image(
+    world_uuid: str,
+    file: UploadFile = File(..., description="New PNG image"),
+    handler: WorldCardService = Depends(get_world_card_handler),
+    png_handler: PngMetadataHandler = Depends(get_png_handler_dependency),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Replace a world card's image while preserving its metadata"""
+    try:
+        logger.log_step(f"Replacing image for world card: {world_uuid}")
+
+        # Read new image bytes
+        new_image_bytes = await file.read()
+        if not new_image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+            raise HTTPException(status_code=400, detail="Invalid image: not a PNG")
+
+        # Get the existing PNG path
+        with handler.character_service._get_session_context() as db:
+            character = handler.character_service.get_character_by_uuid(world_uuid, db)
+            if not character or not character.png_file_path:
+                raise HTTPException(status_code=404, detail=f"World card {world_uuid} not found")
+            png_path = character.png_file_path
+
+        # Read existing metadata from current PNG
+        existing_metadata = png_handler.read_metadata(png_path)
+
+        # Save new image with existing metadata
+        png_handler.save_card_png(
+            new_image_bytes, existing_metadata, png_path,
+            sync_fn=handler.character_service.sync_character_file
+        )
+
+        return create_data_response({
+            "success": True,
+            "message": "World card image updated successfully"
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Error replacing world card image {world_uuid}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to replace world image: {str(e)}")
 
 
 @router.get(
