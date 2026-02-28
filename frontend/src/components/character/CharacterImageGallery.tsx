@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Loader2, ImageIcon } from 'lucide-react';
+import { Plus, X, Loader2, Star } from 'lucide-react';
 import { CharacterImageService, CharacterImage } from '../../services/characterImageService';
 import ImageCropperModal from '../ImageCropperModal';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
@@ -7,17 +7,22 @@ import Button from '../common/Button';
 
 interface CharacterImageGalleryProps {
   characterUuid: string | undefined;
+  portraitUrl?: string;
   onImageSelect?: (image: CharacterImage) => void;
+  onSetAsPortrait?: (imageUrl: string) => void;
 }
 
 const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
   characterUuid,
-  onImageSelect
+  portraitUrl,
+  onImageSelect,
+  onSetAsPortrait
 }) => {
   const [images, setImages] = useState<CharacterImage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<CharacterImage | null>(null);
-  const [hoveredImageId, setHoveredImageId] = useState<number | null>(null);
+  const [starredImageId, setStarredImageId] = useState<number | null>(null);
+  const [starringImageId, setStarringImageId] = useState<number | null>(null);
 
   // Upload state
   const [showCropper, setShowCropper] = useState(false);
@@ -30,6 +35,24 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Stable portrait URL: captures the original card image per-character.
+  // Starring a secondary image changes imageUrl in context (for Save),
+  // but the gallery tile must keep showing the original source file.
+  const [stablePortraitUrl, setStablePortraitUrl] = useState<string | undefined>(undefined);
+  const capturedForUuid = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    capturedForUuid.current = undefined;
+    setStablePortraitUrl(undefined);
+  }, [characterUuid]);
+
+  useEffect(() => {
+    if (portraitUrl && capturedForUuid.current !== characterUuid) {
+      capturedForUuid.current = characterUuid;
+      setStablePortraitUrl(portraitUrl);
+    }
+  }, [portraitUrl, characterUuid]);
 
   // Load images when character changes
   useEffect(() => {
@@ -92,6 +115,11 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
       const uploadedImage = await CharacterImageService.uploadImage(characterUuid, croppedFile);
 
       if (uploadedImage) {
+        // Auto-star if this is the first image in the gallery
+        if (images.length === 0 && onSetAsPortrait) {
+          onSetAsPortrait(URL.createObjectURL(blob));
+          setStarredImageId(uploadedImage.id);
+        }
         // Refresh the image list
         await loadImages();
       } else {
@@ -127,6 +155,24 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
   const handleDeleteClick = (image: CharacterImage, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent triggering image selection
     setDeleteTarget(image);
+  };
+
+  const handleSetAsPortrait = async (image: CharacterImage, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!characterUuid || !onSetAsPortrait) return;
+
+    setStarringImageId(image.id);
+    try {
+      const url = CharacterImageService.getImageUrl(characterUuid, image.filename);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      onSetAsPortrait(URL.createObjectURL(blob));
+      setStarredImageId(image.id);
+    } catch (error) {
+      console.error('Error setting portrait:', error);
+    } finally {
+      setStarringImageId(null);
+    }
   };
 
   const confirmDelete = async () => {
@@ -178,54 +224,86 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
         />
 
         {/* Horizontal scrollable gallery */}
-        <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-stone-800">
+        <div className="flex items-start gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-stone-800">
           {/* Loading state */}
           {isLoading && (
-            <div className="flex items-center justify-center w-20 h-20 bg-stone-800 rounded-lg border border-stone-700">
+            <div className="flex-shrink-0 w-[120px] aspect-[3/5] rounded-lg overflow-hidden bg-stone-950 flex items-center justify-center shadow-lg">
               <Loader2 className="w-5 h-5 text-stone-400 animate-spin" />
             </div>
           )}
 
-          {/* Image thumbnails */}
-          {!isLoading && images.map((image) => (
-            <div
-              key={image.id}
-              className="relative flex-shrink-0 group"
-              onMouseEnter={() => setHoveredImageId(image.id)}
-              onMouseLeave={() => setHoveredImageId(null)}
-            >
-              <button
-                onClick={() => handleImageClick(image)}
-                className={`
-                  w-20 h-20 rounded-lg overflow-hidden border-2 transition-all
-                  ${selectedImage?.id === image.id
-                    ? 'border-blue-500 ring-2 ring-blue-500/50'
-                    : 'border-stone-700 hover:border-stone-500'
-                  }
-                `}
-              >
+          {/* Current portrait */}
+          {!isLoading && stablePortraitUrl && (
+            <div className="relative flex-shrink-0 group w-[120px] aspect-[3/5] rounded-lg overflow-hidden shadow-lg">
+              <div className="w-full h-full bg-stone-950">
                 <img
-                  src={CharacterImageService.getImageUrl(characterUuid, image.filename)}
-                  alt={image.filename}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
+                  src={stablePortraitUrl}
+                  alt="Current portrait"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
-              </button>
-
-              {/* Delete button on hover */}
-              {hoveredImageId === image.id && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  pill
-                  icon={<X className="w-4 h-4" />}
-                  onClick={(e) => handleDeleteClick(image, e)}
-                  title="Delete image"
-                  className="absolute -top-2 -right-2 w-6 h-6 shadow-lg z-10"
-                />
+              </div>
+              {starredImageId === null && (
+                <div className="absolute bottom-2 right-2 z-10 p-1.5 bg-black/60 rounded-full">
+                  <Star size={16} className="text-amber-400" fill="currentColor" />
+                </div>
               )}
             </div>
-          ))}
+          )}
+
+          {/* Secondary images */}
+          {!isLoading && images.map((image) => {
+            const isStarred = starredImageId === image.id;
+            return (
+              <div
+                key={image.id}
+                className="relative flex-shrink-0 group w-[120px] aspect-[3/5] rounded-lg overflow-hidden shadow-lg cursor-pointer"
+                onClick={() => handleImageClick(image)}
+              >
+                {/* Image with zoom on hover */}
+                <div className="w-full h-full bg-stone-950">
+                  <img
+                    src={CharacterImageService.getImageUrl(characterUuid, image.filename)}
+                    alt={image.filename}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+
+                {/* Delete button — fades in on hover (top-right) */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  pill
+                  icon={<X size={16} />}
+                  onClick={(e) => handleDeleteClick(image, e)}
+                  title="Delete image"
+                  className="absolute top-2 right-2 z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-red-600"
+                />
+
+                {/* Star button — fades in on hover (bottom-right), stays visible if starred */}
+                {onSetAsPortrait && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    pill
+                    icon={starringImageId === image.id
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : <Star size={16} fill={isStarred ? 'currentColor' : 'none'} />
+                    }
+                    onClick={(e) => { e.stopPropagation(); handleSetAsPortrait(image, e); }}
+                    disabled={starringImageId === image.id}
+                    title="Set as portrait"
+                    className={`absolute bottom-2 right-2 z-10 !text-amber-400 hover:!bg-amber-600 hover:!text-white
+                      ${isStarred
+                        ? '!bg-black/60 opacity-100'
+                        : '!bg-black/50 opacity-0 group-hover:opacity-100'
+                      }`}
+                  />
+                )}
+              </div>
+            );
+          })}
 
           {/* Upload button */}
           {!isLoading && (
@@ -233,7 +311,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
               onClick={handleAddClick}
               disabled={isUploading}
               className={`
-                flex-shrink-0 w-20 h-20 rounded-lg border-2 border-dashed
+                flex-shrink-0 w-[120px] aspect-[3/5] rounded-lg border-2 border-dashed
                 flex items-center justify-center transition-all
                 ${isUploading
                   ? 'border-stone-700 bg-stone-800 cursor-not-allowed'
@@ -250,13 +328,6 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
             </button>
           )}
 
-          {/* Empty state */}
-          {!isLoading && images.length === 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 text-sm text-stone-500">
-              <ImageIcon className="w-4 h-4" />
-              <span>No images yet. Click + to add.</span>
-            </div>
-          )}
         </div>
 
         {/* Image count */}

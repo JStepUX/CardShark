@@ -493,6 +493,7 @@ async def create_character_endpoint(
         card_data = validator.create_empty_character(card_type="character")
         card_data["data"]["name"] = name
         card_data["name"] = name
+        card_data["data"]["character_uuid"] = character_uuid
         card_data["data"]["extensions"]["character_uuid"] = character_uuid
 
         # Get image bytes

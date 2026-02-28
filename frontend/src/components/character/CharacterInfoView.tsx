@@ -106,7 +106,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
     : primaryContext;
 
   // Always get imageUrl and hasUnsavedChanges from primary context (not used in secondary/compare mode)
-  const { imageUrl, hasUnsavedChanges, setHasUnsavedChanges } = primaryContext;
+  const { imageUrl, setImageUrl, hasUnsavedChanges, setHasUnsavedChanges } = primaryContext;
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
   // Smart change tracking state - removed local hasUnsavedChanges, now using context
@@ -578,8 +578,13 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 <label className="block text-sm font-medium mb-2">Character Images</label>
                 <CharacterImageGallery
                   characterUuid={characterData.data.character_uuid}
+                  portraitUrl={imageUrl}
                   onImageSelect={(image) => {
                     console.log('Selected secondary image:', image.filename);
+                  }}
+                  onSetAsPortrait={(newImageUrl) => {
+                    setImageUrl(newImageUrl);
+                    setHasUnsavedChanges(true);
                   }}
                 />
               </div>
@@ -601,7 +606,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               <label className="block text-sm font-medium mb-2">Description</label>
               <RichTextEditor
                 className={`bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`} // Apply styles to container
-                placeholder="Character description (supports Markdown)"
+                placeholder="Who is this character? Background, appearance, role in the story..."
                 content={getFieldValue('description')}
                 onChange={(html) => handleFieldChange('description', htmlToPlainText(html))}
                 preserveWhitespace={true} // Preserve newlines/whitespace
@@ -613,7 +618,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               <label className="block text-sm font-medium mb-2">Scenario</label>
               <RichTextEditor
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-32`}
-                placeholder="Current situation or context (supports Markdown)"
+                placeholder="Where and when does the conversation begin?"
                 content={getFieldValue('scenario')}
                 onChange={(html) => handleFieldChange('scenario', htmlToPlainText(html))}
                 preserveWhitespace={true} // Preserve newlines/whitespace
@@ -625,7 +630,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               <label className="block text-sm font-medium mb-2">Personality</label>
               <RichTextEditor
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-32`} // Apply styles, manage height
-                placeholder="Key personality traits (supports Markdown)"
+                placeholder="How do they talk, think, and react? What drives them?"
                 content={getFieldValue('personality')}
                 onChange={(html) => handleFieldChange('personality', htmlToPlainText(html))}
                 preserveWhitespace={true}
@@ -637,7 +642,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               <label className="block text-sm font-medium mb-2">Example Dialogue</label>
               <RichTextEditor
                 className={`w-full bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg h-64`} // Apply styles, manage height
-                placeholder="Examples of character dialogue and interactions (supports Markdown)"
+                placeholder="Show, don't tell — a sample exchange in their voice"
                 content={getFieldValue('mes_example')}
                 onChange={(html) => handleFieldChange('mes_example', htmlToPlainText(html))}
                 preserveWhitespace={true} // Crucial for dialogue formatting
@@ -650,7 +655,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
               <div className="relative w-full">
                 <RichTextEditor
                   className={`w-full h-64 bg-stone-800 border ${isSecondary ? 'border-purple-700' : 'border-stone-700'} font-light tracking-wide rounded-lg text-base leading-relaxed`} // Apply styles, manage height
-                  placeholder="AI instructions (supports Markdown)"
+                  placeholder="Instructions for the AI: tone, rules, boundaries, format..."
                   content={getFieldValue('system_prompt')}
                   onChange={(html) => handleFieldChange('system_prompt', htmlToPlainText(html))}
                   preserveWhitespace={true} // Important for prompt structure

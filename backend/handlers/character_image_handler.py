@@ -325,6 +325,61 @@ class CharacterImageHandler:
             self.logger.log_error(f"Error reordering images: {str(e)}")
             return False
 
+    def sync_from_disk(self, db: Session) -> int:
+        """
+        Re-populate character_images table from files on disk.
+        Called at startup to restore DB records after a schema rebuild.
+
+        Returns:
+            Number of image records created.
+        """
+        valid_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+        created = 0
+
+        if not self.base_dir.exists():
+            return 0
+
+        for char_dir in self.base_dir.iterdir():
+            if not char_dir.is_dir():
+                continue
+
+            character_uuid = char_dir.name
+            # Collect files already tracked in DB for this character
+            existing = set(
+                row[0] for row in
+                db.query(CharacterImage.filename)
+                .filter(CharacterImage.character_uuid == character_uuid)
+                .all()
+            )
+
+            order = len(existing)
+            for file_path in sorted(char_dir.iterdir(), key=lambda p: p.stat().st_mtime):
+                if not file_path.is_file():
+                    continue
+                if file_path.suffix.lower() not in valid_extensions:
+                    continue
+                if file_path.name in existing:
+                    continue
+
+                # Validate it's a real image
+                if not self._validate_image(file_path):
+                    continue
+
+                record = CharacterImage(
+                    character_uuid=character_uuid,
+                    filename=file_path.name,
+                    display_order=order
+                )
+                db.add(record)
+                order += 1
+                created += 1
+
+        if created:
+            db.commit()
+            self.logger.log_step(f"Synced {created} secondary image(s) from disk")
+
+        return created
+
     def get_image_path(self, character_uuid: str, filename: str) -> Optional[Path]:
         """
         Get full path to an image file.

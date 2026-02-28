@@ -96,6 +96,7 @@ from backend.database import init_db, SessionLocal, get_db # Import SessionLocal
 from contextlib import asynccontextmanager
 from backend.services.character_service import CharacterService # Import CharacterService
 from backend.services.character_sync_service import CharacterSyncService # Import CharacterSyncService
+from backend.handlers.character_image_handler import CharacterImageHandler
 from backend.services.user_profile_service import UserProfileService # Import UserProfileService
 from backend.services.image_storage_service import ImageStorageService # Import ImageStorageService
 from backend.services.character_lore_service import CharacterLoreService # Import CharacterLoreService
@@ -209,6 +210,14 @@ async def lifespan(app: FastAPI):
             logger.log_error(f"Character sync failed: {sync_exc}")
             raise
         logger.log_info("Initial character directory synchronization complete.")
+
+        # Sync secondary character images from disk → DB
+        try:
+            image_handler = CharacterImageHandler(logger)
+            with SessionLocal() as db:
+                image_handler.sync_from_disk(db)
+        except Exception as img_sync_exc:
+            logger.log_error(f"Character image sync failed: {img_sync_exc}")
 
         # Initialize and run user profile synchronization
         try:
