@@ -296,9 +296,6 @@ backend_datas = [
     ('backend/models/*', 'backend/models'),    ('backend/utils/*', 'backend/utils'),
     ('backend/services/*.py', 'backend/services'),  # Add services directory for character_service
     ('backend/default_room.png', 'backend'),         # Add default room image
-    ('backend/assets/defaults/worlds/*', 'backend/assets/defaults/worlds'),
-    ('backend/assets/defaults/rooms/*', 'backend/assets/defaults/rooms'),
-    ('backend/assets/defaults/npcs/*', 'backend/assets/defaults/npcs'),
     ('backend/gallery_metadata.json', 'backend'),    # Add gallery manifest
     ('content_filters/*.json', 'content_filters'),   # Add content filters JSON files
     ('content_filters/builtin/*.json', 'content_filters/builtin'),  # Add builtin filter packages
@@ -315,6 +312,15 @@ koboldcpp_dir.mkdir(exist_ok=True)
 #     ('KoboldCPP', 'KoboldCPP'),
 # ]
 
+# Collect default asset directories (only include if they contain real files)
+import glob
+defaults_datas = []
+for subdir in ['worlds', 'rooms', 'npcs']:
+    pattern = f'backend/assets/defaults/{subdir}/*'
+    matches = [f for f in glob.glob(pattern) if not os.path.basename(f).startswith('.')]
+    if matches:
+        defaults_datas.append((pattern, f'backend/assets/defaults/{subdir}'))
+
 # Collect gallery images dynamically
 gallery_datas = []
 gallery_dir = Path('gallery_images')
@@ -325,7 +331,7 @@ if gallery_dir.exists():
             gallery_datas.append((f'gallery_images/{theme_name}/*', f'gallery_images/{theme_name}'))
 
 # Combine all data files
-all_datas = frontend_datas + backend_datas + gallery_datas
+all_datas = frontend_datas + backend_datas + defaults_datas + gallery_datas
 
 # Verified backend modules that exist in your project
 hidden_imports = [    # Core FastAPI and dependencies
