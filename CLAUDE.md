@@ -50,6 +50,21 @@ python build.py    # Generates CardShark.spec and builds EXE
 
 **CRITICAL:** All build system changes MUST be made in `build.py`, specifically in the `create_spec_file()` function. The `CardShark.spec` file is generated and should never be manually edited.
 
+### Agent Scripts
+
+The `agent/` directory contains bash scripts for codebase exploration and health checks. Use these via Bash to quickly gather context without multiple tool calls.
+
+| Script | Usage | Purpose |
+|--------|-------|---------|
+| `codebase-snapshot.sh` | `bash agent/codebase-snapshot.sh` | Project structure, file counts, configs, DB tables — full orientation |
+| `schema-dump.sh` | `bash agent/schema-dump.sh` | SQLAlchemy models + all FastAPI route definitions |
+| `health-check.sh` | `bash agent/health-check.sh` | Run tsc, Jest, pytest, mypy, git status, TODO counts |
+| `file-context.sh` | `bash agent/file-context.sh <file>` | File content + resolved import signatures |
+| `trace-imports.sh` | `bash agent/trace-imports.sh <file-or-symbol>` | Reverse dependency search (who imports X?) |
+| `related-files.sh` | `bash agent/related-files.sh <term> [dir]` | Find files matching a term, show imports + match lines |
+| `git-context.sh` | `bash agent/git-context.sh [base-branch]` | Changed files, diffs, recent commits for PR context |
+| `_common.sh` | (sourced by other scripts) | Shared utilities: colors, PROJECT_ROOT, import resolution |
+
 ## Architecture
 
 ### Backend Structure
