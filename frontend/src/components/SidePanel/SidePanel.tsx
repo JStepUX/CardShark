@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Map, Package, BookOpen, Scroll, Loader2 } from 'lucide-react';
+import { Map, Package, BookOpen, Scroll, Loader2, type LucideIcon } from 'lucide-react';
 import Button from '../common/Button';
 import { NPCShowcase } from '../world/NPCShowcase';
 import { DayNightSphere } from '../world/DayNightSphere';
 import { SidePanelProps } from './types';
+import type { WorldModePanelData } from '../../worldplay/contracts';
 import { ContextManagementDropdown } from './ContextManagementDropdown';
 import { SamplerSettingsPanel } from './SamplerSettingsPanel';
 import { usePanelResize } from '../../hooks/usePanelResize';
@@ -106,6 +107,14 @@ export function SidePanel({
 }
 
 // World Mode Content - preserves all existing WorldSidePanel functionality
+type WorldModeContentProps = WorldModePanelData & {
+    activeNpcId?: string;
+    onSelectNpc?: (id: string) => void;
+    onDismissNpc?: (id: string) => void;
+    onOpenMap?: () => void;
+    worldId?: string;
+};
+
 function WorldModeContent({
     currentRoom,
     npcs,
@@ -117,18 +126,7 @@ function WorldModeContent({
     relationships,
     timeState,
     timeConfig
-}: {
-    currentRoom?: any;
-    npcs: any[];
-    activeNpcId?: string;
-    onSelectNpc?: (id: string) => void;
-    onDismissNpc?: (id: string) => void;
-    onOpenMap?: () => void;
-    worldId?: string;
-    relationships?: Record<string, any>;
-    timeState?: any;
-    timeConfig?: any;
-}) {
+}: WorldModeContentProps) {
     return (
         <>
             {/* Room Image with Day/Night Sphere */}
@@ -348,7 +346,7 @@ function AssistantModeContent() {
 }
 
 // Placeholder Button Component
-function PlaceholderButton({ icon: Icon, label }: { icon: any; label: string }) {
+function PlaceholderButton({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
     return (
         <Button
             variant="ghost"

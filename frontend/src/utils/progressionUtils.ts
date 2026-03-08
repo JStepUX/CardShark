@@ -1,3 +1,5 @@
+import { calculateCombatEnemyXP, calculateCombatGoldDrop, calculateCombatXPForNextLevel } from '../worldplay/combatTuning';
+
 /**
  * @file progressionUtils.ts
  * @description XP and leveling system utilities for the tactical RPG.
@@ -33,8 +35,7 @@
  * calculateXPForNextLevel(5)  // 1118
  */
 export function calculateXPForNextLevel(level: number): number {
-    const clampedLevel = Math.max(1, Math.min(60, level));
-    return Math.floor(100 * Math.pow(clampedLevel, 1.5));
+    return calculateCombatXPForNextLevel(level);
 }
 
 /**
@@ -213,7 +214,7 @@ export function checkLevelUp(
  * @returns Gold dropped
  */
 export function calculateGoldDrop(enemyLevel: number): number {
-    return enemyLevel * 5;
+    return calculateCombatGoldDrop(enemyLevel);
 }
 
 // =============================================================================
@@ -231,7 +232,7 @@ export function calculateGoldDrop(enemyLevel: number): number {
  * Incapacitate: level * 5
  */
 export function calculateEnemyXP(enemyLevel: number, wasKilled: boolean): number {
-    return wasKilled ? enemyLevel * 10 : enemyLevel * 5;
+    return calculateCombatEnemyXP(enemyLevel, wasKilled);
 }
 
 // =============================================================================

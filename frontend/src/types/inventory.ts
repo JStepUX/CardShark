@@ -359,7 +359,7 @@ export function isAoEWeapon(subtype: WeaponSubtype | undefined): boolean {
  */
 export function getWeaponAPCost(item: InventoryItem | null): number {
   if (!item) return 2; // Unarmed = heavy attack
-  if (item.apCost !== undefined) return item.apCost;
+  if (item.apCost != null) return item.apCost;
   // Fallback for legacy items
   if (isLightWeapon(item.subtype)) return 1;
   if (isAoEWeapon(item.subtype)) return 3;
@@ -371,7 +371,7 @@ export function getWeaponAPCost(item: InventoryItem | null): number {
  */
 export function doesWeaponEndTurn(item: InventoryItem | null): boolean {
   if (!item) return true; // Unarmed ends turn
-  if (item.endsTurn !== undefined) return item.endsTurn;
+  if (item.endsTurn != null) return item.endsTurn;
   return !isLightWeapon(item.subtype);
 }
 
@@ -380,7 +380,7 @@ export function doesWeaponEndTurn(item: InventoryItem | null): boolean {
  */
 export function getWeaponAttackRange(item: InventoryItem | null, level: number = 1): number {
   if (!item) return 1; // Unarmed
-  if (item.attackRange !== undefined) return item.attackRange;
+  if (item.attackRange != null) return item.attackRange;
   // Legacy fallback
   const cat = getWeaponCategory(item.subtype);
   if (cat === 'melee') return 1;

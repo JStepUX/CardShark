@@ -19,10 +19,25 @@ export interface WordSwapRule {
   strategy: 'api-ban' | 'client-replace' | 'auto';
 }
 
+const SHORT_COMMON_RESPONSES = new Set([
+  'yes',
+  'no',
+  'okay',
+  'ok',
+  'thanks',
+  'thank you',
+  'sure',
+  'yep',
+  'nope',
+]);
+
+const MARKDOWN_TERMINAL_PATTERN = /(?:!\[[^\]]*\]\([^\s)]+(?:\([^)]*\)[^)]*)*\)|\[[^\]]+\]\([^\s)]+(?:\([^)]*\)[^)]*)*\))$/u;
+const MARKDOWN_TERMINAL_GLOBAL_PATTERN = /(?:!\[[^\]]*\]\([^\s)]+(?:\([^)]*\)[^)]*)*\)|\[[^\]]+\]\([^\s)]+(?:\([^)]*\)[^)]*)*\))/gu;
+
 /**
- * Removes incomplete sentences from the end of text content
- * An incomplete sentence is one that doesn't end with any of these characters: ., !, ?, .", !", ?", etc.
- * 
+ * Removes incomplete sentences from the end of text content.
+ * Preserves short common responses and markdown links/images that are already complete.
+ *
  * @param text The text content to process
  * @returns The text content with any incomplete sentence at the end removed
  */
@@ -32,35 +47,39 @@ export function removeIncompleteSentences(text: string): string {
   const trimmed = text.trim();
   if (trimmed.length === 0) return trimmed;
 
-  // A valid sentence ending is terminal punctuation (.!?) followed by zero or more
-  // closing wrappers: any quotation mark (Unicode-aware), asterisks, or brackets.
-  // A bare closing * also counts (RP action blocks like *nods*).
-  // Uses \p{Quotation_Mark} to match ALL Unicode quote variants — no guessing.
-  const CLOSERS = `[*\\p{Quotation_Mark}\\)\\]\\}]*`;
+  if (SHORT_COMMON_RESPONSES.has(trimmed.toLowerCase())) {
+    return trimmed;
+  }
 
-  // 1. Already ends cleanly? Done.
-  const endsCleanly = new RegExp(`(?:[.!?]${CLOSERS}|\\*)$`, 'u').test(trimmed);
-  if (endsCleanly) return trimmed;
+  if (MARKDOWN_TERMINAL_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
 
-  // 2. Find the last valid sentence ending in the text and trim there.
-  //    Anchor on .!? + optional closers, requiring whitespace or EOL after.
-  //    Also match * followed by whitespace (closing an RP action mid-text).
-  const endingPattern = new RegExp(`[.!?]${CLOSERS}(?=\\s|$)|\\*(?=\\s|$)`, 'gu');
+  const closers = `[*\\p{Quotation_Mark}\\)\\]\\}]*`;
+  const sentenceEndPattern = new RegExp(`(?:[.!?]${closers}|\\*)(?=\\s|$)`, 'gu');
+
   let lastEnd = -1;
-  let match;
-  while ((match = endingPattern.exec(trimmed)) !== null) {
+  let match: RegExpExecArray | null;
+  while ((match = sentenceEndPattern.exec(trimmed)) !== null) {
     lastEnd = match.index + match[0].length;
   }
 
-  if (lastEnd > 0) return trimmed.substring(0, lastEnd);
+  let markdownEnd = -1;
+  while ((match = MARKDOWN_TERMINAL_GLOBAL_PATTERN.exec(trimmed)) !== null) {
+    markdownEnd = match.index + match[0].length;
+  }
 
-  // 3. No sentence ending found anywhere — return original. Never destroy content.
-  return trimmed;
+  const cutIndex = Math.max(lastEnd, markdownEnd);
+  if (cutIndex > 0) {
+    return trimmed.slice(0, cutIndex).trimEnd();
+  }
+
+  return '';
 }
 
 /**
  * Applies word substitution rules to the given text
- * 
+ *
  * @param text The text content to process
  * @param rules Array of word substitution rules to apply
  * @returns The processed text with substitutions applied
@@ -71,11 +90,11 @@ export function applyWordSubstitutions(text: string, rules: WordSwapRule[]): str
   }
 
   let processedText = text;
-  
+
   // Apply only enabled rules with client-side strategy
-  const clientRules = rules.filter(rule => rule.enabled && 
+  const clientRules = rules.filter(rule => rule.enabled &&
     (rule.strategy === 'client-replace' || rule.strategy === 'auto'));
-  
+
   for (const rule of clientRules) {
     // Skip rules without valid original text or substitutions
     if (!rule.original || !rule.substitutions || rule.substitutions.length === 0) {
@@ -83,8 +102,8 @@ export function applyWordSubstitutions(text: string, rules: WordSwapRule[]): str
     }
 
     // Get a random substitution (or empty string if none available)
-    const replacement = rule.substitutions.length > 0 
-      ? rule.substitutions[Math.floor(Math.random() * rule.substitutions.length)] 
+    const replacement = rule.substitutions.length > 0
+      ? rule.substitutions[Math.floor(Math.random() * rule.substitutions.length)]
       : '';
 
     // Apply the substitution based on the matching mode
@@ -92,13 +111,13 @@ export function applyWordSubstitutions(text: string, rules: WordSwapRule[]): str
       case 'exact':
         processedText = processedText.split(rule.original).join(replacement);
         break;
-        
+
       case 'case-insensitive': {
         const regex = new RegExp(escapeRegExp(rule.original), 'gi');
         processedText = processedText.replace(regex, replacement);
         break;
       }
-        
+
       case 'regex': {
         try {
           const regex = new RegExp(rule.original, 'g');
@@ -110,13 +129,13 @@ export function applyWordSubstitutions(text: string, rules: WordSwapRule[]): str
       }
     }
   }
-  
+
   return processedText;
 }
 
 /**
  * Extract banned tokens from word substitution rules for API-level filtering
- * 
+ *
  * @param rules Array of word substitution rules
  * @returns Array of strings to be banned at API level
  */

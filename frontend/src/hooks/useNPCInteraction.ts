@@ -51,6 +51,12 @@ export interface UseNPCInteractionOptions {
   timeConfig: TimeConfig;
   npcRelationships: Record<string, NPCRelationship>;
   setNpcRelationships: (rel: Record<string, NPCRelationship> | ((prev: Record<string, NPCRelationship>) => Record<string, NPCRelationship>)) => void;
+  activeNpcId: string | undefined;
+  activeNpcName: string;
+  activeNpcCard: CharacterCard | null;
+  setActiveNpcId: (id: string | undefined) => void;
+  setActiveNpcName: (name: string) => void;
+  setActiveNpcCard: (card: CharacterCard | null) => void;
   currentEmotion: EmotionState | null;
   // Combat trigger callback: view initiates combat when hostile NPC clicked
   onHostileNpcClicked: (initData: CombatInitData) => void;
@@ -92,6 +98,12 @@ export function useNPCInteraction({
   timeConfig,
   npcRelationships,
   setNpcRelationships,
+  activeNpcId,
+  activeNpcName,
+  activeNpcCard,
+  setActiveNpcId,
+  setActiveNpcName,
+  setActiveNpcCard,
   currentEmotion,
   onHostileNpcClicked,
   chatSessionUuid,
@@ -101,11 +113,6 @@ export function useNPCInteraction({
   const [conversationTargetId, setConversationTargetId] = useState<string | undefined>();
   const [conversationTargetName, setConversationTargetName] = useState<string>('');
   const [conversationTargetCard, setConversationTargetCard] = useState<CharacterCard | null>(null);
-
-  // Bonded ally state
-  const [activeNpcId, setActiveNpcId] = useState<string | undefined>();
-  const [activeNpcName, setActiveNpcName] = useState<string>('');
-  const [activeNpcCard, setActiveNpcCard] = useState<CharacterCard | null>(null);
 
   // Track processed message IDs for multi-speaker parsing
   const processedMultiSpeakerIds = useRef<Set<string>>(new Set());

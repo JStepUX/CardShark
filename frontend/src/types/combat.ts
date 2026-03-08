@@ -70,17 +70,16 @@ export interface CombatStats {
  * // { hp: 220, damage: 22, defense: 18, speed: 7, armor: 2 }
  */
 export function deriveCombatStats(level: number): CombatStats {
-  const clampedLevel = Math.max(1, Math.min(60, level));
-  const hp = 20 + (clampedLevel * 5);
+  const stats = deriveCombatTuningStats(level, 'melee');
 
   return {
-    hp,
-    maxHp: hp,
-    damage: 2 + Math.floor(clampedLevel / 2),
-    defense: 5 + Math.floor(clampedLevel / 3),
-    speed: 3 + Math.floor(clampedLevel / 10),
-    armor: Math.floor(clampedLevel / 15),
-    weaponType: 'melee', // Hardcoded V1
+    hp: stats.hp,
+    maxHp: stats.maxHp,
+    damage: stats.damage,
+    defense: stats.defense,
+    speed: stats.speed,
+    armor: stats.armor,
+    weaponType: stats.weaponType,
   };
 }
 
@@ -413,6 +412,11 @@ export interface CombatInitData {
 import { TilePosition } from './localMap';
 import type { ActiveBuffs, InventoryItem, WeaponSubtype } from './inventory';
 import { createEmptyBuffs } from './inventory';
+import { WORLD_PLAY_COMBAT } from '../worldplay/config';
+import {
+  deriveAPForLevel,
+  deriveCombatTuningStats,
+} from '../worldplay/combatTuning';
 
 /**
  * Extended combatant with grid position for local map combat.
@@ -584,28 +588,19 @@ export function deriveGridCombatStats(
   level: number,
   weaponType: 'melee' | 'ranged' = 'melee'
 ): CombatStats & { movementRange: number; attackRange: number; threatRange: number } {
-  const baseStats = deriveCombatStats(level);
-
-  // Movement range: 3 base + speed bonus
-  // Speed ranges from 3-9, so movement is 3-4 tiles
-  const movementRange = 3 + Math.floor((baseStats.speed - 3) / 3);
-
-  // Attack range: 1 for melee, 3-5 for ranged based on level
-  const attackRange = weaponType === 'melee'
-    ? 1
-    : 3 + Math.floor(level / 20); // 3-5 tiles
-
-  // Threat range: engagement distance for combat initiation
-  // Level 1-19: 1 tile (standard)
-  // Level 20-39: 2 tiles (elite)
-  // Level 40+: 3 tiles (boss-tier)
-  const threatRange = level >= 40 ? 3 : level >= 20 ? 2 : 1;
+  const stats = deriveCombatTuningStats(level, weaponType);
 
   return {
-    ...baseStats,
-    movementRange,
-    attackRange,
-    threatRange,
+    hp: stats.hp,
+    maxHp: stats.maxHp,
+    damage: stats.damage,
+    defense: stats.defense,
+    speed: stats.speed,
+    armor: stats.armor,
+    weaponType: stats.weaponType,
+    movementRange: stats.movementRange,
+    attackRange: stats.attackRange,
+    threatRange: stats.threatRange,
   };
 }
 
@@ -685,23 +680,22 @@ export function createGridCombatant(
  * | 60    | 8  |
  */
 export function getAPForLevel(level: number): number {
-  const clamped = Math.max(1, Math.min(60, level));
-  return 2 + Math.floor(clamped / 10);
+  return deriveAPForLevel(level);
 }
 
 /**
  * AP costs for grid combat actions
  */
 export const GRID_AP_COSTS = {
-  move: 1,           // Per tile moved
-  attack: 2,         // Basic attack (heavy/gun/magic direct)
-  lightAttack: 1,    // Light weapon attack (melee/ranged)
-  defend: 1,         // Enter defend stance
-  overwatch: 2,      // Set up overwatch
-  aimedShot: 3,      // Careful aimed shot (ranged heavy only)
-  aoeAttack: 3,      // AoE attack (bomb/magic AoE)
-  useItem: 2,        // Use consumable item
+  move: WORLD_PLAY_COMBAT.actionCosts.move,
+  attack: WORLD_PLAY_COMBAT.actionCosts.attack,
+  lightAttack: WORLD_PLAY_COMBAT.actionCosts.lightAttack,
+  defend: WORLD_PLAY_COMBAT.actionCosts.defend,
+  overwatch: WORLD_PLAY_COMBAT.actionCosts.overwatch,
+  aimedShot: WORLD_PLAY_COMBAT.actionCosts.aimedShot,
+  aoeAttack: WORLD_PLAY_COMBAT.actionCosts.aoeAttack,
+  useItem: WORLD_PLAY_COMBAT.actionCosts.useItem,
 } as const;
 
 /** Maximum light attacks per turn (regardless of available AP) */
-export const MAX_LIGHT_ATTACKS_PER_TURN = 2;
+export const MAX_LIGHT_ATTACKS_PER_TURN = WORLD_PLAY_COMBAT.limits.maxLightAttacksPerTurn;

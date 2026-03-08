@@ -31,6 +31,7 @@ import {
     LOCAL_MAP_TILE_GAP,
     LOCAL_MAP_ZOOM,
 } from '../../../../types/localMap';
+import { clampViewportPan } from '../../../../worldplay/viewport';
 import { LocalMapTile } from './LocalMapTile';
 import { EntityCardSprite } from './EntityCardSprite';
 import { CombatParticleSystem, EFFECT_COLORS, PROJECTILE_PRESETS } from './CombatParticleSystem';
@@ -703,24 +704,12 @@ export class LocalMapStage extends PIXI.Container {
      * Clamp pan to keep map partially visible in viewport
      */
     private clampPan(): void {
-        const scaledWidth = this.stageWidth * this.viewportZoom;
-        const scaledHeight = this.stageHeight * this.viewportZoom;
-
-        // Allow panning such that a percentage of the map stays visible
-        const minVisibleFraction = LOCAL_MAP_ZOOM.minVisibleFraction;
-        const minVisibleX = scaledWidth * minVisibleFraction;
-        const minVisibleY = scaledHeight * minVisibleFraction;
-
-        // Max pan: content can move right/down until only minVisible remains on screen
-        const maxPanX = scaledWidth - minVisibleX;
-        const maxPanY = scaledHeight - minVisibleY;
-
-        // Min pan: content can move left/up until only minVisible is past the origin
-        const minPanX = -(scaledWidth - minVisibleX);
-        const minPanY = -(scaledHeight - minVisibleY);
-
-        this.viewportPan.x = Math.max(minPanX, Math.min(maxPanX, this.viewportPan.x));
-        this.viewportPan.y = Math.max(minPanY, Math.min(maxPanY, this.viewportPan.y));
+        this.viewportPan = clampViewportPan(
+            this.viewportPan,
+            this.stageWidth,
+            this.stageHeight,
+            this.viewportZoom
+        );
     }
 
     /**

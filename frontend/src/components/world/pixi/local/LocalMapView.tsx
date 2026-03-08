@@ -14,7 +14,6 @@ import { LocalMapStage } from './LocalMapStage';
 import {
     LocalMapState,
     LocalMapEntity,
-    LocalMapTileData,
     TilePosition,
     ExitDirection,
     LocalMapConfig,
@@ -22,25 +21,31 @@ import {
     LOCAL_MAP_TILE_SIZE,
     LOCAL_MAP_TILE_GAP,
     LOCAL_MAP_CARD_OVERFLOW_PADDING,
-    LOCAL_MAP_ZOOM,
 } from '../../../../types/localMap';
+import { WORLD_PLAY_VIEWPORT } from '../../../../worldplay/config';
 import { GridCombatant } from '../../../../types/combat';
 import type { BlastPattern } from '../../../../types/inventory';
 import { getBlastPattern, CombatGrid } from '../../../../utils/gridCombatUtils';
 import { GridWorldState, GridRoom, DisplayNPC } from '../../../../types/worldGrid';
 import {
-    deriveExitsFromWorld,
     calculateThreatZones,
-    autoPlaceEntities,
-    getSpawnPosition,
     isInThreatZone,
     areAdjacent,
     findPath,
 } from '../../../../utils/localMapUtils';
-import { getCellZoneType } from '../../../../types/localMap';
 import { TextureCache } from '../../../combat/pixi/TextureCache';
 import { soundManager } from '../../../combat/pixi/SoundManager';
 import { useSettings } from '../../../../contexts/SettingsContext';
+import {
+    buildLocalMapState,
+    createPlacedNpcEntities,
+    findSafeCompanionPosition,
+    getHostileIdsNearPosition,
+    getLocalMapEntryPosition,
+    getNonPlayerEntityAtTile,
+    isTileOccupiedByNonPlayer,
+} from './localMapState';
+import { useLocalMapCamera } from './useLocalMapCamera';
 
 // Debug logging flag - set to true for development debugging
 const DEBUG = false;
@@ -141,6 +146,8 @@ interface LocalMapViewProps {
     className?: string;
     /** Ref for external animation control */
     mapRef?: React.RefObject<LocalMapViewHandle | null>;
+    /** Optional debug toggle from world play */
+    showDebugOverlay?: boolean;
 }
 
 export const LocalMapView: React.FC<LocalMapViewProps> = ({
@@ -166,6 +173,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     config: configOverrides,
     className,
     mapRef,
+    showDebugOverlay = false,
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<PIXI.Application | null>(null);
@@ -184,9 +192,9 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         backgroundImage: backgroundImage ?? null,
     }), [configOverrides, backgroundImage]);
 
-    // Track player position - default to center (2,2) for better initial view
+    // Track player position from entry/default spawn
     const [playerPosition, setPlayerPosition] = useState<TilePosition>(
-        initialPlayerPosition ?? { x: 2, y: 2 }
+        getLocalMapEntryPosition(initialPlayerPosition, entryDirection, config)
     );
 
     // Track loading state for texture preloading
@@ -205,27 +213,33 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     const [isMoving, setIsMoving] = useState(false);
     const movementAbortRef = useRef(false);
 
-    // Zoom/pan state - start zoomed in for RPG feel (from centralized constants)
-    const DEFAULT_ZOOM: number = LOCAL_MAP_ZOOM.default;
-    const [currentZoom, setCurrentZoom] = useState(DEFAULT_ZOOM);
-    const [isPanMode, setIsPanMode] = useState(false);
-    const isPanModeRef = useRef(false);
-    const isPanningRef = useRef(false);
-    const lastPanPosRef = useRef({ x: 0, y: 0 });
-
-    // Auto-pan state (edge scrolling)
-    const autoPanRef = useRef<{ dx: number; dy: number } | null>(null);
-    const autoPanAnimationRef = useRef<number | null>(null);
-
     // Refs to always get latest handlers (avoids stale closure in Pixi event)
     const handleTileClickRef = useRef<(position: TilePosition) => void>(() => { });
     const onEntityClickRef = useRef<((entityId: string) => void) | undefined>();
     const tileHoverRef = useRef<((position: TilePosition) => void) | null>(null);
-
-    // Keep ref in sync with state
-    useEffect(() => {
-        isPanModeRef.current = isPanMode;
-    }, [isPanMode]);
+    const DEFAULT_ZOOM = WORLD_PLAY_VIEWPORT.zoom.default;
+    const {
+        currentZoom,
+        viewportDebug,
+        isPanMode,
+        setIsPanMode,
+        centerViewportOnPlayer,
+        handleZoomIn,
+        handleZoomOut,
+        handleResetZoom,
+        handleWheel,
+        handleMouseDown,
+        handleMouseMove,
+        handleMouseUp,
+        handleMouseLeave,
+        handleContextMenu,
+    } = useLocalMapCamera({
+        containerRef,
+        stageRef,
+        playerPosition,
+        defaultZoom: DEFAULT_ZOOM,
+        cardOverflowPadding: CARD_OVERFLOW_PADDING,
+    });
 
     // Expose animation methods via ref for external combat control
     useImperativeHandle(mapRef, () => ({
@@ -347,43 +361,15 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         }
 
         if (DEBUG) console.log('[LocalMapView] Placing NPCs:', { roomChanged, npcsChanged, npcCount: roomNpcs?.length ?? 0 });
-
-        // Get initial player position for NPC placement calculation
-        let initialPos = initialPlayerPosition ?? { x: 0, y: Math.floor(config.gridHeight / 2) };
-        if (entryDirection && !initialPlayerPosition) {
-            initialPos = getSpawnPosition(entryDirection, config);
-        }
-
-        // Get all NPCs for this room (exclude player only - companion filtering happens at render time)
-        const npcsToPlace = (roomNpcs && roomNpcs.length > 0 ? roomNpcs : currentRoom.npcs)
-            ?.filter(npc => {
-                const npcId = 'id' in npc ? (npc as ResolvedNPC).id : (npc as any).character_uuid;
-                return npcId !== player.id;
-            });
-
-        if (npcsToPlace && npcsToPlace.length > 0) {
-            const npcData = npcsToPlace.map(npc => {
-                const isResolved = 'imageUrl' in npc;
-                const resolvedNpc = npc as ResolvedNPC;
-                const rawNpc = npc as any;
-                return {
-                    id: isResolved ? resolvedNpc.id : (rawNpc.character_uuid || rawNpc.name),
-                    name: isResolved ? resolvedNpc.name : rawNpc.name,
-                    hostile: rawNpc.hostile ?? false,
-                    imagePath: isResolved ? resolvedNpc.imageUrl : undefined,
-                    level: resolvedNpc.monster_level ?? rawNpc.monster_level ?? 1,
-                    isIncapacitated: rawNpc.isIncapacitated ?? false,
-                    isDead: rawNpc.isDead ?? false,
-                };
-            });
-
-            // Place NPCs once based on initial player position
-            // Use layout_data if available for configured spawn positions
-            const placed = autoPlaceEntities(npcData, initialPos, config, currentRoom.layout_data);
-            setPlacedNpcEntities(placed);
-        } else {
-            setPlacedNpcEntities([]);
-        }
+        const placedNpcs = createPlacedNpcEntities({
+            currentRoom,
+            roomNpcs,
+            playerId: player.id,
+            config,
+            initialPlayerPosition,
+            entryDirection,
+        });
+        setPlacedNpcEntities(placedNpcs);
 
         // Track what we've placed to avoid redundant recalculations
         lastPlacedRoomIdRef.current = currentRoom.id;
@@ -394,365 +380,18 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
     // When in combat, uses combatMapState entities to reflect combat movement
     const buildMapState = useCallback((): LocalMapState | null => {
         if (!currentRoom) return null;
-
-        // COMBAT MODE: Use entities from combatMapState if available
-        // This ensures entity positions reflect combat movement
-        if (inCombat && combatMapState && combatMapState.entities.length > 0) {
-            // Use the combat-synced entities directly
-            // They already have updated positions from the combat engine
-            const entities = combatMapState.entities;
-
-            // Derive exits from world topology
-            const exits = worldState
-                ? deriveExitsFromWorld(currentRoom.id, worldState, config)
-                : [];
-
-            // Calculate threat zones (not used in combat, but needed for interface)
-            const threatZones = calculateThreatZones(entities, config);
-
-            // Build tile grid with dead zone data from layout
-            const tiles: LocalMapTileData[][] = [];
-            for (let y = 0; y < config.gridHeight; y++) {
-                tiles[y] = [];
-                for (let x = 0; x < config.gridWidth; x++) {
-                    // Check if this cell is in a dead zone
-                    const zoneType = getCellZoneType(currentRoom.layout_data, x, y);
-                    let traversable = true;
-                    let terrainType: 'normal' | 'difficult' | 'impassable' | 'hazard' | 'water' = 'normal';
-                    let blocksVision = false;
-
-                    if (zoneType) {
-                        switch (zoneType) {
-                            case 'water':
-                                traversable = true;   // Can wade through but very slow
-                                terrainType = 'water';
-                                break;
-                            case 'wall':
-                                traversable = false;
-                                terrainType = 'impassable';
-                                blocksVision = true;
-                                break;
-                            case 'hazard':
-                                traversable = true;  // Can walk through but dangerous
-                                terrainType = 'hazard';
-                                break;
-                            case 'no-spawn':
-                                traversable = true;  // Can walk through, just blocks NPC placement
-                                break;
-                        }
-                    }
-
-                    tiles[y][x] = {
-                        position: { x, y },
-                        traversable,
-                        terrainType,
-                        highlight: 'none',
-                        isExit: false,
-                        blocksVision,
-                        zoneType: zoneType ?? undefined,
-                    };
-                }
-            }
-
-            return {
-                roomId: currentRoom.id,
-                roomName: currentRoom.name,
-                config,
-                tiles,
-                entities,
-                playerPosition: combatMapState.playerPosition,
-                threatZones,
-                exits,
-                inCombat: true,
-            };
-        }
-
-        // EXPLORATION MODE: Build from props
-        // Build entity list
-        const entities: LocalMapEntity[] = [];
-
-        // Add player at current position
-        entities.push({
-            id: player.id,
-            name: player.name,
-            level: player.level,
-            allegiance: 'player',
-            position: playerPosition,
-            imagePath: player.imagePath,
-            currentHp: player.currentHp ?? 100,
-            maxHp: player.maxHp ?? 100,
-        });
-
-        // Add companion if present - follows player
-        if (companion) {
-            // Position companion adjacent to player
-            const companionPos: TilePosition = {
-                x: Math.max(0, playerPosition.x - 1),
-                y: playerPosition.y,
-            };
-            entities.push({
-                id: companion.id,
-                name: companion.name,
-                level: companion.level,
-                allegiance: 'bonded_ally',
-                position: companionPos,
-                imagePath: companion.imagePath,
-                currentHp: companion.currentHp ?? 100,
-                maxHp: companion.maxHp ?? 100,
-                isBonded: true,
-            });
-        }
-
-        // Add pre-placed room NPCs (positions don't change when player moves)
-        // Filter out bonded companion here (they're handled above with follow behavior)
-        const nonCompanionNpcs = companion
-            ? placedNpcEntities.filter(npc => npc.id !== companion.id)
-            : placedNpcEntities;
-        entities.push(...nonCompanionNpcs);
-
-        // Derive exits from world topology
-        const exits = worldState
-            ? deriveExitsFromWorld(currentRoom.id, worldState, config)
-            : [];
-
-        // Calculate threat zones
-        const threatZones = calculateThreatZones(entities, config);
-
-        // Build tile grid with dead zone data from layout
-        // This is needed for pathfinding and combat movement
-        const tiles: LocalMapTileData[][] = [];
-        for (let y = 0; y < config.gridHeight; y++) {
-            tiles[y] = [];
-            for (let x = 0; x < config.gridWidth; x++) {
-                // Check if this cell is in a dead zone
-                const zoneType = getCellZoneType(currentRoom.layout_data, x, y);
-                let traversable = true;
-                let terrainType: 'normal' | 'difficult' | 'impassable' | 'hazard' | 'water' = 'normal';
-                let blocksVision = false;
-
-                if (zoneType) {
-                    switch (zoneType) {
-                        case 'water':
-                            traversable = true;   // Can wade through but very slow
-                            terrainType = 'water';
-                            break;
-                        case 'wall':
-                            traversable = false;
-                            terrainType = 'impassable';
-                            blocksVision = true;
-                            break;
-                        case 'hazard':
-                            traversable = true;  // Can walk through but dangerous
-                            terrainType = 'hazard';
-                            break;
-                        case 'no-spawn':
-                            traversable = true;  // Can walk through, just blocks NPC placement
-                            break;
-                    }
-                }
-
-                tiles[y][x] = {
-                    position: { x, y },
-                    traversable,
-                    terrainType,
-                    highlight: 'none',
-                    isExit: false,
-                    blocksVision,
-                    zoneType: zoneType ?? undefined,
-                };
-            }
-        }
-
-        return {
-            roomId: currentRoom.id,
-            roomName: currentRoom.name,
+        return buildLocalMapState({
+            currentRoom,
+            worldState,
             config,
-            tiles,
-            entities,
+            player,
+            companion,
             playerPosition,
-            threatZones,
-            exits,
+            placedNpcEntities,
             inCombat,
-        };
+            combatMapState,
+        });
     }, [currentRoom, worldState, player, companion, playerPosition, placedNpcEntities, config, inCombat, combatMapState]);
-
-    // ============================================
-    // ZOOM/PAN HANDLERS
-    // ============================================
-
-    // Track last known mouse position within the container for button-triggered zoom
-    const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
-
-    const handleZoomIn = useCallback(() => {
-        if (!stageRef.current) return;
-        const newZoom = Math.min(stageRef.current.getZoom() + LOCAL_MAP_ZOOM.buttonStep, LOCAL_MAP_ZOOM.max);
-        const mp = lastMousePosRef.current;
-        if (mp) {
-            stageRef.current.setZoom(newZoom, mp.x, mp.y);
-        } else {
-            stageRef.current.setZoom(newZoom);
-        }
-        setCurrentZoom(newZoom);
-    }, []);
-
-    const handleZoomOut = useCallback(() => {
-        if (!stageRef.current) return;
-        const newZoom = Math.max(stageRef.current.getZoom() - LOCAL_MAP_ZOOM.buttonStep, LOCAL_MAP_ZOOM.min);
-        const mp = lastMousePosRef.current;
-        if (mp) {
-            stageRef.current.setZoom(newZoom, mp.x, mp.y);
-        } else {
-            stageRef.current.setZoom(newZoom);
-        }
-        setCurrentZoom(newZoom);
-    }, []);
-
-    const handleResetZoom = useCallback(() => {
-        if (!stageRef.current || !containerRef.current) return;
-        // Reset to default zoom and recenter on player
-        stageRef.current.setZoom(DEFAULT_ZOOM);
-        const rect = containerRef.current.getBoundingClientRect();
-        const viewportWidth = rect.width - CARD_OVERFLOW_PADDING * 2;
-        const viewportHeight = rect.height - CARD_OVERFLOW_PADDING * 2;
-        stageRef.current.centerOnTile(playerPosition, viewportWidth, viewportHeight);
-        setCurrentZoom(DEFAULT_ZOOM);
-    }, [playerPosition]);
-
-    // Mouse wheel zoom handler
-    const handleWheel = useCallback((e: React.WheelEvent) => {
-        if (!stageRef.current || !containerRef.current) return;
-
-        e.preventDefault();
-
-        // Get mouse position relative to canvas
-        const rect = containerRef.current.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left - CARD_OVERFLOW_PADDING;
-        const mouseY = e.clientY - rect.top - CARD_OVERFLOW_PADDING;
-
-        // Calculate zoom delta
-        const zoomDelta = e.deltaY > 0 ? -LOCAL_MAP_ZOOM.wheelStep : LOCAL_MAP_ZOOM.wheelStep;
-        const newZoom = Math.max(LOCAL_MAP_ZOOM.min, Math.min(LOCAL_MAP_ZOOM.max, stageRef.current.getZoom() + zoomDelta));
-
-        // Zoom toward cursor position
-        stageRef.current.setZoom(newZoom, mouseX, mouseY);
-        setCurrentZoom(newZoom);
-    }, []);
-
-    // Pan start handler (middle mouse, Ctrl+left mouse, right mouse, or any click in pan mode)
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
-        // In pan mode, any left click starts panning (use ref to avoid stale closure)
-        if (isPanModeRef.current && e.button === 0) {
-            e.preventDefault();
-            isPanningRef.current = true;
-            lastPanPosRef.current = { x: e.clientX, y: e.clientY };
-            return;
-        }
-        // Middle mouse button (1), Ctrl+left mouse (0), or right mouse (2)
-        if (e.button === 1 || e.button === 2 || (e.button === 0 && e.ctrlKey)) {
-            e.preventDefault();
-            isPanningRef.current = true;
-            lastPanPosRef.current = { x: e.clientX, y: e.clientY };
-        }
-    }, []);
-
-    // Prevent context menu on right-click (for pan)
-    const handleContextMenu = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-    }, []);
-
-    // ============================================
-    // AUTO-PAN (EDGE SCROLLING)
-    // ============================================
-
-    // Edge zone size in pixels (how close to edge triggers auto-pan)
-    // Reduced from 60 to 30 to be less aggressive and avoid triggering over UI
-    const EDGE_ZONE = 30;
-    // Auto-pan speed (pixels per frame at 60fps)
-    const AUTO_PAN_SPEED = 3;
-
-    // Start auto-pan animation loop
-    const startAutoPan = useCallback(() => {
-        if (autoPanAnimationRef.current !== null) return;
-
-        const animate = () => {
-            const dir = autoPanRef.current;
-            if (dir && stageRef.current && (dir.dx !== 0 || dir.dy !== 0)) {
-                stageRef.current.pan(dir.dx * AUTO_PAN_SPEED, dir.dy * AUTO_PAN_SPEED);
-            }
-            autoPanAnimationRef.current = requestAnimationFrame(animate);
-        };
-        autoPanAnimationRef.current = requestAnimationFrame(animate);
-    }, []);
-
-    // Stop auto-pan animation loop
-    const stopAutoPan = useCallback(() => {
-        if (autoPanAnimationRef.current !== null) {
-            cancelAnimationFrame(autoPanAnimationRef.current);
-            autoPanAnimationRef.current = null;
-        }
-        autoPanRef.current = null;
-    }, []);
-
-    // Check if mouse is in edge zone and update auto-pan direction
-    const updateAutoPan = useCallback((e: React.MouseEvent) => {
-        if (!containerRef.current || isPanningRef.current) {
-            stopAutoPan();
-            return;
-        }
-
-        // Don't trigger auto-pan when hovering over UI elements (buttons, etc.)
-        const target = e.target as HTMLElement;
-        if (target.tagName === 'BUTTON' || target.closest('button') || target.closest('.z-20')) {
-            stopAutoPan();
-            return;
-        }
-
-        const rect = containerRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const width = rect.width;
-        const height = rect.height;
-
-        let dx = 0;
-        let dy = 0;
-
-        // Check horizontal edges
-        if (x < EDGE_ZONE) {
-            dx = 1; // Pan right (move content right = reveal left side)
-        } else if (x > width - EDGE_ZONE) {
-            dx = -1; // Pan left
-        }
-
-        // Check vertical edges
-        if (y < EDGE_ZONE) {
-            dy = 1; // Pan down
-        } else if (y > height - EDGE_ZONE) {
-            dy = -1; // Pan up
-        }
-
-        if (dx !== 0 || dy !== 0) {
-            autoPanRef.current = { dx, dy };
-            startAutoPan();
-        } else {
-            stopAutoPan();
-        }
-    }, [startAutoPan, stopAutoPan]);
-
-    // Handle mouse leave - stop auto-pan
-    const handleMouseLeave = useCallback(() => {
-        isPanningRef.current = false;
-        lastMousePosRef.current = null;
-        stopAutoPan();
-    }, [stopAutoPan]);
-
-    // Clean up auto-pan on unmount
-    useEffect(() => {
-        return () => {
-            if (autoPanAnimationRef.current !== null) {
-                cancelAnimationFrame(autoPanAnimationRef.current);
-            }
-        };
-    }, []);
 
     // Initialize sound manager and sync volume settings
     useEffect(() => {
@@ -780,35 +419,6 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         updateSettings({ musicVolume: value });
     }, [updateSettings]);
 
-    // Pan move handler
-    const handleMouseMove = useCallback((e: React.MouseEvent) => {
-        // Track mouse position for zoom-toward-cursor on button clicks
-        if (containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            lastMousePosRef.current = {
-                x: e.clientX - rect.left - CARD_OVERFLOW_PADDING,
-                y: e.clientY - rect.top - CARD_OVERFLOW_PADDING,
-            };
-        }
-
-        // Manual panning (drag)
-        if (isPanningRef.current && stageRef.current) {
-            const dx = e.clientX - lastPanPosRef.current.x;
-            const dy = e.clientY - lastPanPosRef.current.y;
-            lastPanPosRef.current = { x: e.clientX, y: e.clientY };
-            stageRef.current.pan(dx, dy);
-            return;
-        }
-
-        // Auto-pan edge detection (only when not manually panning)
-        updateAutoPan(e);
-    }, [updateAutoPan]);
-
-    // Pan end handler
-    const handleMouseUp = useCallback(() => {
-        isPanningRef.current = false;
-    }, []);
-
     // ============================================
     // CLICK-TO-MOVE MOVEMENT
     // ============================================
@@ -835,65 +445,6 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         return blocked;
     }, [placedNpcEntities]);
 
-    // Helper to find a safe adjacent position for companion that doesn't overlap enemies
-    const findSafeCompanionPosition = useCallback((
-        playerPos: TilePosition,
-        entities: LocalMapEntity[]
-    ): TilePosition => {
-        // Get all enemy positions
-        const enemyPositions = entities
-            .filter(e => e.allegiance === 'hostile')
-            .map(e => e.position);
-
-        // Adjacent offsets in priority order: left, up-left, down-left, up, down, right, up-right, down-right
-        const adjacentOffsets: TilePosition[] = [
-            { x: -1, y: 0 },   // left (preferred)
-            { x: -1, y: -1 },  // up-left
-            { x: -1, y: 1 },   // down-left
-            { x: 0, y: -1 },   // up
-            { x: 0, y: 1 },    // down
-            { x: 1, y: 0 },    // right
-            { x: 1, y: -1 },   // up-right
-            { x: 1, y: 1 },    // down-right
-        ];
-
-        for (const offset of adjacentOffsets) {
-            const candidatePos: TilePosition = {
-                x: playerPos.x + offset.x,
-                y: playerPos.y + offset.y,
-            };
-
-            // Check bounds
-            if (candidatePos.x < 0 || candidatePos.x >= config.gridWidth ||
-                candidatePos.y < 0 || candidatePos.y >= config.gridHeight) {
-                continue;
-            }
-
-            // Check if occupied by enemy
-            const isOccupiedByEnemy = enemyPositions.some(
-                ep => ep.x === candidatePos.x && ep.y === candidatePos.y
-            );
-
-            if (!isOccupiedByEnemy) {
-                return candidatePos;
-            }
-        }
-
-        // Fallback: return left position even if out of bounds (clamp to 0)
-        // This shouldn't happen in practice if grid is big enough
-        return { x: Math.max(0, playerPos.x - 1), y: playerPos.y };
-    }, [config.gridWidth, config.gridHeight]);
-
-    // Check if a tile is occupied by any entity (NPC or companion)
-    const isTileOccupied = useCallback((position: TilePosition, mapState: LocalMapState): boolean => {
-        // Check against all non-player entities
-        return mapState.entities.some(entity =>
-            entity.allegiance !== 'player' &&
-            entity.position.x === position.x &&
-            entity.position.y === position.y
-        );
-    }, []);
-
     // Animate a single step
     const animateStep = useCallback((target: TilePosition): Promise<void> => {
         return new Promise(resolve => {
@@ -914,13 +465,9 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         if (isMoving) return;
 
         // Check if destination is occupied - don't allow moving onto occupied tiles
-        if (isTileOccupied(destination, mapState)) {
+        if (isTileOccupiedByNonPlayer(mapState.entities, destination)) {
             // Find the entity and trigger click instead
-            const entityAtTile = mapState.entities.find(e =>
-                e.allegiance !== 'player' &&
-                e.position.x === destination.x &&
-                e.position.y === destination.y
-            );
+            const entityAtTile = getNonPlayerEntityAtTile(mapState.entities, destination);
             if (entityAtTile) {
                 onEntityClick?.(entityAtTile.id);
             }
@@ -945,21 +492,13 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 // Move to threat zone tile first
                 await animateStep(nextTile);
 
-                // Find hostile NPCs adjacent to this position
-                const hostileIds = mapState.entities
-                    .filter(e => e.allegiance === 'hostile')
-                    .filter(e => {
-                        const dx = Math.abs(e.position.x - nextTile.x);
-                        const dy = Math.abs(e.position.y - nextTile.y);
-                        return dx <= 1 && dy <= 1;
-                    })
-                    .map(e => e.id);
+                const hostileIds = getHostileIdsNearPosition(mapState.entities, nextTile);
 
                 if (hostileIds.length > 0) {
                     // Pass current position and updated map state to combat
                     // Must update BOTH playerPosition AND the player entity's position
                     // Also update companion position to stay adjacent to player (avoiding enemies)
-                    const companionPos = findSafeCompanionPosition(nextTile, mapState.entities);
+                    const companionPos = findSafeCompanionPosition(nextTile, mapState.entities, config);
                     const updatedEntities = mapState.entities.map(e => {
                         if (e.allegiance === 'player') return { ...e, position: nextTile };
                         if (e.allegiance === 'bonded_ally') return { ...e, position: companionPos };
@@ -996,7 +535,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         }
 
         setIsMoving(false);
-    }, [isMoving, playerPosition, config, getBlockedTiles, inCombat, animateStep, onEnterThreatZone, onExitClick, onTileClick, isTileOccupied, onEntityClick, findSafeCompanionPosition]);
+    }, [isMoving, playerPosition, config, getBlockedTiles, inCombat, animateStep, onEnterThreatZone, onExitClick, onTileClick, onEntityClick]);
 
     // Initialize Pixi application
     useEffect(() => {
@@ -1122,14 +661,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             }
 
             // Set initial zoom and center on player
-            stage.setZoom(DEFAULT_ZOOM);
-            if (containerRef.current) {
-                const rect = containerRef.current.getBoundingClientRect();
-                // Center on player position (accounting for padding)
-                const viewportWidth = rect.width - CARD_OVERFLOW_PADDING * 2;
-                const viewportHeight = rect.height - CARD_OVERFLOW_PADDING * 2;
-                stage.centerOnTile(playerPosition, viewportWidth, viewportHeight);
-            }
+            centerViewportOnPlayer({ resetZoom: true });
 
             // Mark stage ready (triggers background effect)
             setStageReady(true);
@@ -1186,78 +718,15 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             }
             appRef.current = null;
         };
-    }, []); // Only run once on mount
-
-    // Keyboard shortcuts with smooth WASD panning
-    useEffect(() => {
-        const PAN_SPEED = 8; // Pixels per frame (smooth)
-        const keysHeld = new Set<string>();
-        let animationId: number | null = null;
-
-        const updatePan = () => {
-            if (!stageRef.current || keysHeld.size === 0) {
-                animationId = null;
-                return;
-            }
-
-            let dx = 0, dy = 0;
-            if (keysHeld.has('w')) dy += PAN_SPEED;
-            if (keysHeld.has('s')) dy -= PAN_SPEED;
-            if (keysHeld.has('a')) dx += PAN_SPEED;
-            if (keysHeld.has('d')) dx -= PAN_SPEED;
-
-            if (dx !== 0 || dy !== 0) {
-                stageRef.current.pan(dx, dy);
-            }
-
-            animationId = requestAnimationFrame(updatePan);
-        };
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Ignore if user is typing in an input field or contentEditable (TipTap editor)
-            if (e.target instanceof HTMLInputElement ||
-                e.target instanceof HTMLTextAreaElement ||
-                (e.target instanceof HTMLElement && e.target.isContentEditable)) {
-                return;
-            }
-
-            // P key toggles pan mode
-            if (e.key === 'p' || e.key === 'P') {
-                setIsPanMode(prev => !prev);
-                return;
-            }
-
-            // WASD camera panning
-            const key = e.key.toLowerCase();
-            if (['w', 'a', 's', 'd'].includes(key)) {
-                e.preventDefault();
-                if (!keysHeld.has(key)) {
-                    keysHeld.add(key);
-                    if (!animationId) {
-                        animationId = requestAnimationFrame(updatePan);
-                    }
-                }
-            }
-        };
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            const key = e.key.toLowerCase();
-            keysHeld.delete(key);
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-            if (animationId) cancelAnimationFrame(animationId);
-        };
+    // Component is keyed by room id in WorldPlayView, so initialization should run once per mount.
+    // centerViewportOnPlayer is read from closure at call-time; listing it as a dep causes
+    // re-init on every player movement tick, destroying and recreating the PIXI app.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Handle tile click - uses click-to-move for distant tiles
     const handleTileClick = useCallback((position: TilePosition) => {
-        // Ignore clicks in pan mode (use ref to avoid stale closure)
-        if (isPanModeRef.current) return;
+        if (isPanMode) return;
 
         const mapState = buildMapState();
         if (!mapState) return;
@@ -1266,11 +735,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         // Combat movement is handled by gridCombat.handleTileClick via onTileClick
         if (inCombat) {
             // Check if tile has an entity for attack targeting
-            const entityAtTile = mapState.entities.find(e =>
-                e.allegiance !== 'player' &&
-                e.position.x === position.x &&
-                e.position.y === position.y
-            );
+            const entityAtTile = getNonPlayerEntityAtTile(mapState.entities, position);
 
             if (entityAtTile) {
                 onEntityClick?.(entityAtTile.id);
@@ -1336,13 +801,9 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
         // Check if the tile is occupied by another entity (NPCs, companions)
         // If so, clicking on them should trigger entity interaction, not movement
-        if (isTileOccupied(position, mapState)) {
+        if (isTileOccupiedByNonPlayer(mapState.entities, position)) {
             // Find the entity at this position
-            const entityAtTile = mapState.entities.find(e =>
-                e.allegiance !== 'player' &&
-                e.position.x === position.x &&
-                e.position.y === position.y
-            );
+            const entityAtTile = getNonPlayerEntityAtTile(mapState.entities, position);
 
             if (entityAtTile) {
                 // Trigger entity click instead of movement
@@ -1357,15 +818,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         if (isAdjacent) {
             // Single step - check for threat zone
             if (isInThreatZone(position, mapState.threatZones)) {
-                // Find hostile NPCs adjacent to this position
-                const hostileIds = mapState.entities
-                    .filter(e => e.allegiance === 'hostile')
-                    .filter(e => {
-                        const dx = Math.abs(e.position.x - position.x);
-                        const dy = Math.abs(e.position.y - position.y);
-                        return dx <= 1 && dy <= 1;
-                    })
-                    .map(e => e.id);
+                const hostileIds = getHostileIdsNearPosition(mapState.entities, position);
 
                 // Move to the tile first
                 setPlayerPosition(position);
@@ -1377,7 +830,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 // Must update BOTH playerPosition AND the player entity's position
                 // Also update companion position to stay adjacent to player (avoiding enemies)
                 if (hostileIds.length > 0) {
-                    const companionPos = findSafeCompanionPosition(position, mapState.entities);
+                    const companionPos = findSafeCompanionPosition(position, mapState.entities, config);
                     const updatedEntities = mapState.entities.map(e => {
                         if (e.allegiance === 'player') return { ...e, position: position };
                         if (e.allegiance === 'bonded_ally') return { ...e, position: companionPos };
@@ -1405,7 +858,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
         // Distant tile - use click-to-move pathfinding
         startMovement(position, mapState);
-    }, [isMoving, buildMapState, playerPosition, inCombat, onExitClick, onEnterThreatZone, onTileClick, onEntityClick, startMovement, player.id, isTileOccupied, findSafeCompanionPosition]);
+    }, [isMoving, buildMapState, playerPosition, inCombat, onExitClick, onEnterThreatZone, onTileClick, onEntityClick, startMovement, player.id, config]);
 
     // Keep refs updated to avoid stale closure in Pixi event handler
     useEffect(() => {
@@ -1438,14 +891,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             // Re-center camera on player when room changes
             if (currentRoom?.id !== lastCenteredRoomRef.current) {
                 lastCenteredRoomRef.current = currentRoom?.id ?? null;
-                if (containerRef.current) {
-                    stageRef.current.setZoom(DEFAULT_ZOOM);
-                    const rect = containerRef.current.getBoundingClientRect();
-                    const viewportWidth = rect.width - CARD_OVERFLOW_PADDING * 2;
-                    const viewportHeight = rect.height - CARD_OVERFLOW_PADDING * 2;
-                    stageRef.current.centerOnTile(playerPosition, viewportWidth, viewportHeight);
-                    setCurrentZoom(DEFAULT_ZOOM);
-                }
+                centerViewportOnPlayer({ resetZoom: true });
             }
 
             // Notify parent of map state for external combat system
@@ -1454,7 +900,22 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 onMapStateChange?.(mapState);
             }
         }
+    // syncViewportDebug and centerViewportOnPlayer are called imperatively within this effect;
+    // they read latest state via refs. Listing them as deps caused re-fire on every movement tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentRoom, worldState, player, companion, playerPosition, inCombat, buildMapState, onMapStateChange, stageReady]);
+
+    const lastCombatModeRef = useRef(inCombat);
+    useEffect(() => {
+        const enteredCombat = inCombat && !lastCombatModeRef.current;
+        lastCombatModeRef.current = inCombat;
+
+        if (!enteredCombat || !WORLD_PLAY_VIEWPORT.recenterOnCombatStart || !stageRef.current || !containerRef.current) {
+            return;
+        }
+
+        centerViewportOnPlayer();
+    }, [inCombat, centerViewportOnPlayer]);
 
     // Update background when it changes or stage becomes ready
     useEffect(() => {
@@ -1610,6 +1071,16 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                     <div className="text-xs text-center text-gray-400 mt-1">
                         {Math.round(currentZoom * 100)}%
                     </div>
+
+                    {showDebugOverlay && (
+                        <div className="mt-2 rounded border border-amber-500/40 bg-black/70 px-2 py-2 text-[10px] leading-4 text-amber-200 shadow-lg">
+                            <div>zoom {currentZoom.toFixed(2)}</div>
+                            <div>pan {Math.round(viewportDebug.pan.x)}, {Math.round(viewportDebug.pan.y)}</div>
+                            <div>bounds x {Math.round(viewportDebug.bounds.minX)}..{Math.round(viewportDebug.bounds.maxX)}</div>
+                            <div>bounds y {Math.round(viewportDebug.bounds.minY)}..{Math.round(viewportDebug.bounds.maxY)}</div>
+                            <div>player {viewportDebug.playerTile.x}, {viewportDebug.playerTile.y}</div>
+                        </div>
+                    )}
 
                     {/* Volume Controls */}
                     <div className="h-px bg-stone-600/30 my-1.5" />

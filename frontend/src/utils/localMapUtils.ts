@@ -20,6 +20,7 @@ import {
     findSpawnForEntity,
 } from '../types/localMap';
 import { GridWorldState } from '../types/worldGrid';
+import { deriveCombatTuningStats } from '../worldplay/combatTuning';
 
 /**
  * Exit positions on the local map edges
@@ -329,16 +330,11 @@ export function autoPlaceEntities(
             allegiance = 'friendly';
         }
 
-        if (position) {
+                if (position) {
             const level = npc.level ?? 1;
-            const baseHp = 30 + level * 10; // Scale HP with level
-
-            // Calculate threat range for hostile NPCs based on level
-            // Level 1-19: 1 tile (standard)
-            // Level 20-39: 2 tiles (elite)
-            // Level 40+: 3 tiles (boss-tier)
+            const combatStats = deriveCombatTuningStats(level, 'melee');
             const threatRange = allegiance === 'hostile'
-                ? (level >= 40 ? 3 : level >= 20 ? 2 : 1)
+                ? combatStats.threatRange
                 : undefined;
 
             entities.push({
@@ -348,8 +344,8 @@ export function autoPlaceEntities(
                 allegiance,
                 position,
                 imagePath: npc.imagePath ?? null,
-                currentHp: baseHp,
-                maxHp: baseHp,
+                currentHp: combatStats.maxHp,
+                maxHp: combatStats.maxHp,
                 threatRange,
                 isIncapacitated: npc.isIncapacitated || false,
                 isDead: npc.isDead || false,

@@ -10,6 +10,7 @@ import type { GridRoom, CombatDisplayNPC } from '../types/worldGrid';
 import type { NPCRelationship, TimeState } from '../types/worldRuntime';
 import type { CharacterInventory } from '../types/inventory';
 import type { PlayerProgression } from '../utils/progressionUtils';
+import { snapshotRoomState } from '../worldplay/roomTransition';
 
 export interface UseWorldPersistenceOptions {
   worldId: string;
@@ -47,23 +48,6 @@ export function useWorldPersistence({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
-   * Build RoomInstanceState from the current room's NPC list.
-   * Only records non-alive NPCs to keep data compact.
-   */
-  const buildCurrentRoomState = useCallback((): RoomInstanceState => {
-    const npcStates: Record<string, { status: 'alive' | 'incapacitated' | 'dead' }> = {};
-    for (const npc of roomNpcs) {
-      if (npc.isDead) {
-        npcStates[npc.id] = { status: 'dead' };
-      } else if (npc.isIncapacitated) {
-        npcStates[npc.id] = { status: 'incapacitated' };
-      }
-      // Alive NPCs omitted (default state)
-    }
-    return { npc_states: npcStates };
-  }, [roomNpcs]);
-
-  /**
    * Save all world runtime state to the backend via the per-user progress API.
    * Merges current room's NPC states into the accumulated room_states ref
    * before saving.
@@ -76,7 +60,7 @@ export function useWorldPersistence({
 
     // Snapshot current room state into the ref (unless told to skip)
     if (!opts?.skipRoomState && currentRoom) {
-      roomStatesRef.current[currentRoom.id] = buildCurrentRoomState();
+      roomStatesRef.current[currentRoom.id] = snapshotRoomState(roomNpcs);
     }
 
     try {
@@ -99,7 +83,7 @@ export function useWorldPersistence({
     } catch (err) {
       console.error('[RuntimeState] Failed to save:', err);
     }
-  }, [worldId, userUuid, currentRoom, buildCurrentRoomState, playerProgression, activeNpcId, timeState, npcRelationships, playerInventory, allyInventory, roomStatesRef]);
+  }, [worldId, userUuid, currentRoom, roomNpcs, playerProgression, activeNpcId, timeState, npcRelationships, playerInventory, allyInventory, roomStatesRef]);
 
   /**
    * Debounced save - batches frequent state changes (affinity, time, inventory)

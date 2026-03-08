@@ -26,6 +26,12 @@ import { buildCombatNarrativeSummary, buildPostCombatPrompt, buildDefeatPrompt }
 import { generateCombatLoot } from '../services/loot/lootGenerator';
 import { soundManager } from '../components/world/pixi/local';
 import { executeWorldGeneration, streamToMessage } from '../services/worldGenerationService';
+import type {
+  WorldPlayApiConfig,
+  WorldPlayCurrentUser,
+  WorldPlayMessageAppender,
+  WorldPlayMessageSetter,
+} from '../worldplay/contracts';
 
 
 interface GridCombatHandle {
@@ -60,11 +66,11 @@ interface UseCombatManagerOptions {
   activeNpcName: string;
   activeNpcCard: CharacterCard | null;
   characterData: CharacterCard | null;
-  apiConfig: any;
-  addMessage: (message: any) => void;
-  setMessages: (messages: any) => void;
+  apiConfig: WorldPlayApiConfig;
+  addMessage: WorldPlayMessageAppender;
+  setMessages: WorldPlayMessageSetter;
   // For threat zone entry
-  currentUser: { id?: string; name?: string } | null;
+  currentUser: WorldPlayCurrentUser;
   // For defeat respawn: navigate to starting room
   onDefeatRespawn?: () => Promise<void>;
   /** Chat session UUID — enables LogitShaper + session tracking for combat narratives */
@@ -246,7 +252,7 @@ export function useCombatManager(options: UseCombatManagerOptions): UseCombatMan
         response,
         messageId: narrativeMessageId,
         characterName: hasAllyNarrator ? activeNpcName : undefined,
-        setMessages: setMessages as any,
+        setMessages,
         fallbackText: '*The battle is over.*',
         signal: abortController.signal,
       });

@@ -347,10 +347,16 @@ export function useGridCombat(
 
     // Dispatch action to combat reducer
     const dispatchAction = useCallback(async (action: GridCombatAction) => {
-        if (!combatState) return;
+        if (!combatState) {
+            console.warn('[GridCombat] dispatchAction: no combatState!');
+            return;
+        }
 
         const grid = getCombatGrid();
-        if (!grid) return;
+        if (!grid) {
+            console.warn('[GridCombat] dispatchAction: getCombatGrid() returned null! mapState:', !!mapState);
+            return;
+        }
 
         const result = gridCombatReducer(combatState, action, grid);
 

@@ -17,6 +17,7 @@ import { DEFAULT_GENERATION_SETTINGS } from '../types/api';
 import { streamResponse } from './generation/streamParser';
 import { dispatchScrollToBottom } from '../hooks/useScrollToBottom';
 import { removeIncompleteSentences } from '../utils/contentProcessing';
+import type { WorldPlayMessageSetter } from '../worldplay/contracts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,7 +60,7 @@ export interface StreamToMessageOptions {
   characterName?: string;
 
   /** Updater for the messages array */
-  setMessages: (updater: (prev: any[]) => any[]) => void;
+  setMessages: WorldPlayMessageSetter;
 
   /** Fallback text if generation produces nothing */
   fallbackText: string;
