@@ -812,7 +812,7 @@ class ApiHandler:
                 assembler = PromptAssemblyService(self.logger)
 
                 # Load session notes from DB if available
-                db_session_notes = ''
+                db_session_notes = None  # None = not loaded; '' = intentionally cleared
                 chat_session_uuid = generation_params.get('chat_session_uuid')
                 if chat_session_uuid:
                     try:
@@ -830,9 +830,9 @@ class ApiHandler:
                     except Exception as sn_err:
                         self.logger.log_warning(f"Could not load session notes: {sn_err}")
 
-                # Frontend may also send session_notes in the prompt for backward compat;
-                # DB value takes precedence if available
-                session_notes_final = db_session_notes or generation_params.get('session_notes', '')
+                # DB value takes precedence when successfully loaded (even if empty).
+                # Only fall back to payload when DB lookup was skipped or failed.
+                session_notes_final = db_session_notes if db_session_notes is not None else generation_params.get('session_notes', '')
 
                 # Phase 3: Use DB-loaded message count as primary source
                 message_count = len(chat_history)
