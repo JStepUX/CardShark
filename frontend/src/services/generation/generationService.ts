@@ -448,9 +448,24 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
       ? extractEssentialCharacterData(characterCard)
       : null;
 
+    // Build template_format for backend assembly (active template's formatting fields)
+    const templateFormat = template ? {
+      userFormat: template.userFormat,
+      assistantFormat: template.assistantFormat,
+      ...(template.systemFormat ? { systemFormat: template.systemFormat } : {}),
+      ...(template.memoryFormat ? { memoryFormat: template.memoryFormat } : {}),
+      ...(template.stopSequences && template.stopSequences.length > 0
+        ? { stopSequences: template.stopSequences }
+        : {}),
+    } : undefined;
+
     // Build payload
     const payload = {
-      api_config: apiConfig,
+      api_config: {
+        ...apiConfig,
+        // Include template format fields for backend assembly
+        ...(templateFormat ? { template_format: templateFormat } : {}),
+      },
       generation_params: {
         ...(apiConfig.generation_settings as Record<string, unknown> || {}),
         prompt: finalPrompt,
@@ -462,8 +477,13 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
         character_data: essentialCharacterData,
         chat_history: contextMessages,
         ...(continuationText ? { continuation_text: continuationText } : {}),
-        generation_type: (apiConfig as Record<string, unknown>)._generation_type || 'generate',
+        generation_type: apiConfig._generation_type || 'generate',
         quiet: true,
+        // Backend assembly fields
+        backend_assembly: true,
+        compression_level: effectiveCompressionLevel,
+        message_count: contextMessages.length,
+        ...(sessionNotes ? { session_notes: sessionNotes } : {}),
       },
     };
 

@@ -764,129 +764,225 @@ class ApiHandler:
                 except Exception as e:
                     self.logger.log_error(f"Error processing lore: {str(e)}")
 
-            # Backend always builds memory from character_data (single source of truth)
-            if character_data and character_data.get('data'):
-                from backend.lore_handler import LoreHandler
-                lore_handler = LoreHandler(self.logger)
-                char_name = character_data['data'].get('name', 'Character')
-                memory = lore_handler.build_memory(
-                    character_data,
-                    excluded_fields=excluded_fields,
-                    char_name=char_name,
+            # ── Backend Assembly (unified codepath) ──────────────────────────
+            # When backend_assembly is set, PromptAssemblyService owns the
+            # complete prompt for ALL providers (instruct + KoboldCPP story-mode).
+            # This replaces the split logic below where non-KoboldCPP used the
+            # frontend prompt and KoboldCPP rebuilt from chat_history.
+            backend_assembly = generation_params.get('backend_assembly', False)
+
+            if backend_assembly:
+                from backend.services.prompt_assembly_service import PromptAssemblyService
+
+                assembler = PromptAssemblyService(self.logger)
+
+                # Load session notes from DB if available
+                db_session_notes = ''
+                chat_session_uuid = generation_params.get('chat_session_uuid')
+                if chat_session_uuid:
+                    try:
+                        from backend.database import SessionLocal
+                        from backend.sql_models import ChatSession
+                        db_sn = SessionLocal()
+                        try:
+                            session_row = db_sn.query(ChatSession).filter(
+                                ChatSession.chat_session_uuid == chat_session_uuid
+                            ).first()
+                            if session_row:
+                                db_session_notes = session_row.session_notes or ''
+                        finally:
+                            db_sn.close()
+                    except Exception as sn_err:
+                        self.logger.log_warning(f"Could not load session notes: {sn_err}")
+
+                # Frontend may also send session_notes in the prompt for backward compat;
+                # DB value takes precedence if available
+                session_notes_final = db_session_notes or generation_params.get('session_notes', '')
+
+                # Extract compressed context from frontend prompt (Phase 1 compat —
+                # compression still runs on frontend, result is embedded in prompt)
+                compressed_context = ''
+                frontend_prompt = generation_params.get('prompt', '')
+                if frontend_prompt:
+                    from backend.kobold_prompt_builder import extract_block
+                    compressed_context = extract_block(
+                        frontend_prompt,
+                        '[Previous Events Summary]',
+                        '[End Summary'
+                    ) or ''
+
+                user_persona = generation_params.get('user_persona', '')
+
+                # Template format from api_config (frontend sends active template fields)
+                template_format = api_config.get('template_format')
+
+                assembly_result = assembler.assemble(
+                    chat_history=chat_history,
+                    character_data=character_data,
+                    template_format=template_format,
                     user_name=user_name,
-                    lore_entries=matched_entries,
-                    active_sticky_entries=active_sticky_entries,
-                    token_budget=token_budget
-                )
-                self.logger.log_step(f"Built memory from character_data ({len(memory)} chars, {len(matched_entries)} matched lore, {len(active_sticky_entries)} sticky, {len(excluded_fields)} excluded fields)")
-
-            # Inject user persona block at end of memory (after character identity, before system_instruction)
-            user_persona = generation_params.get('user_persona', '')
-            if user_persona and user_persona.strip():
-                persona_block = f"\n\n[About {user_name}]\n{user_persona.strip()}\n[End About {user_name}]"
-                memory = (memory or '') + persona_block
-                self.logger.log_step(f"Injected user persona for '{user_name}' ({len(user_persona.strip())} chars)")
-
-            # Prepend system_instruction to memory for non-KoboldCPP providers
-            # (KoboldCPP uses fold_system_instruction in its own path below)
-            if system_instruction and not is_kobold:
-                self.logger.log_step(f"Prepending system_instruction to memory ({len(system_instruction)} chars)")
-                if memory:
-                    memory = f"{system_instruction}\n\n{memory}"
-                else:
-                    memory = system_instruction
-
-            # KoboldCPP story-mode rebuild: fold system instruction,
-            # rebuild prompt from raw chat_history, set clean stop sequences
-            if is_kobold:
-                from backend.kobold_prompt_builder import (
-                    fold_system_instruction, build_story_prompt,
-                    build_story_stop_sequences, extract_block
+                    user_persona=user_persona,
+                    compression_level=generation_params.get('compression_level', 'none'),
+                    message_count=generation_params.get('message_count', len(chat_history)),
+                    compressed_context=compressed_context,
+                    session_notes=session_notes_final,
+                    system_instruction=system_instruction,
+                    continuation_text=generation_params.get('continuation_text', ''),
+                    matched_lore=matched_entries,
+                    active_sticky_lore=active_sticky_entries,
+                    token_budget=token_budget,
+                    is_kobold=is_kobold,
                 )
 
-                char_data = character_data.get('data', {}) if character_data else {}
-                char_name = char_data.get('name', 'Character')
-
-                # build_memory() already resolved {{user}}/{{char}} and skips empty fields,
-                # so clean_memory() and token resolution are no longer needed here.
-
-                # Fold system_instruction into memory as narrative framing
-                if system_instruction:
-                    memory = fold_system_instruction(system_instruction, memory)
-
-                # Append *** separator between memory and prompt
-                if memory and not memory.rstrip().endswith('***'):
-                    memory = memory.rstrip() + '\n***'
-
-                # Rebuild prompt from chat_history (main chat flow)
-                raw_history = generation_params.get('chat_history', [])
-                if raw_history:
-                    original_prompt = prompt or ''
-                    session_notes = extract_block(original_prompt, '[Session Notes]', '[End Session Notes]')
-                    compressed = extract_block(original_prompt, '[Previous Events Summary]', '[End Summary')
-                    continuation_text = generation_params.get('continuation_text', '')
-
-                    # Build post-history instructions (strongest prompt position).
-                    # Combines character card post_history_instructions + session Journal.
-                    post_history_parts = []
-                    card_post_history = char_data.get('post_history_instructions', '')
-                    if card_post_history and card_post_history.strip():
-                        resolved = card_post_history.strip()
-                        resolved = resolved.replace('{{char}}', char_name).replace('{{user}}', user_name)
-                        post_history_parts.append(resolved)
-                    if session_notes:
-                        post_history_parts.append(session_notes.strip())
-                    post_history = '\n'.join(post_history_parts)
-
-                    prompt = ''
-                    if compressed:
-                        prompt += compressed + '\n\n'
-                    prompt += build_story_prompt(raw_history, char_name, user_name, continuation_text, post_history)
-
-                # Set clean stop sequences
-                stop_sequence = build_story_stop_sequences(char_name, user_name)
-
-                # ── Context Budget Debugger ──────────────────────────────────
-                # Estimate tokens (~4 chars per token) and log per-field breakdown
-                def _est_tokens(text: str) -> int:
-                    return len(text) // 4 if text else 0
-
-                ctx_max = original_generation_settings.get('max_context_length', 8192)
-                ctx_memory_tok = _est_tokens(memory)
-                ctx_compressed_tok = _est_tokens(compressed) if raw_history and compressed else 0
-                ctx_notes_tok = _est_tokens(session_notes) if raw_history and session_notes else 0
-                ctx_history_tok = _est_tokens(build_story_prompt(raw_history, char_name, user_name)) if raw_history else _est_tokens(prompt)
-                ctx_total_tok = ctx_memory_tok + ctx_compressed_tok + ctx_notes_tok + ctx_history_tok
+                prompt = assembly_result.prompt
+                memory = assembly_result.memory
+                stop_sequence = assembly_result.stop_sequences
 
                 self.logger.log_step(
-                    f"KoboldCPP Context Budget (est. tokens, ~4 chars/token):\n"
-                    f"  Memory (card+lore+sys): {ctx_memory_tok:>6} tokens  ({len(memory or ''):>8} chars)\n"
-                    f"  Compressed summary:     {ctx_compressed_tok:>6} tokens\n"
-                    f"  Session notes:          {ctx_notes_tok:>6} tokens\n"
-                    f"  Chat history:           {ctx_history_tok:>6} tokens  ({len(raw_history) if raw_history else 0} messages)\n"
-                    f"  ─────────────────────────────────\n"
-                    f"  TOTAL:                  {ctx_total_tok:>6} tokens  /  {ctx_max} limit  "
-                    f"({ctx_total_tok * 100 // ctx_max}% used)"
+                    f"Backend assembly complete: prompt={len(prompt)} chars, "
+                    f"memory={len(memory)} chars, stops={stop_sequence}"
                 )
-                if ctx_total_tok > ctx_max:
-                    self.logger.log_warning(
-                        f"CONTEXT OVERFLOW: Sending ~{ctx_total_tok} tokens but limit is {ctx_max}. "
-                        f"KoboldCPP will silently truncate from the front, losing character card and system context. "
-                        f"Overflow: ~{ctx_total_tok - ctx_max} tokens over budget."
-                    )
-                elif ctx_total_tok > ctx_max * 0.85:
-                    self.logger.log_warning(
-                        f"CONTEXT WARNING: Using {ctx_total_tok * 100 // ctx_max}% of context budget "
-                        f"({ctx_total_tok}/{ctx_max}). Approaching overflow."
-                    )
-                # ── End Context Budget Debugger ──────────────────────────────
 
-                self.logger.log_step(f"KoboldCPP story-mode rebuild complete. Memory: {len(memory)} chars, Prompt: {len(prompt) if prompt else 0} chars")
-                self.logger.log_step(f"KoboldCPP stop_sequence: {stop_sequence}")
+                # Context budget logging
+                ctx_max = original_generation_settings.get('max_context_length', 8192)
+                ctx_total = (len(prompt) + len(memory)) // 4
+                self.logger.log_step(
+                    f"Context budget: ~{ctx_total} tokens / {ctx_max} limit "
+                    f"({ctx_total * 100 // ctx_max if ctx_max else 0}% used)"
+                )
+                if ctx_total > ctx_max:
+                    self.logger.log_warning(
+                        f"CONTEXT OVERFLOW: ~{ctx_total} tokens but limit is {ctx_max}. "
+                        f"Overflow: ~{ctx_total - ctx_max} tokens."
+                    )
 
-            # Add </s> to stop sequences if not already present (skip for KoboldCPP)
-            if not is_kobold and "</s>" not in stop_sequence:
-                stop_sequence.append("</s>")
+            # ── Legacy codepath (frontend-assembled prompt) ────────────────
+            # Kept for backward compatibility with older frontends that do
+            # not set backend_assembly=true.
+            if not backend_assembly:
+                # Backend always builds memory from character_data (single source of truth)
+                if character_data and character_data.get('data'):
+                    from backend.lore_handler import LoreHandler
+                    lore_handler = LoreHandler(self.logger)
+                    char_name = character_data['data'].get('name', 'Character')
+                    memory = lore_handler.build_memory(
+                        character_data,
+                        excluded_fields=excluded_fields,
+                        char_name=char_name,
+                        user_name=user_name,
+                        lore_entries=matched_entries,
+                        active_sticky_entries=active_sticky_entries,
+                        token_budget=token_budget
+                    )
+                    self.logger.log_step(f"Built memory from character_data ({len(memory)} chars, {len(matched_entries)} matched lore, {len(active_sticky_entries)} sticky, {len(excluded_fields)} excluded fields)")
+
+                # Inject user persona block at end of memory (after character identity, before system_instruction)
+                user_persona = generation_params.get('user_persona', '')
+                if user_persona and user_persona.strip():
+                    persona_block = f"\n\n[About {user_name}]\n{user_persona.strip()}\n[End About {user_name}]"
+                    memory = (memory or '') + persona_block
+                    self.logger.log_step(f"Injected user persona for '{user_name}' ({len(user_persona.strip())} chars)")
+
+                # Prepend system_instruction to memory for non-KoboldCPP providers
+                # (KoboldCPP uses fold_system_instruction in its own path below)
+                if system_instruction and not is_kobold:
+                    self.logger.log_step(f"Prepending system_instruction to memory ({len(system_instruction)} chars)")
+                    if memory:
+                        memory = f"{system_instruction}\n\n{memory}"
+                    else:
+                        memory = system_instruction
+
+                # KoboldCPP story-mode rebuild: fold system instruction,
+                # rebuild prompt from raw chat_history, set clean stop sequences
+                if is_kobold:
+                    from backend.kobold_prompt_builder import (
+                        fold_system_instruction, build_story_prompt,
+                        build_story_stop_sequences, extract_block
+                    )
+
+                    char_data = character_data.get('data', {}) if character_data else {}
+                    char_name = char_data.get('name', 'Character')
+
+                    # build_memory() already resolved {{user}}/{{char}} and skips empty fields,
+                    # so clean_memory() and token resolution are no longer needed here.
+
+                    # Fold system_instruction into memory as narrative framing
+                    if system_instruction:
+                        memory = fold_system_instruction(system_instruction, memory)
+
+                    # Append *** separator between memory and prompt
+                    if memory and not memory.rstrip().endswith('***'):
+                        memory = memory.rstrip() + '\n***'
+
+                    # Rebuild prompt from chat_history (main chat flow)
+                    raw_history = generation_params.get('chat_history', [])
+                    if raw_history:
+                        original_prompt = prompt or ''
+                        session_notes = extract_block(original_prompt, '[Session Notes]', '[End Session Notes]')
+                        compressed = extract_block(original_prompt, '[Previous Events Summary]', '[End Summary')
+                        continuation_text = generation_params.get('continuation_text', '')
+
+                        # Build post-history instructions (strongest prompt position).
+                        # Combines character card post_history_instructions + session Journal.
+                        post_history_parts = []
+                        card_post_history = char_data.get('post_history_instructions', '')
+                        if card_post_history and card_post_history.strip():
+                            resolved = card_post_history.strip()
+                            resolved = resolved.replace('{{char}}', char_name).replace('{{user}}', user_name)
+                            post_history_parts.append(resolved)
+                        if session_notes:
+                            post_history_parts.append(session_notes.strip())
+                        post_history = '\n'.join(post_history_parts)
+
+                        prompt = ''
+                        if compressed:
+                            prompt += compressed + '\n\n'
+                        prompt += build_story_prompt(raw_history, char_name, user_name, continuation_text, post_history)
+
+                    # Set clean stop sequences
+                    stop_sequence = build_story_stop_sequences(char_name, user_name)
+
+                    # ── Context Budget Debugger ──────────────────────────────────
+                    # Estimate tokens (~4 chars per token) and log per-field breakdown
+                    def _est_tokens(text: str) -> int:
+                        return len(text) // 4 if text else 0
+
+                    ctx_max = original_generation_settings.get('max_context_length', 8192)
+                    ctx_memory_tok = _est_tokens(memory)
+                    ctx_compressed_tok = _est_tokens(compressed) if raw_history and compressed else 0
+                    ctx_notes_tok = _est_tokens(session_notes) if raw_history and session_notes else 0
+                    ctx_history_tok = _est_tokens(build_story_prompt(raw_history, char_name, user_name)) if raw_history else _est_tokens(prompt)
+                    ctx_total_tok = ctx_memory_tok + ctx_compressed_tok + ctx_notes_tok + ctx_history_tok
+
+                    self.logger.log_step(
+                        f"KoboldCPP Context Budget (est. tokens, ~4 chars/token):\n"
+                        f"  Memory (card+lore+sys): {ctx_memory_tok:>6} tokens  ({len(memory or ''):>8} chars)\n"
+                        f"  Compressed summary:     {ctx_compressed_tok:>6} tokens\n"
+                        f"  Session notes:          {ctx_notes_tok:>6} tokens\n"
+                        f"  Chat history:           {ctx_history_tok:>6} tokens  ({len(raw_history) if raw_history else 0} messages)\n"
+                        f"  ─────────────────────────────────\n"
+                        f"  TOTAL:                  {ctx_total_tok:>6} tokens  /  {ctx_max} limit  "
+                        f"({ctx_total_tok * 100 // ctx_max}% used)"
+                    )
+                    if ctx_total_tok > ctx_max:
+                        self.logger.log_warning(
+                            f"CONTEXT OVERFLOW: Sending ~{ctx_total_tok} tokens but limit is {ctx_max}. "
+                            f"KoboldCPP will silently truncate from the front, losing character card and system context. "
+                            f"Overflow: ~{ctx_total_tok - ctx_max} tokens over budget."
+                        )
+                    elif ctx_total_tok > ctx_max * 0.85:
+                        self.logger.log_warning(
+                            f"CONTEXT WARNING: Using {ctx_total_tok * 100 // ctx_max}% of context budget "
+                            f"({ctx_total_tok}/{ctx_max}). Approaching overflow."
+                        )
+                    # ── End Context Budget Debugger ──────────────────────────────
+
+                    self.logger.log_step(f"KoboldCPP story-mode rebuild complete. Memory: {len(memory)} chars, Prompt: {len(prompt) if prompt else 0} chars")
+                    self.logger.log_step(f"KoboldCPP stop_sequence: {stop_sequence}")
+
+                # Add </s> to stop sequences if not already present (skip for KoboldCPP)
+                if not is_kobold and "</s>" not in stop_sequence:
+                    stop_sequence.append("</s>")
             
             # Save context window for debugging if provided
             if context_window:
@@ -1070,17 +1166,7 @@ class ApiHandler:
                 }
             }
             yield f"data: {json.dumps(error_data)}\n\n".encode('utf-8')
-            
-            # Add provider info to help frontend identify API that failed
-            error_data = {
-                'error': {
-                    'type': 'ConnectionError',
-                    'message': error_msg,
-                    'provider': provider
-                }
-            }
-            yield f"data: {json.dumps(error_data)}\n\n".encode('utf-8')
-            
+
         except Exception as e:
             error_msg = f"Stream generation failed: {str(e)}"
             self.logger.log_error(error_msg)
