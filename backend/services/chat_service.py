@@ -241,13 +241,46 @@ def replace_chat_session_messages(db: Session, chat_session_uuid: str, messages_
         db.rollback()
         raise e
 
-def get_chat_messages(db: Session, chat_session_uuid: str, 
+def get_chat_messages(db: Session, chat_session_uuid: str,
                      skip: int = 0, limit: int = 1000) -> List[sql_models.ChatMessage]:
     """Get messages for a chat session, ordered by sequence_number then timestamp."""
     return db.query(sql_models.ChatMessage)\
         .filter(sql_models.ChatMessage.chat_session_uuid == chat_session_uuid)\
         .order_by(sql_models.ChatMessage.sequence_number.asc(), sql_models.ChatMessage.timestamp.asc())\
         .offset(skip).limit(limit).all()
+
+
+def get_chat_messages_for_generation(db: Session, chat_session_uuid: str) -> List[dict]:
+    """Load chat messages from SQLite for LLM generation.
+
+    Returns lightweight {role, content} dicts, filtering out 'thinking' role
+    and messages with non-complete status (generating, error).  Resolves
+    message variations when present in metadata_json.
+    """
+    rows = db.query(sql_models.ChatMessage)\
+        .filter(
+            sql_models.ChatMessage.chat_session_uuid == chat_session_uuid,
+            sql_models.ChatMessage.role.notin_(['thinking']),
+            sql_models.ChatMessage.status == 'complete',
+        )\
+        .order_by(
+            sql_models.ChatMessage.sequence_number.asc(),
+            sql_models.ChatMessage.timestamp.asc(),
+        ).all()
+
+    messages: List[dict] = []
+    for msg in rows:
+        # Resolve active variation if available
+        content = msg.content or ''
+        if msg.metadata_json:
+            variations = msg.metadata_json.get('variations', [])
+            current_var = msg.metadata_json.get('current_variation')
+            if variations and isinstance(current_var, int) and 0 <= current_var < len(variations):
+                content = variations[current_var]
+
+        messages.append({'role': msg.role, 'content': content})
+    return messages
+
 
 def get_chat_message(db: Session, message_id: str) -> Optional[sql_models.ChatMessage]:
     """Get a specific chat message by ID."""

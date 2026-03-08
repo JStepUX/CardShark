@@ -7,7 +7,7 @@
  * Sub-contexts:
  * - ChatSessionContext: session lifecycle, UUID, settings
  * - ChatMessageContext: messages, CRUD, persistence
- * - ChatCompressionContext: compression level, cache
+ * - ChatCompressionContext: compression level
  * - ChatGenerationContext: generation, streaming, lore images
  */
 import React, { createContext, useContext, useCallback, useEffect } from 'react';
@@ -22,7 +22,7 @@ import {
 } from '../handlers/loreHandler';
 import { LoreEntry, CharacterCard } from '../types/schema';
 import { chatService } from '../services/chat/chatService';
-import { CompressionLevel, CompressedContextCache } from '../services/chat/chatTypes';
+import { CompressionLevel } from '../services/chat/chatTypes';
 
 // Sub-context providers and hooks
 import { ChatSessionProvider, useChatSession } from './ChatSessionContext';
@@ -52,8 +52,6 @@ interface ChatContextType {
   sessionNotes: string;
   sessionName: string;
   compressionLevel: CompressionLevel;
-  isCompressing: boolean;
-  compressedContextCache: CompressedContextCache | null;
   characterDataOverride: CharacterCard | null;
   setCharacterDataOverride: (characterData: CharacterCard | null) => void;
   updateMessage: (messageId: string, content: string) => void;
@@ -79,7 +77,6 @@ interface ChatContextType {
   setSessionName: (name: string) => void;
   saveSessionNameNow: (nameOverride?: string) => Promise<void>;
   setCompressionLevel: (level: CompressionLevel) => void;
-  invalidateCompressionCache: () => void;
   forkChat: (atMessageIndex: number, bringCount?: number | 'all') => Promise<string | null>;
 }
 
@@ -103,7 +100,6 @@ const ChatInitializer: React.FC<{
   const { characterData } = useCharacter();
   const session = useChatSession();
   const messageStore = useChatMessageStore();
-  const compression = useChatCompression();
   const generation = useChatGeneration();
 
   /**
@@ -127,7 +123,6 @@ const ChatInitializer: React.FC<{
 
     messageStore.setIsLoading(true); messageStore.setError(null);
     session.setCurrentChatId(null);
-    compression.setCompressedContextCache(null);
     session.autoSaveDisabledCount.current++;
 
     try {
@@ -207,7 +202,7 @@ const ChatInitializer: React.FC<{
       session.isLoadingChatRef.current = false;
       session.loadingForCharacterRef.current = null;
     }
-  }, [characterData, session, messageStore, compression, generation]);
+  }, [characterData, session, messageStore, generation]);
 
   /**
    * Create a new chat session
@@ -223,7 +218,6 @@ const ChatInitializer: React.FC<{
     messageStore.setIsLoading(true); messageStore.setError(null);
     session.setCurrentChatId(null);
     messageStore.setMessages([]);
-    compression.setCompressedContextCache(null);
     messageStore.messagesRef.current = [];
 
     try {
@@ -301,7 +295,7 @@ const ChatInitializer: React.FC<{
       messageStore.setIsLoading(false);
       session.isCreatingChatRef.current = false;
     }
-  }, [characterData, session, messageStore, compression]);
+  }, [characterData, session, messageStore]);
 
   /**
    * Fork the current chat at a specific message index
@@ -337,8 +331,6 @@ const ChatInitializer: React.FC<{
         startIndex
       );
 
-      compression.setCompressedContextCache(null);
-
       const loadResponse = await ChatStorage.loadChat(newChatId, characterData);
       if (loadResponse.success) {
         const sessionData = loadResponse.data || loadResponse;
@@ -361,7 +353,7 @@ const ChatInitializer: React.FC<{
     } finally {
       messageStore.setIsLoading(false);
     }
-  }, [characterData, session, messageStore, compression]);
+  }, [characterData, session, messageStore]);
 
   // Expose refs for createNewChat/loadExistingChat
   useEffect(() => {
@@ -643,10 +635,7 @@ const ChatContextBridge: React.FC<{
 
     // Compression
     compressionLevel: compressionCtx.compressionLevel,
-    isCompressing: compressionCtx.isCompressing,
-    compressedContextCache: compressionCtx.compressedContextCache,
     setCompressionLevel: compressionCtx.setCompressionLevel,
-    invalidateCompressionCache: compressionCtx.invalidateCompressionCache,
 
     // Generation
     isGenerating: generation.isGenerating,

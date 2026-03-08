@@ -597,3 +597,410 @@ class PromptAssemblyService:
             resolved.append(s)
 
         return resolved
+
+    # ── Character Memory (lightweight) ──────────────────────────────────
+
+    def _build_character_memory(
+        self,
+        character_data: Optional[Dict],
+    ) -> str:
+        """
+        Build lightweight character memory from card fields.
+
+        Used by legacy endpoints (greeting, impersonate) that don't need
+        lore matching, compression, or field expiration. Constructs memory
+        from system_prompt + description + personality + scenario.
+        """
+        if not character_data:
+            return ''
+        data = character_data.get('data', {})
+
+        context_parts: List[str] = []
+        description = data.get('description', '')
+        personality = data.get('personality', '')
+        scenario = data.get('scenario', '')
+        if description:
+            context_parts.append(f"Description: {description}")
+        if personality:
+            context_parts.append(f"Personality: {personality}")
+        if scenario:
+            context_parts.append(f"Scenario: {scenario}")
+
+        character_context = "\n\n".join(context_parts)
+
+        system_prompt = data.get('system_prompt', '')
+        full_memory = ""
+        if system_prompt:
+            full_memory += system_prompt + "\n\n"
+        if character_context:
+            full_memory += "Character Data:\n" + character_context
+
+        return full_memory
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Phase 4: Legacy Endpoint Assembly Methods
+    # ══════════════════════════════════════════════════════════════════════
+    #
+    # These methods centralize prompt construction for the four legacy
+    # generation endpoints, replacing per-endpoint KoboldCPP override blocks
+    # and duplicated prompt-building logic.
+    #
+    # Each returns an AssemblyResult with prompt, memory, stop_sequences.
+    # ══════════════════════════════════════════════════════════════════════
+
+    def assemble_greeting(
+        self,
+        *,
+        character_data: Dict,
+        generation_instruction: str,
+        partial_message: str = '',
+        is_kobold: bool = False,
+    ) -> AssemblyResult:
+        """
+        Assemble prompt for greeting generation.
+
+        Centralizes the prompt-building logic from /api/generate-greeting,
+        including the KoboldCPP override path.
+
+        Args:
+            character_data: Full character card dict
+            generation_instruction: The resolved instruction text (from prompt
+                template, custom_prompt, or the default greeting instruction)
+            partial_message: Optional partial text to continue from
+            is_kobold: Whether the provider is KoboldCPP
+        """
+        data = character_data.get('data', {})
+        name = data.get('name', 'Character')
+
+        # Build memory from character card fields
+        memory = self._build_character_memory(character_data)
+
+        if is_kobold:
+            from backend.kobold_prompt_builder import (
+                build_story_memory, build_greeting_prompt,
+                build_story_stop_sequences,
+            )
+            memory = build_story_memory(
+                character_data, system_instruction=generation_instruction,
+            )
+            prompt = build_greeting_prompt(name, partial_message)
+            stop_sequences = build_story_stop_sequences(name, 'User')
+
+            # Append *** separator between memory and prompt
+            if memory and not memory.rstrip().endswith('***'):
+                memory = memory.rstrip() + '\n***'
+
+            return AssemblyResult(
+                prompt=prompt,
+                memory=memory,
+                stop_sequences=stop_sequences,
+            )
+
+        # Instruct mode
+        # System instruction goes into memory
+        if generation_instruction:
+            if memory:
+                memory = f"{generation_instruction}\n\n{memory}"
+            else:
+                memory = generation_instruction
+
+        # Build prompt: if partial_message, continue from it; otherwise bare turn marker
+        if partial_message and partial_message.strip():
+            prompt = f"\n{name}: {partial_message}"
+        else:
+            prompt = f"\n{name}:"
+
+        stop_sequences = ["User:", "Human:", "</s>", f"\n{name}:", "{{user}}:"]
+
+        return AssemblyResult(
+            prompt=prompt,
+            memory=memory,
+            stop_sequences=stop_sequences,
+        )
+
+    def assemble_impersonate(
+        self,
+        *,
+        character_data: Dict,
+        messages: List[Dict[str, str]],
+        generation_instruction: str,
+        partial_message: str = '',
+        user_name: str = 'User',
+        user_persona: str = '',
+        is_kobold: bool = False,
+    ) -> AssemblyResult:
+        """
+        Assemble prompt for impersonation generation.
+
+        Centralizes the prompt-building logic from /api/generate-impersonate,
+        including the KoboldCPP override path.
+
+        Args:
+            character_data: Full character card dict
+            messages: Chat history messages
+            generation_instruction: The resolved impersonate instruction
+            partial_message: Optional partial text to continue from
+            user_name: User display name
+            user_persona: User persona/description text
+            is_kobold: Whether the provider is KoboldCPP
+        """
+        data = character_data.get('data', {})
+        char_name = data.get('name', 'Character')
+
+        # Build memory from character card fields
+        memory = self._build_character_memory(character_data)
+
+        if is_kobold:
+            from backend.kobold_prompt_builder import (
+                build_story_memory, build_impersonate_prompt,
+            )
+            memory = build_story_memory(
+                character_data, system_instruction=generation_instruction,
+            )
+            prompt = build_impersonate_prompt(
+                messages, char_name, user_name, partial_message,
+            )
+            stop_sequences = [f"{char_name}:", f"\n{char_name}: "]
+
+            # Append *** separator
+            if memory and not memory.rstrip().endswith('***'):
+                memory = memory.rstrip() + '\n***'
+
+            return AssemblyResult(
+                prompt=prompt,
+                memory=memory,
+                stop_sequences=stop_sequences,
+            )
+
+        # Instruct mode
+        # System instruction prepended to memory
+        if generation_instruction:
+            if memory:
+                memory = f"{generation_instruction}\n\n{memory}"
+            else:
+                memory = generation_instruction
+
+        # Inject user persona into memory if available
+        if user_persona and user_persona.strip():
+            persona_block = f"\n\n[About {user_name}]\n{user_persona.strip()}\n[End About {user_name}]"
+            memory = (memory or '') + persona_block
+
+        # Build conversation history for context (last 10 messages)
+        chat_history = ""
+        for msg in messages[-10:]:
+            role = msg.get('role', 'user')
+            content = strip_html_tags(msg.get('content', ''))
+            if role == 'assistant':
+                chat_history += f"{char_name}: {content}\n\n"
+            elif role == 'user':
+                chat_history += f"{user_name}: {content}\n\n"
+
+        # Build the prompt (conversation history + turn marker)
+        prompt = f"## Recent Conversation:\n{chat_history}"
+        if partial_message and partial_message.strip():
+            prompt += (
+                f"\n## Continue this message from {user_name} "
+                f"(write ONLY the continuation, do not repeat what's already written):"
+                f"\n{user_name}: {partial_message}"
+            )
+        else:
+            prompt += f"\n## Write a response as {user_name}:\n{user_name}:"
+
+        stop_sequences = [f"{char_name}:", "</s>", "\n\n"]
+
+        return AssemblyResult(
+            prompt=prompt,
+            memory=memory,
+            stop_sequences=stop_sequences,
+        )
+
+    def assemble_room_content(
+        self,
+        *,
+        world_context: Dict,
+        room_context: Dict,
+        field_type: str,
+        existing_text: str = '',
+        user_prompt: str = '',
+        is_kobold: bool = False,
+    ) -> AssemblyResult:
+        """
+        Assemble prompt for room content generation (description or introduction).
+
+        Centralizes the prompt-building logic from /api/generate-room-content,
+        including the KoboldCPP override path.
+
+        Args:
+            world_context: Dict with world name, description, etc.
+            room_context: Dict with room name, description, npcs list
+            field_type: 'description' or 'introduction'
+            existing_text: Current text to continue from
+            user_prompt: Optional user guidance text
+            is_kobold: Whether the provider is KoboldCPP
+        """
+        # Build memory from world/room context
+        world_name = world_context.get('name', 'Unknown World')
+        world_description = world_context.get('description', '')
+        room_name = room_context.get('name', 'Unknown Room')
+        room_description = room_context.get('description', '')
+        room_npcs = room_context.get('npcs', [])
+
+        memory_parts: List[str] = []
+        memory_parts.append(f"## World: {world_name}")
+        if world_description:
+            memory_parts.append(f"World Description: {world_description}")
+        memory_parts.append(f"\n## Room: {room_name}")
+        if room_description and field_type == 'introduction':
+            memory_parts.append(f"Room Description: {room_description}")
+        if room_npcs:
+            npc_names = [npc.get('name', 'Unknown NPC') for npc in room_npcs]
+            memory_parts.append(f"NPCs present: {', '.join(npc_names)}")
+
+        memory = "\n".join(memory_parts)
+
+        # Build generation instruction
+        if field_type == 'introduction':
+            base_instruction = (
+                f'You are a creative writer helping to craft an introduction scene '
+                f'for a room in a story/roleplay world.\n\n'
+                f'The room is "{room_name}" in the world "{world_name}".\n\n'
+                f'Write an evocative introduction that:\n'
+                f'- Sets the scene and atmosphere\n'
+                f'- Describes what the player sees, hears, and feels upon entering\n'
+                f'- Hints at the room\'s purpose or history\n'
+                f'- Creates immersion without being overly verbose\n\n'
+                f'Write in second person perspective (e.g., "You enter...", "You see...").\n'
+                f'Keep it to 2-4 paragraphs unless the user requests otherwise.'
+            )
+        else:  # description
+            base_instruction = (
+                f'You are a creative writer helping to craft a room description '
+                f'for a story/roleplay world.\n\n'
+                f'The room is "{room_name}" in the world "{world_name}".\n\n'
+                f'Write a detailed description that:\n'
+                f'- Captures the physical layout and key features\n'
+                f'- Establishes the atmosphere and mood\n'
+                f'- Notes important objects or points of interest\n'
+                f'- Can be referenced by AI for roleplay context\n\n'
+                f'Write in a neutral, informative tone that provides context '
+                f'without being a narrative.\n'
+                f'Keep it to 2-4 paragraphs unless the user requests otherwise.'
+            )
+
+        generation_instruction = base_instruction
+        if user_prompt:
+            generation_instruction += f"\n\nUser guidance: {user_prompt}"
+
+        if is_kobold:
+            from backend.kobold_prompt_builder import build_room_content_prompt
+
+            # For KoboldCPP: fold instruction into memory, use clean prompt
+            kobold_memory = (
+                generation_instruction + '\n\n' + memory
+                if generation_instruction else memory
+            )
+            prompt = build_room_content_prompt(field_type, existing_text)
+            stop_sequences = ["[END]", "---"]
+
+            # Append *** separator
+            if kobold_memory and not kobold_memory.rstrip().endswith('***'):
+                kobold_memory = kobold_memory.rstrip() + '\n***'
+
+            return AssemblyResult(
+                prompt=prompt,
+                memory=kobold_memory,
+                stop_sequences=stop_sequences,
+            )
+
+        # Instruct mode
+        # System instruction prepended to memory
+        if generation_instruction:
+            memory = f"{generation_instruction}\n\n{memory}"
+
+        # Build the prompt
+        if existing_text and existing_text.strip():
+            prompt = (
+                f"## Continue this {field_type} "
+                f"(write ONLY the continuation, do not repeat what's already written):"
+                f"\n\n{existing_text}"
+            )
+        else:
+            prompt = f"## Write the {field_type}:\n\n"
+
+        stop_sequences = ["</s>", "[END]", "---"]
+
+        return AssemblyResult(
+            prompt=prompt,
+            memory=memory,
+            stop_sequences=stop_sequences,
+        )
+
+    def assemble_thin_frame(
+        self,
+        *,
+        character_data: Dict,
+        is_kobold: bool = False,
+    ) -> AssemblyResult:
+        """
+        Assemble prompt for NPC thin frame generation.
+
+        Centralizes the prompt-building logic from /api/context/generate-thin-frame,
+        including the KoboldCPP override path.
+
+        Args:
+            character_data: Character card data (name, description, personality)
+            is_kobold: Whether the provider is KoboldCPP
+        """
+        data = character_data.get('data', character_data)
+        name = data.get('name', 'Unknown')
+        description = data.get('description', '')
+        personality = data.get('personality', '')
+
+        generation_instruction = (
+            'You are analyzing a character to extract their core identity traits.\n'
+            'Output ONLY a JSON object with these exact fields:\n'
+            '{\n'
+            '  "archetype": "2-3 word character type (e.g., \'gruff blacksmith\', \'mysterious sage\')",\n'
+            '  "key_traits": ["trait1", "trait2", "trait3"],\n'
+            '  "speaking_style": "how they talk (e.g., \'formal, archaic\', \'casual, uses slang\')",\n'
+            '  "motivation": "what drives them in one sentence",\n'
+            '  "appearance_hook": "their most memorable visual detail"\n'
+            '}\n\n'
+            'Rules:\n'
+            '- archetype: Maximum 3 words, captures their role/demeanor\n'
+            '- key_traits: Exactly 3 personality traits, one word each\n'
+            '- speaking_style: How they speak, not what they say\n'
+            '- motivation: Their primary goal or drive\n'
+            '- appearance_hook: One distinctive physical feature or look\n\n'
+            'Output ONLY the JSON object, no other text.'
+        )
+
+        character_context = (
+            f"Character: {name}\n\n"
+            f"Description:\n"
+            f"{description[:1500] if description else 'No description provided.'}\n\n"
+            f"Personality:\n"
+            f"{personality[:1500] if personality else 'No personality provided.'}"
+        )
+
+        prompt = f"{character_context}\n\nJSON:"
+        memory = ""  # Thin frames use no memory context
+
+        if is_kobold:
+            # KoboldCPP: fold instruction into memory, remove </s> from stops
+            memory = generation_instruction
+            stop_sequences = ["\n\n\n", "```\n\n"]
+
+            # Append *** separator
+            if memory and not memory.rstrip().endswith('***'):
+                memory = memory.rstrip() + '\n***'
+        else:
+            # Instruct mode: instruction in memory
+            memory = generation_instruction
+            stop_sequences = ["</s>", "\n\n\n", "```\n\n"]
+
+        return AssemblyResult(
+            prompt=prompt,
+            memory=memory,
+            stop_sequences=stop_sequences,
+        )

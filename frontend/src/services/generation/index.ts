@@ -4,16 +4,10 @@
  *
  * Replaces the monolithic PromptHandler with focused modules:
  * - streamParser: SSE stream parsing (streamResponse)
- * - compressionService: Smart context compression with caching
  * - generationService: LLM generation request orchestration
  */
 
 export { streamResponse } from './streamParser';
-export {
-  formatMessagesForCompression,
-  compressMessages,
-  orchestrateCompression,
-} from './compressionService';
 export {
   generateChatResponse,
   getStopSequences,

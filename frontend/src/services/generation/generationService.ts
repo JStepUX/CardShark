@@ -7,7 +7,6 @@
  *
  * Delegates to:
  * - ContextSerializer (V2) for createMemoryContext, getTemplate
- * - compressionService for smart context compression
  * - Inline payload construction (matching worldGenerationService pattern)
  *
  * Also exports helper functions previously buried in PromptHandler:
@@ -22,7 +21,6 @@ import type { CharacterCard } from '../../types/schema';
 import type { Template } from '../../types/templateTypes';
 import type {
   CompressionLevel,
-  CompressedContextCache,
   MemoryContextResult,
 } from '../chat/chatTypes';
 import { ChatStorage } from '../chatStorage';
@@ -32,7 +30,6 @@ import {
   replaceVariables,
   stripHtmlTags,
 } from '../context/ContextSerializer';
-import { orchestrateCompression } from './compressionService';
 
 const DEBUG = false;
 
@@ -52,11 +49,12 @@ export interface GenerateChatOptions {
   characterCard?: CharacterCard;
   sessionNotes?: string;
   compressionLevel?: CompressionLevel;
-  compressedContextCache?: CompressedContextCache | null;
-  onCompressionStart?: () => void;
-  onCompressionEnd?: () => void;
   onPayloadReady?: (payload: Record<string, unknown>) => void;
   continuationText?: string;
+  /** Phase 3: When true, backend loads chat history from SQLite.
+   *  contextMessages are NOT sent in the payload (saves bandwidth).
+   *  The backend uses chat_session_uuid to load messages from DB. */
+  backendHistory?: boolean;
 }
 
 // ─── Stop Sequences ─────────────────────────────────────────────────────────
@@ -345,11 +343,9 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
     characterCard,
     sessionNotes,
     compressionLevel,
-    compressedContextCache,
-    onCompressionStart,
-    onCompressionEnd,
     onPayloadReady,
     continuationText,
+    backendHistory,
   } = options;
 
   if (!chatSessionUuid) {
@@ -389,20 +385,6 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
       );
     }
 
-    // Smart compression with caching
-    const compressionResult = await orchestrateCompression({
-      contextMessages: contextMessages as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-      characterName,
-      apiConfig: apiConfig as Record<string, unknown>,
-      compressionLevel: effectiveCompressionLevel,
-      compressedContextCache: compressedContextCache || null,
-      signal,
-      onCompressionStart,
-      onCompressionEnd,
-    });
-
-    const { compressedContextBlock, messagesToFormat, updatedCache } = compressionResult;
-
     // Build post-history block
     const currentUserProfile = ChatStorage.getCurrentUser();
     const resolvedUserName = currentUserProfile?.name || 'User';
@@ -415,19 +397,17 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
       resolvedUserName
     );
 
-    // Format conversation history
+    // Format conversation history (for Context Window Modal display;
+    // backend builds its own prompt from character_data + chat_history)
     const history = formatChatHistory(
-      messagesToFormat.map(msg => ({
-        role: msg.role as string,
-        content: msg.content,
-      })),
+      contextMessages,
       characterName,
       templateId
     );
 
     // Assemble final prompt
     const finalPrompt = assemblePrompt(
-      compressedContextBlock,
+      '',
       history,
       postHistoryBlock,
       characterName,
@@ -460,6 +440,10 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
     } : undefined;
 
     // Build payload
+    // Phase 3: When backendHistory is true, omit chat_history from the payload.
+    // The backend loads messages directly from SQLite using chat_session_uuid,
+    // eliminating large payload transfers for normal generation.
+    // Special flows (continuation, regen) still send chat_history when needed.
     const payload = {
       api_config: {
         ...apiConfig,
@@ -475,14 +459,14 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
         stop_sequence: stopSequences,
         chat_session_uuid: chatSessionUuid,
         character_data: essentialCharacterData,
-        chat_history: contextMessages,
+        ...(!backendHistory ? { chat_history: contextMessages } : {}),
         ...(continuationText ? { continuation_text: continuationText } : {}),
         generation_type: apiConfig._generation_type || 'generate',
         quiet: true,
         // Backend assembly fields
         backend_assembly: true,
         compression_level: effectiveCompressionLevel,
-        message_count: contextMessages.length,
+        ...(!backendHistory ? { message_count: contextMessages.length } : {}),
         ...(sessionNotes ? { session_notes: sessionNotes } : {}),
       },
     };
@@ -494,7 +478,6 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
         displayMemory: memoryResult?.memory || '',
         fieldBreakdown: memoryResult?.fieldBreakdown || [],
         savedTokens: memoryResult?.savedTokens || 0,
-        compressedContextCache: updatedCache,
       });
     }
 

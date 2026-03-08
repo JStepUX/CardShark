@@ -1,43 +1,31 @@
 /**
  * @file ChatCompressionContext.tsx
- * @description Manages compression level, compression state, and compressed context cache.
+ * @description Manages compression level setting.
  * Standalone context with zero dependencies on other chat contexts.
+ *
+ * Note: Compression execution moved to backend (Phase 2). This context now
+ * only tracks the user's compression level preference, which is sent to the
+ * backend in the generation payload for field expiration and compression decisions.
  */
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { CompressionLevel, CompressedContextCache } from '../services/chat/chatTypes';
+import { CompressionLevel } from '../services/chat/chatTypes';
 
 interface ChatCompressionContextType {
   compressionLevel: CompressionLevel;
-  isCompressing: boolean;
-  compressedContextCache: CompressedContextCache | null;
   setCompressionLevel: (level: CompressionLevel) => void;
-  invalidateCompressionCache: () => void;
-  setIsCompressing: (value: boolean) => void;
-  setCompressedContextCache: (cache: CompressedContextCache | null) => void;
 }
 
 const ChatCompressionContext = createContext<ChatCompressionContextType | null>(null);
 
 export const ChatCompressionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [compressionLevel, setCompressionLevelState] = useState<CompressionLevel>('none');
-  const [isCompressing, setIsCompressing] = useState<boolean>(false);
-  const [compressedContextCache, setCompressedContextCache] = useState<CompressedContextCache | null>(null);
   const compressionSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
-   * Invalidate compression cache (called when compression level changes or messages are modified)
-   */
-  const invalidateCompressionCache = useCallback(() => {
-    setCompressedContextCache(null);
-  }, []);
-
-  /**
    * Set compression level with debounced save to localStorage
-   * Invalidates compression cache when level changes
    */
   const setCompressionLevel = useCallback((level: CompressionLevel) => {
     setCompressionLevelState(level);
-    invalidateCompressionCache();
 
     if (compressionSaveTimerRef.current) {
       clearTimeout(compressionSaveTimerRef.current);
@@ -50,7 +38,7 @@ export const ChatCompressionProvider: React.FC<{ children: React.ReactNode }> = 
         console.error('Failed to save compression level:', error);
       }
     }, 1500);
-  }, [invalidateCompressionCache]);
+  }, []);
 
   /**
    * Load global compression level on mount
@@ -68,12 +56,7 @@ export const ChatCompressionProvider: React.FC<{ children: React.ReactNode }> = 
 
   const contextValue: ChatCompressionContextType = {
     compressionLevel,
-    isCompressing,
-    compressedContextCache,
     setCompressionLevel,
-    invalidateCompressionCache,
-    setIsCompressing,
-    setCompressedContextCache,
   };
 
   return (

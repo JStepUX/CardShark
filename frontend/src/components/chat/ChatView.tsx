@@ -140,7 +140,6 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
     continueResponse,
     regenerateGreeting,
     impersonateUser,
-    isCompressing,
     sessionNotes,
     setSessionNotes,
     triggeredLoreImages,
@@ -567,7 +566,6 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
               onSend={handleSendMessage}
               onImpersonate={impersonateUser}
               isGenerating={isGenerating}
-              isCompressing={isCompressing}
               currentUser={currentUser}
               onUserSelect={() => setShowUserSelect(true)}
               disableUserSelect={disableUserSelect}

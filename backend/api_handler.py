@@ -120,6 +120,15 @@ class ThinkingTagFilter:
 class ApiHandler:
     def __init__(self, logger):
         self.logger = logger
+        self._compression_service = None
+
+    @property
+    def compression_service(self):
+        """Lazy-init compression service singleton."""
+        if self._compression_service is None:
+            from backend.services.compression_service import CompressionService
+            self._compression_service = CompressionService(self.logger)
+        return self._compression_service
 
     def _apply_thinking_filter(self, chunk: bytes, thinking_filter: ThinkingTagFilter) -> Optional[bytes]:
         """Apply thinking tag filter to a streaming SSE chunk.
@@ -617,7 +626,33 @@ class ApiHandler:
             character_data = generation_params.get('character_data')
             chat_history = generation_params.get('chat_history', [])
             current_message = generation_params.get('current_message', '')
-            
+
+            # ── Phase 3: Load chat history from SQLite ────────────────────────
+            # When backend_assembly is enabled and the frontend omits chat_history
+            # (normal generation), load messages directly from the database.
+            # If the frontend sends chat_history (continuation, regen, etc.),
+            # use the payload version as-is.
+            backend_assembly = generation_params.get('backend_assembly', False)
+            if backend_assembly and not chat_history:
+                chat_session_uuid_for_history = generation_params.get('chat_session_uuid')
+                if chat_session_uuid_for_history:
+                    try:
+                        from backend.database import SessionLocal
+                        from backend.services.chat_service import get_chat_messages_for_generation
+                        db_hist = SessionLocal()
+                        try:
+                            chat_history = get_chat_messages_for_generation(
+                                db_hist, chat_session_uuid_for_history
+                            )
+                            self.logger.log_step(
+                                f"Phase 3: Loaded {len(chat_history)} messages from DB "
+                                f"(session {chat_session_uuid_for_history[:8]}…)"
+                            )
+                        finally:
+                            db_hist.close()
+                    except Exception as hist_err:
+                        self.logger.log_warning(f"Phase 3: DB history load failed, using payload: {hist_err}")
+
             # Extract current message from chat_history if not provided explicitly
             # The last message in chat_history should be the user's current message
             if not current_message and chat_history:
@@ -769,7 +804,7 @@ class ApiHandler:
             # complete prompt for ALL providers (instruct + KoboldCPP story-mode).
             # This replaces the split logic below where non-KoboldCPP used the
             # frontend prompt and KoboldCPP rebuilt from chat_history.
-            backend_assembly = generation_params.get('backend_assembly', False)
+            # (backend_assembly was already read near line 635 for Phase 3 DB loading)
 
             if backend_assembly:
                 from backend.services.prompt_assembly_service import PromptAssemblyService
@@ -799,17 +834,19 @@ class ApiHandler:
                 # DB value takes precedence if available
                 session_notes_final = db_session_notes or generation_params.get('session_notes', '')
 
-                # Extract compressed context from frontend prompt (Phase 1 compat —
-                # compression still runs on frontend, result is embedded in prompt)
-                compressed_context = ''
-                frontend_prompt = generation_params.get('prompt', '')
-                if frontend_prompt:
-                    from backend.kobold_prompt_builder import extract_block
-                    compressed_context = extract_block(
-                        frontend_prompt,
-                        '[Previous Events Summary]',
-                        '[End Summary'
-                    ) or ''
+                # Phase 3: Use DB-loaded message count as primary source
+                message_count = len(chat_history)
+
+                # Backend compression (Phase 2) — replaces Phase 1 extract_block bridge
+                compression_result = self.compression_service.compress_if_needed(
+                    chat_history=chat_history,
+                    compression_level=generation_params.get('compression_level', 'none'),
+                    message_count=message_count,
+                    api_config=api_config,
+                    character_name=(character_data or {}).get('data', {}).get('name', 'Character'),
+                    user_name=user_name,
+                    chat_session_uuid=chat_session_uuid,
+                )
 
                 user_persona = generation_params.get('user_persona', '')
 
@@ -817,14 +854,14 @@ class ApiHandler:
                 template_format = api_config.get('template_format')
 
                 assembly_result = assembler.assemble(
-                    chat_history=chat_history,
+                    chat_history=compression_result.messages_for_formatting,
                     character_data=character_data,
                     template_format=template_format,
                     user_name=user_name,
                     user_persona=user_persona,
                     compression_level=generation_params.get('compression_level', 'none'),
-                    message_count=generation_params.get('message_count', len(chat_history)),
-                    compressed_context=compressed_context,
+                    message_count=message_count,
+                    compressed_context=compression_result.compressed_context,
                     session_notes=session_notes_final,
                     system_instruction=system_instruction,
                     continuation_text=generation_params.get('continuation_text', ''),
@@ -859,7 +896,10 @@ class ApiHandler:
             # ── Legacy codepath (frontend-assembled prompt) ────────────────
             # Kept for backward compatibility with older frontends that do
             # not set backend_assembly=true.
-            if not backend_assembly:
+            # Skip when _pre_assembled is set (legacy endpoints that already
+            # built prompt/memory/stops via PromptAssemblyService).
+            pre_assembled = generation_params.get('_pre_assembled', False)
+            if not backend_assembly and not pre_assembled:
                 # Backend always builds memory from character_data (single source of truth)
                 if character_data and character_data.get('data'):
                     from backend.lore_handler import LoreHandler

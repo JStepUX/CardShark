@@ -146,20 +146,6 @@ export interface MemoryContextResult {
   savedTokens: number;
 }
 
-/**
- * Cached compression result to avoid re-compressing on every message
- */
-export interface CompressedContextCache {
-  /** The compressed summary text */
-  compressedText: string;
-  /** Message count when this compression was performed */
-  compressedAtMessageCount: number;
-  /** Compression level used for this compression */
-  compressionLevel: CompressionLevel;
-  /** Timestamp when compressed (for invalidation) */
-  timestamp: number;
-}
-
 // === TYPE GUARDS ===
 
 /**

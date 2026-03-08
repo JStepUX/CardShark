@@ -15,7 +15,7 @@
  * - This module extracts the shared mechanics while allowing intent-specific customization
  */
 
-import { Message, PromptContextMessage, CompressionLevel, CompressedContextCache } from '../services/chat/chatTypes';
+import { Message, PromptContextMessage, CompressionLevel } from '../services/chat/chatTypes';
 import { buildContextMessages } from './contextBuilder';
 import { streamResponse, generateChatResponse } from '../services/generation';
 import { CharacterCard } from '../types/schema';
@@ -53,15 +53,6 @@ export interface GenerationConfig {
 
     /** Compression level for intelligent context management */
     compressionLevel?: CompressionLevel;
-
-    /** Cached compression result for performance */
-    compressedContextCache?: CompressedContextCache | null;
-
-    /** Callback when compression starts */
-    onCompressionStart?: () => void;
-
-    /** Callback when compression ends */
-    onCompressionEnd?: () => void;
 
     /** Callback with payload before sending to API */
     onPayloadReady?: (payload: any) => void;
@@ -214,7 +205,7 @@ export async function executeGeneration(
     config: GenerationConfig,
     context: GenerationContextResult
 ): Promise<Response> {
-    const { chatSessionUuid, characterData, apiConfig, signal, sessionNotes, compressionLevel, compressedContextCache, onCompressionStart, onCompressionEnd, onPayloadReady } = config;
+    const { chatSessionUuid, characterData, apiConfig, signal, sessionNotes, compressionLevel, onPayloadReady } = config;
 
     // Combine session notes with continuation instructions if present
     let effectiveSessionNotes = sessionNotes || '';
@@ -235,11 +226,9 @@ export async function executeGeneration(
         characterCard: characterData,
         sessionNotes: effectiveSessionNotes,
         compressionLevel,
-        compressedContextCache,
-        onCompressionStart,
-        onCompressionEnd,
         onPayloadReady,
         continuationText: context.continuationText,
+        backendHistory: config.type === 'generate',
     });
 
     return response;

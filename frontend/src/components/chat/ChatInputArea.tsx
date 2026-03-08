@@ -11,7 +11,6 @@ interface ChatInputAreaProps {
   onSend: (text: string) => void;
   onImpersonate?: (partialMessage: string, onChunk: (chunk: string) => void) => Promise<{ success: boolean; response?: string; error?: string }>;
   isGenerating: boolean;
-  isCompressing?: boolean;
   currentUser: UserProfile | null;
   onUserSelect: () => void;
   disableUserSelect?: boolean;
@@ -26,7 +25,6 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onSend,
   onImpersonate,
   isGenerating,
-  isCompressing = false,
   currentUser,
   onUserSelect,
   disableUserSelect = false,
@@ -42,7 +40,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (inputValue.trim() && !isGenerating && !isCompressing) {
+      if (inputValue.trim() && !isGenerating) {
         onSend(inputValue.trim());
         setInputValue('');
       }
@@ -97,13 +95,6 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 
   return (
     <div className="flex-none p-4 border-t border-stone-800">
-      {/* Compression Indicator */}
-      {isCompressing && (
-        <div className="mb-2 flex items-center gap-2 text-sm text-blue-400 animate-pulse">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Preparing context...</span>
-        </div>
-      )}
       <div className="flex items-end gap-4">
         {/* User Image - conditionally rendered */}
         {!hideUserAvatar && (
@@ -153,12 +144,12 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             size="sm"
             icon={<Send size={18} />}
             onClick={() => {
-              if (inputValue.trim() && !isGenerating && !isCompressing && !isImpersonating) {
+              if (inputValue.trim() && !isGenerating && !isImpersonating) {
                 onSend(inputValue.trim());
                 setInputValue('');
               }
             }}
-            disabled={!inputValue.trim() || isGenerating || isCompressing || isImpersonating}
+            disabled={!inputValue.trim() || isGenerating || isImpersonating}
             className="hover:bg-orange-700"
             title="Send message"
           />
@@ -170,7 +161,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               size="sm"
               icon={isImpersonating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
               onClick={async () => {
-                if (isGenerating || isCompressing || isImpersonating) return;
+                if (isGenerating || isImpersonating) return;
 
                 setIsImpersonating(true);
                 const startingText = inputValue.trim();
@@ -195,7 +186,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 
                 setIsImpersonating(false);
               }}
-              disabled={isGenerating || isCompressing || isImpersonating}
+              disabled={isGenerating || isImpersonating}
               className="hover:bg-purple-700"
               title={inputValue.trim() ? "Continue your message with AI" : "Generate a response as you"}
             />

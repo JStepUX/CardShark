@@ -177,13 +177,7 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
         signal: abortCtrl.signal,
         sessionNotes: session.sessionNotes,
         compressionLevel: compression.compressionLevel,
-        compressedContextCache: compression.compressedContextCache,
-        onCompressionStart: () => compression.setIsCompressing(true),
-        onCompressionEnd: () => compression.setIsCompressing(false),
         onPayloadReady: (payload: Record<string, unknown>) => {
-          if (payload.compressedContextCache) {
-            compression.setCompressedContextCache(payload.compressedContextCache as import('../services/chat/chatTypes').CompressedContextCache);
-          }
           session.setLastContextWindow({
             type: 'regeneration',
             timestamp: new Date().toISOString(),
@@ -330,13 +324,8 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
         characterCard: effectiveCharData,
         sessionNotes: session.sessionNotes,
         compressionLevel: compression.compressionLevel,
-        compressedContextCache: compression.compressedContextCache,
-        onCompressionStart: () => compression.setIsCompressing(true),
-        onCompressionEnd: () => compression.setIsCompressing(false),
+        backendHistory: true,
         onPayloadReady: (payload) => {
-          if (payload.compressedContextCache) {
-            compression.setCompressedContextCache(payload.compressedContextCache as import('../services/chat/chatTypes').CompressedContextCache);
-          }
           session.setLastContextWindow({
             type: 'generation',
             timestamp: new Date().toISOString(),
@@ -543,13 +532,7 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
         signal: abortCtrl.signal,
         sessionNotes: session.sessionNotes,
         compressionLevel: compression.compressionLevel,
-        compressedContextCache: compression.compressedContextCache,
-        onCompressionStart: () => compression.setIsCompressing(true),
-        onCompressionEnd: () => compression.setIsCompressing(false),
         onPayloadReady: (payload: Record<string, unknown>) => {
-          if (payload.compressedContextCache) {
-            compression.setCompressedContextCache(payload.compressedContextCache as import('../services/chat/chatTypes').CompressedContextCache);
-          }
           session.setLastContextWindow({
             type: 'continuation',
             timestamp: new Date().toISOString(),
