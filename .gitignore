@@ -73,6 +73,9 @@ gallery_images/
 *.spec
 crawlsite.py
 
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json
+
 # windsurf rules
 .windsurfrules
 content_filters/active_filters.json
