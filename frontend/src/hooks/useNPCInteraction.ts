@@ -8,6 +8,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { CharacterCard } from '../types/schema';
 import type { GridRoom, CombatDisplayNPC } from '../types/worldGrid';
 import type { WorldCard } from '../types/worldCard';
+import type { WorldPlayBondedAllyState } from '../worldplay/session';
 import type { NPCRelationship, TimeState, TimeConfig } from '../types/worldRuntime';
 import type { CombatInitData } from '../types/combat';
 import { injectRoomContext, injectNPCContext, buildThinNPCContext, buildDualSpeakerContext } from '../utils/worldCardAdapter';
@@ -57,6 +58,8 @@ export interface UseNPCInteractionOptions {
   setActiveNpcId: (id: string | undefined) => void;
   setActiveNpcName: (name: string) => void;
   setActiveNpcCard: (card: CharacterCard | null) => void;
+  setBondedAlly: (ally: WorldPlayBondedAllyState | null) => void;
+  clearBondedAlly: () => void;
   currentEmotion: EmotionState | null;
   // Combat trigger callback: view initiates combat when hostile NPC clicked
   onHostileNpcClicked: (initData: CombatInitData) => void;
@@ -104,6 +107,8 @@ export function useNPCInteraction({
   setActiveNpcId,
   setActiveNpcName,
   setActiveNpcCard,
+  setBondedAlly,
+  clearBondedAlly,
   currentEmotion,
   onHostileNpcClicked,
   chatSessionUuid,
@@ -531,9 +536,7 @@ export function useNPCInteraction({
       setConversationTargetName('');
       setConversationTargetCard(null);
 
-      setActiveNpcId(conversationTargetId);
-      setActiveNpcName(npc.name);
-      setActiveNpcCard(npcCharacterData);
+      setBondedAlly({ id: conversationTargetId!, name: npc.name, card: npcCharacterData });
 
       addMessage({
         id: crypto.randomUUID(),
@@ -553,7 +556,7 @@ export function useNPCInteraction({
     } catch (err) {
       console.error('Error bonding with NPC:', err);
     }
-  }, [roomNpcs, currentRoom, addMessage, conversationTargetId, activeNpcId, activeNpcName]);
+  }, [roomNpcs, currentRoom, addMessage, conversationTargetId, activeNpcId, activeNpcName, setBondedAlly]);
 
   const dismissBondedAlly = useCallback(() => {
     if (!currentRoom) return;
@@ -561,9 +564,7 @@ export function useNPCInteraction({
     const npc = roomNpcs.find((n: CombatDisplayNPC) => n.id === activeNpcId);
     if (!npc) return;
 
-    setActiveNpcId(undefined);
-    setActiveNpcName('');
-    setActiveNpcCard(null);
+    clearBondedAlly();
 
     addMessage({
       id: crypto.randomUUID(),
@@ -579,7 +580,7 @@ export function useNPCInteraction({
     } as ChatMessage);
 
     console.log(`Dismissed NPC: ${npc.name} - full character context cleared`);
-  }, [roomNpcs, currentRoom, addMessage, activeNpcId]);
+  }, [roomNpcs, currentRoom, addMessage, activeNpcId, clearBondedAlly]);
 
   return {
     conversationTargetId,

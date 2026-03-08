@@ -157,6 +157,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     setActiveNpcId,
     setActiveNpcName,
     setActiveNpcCard,
+    setBondedAlly,
     clearBondedAlly,
     resetRuntimeState,
   } = session;
@@ -218,6 +219,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     setActiveNpcId,
     setActiveNpcName,
     setActiveNpcCard,
+    setBondedAlly,
+    clearBondedAlly,
     currentEmotion,
     onHostileNpcClicked: useCallback((initData: CombatInitData) => {
       setCombatInitData(initData);
@@ -345,7 +348,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     currentRoom, setCurrentRoom, roomNpcs, setRoomNpcs, roomStatesRef,
     messages, setMessages: setWorldPlayMessages, addMessage: appendWorldPlayMessage,
     activeNpcId, activeNpcName, clearConversationTarget,
-    setActiveNpcId, setActiveNpcName, setActiveNpcCard,
+    setActiveNpcId, setActiveNpcName, setActiveNpcCard, clearBondedAlly,
     isInCombat, setIsInCombat, gridCombat,
     setLocalMapStateCache, setPlayerTilePosition, setWorldState, setAdventureContext,
     playerProgression, timeState, npcRelationships,

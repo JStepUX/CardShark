@@ -81,6 +81,7 @@ interface UseRoomTransitionOptions {
   setActiveNpcId: (id: string | undefined) => void;
   setActiveNpcName: (name: string) => void;
   setActiveNpcCard: (card: CharacterCard | null) => void;
+  clearBondedAlly: () => void;
   clearConversationTarget: () => void;
   isInCombat: boolean;
   setIsInCombat: (inCombat: boolean) => void;
@@ -126,6 +127,7 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
     setActiveNpcId,
     setActiveNpcName,
     setActiveNpcCard,
+    clearBondedAlly,
     clearConversationTarget,
     isInCombat,
     setIsInCombat,
@@ -320,9 +322,7 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
     setPlayerTilePosition(preparedRoom.spawnPosition);
 
     if (!keepActiveNpc) {
-      setActiveNpcId(undefined);
-      setActiveNpcName('');
-      setActiveNpcCard(null);
+      clearBondedAlly();
     }
 
     if (preparedRoom.room.introduction_text) {

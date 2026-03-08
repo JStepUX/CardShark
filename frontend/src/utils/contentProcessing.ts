@@ -74,7 +74,9 @@ export function removeIncompleteSentences(text: string): string {
     return trimmed.slice(0, cutIndex).trimEnd();
   }
 
-  return '';
+  // No sentence ending found — preserve the content as-is rather than
+  // blanking valid completions that simply lack terminal punctuation.
+  return trimmed;
 }
 
 /**
