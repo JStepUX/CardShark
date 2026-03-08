@@ -63,7 +63,7 @@ class KoboldCPPManager:
             logger.warning(f"Could not fetch latest release info: {e}")
             self.latest_release_info = None
             
-        self.download_url = self._get_platform_download_url()
+        self.download_url = self._get_download_url() or self._get_platform_download_url()
         
         # Possible executable names, in order of preference
         self.exe_names = self._get_platform_exe_names()
@@ -96,33 +96,59 @@ class KoboldCPPManager:
             return None
     
     def _get_download_url(self):
-        """Get the direct download URL for the current platform"""
+        """Get the direct download URL for the current platform from GitHub API.
+
+        Uses the release assets list for accurate filename matching, since
+        KoboldCPP asset names vary across releases (e.g. koboldcpp-mac-arm64,
+        koboldcpp_macos_arm64, etc.).
+        """
         try:
             release_info = self._get_latest_release_info()
-            
-            # Determine the correct asset based on platform
-            import platform
+            if not release_info:
+                return None
+
             system = platform.system().lower()
-            
+            machine = platform.machine().lower()
+            assets = release_info.get('assets', [])
+
             if system == "windows":
-                filename = "koboldcpp.exe"
-            elif system == "darwin":  # macOS
-                filename = "koboldcpp-mac"
-            else:  # Linux and others
-                filename = "koboldcpp-linux"
-            
-            # Find the matching asset
-            for asset in release_info.get('assets', []):
-                if asset['name'] == filename:
-                    return asset['browser_download_url']
-            
-            # Fallback to releases page if specific asset not found
+                # Windows: look for .exe
+                for asset in assets:
+                    name = asset['name'].lower()
+                    if name == 'koboldcpp.exe' or (name.startswith('koboldcpp') and name.endswith('.exe')):
+                        return asset['browser_download_url']
+            elif system == "darwin":
+                # macOS: prefer ARM64 build on Apple Silicon, fall back to generic mac build
+                arm_match = None
+                mac_match = None
+                for asset in assets:
+                    name = asset['name'].lower()
+                    if name.endswith('.exe') or 'linux' in name:
+                        continue
+                    if 'mac' in name or 'macos' in name or 'darwin' in name:
+                        if 'arm64' in name or 'arm' in name:
+                            arm_match = asset['browser_download_url']
+                        else:
+                            mac_match = asset['browser_download_url']
+                # Prefer ARM64 on Apple Silicon, otherwise generic mac
+                if machine == 'arm64' and arm_match:
+                    return arm_match
+                return arm_match or mac_match
+            else:
+                # Linux
+                for asset in assets:
+                    name = asset['name'].lower()
+                    if name.endswith('.exe') or 'mac' in name or 'macos' in name or 'darwin' in name:
+                        continue
+                    if 'linux' in name:
+                        return asset['browser_download_url']
+
+            # Fallback to releases page if no matching asset found
             return release_info.get('html_url', 'https://github.com/LostRuins/koboldcpp/releases/latest')
-            
+
         except Exception as e:
             logger.error(f"Failed to get download URL: {e}")
-            # Ultimate fallback
-            return 'https://github.com/LostRuins/koboldcpp/releases/latest'
+            return None
     
     def _get_installed_version(self) -> str:
         """Get the installed version of KoboldCPP"""
@@ -254,7 +280,7 @@ class KoboldCPPManager:
         if platform.system() == 'Windows':
             return ['koboldcpp.exe', 'koboldcpp_win.exe', 'koboldcpp_x64.exe']
         elif platform.system() == 'Darwin':  # macOS
-            return ['koboldcpp', 'koboldcpp_macos']
+            return ['koboldcpp', 'koboldcpp-mac-arm64', 'koboldcpp_macos_arm64', 'koboldcpp_macos', 'koboldcpp-mac']
         else:  # Linux
             return ['koboldcpp', 'koboldcpp_linux']
 

@@ -12,6 +12,10 @@ import tempfile  # Import tempfile for getting temp directory
 import psutil  # For process management
 import requests  # For health checks
 
+# npm on Windows is npm.cmd, which requires shell=True to resolve via PATH.
+# On macOS/Linux, shell=True with a list breaks argument passing.
+_SHELL = sys.platform == "win32"
+
 app = FastAPI()
 
 # CardShark ports
@@ -123,11 +127,11 @@ def check_npm():
     try:
         # Print current working directory for debugging
         print(f"Checking npm from: {os.getcwd()}")
-        result = subprocess.run(["npm", "--version"], 
-                              stdout=subprocess.PIPE, 
-                              stderr=subprocess.PIPE, 
+        result = subprocess.run(["npm", "--version"],
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,
                               check=True,
-                              shell=True)  # Add shell=True for Windows
+                              shell=_SHELL)
         print(f"npm version: {result.stdout.decode().strip()}")
         return True
     except Exception as e:
@@ -139,7 +143,7 @@ def install_frontend_deps(root_dir):
     if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
         print("Installing frontend dependencies...")
         os.chdir(frontend_dir)
-        subprocess.run(["npm", "install"], check=True)
+        subprocess.run(["npm", "install"], check=True, shell=_SHELL)
         os.chdir(root_dir)
 
 def install_backend_deps(root_dir):
@@ -175,7 +179,7 @@ def run_backend():
 def run_frontend(root_dir):
     frontend_dir = os.path.join(root_dir, "frontend")
     os.chdir(frontend_dir)
-    subprocess.run(["npm", "run", "dev"], shell=True, check=True)
+    subprocess.run(["npm", "run", "dev"], shell=_SHELL, check=True)
 
 def signal_handler(signum, frame):
     print("\nShutting down...")

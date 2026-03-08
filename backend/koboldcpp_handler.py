@@ -85,12 +85,17 @@ class KoboldCPPHandler:
                     status["is_running"] = bool(lsof_output.strip())
                 except (subprocess.SubprocessError, FileNotFoundError):
                     # Fallback to netstat if lsof fails or is not available
+                    # Use -an (works on macOS and Linux) instead of -tulnp (Linux-only)
                     try:
                         netstat_output = subprocess.check_output(
-                            ["netstat", "-tulnp"],
+                            ["netstat", "-an"],
                             text=True
                         )
-                        status["is_running"] = f":{DEFAULT_KCPP_PORT}" in netstat_output
+                        for line in netstat_output.splitlines():
+                            if f".{DEFAULT_KCPP_PORT}" in line or f":{DEFAULT_KCPP_PORT}" in line:
+                                if "LISTEN" in line:
+                                    status["is_running"] = True
+                                    break
                     except (subprocess.SubprocessError, FileNotFoundError):
                         logger.warning("Could not check if KoboldCPP is running - netstat and lsof commands failed")
         except Exception as e:
