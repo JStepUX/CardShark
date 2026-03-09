@@ -76,7 +76,7 @@ def read_rooms(
             success=True,
             message="Rooms retrieved successfully",
             data=rooms,
-            count=len(rooms)
+            total=len(rooms)
         )
     except Exception as e:
         logger.error(f"Error retrieving rooms: {str(e)}")
