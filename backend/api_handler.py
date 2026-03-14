@@ -594,8 +594,11 @@ class ApiHandler:
 
             # Extract basic required parameters
             prompt = generation_params.get('prompt')
-            # Backend owns memory building — ignore frontend memory field
-            memory = ''
+            # Backend owns memory building — ignore frontend memory field.
+            # Exception: _pre_assembled endpoints (greeting, impersonate, etc.)
+            # already built memory via PromptAssemblyService; preserve their value.
+            pre_assembled = generation_params.get('_pre_assembled', False)
+            memory = generation_params.get('memory', '') if pre_assembled else ''
             excluded_fields = generation_params.get('excluded_fields', [])
             user_name = generation_params.get('user_name', 'User') or 'User'
 
@@ -898,7 +901,7 @@ class ApiHandler:
             # not set backend_assembly=true.
             # Skip when _pre_assembled is set (legacy endpoints that already
             # built prompt/memory/stops via PromptAssemblyService).
-            pre_assembled = generation_params.get('_pre_assembled', False)
+            # (pre_assembled was read near line 598)
             if not backend_assembly and not pre_assembled:
                 # Backend always builds memory from character_data (single source of truth)
                 if character_data and character_data.get('data'):
