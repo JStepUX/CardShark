@@ -635,6 +635,7 @@ export class LocalMapStage extends PIXI.Container {
             this.viewportPan.y = centerY - contentY * this.viewportZoom;
         }
 
+        this.clampPan();
         this.applyViewportTransform();
     }
 

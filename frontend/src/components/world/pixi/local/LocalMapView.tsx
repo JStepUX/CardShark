@@ -610,7 +610,9 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             // Add canvas to DOM with z-index above blurred background
             if (containerRef.current) {
                 const canvas = app.canvas as HTMLCanvasElement;
-                canvas.style.position = 'relative';
+                canvas.style.position = 'absolute';
+                canvas.style.top = '0';
+                canvas.style.left = '0';
                 canvas.style.zIndex = '10';
                 containerRef.current.appendChild(canvas);
                 if (DEBUG) console.log('[LocalMapView] Canvas appended to DOM');
@@ -660,8 +662,10 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                 stage.updateFromState(mapState);
             }
 
-            // Set initial zoom and center on player
-            centerViewportOnPlayer({ resetZoom: true });
+            // Set initial zoom and center on player (defer to after browser layout)
+            requestAnimationFrame(() => {
+                centerViewportOnPlayer({ resetZoom: true });
+            });
 
             // Mark stage ready (triggers background effect)
             setStageReady(true);
@@ -995,9 +999,6 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
             style={{
                 width: '100%',
                 height: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
                 overflow: 'hidden',
                 backgroundColor: '#1a1a1a',
                 position: 'relative',
