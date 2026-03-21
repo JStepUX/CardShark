@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# health-check.sh — tsc + jest + pytest + git status + TODO counts
+# health-check.sh — tsc + vitest + pytest + git status + TODO counts
 # Usage: bash scripts/agent/health-check.sh
 
 source "$(dirname "$0")/_common.sh"
@@ -27,15 +27,15 @@ header "Health Check"
 ) &
 pid_fe_tsc=$!
 
-# Frontend jest
+# Frontend vitest
 (
-  echo "=== Frontend Tests (Jest) ===" > "$tmp_dir/fe_test.txt"
-  if [ -f "frontend/package.json" ] && grep -q '"jest"' frontend/package.json 2>/dev/null; then
+  echo "=== Frontend Tests (Vitest) ===" > "$tmp_dir/fe_test.txt"
+  if [ -f "frontend/package.json" ] && grep -q '"vitest"' frontend/package.json 2>/dev/null; then
     cd frontend
-    npx jest --ci 2>&1 | tail -40 >> "$tmp_dir/fe_test.txt"
+    npx vitest run 2>&1 | tail -40 >> "$tmp_dir/fe_test.txt"
     echo "EXIT:${PIPESTATUS[0]}" >> "$tmp_dir/fe_test.txt"
   else
-    echo "  (jest not configured)" >> "$tmp_dir/fe_test.txt"
+    echo "  (vitest not configured)" >> "$tmp_dir/fe_test.txt"
     echo "EXIT:0" >> "$tmp_dir/fe_test.txt"
   fi
 ) &

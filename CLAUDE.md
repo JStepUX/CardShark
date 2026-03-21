@@ -18,7 +18,7 @@ Bash scripts that collapse common multi-tool-call patterns into single invocatio
 | `codebase-snapshot.sh` | Project tree, git log, scripts, file counts | `codebase-snapshot.sh` |
 | `related-files.sh` | Grep for term + imports/context per match | `related-files.sh <term> [dir]` |
 | `git-context.sh` | Status, diffs, branch info for commits/PRs | `git-context.sh [base-branch]` |
-| `health-check.sh` | tsc + jest + pytest (parallel) + git + TODO counts | `health-check.sh` |
+| `health-check.sh` | tsc + vitest + pytest (parallel) + git + TODO counts | `health-check.sh` |
 | `trace-imports.sh` | Who imports a file/symbol (2-level) | `trace-imports.sh <file-or-symbol>` |
 | `schema-dump.sh` | DB tables + API route map | `schema-dump.sh` |
 | `test-scan.sh` | Test gap analysis + metrics | `test-scan.sh [--scope backend\|frontend\|all]` |
@@ -42,7 +42,7 @@ Docs live in `docs/vendor/` (migration) and `docs/vendor/reference/` (durable AP
 
 ## Test Runners
 
-- **Frontend:** Jest (`npm test` from `frontend/`). Config in `frontend/jest.config.cjs`. Uses `ts-jest` + `jsdom`.
+- **Frontend:** Vitest (`npm test` from `frontend/`). Config in `frontend/vitest.config.ts`. Uses Vite's SWC pipeline + `jsdom`.
 - **Backend:** pytest (`pytest` from `backend/`). Python + FastAPI. Smoke tests in `backend/tests/smoke/` use in-memory SQLite with patched side effects.
 - **Build:** `python build.py` generates `CardShark.spec` — never edit the spec directly.
 - **Monolith gate:** `file-size.test.ts` fails if any source file exceeds 1000 lines (allowlist in the test file).

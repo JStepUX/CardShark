@@ -165,7 +165,7 @@ run_backend_scan() {
   fi
 }
 
-# ── Frontend Scan (TypeScript/Jest) ──
+# ── Frontend Scan (TypeScript/Vitest) ──
 run_frontend_scan() {
   subheader "Frontend: Source ↔ Test Coverage"
 
@@ -214,14 +214,14 @@ run_frontend_scan() {
     done
   fi
 
-  # ── Frontend Mock Density (Jest) ──
+  # ── Frontend Mock Density (Vitest) ──
   subheader "Frontend: Mock Density"
   local fe_test_count=0
   while IFS= read -r test_file; do
     [ -f "$test_file" ] || continue
     fe_test_count=$((fe_test_count + 1))
     local base=$(basename "$test_file")
-    local mock_count=$(count_in_file "$test_file" "jest\.(mock|fn|spyOn)")
+    local mock_count=$(count_in_file "$test_file" "vi\.(mock|fn|spyOn)")
     local test_count=$(count_in_file "$test_file" "^\s*(it|test)\(")
     if [ "$test_count" -eq 0 ]; then test_count=1; fi
     local ratio=$(awk "BEGIN { printf \"%.2f\", $mock_count / $test_count }")

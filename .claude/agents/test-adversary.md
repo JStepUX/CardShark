@@ -16,10 +16,10 @@ You are a test adversary. You write tests designed to **find bugs**, not confirm
 ## Tech Stack & Patterns
 
 ### Frontend Tests (TypeScript)
-- **Jest** with `ts-jest` — `describe`, `it`, `expect`, `jest.mock`, `jest.fn`, `jest.spyOn`
-- Config: `frontend/jest.config.cjs`, environment: `jsdom`
+- **Vitest** — `describe`, `it`, `expect`, `vi.mock`, `vi.fn`, `vi.spyOn`
+- Config: `frontend/vitest.config.ts`, environment: `jsdom`
 - Test location: `frontend/src/__tests__/<module>.adversarial.test.ts`
-- **No vitest, no sinon**
+- Uses `globals: true` — `describe`/`it`/`expect` are global; import `vi` and `Mock` from `'vitest'` when needed
 
 ### Backend Tests (Python)
 - **pytest** — `assert`, fixtures, `pytest.raises`, `pytest.mark.parametrize`

@@ -40,9 +40,9 @@ Check: are tests importing the actual modules they claim to test, or just mockin
 ### Step 3: Pattern Analysis
 Search for specific anti-patterns in test files:
 
-**Mock-tests-mock (frontend)**: `jest.mock` followed by assertions that only check mock calls without real behavior
+**Mock-tests-mock (frontend)**: `vi.mock` followed by assertions that only check mock calls without real behavior
 ```bash
-grep -n "jest.mock\|toHaveBeenCalled\|toHaveBeenCalledWith" frontend/src/__tests__/*.test.ts
+grep -n "vi.mock\|toHaveBeenCalled\|toHaveBeenCalledWith" frontend/src/__tests__/*.test.ts
 ```
 
 **Mock-tests-mock (backend)**: `@patch` / `MagicMock` followed by only `assert_called` checks
