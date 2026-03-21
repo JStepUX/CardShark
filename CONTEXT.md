@@ -90,75 +90,36 @@ selection_ui: Message Manager
 ```
 
 ## FILE_GRAPH
-```mermaid
-flowchart LR
-subgraph frontend[frontend/src/]
-subgraph views[views/]
-WCV[WorldCardsView.tsx]
-WV[WorldView.tsx]
-end
-subgraph components[components/]
-CV[ChatView.tsx]
-CG[CharacterGallery.tsx]
-CIV[CharacterInfoView.tsx]
-ASV[APISettingsView.tsx]
-end
-subgraph hooks[hooks/]
-UCM[useChatMessages.ts]
-end
-subgraph handlers[handlers/]
-PH[promptHandler.ts]
-end
-subgraph contexts[contexts/]
-CC[ChatContext.tsx]
-CharC[CharacterContext.tsx]
-WPC[WorldPlayContext.tsx]
-APC[APIConfigContext.tsx]
-end
-subgraph api[api/]
-WA[worldApi.ts]
-CA[characterApi.ts]
-end
-end
-subgraph backend[backend/]
-subgraph endpoints[endpoints]
-CE[chat_endpoints.py]
-ChE[character_endpoints.py]
-WE[world_endpoints.py]
-SE[settings_endpoints.py]
-end
-subgraph services[services/]
-CS[chat_service.py]
-end
-subgraph handlers_be[handlers/]
-WCH[world_card_handler_v2.py]
-RCH[room_card_handler.py]
-EH[export_handler.py]
-PMH[png_metadata_handler.py]
-CH[chat_handler.py]
-end
-subgraph models[models/]
-WC[world_card.py]
-RC[room_card.py]
-CD[character_data.py]
-end
-end
-subgraph storage[Storage]
-DB[(cardshark.sqlite)]
-PNG[/*.png files/]
-JSON[/*.json files/]
-end
-CV --> UCM
-UCM --> CC
-CV --> PH
-PH --> APC
-api --> endpoints
-CE --> CS
-CS --> DB
-ChE --> PMH
-PMH --> PNG
-WE --> WSH
-WSH --> JSON
+```yaml
+# This section is intentionally high-level. For live import tracing, run:
+#   bash scripts/agent/trace-imports.sh <file-or-symbol>
+#   bash scripts/agent/codebase-snapshot.sh
+frontend:
+  views: [WorldPlayView.tsx, WorldEditor.tsx, WorldLauncher.tsx]
+  components:
+    chat: [ChatView.tsx, ChatBubble.tsx, ChatHeader.tsx, ChatInputArea.tsx]
+    character: [CharacterGallery.tsx, CharacterInfoView.tsx, CharacterDetailView.tsx]
+    settings: [APISettingsView.tsx]
+    combat: [GridCombatHUD.tsx, CombatLogPanel.tsx, CombatEndScreen.tsx]
+    world: [PlayViewLayout.tsx, LocalMapView.tsx]
+  contexts: [ChatContext.tsx, CharacterContext.tsx, WorldPlayContext.tsx, APIConfigContext.tsx]
+  services:
+    generation: [generationService.ts, streamParser.ts]
+    combat: [gridCombatEngine.ts, gridEnemyAI.ts, combatMapSync.ts]
+    context: [ContextAssembler.ts, ContextSerializer.ts, ContextCache.ts]
+  api: [worldApi.ts, characterApi.ts]
+backend:
+  endpoints: [chat_endpoints.py, character_endpoints.py, generation_endpoints.py, settings_endpoints.py, world_card_endpoints_v2.py, room_card_endpoints.py]
+  services: [chat_service.py, character_service.py, world_card_service.py, world_export_service.py]
+  handlers: [room_card_handler.py, world_card_chat_handler.py, world_chat_handler.py]
+  core: [png_metadata_handler.py, api_handler.py, kobold_prompt_builder.py, logit_shaper.py]
+  models: [world_card.py, room_card.py, character_data.py]
+storage:
+  database: cardshark.sqlite
+  characters: "characters/*.png (EXIF metadata)"
+  worlds: "characters/worlds/*.png"
+  rooms: "characters/rooms/*.png"
+  settings: settings.json
 ```
 
 ## STATE_MACHINES
@@ -286,7 +247,8 @@ response: v2 character data
 
 ### world_endpoints
 ```yaml
-# V2 PNG-Based World Cards API
+# V2 PNG-Based World Cards API (prefix: /api/world-cards-v2)
+# For live route listing: bash scripts/agent/schema-dump.sh
 list_worlds:
 method: GET
 path: /api/world-cards-v2/
@@ -324,32 +286,32 @@ path: /api/world-cards-v2/import
 request: .cardshark.zip file
 response: imported world UUID
 
-# Room Cards API
+# Room Cards API (prefix: /api/room-cards)
 list_rooms:
 method: GET
-path: /api/room-cards-v2/
+path: /api/room-cards/
 response: array of RoomCardSummary
 
 create_room:
 method: POST
-path: /api/room-cards-v2/
+path: /api/room-cards/
 request: multipart (name, description, image, npcs)
 response: RoomCardSummary
 
 get_room:
 method: GET
-path: /api/room-cards-v2/{uuid}
+path: /api/room-cards/{uuid}
 response: RoomCard (Character Card V2 with room_data extension)
 
 update_room:
 method: PUT
-path: /api/room-cards-v2/{uuid}
+path: /api/room-cards/{uuid}
 request: {name, description, npcs}
 response: RoomCardSummary
 
 delete_room:
 method: DELETE
-path: /api/room-cards-v2/{uuid}
+path: /api/room-cards/{uuid}
 ```
 
 ## INVARIANTS
@@ -377,41 +339,37 @@ rule: active template determines payload format
 
 ## ENTRY_POINTS
 ```yaml
+# For live import tracing: bash scripts/agent/trace-imports.sh <file-or-symbol>
 modify_chat:
-start: frontend/src/components/ChatView.tsx
-check: [frontend/src/hooks/useChatMessages.ts, frontend/src/handlers/promptHandler.ts, backend/chat_endpoints.py, backend/services/chat_service.py]
+start: frontend/src/components/chat/ChatView.tsx
+check: [frontend/src/hooks/chat/useChatSession.ts, frontend/src/services/generation/generationService.ts, backend/endpoints/chat_endpoints.py, backend/services/chat_service.py]
 
 modify_character:
-start: backend/character_endpoints.py
-check: [backend/png_metadata_handler.py, frontend/src/components/CharacterInfoView.tsx, frontend/src/components/CharacterGallery.tsx]
+start: backend/endpoints/character_endpoints.py
+check: [backend/png_metadata_handler.py, frontend/src/components/character/CharacterInfoView.tsx, frontend/src/components/character/CharacterGallery.tsx]
 
 modify_world:
 start: backend/endpoints/world_card_endpoints_v2.py
-check: [backend/handlers/world_card_handler_v2.py, backend/handlers/room_card_handler.py, backend/handlers/export_handler.py, frontend/src/views/WorldPlayView.tsx, frontend/src/views/WorldEditor.tsx, frontend/src/api/worldApi.ts]
+check: [backend/handlers/room_card_handler.py, frontend/src/views/WorldPlayView.tsx, frontend/src/views/WorldEditor.tsx, frontend/src/api/worldApi.ts]
 
 modify_api_config:
-start: frontend/src/components/APISettingsView.tsx
-check: [frontend/src/contexts/APIConfigContext.tsx, backend/settings_endpoints.py, templates/]
+start: frontend/src/components/settings/APISettingsView.tsx
+check: [frontend/src/contexts/APIConfigContext.tsx, backend/endpoints/settings_endpoints.py, templates/]
 
-modify_prompt_format:
-start: frontend/src/handlers/promptHandler.ts
-check: [templates/, frontend/src/contexts/APIConfigContext.tsx]
+modify_generation:
+start: frontend/src/services/generation/generationService.ts
+check: [frontend/src/services/generation/streamParser.ts, backend/api_handler.py, backend/kobold_prompt_builder.py, backend/logit_shaper.py]
 
 add_endpoint:
 start: backend/main.py
-pattern: [1_create_endpoint, 2_create_service, 3_add_pydantic_model, 4_create_frontend_client]
+pattern: [1_create_endpoint_in_endpoints/, 2_create_service, 3_add_pydantic_model, 4_create_frontend_api_client]
 ```
 
 ## COMPLEXITY_WARNINGS
 ```yaml
-ChatView_tsx:
-issue: too many concerns
-responsibilities: [rendering, emotion_detection, scroll, hotkeys, settings, backgrounds]
-recommendation: decompose
-
 template_system:
 issue: cross-layer ripple
-touches: [api_config, prompt_handler, character_context, LLM_request]
+touches: [api_config, generationService, character_context, LLM_request]
 recommendation: trace full path first
 
 png_metadata:
@@ -426,15 +384,11 @@ source_of_truth: SQLite
 frontend_role: cache
 risk: stale state on silent failures
 recommendation: handle errors, refresh on doubt
-```
 
-## ACTIVE_DEVELOPMENT
-```yaml
-# HUMAN_INPUT_REQUIRED
-current_focus: null
-in_progress: []
-blocked_on: []
-recently_completed: []
+kobold_prompt_building:
+issue: story-mode prompt assembly differs from standard providers
+touches: [api_handler.py, kobold_prompt_builder.py, generation_endpoints.py]
+recommendation: test both KoboldCPP and standard provider paths
 ```
 
 ## HISTORY
@@ -470,6 +424,6 @@ template_tokens:
 - never hardcode names
 
 references:
-- AGENT.md (tool config)
-- docs/cursorrules.md (conventions)
+- AGENTS.md (comprehensive dev guide)
+- CONTEXT.md (this file - system definition)
 ```

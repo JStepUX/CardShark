@@ -24,6 +24,7 @@ Bash scripts that collapse common multi-tool-call patterns into single invocatio
 | `test-scan.sh` | Test gap analysis + metrics | `test-scan.sh [--scope backend\|frontend\|all]` |
 | `extract-interfaces.sh` | Type signature extraction | `extract-interfaces.sh <file-or-dir> [--awk]` |
 | `read-docs.sh` | Vendor docs + Context7 pointers for post-cutoff packages | `read-docs.sh <package-or-phase>` |
+| `context-validate.sh` | Validate CONTEXT.md file paths + API routes against live codebase | `context-validate.sh` |
 
 Shared utilities live in `_common.sh` (project root detection, colors, `resolve_import()`, `extract_imports()`, `extract_signatures()`).
 
