@@ -13,11 +13,6 @@ dist-ssr
 *.local
 chats
 users
-__tests__
-__mocks__
-*.test.ts
-jest*.*
-scripts
 cardshark.sqlite
 
 # Editor directories and files

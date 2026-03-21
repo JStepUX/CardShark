@@ -57,7 +57,6 @@ legacy/
 settings.json
 active_filters.json
 users/
-__tests__/
 context/
 backgrounds/
 Characters/
