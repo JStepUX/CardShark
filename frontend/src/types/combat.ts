@@ -688,6 +688,7 @@ export function getAPForLevel(level: number): number {
  */
 export const GRID_AP_COSTS = {
   move: WORLD_PLAY_COMBAT.actionCosts.move,
+  difficultMove: WORLD_PLAY_COMBAT.actionCosts.difficultMove,
   attack: WORLD_PLAY_COMBAT.actionCosts.attack,
   lightAttack: WORLD_PLAY_COMBAT.actionCosts.lightAttack,
   defend: WORLD_PLAY_COMBAT.actionCosts.defend,
@@ -696,6 +697,9 @@ export const GRID_AP_COSTS = {
   aoeAttack: WORLD_PLAY_COMBAT.actionCosts.aoeAttack,
   useItem: WORLD_PLAY_COMBAT.actionCosts.useItem,
 } as const;
+
+/** Chance (0-100) that a defeated enemy is incapacitated rather than killed */
+export const INCAPACITATION_CHANCE_PERCENT = WORLD_PLAY_COMBAT.outcomes.incapacitationChancePercent;
 
 /** Maximum light attacks per turn (regardless of available AP) */
 export const MAX_LIGHT_ATTACKS_PER_TURN = WORLD_PLAY_COMBAT.limits.maxLightAttacksPerTurn;

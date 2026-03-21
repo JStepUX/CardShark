@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Message } from '../types/messages';
 import type { WorldCard } from '../types/worldCard';
 import type { CombatDisplayNPC, GridRoom, GridWorldState } from '../types/worldGrid';
@@ -76,6 +76,6 @@ export function useWorldPlayHydration({
   return {
     missingRoomCount,
     showMissingRoomWarning,
-    dismissMissingRoomWarning: () => setShowMissingRoomWarning(false),
+    dismissMissingRoomWarning: useCallback(() => setShowMissingRoomWarning(false), []),
   };
 }

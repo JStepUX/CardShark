@@ -124,7 +124,6 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
             {phase === 'summarizing' && 'Summarizing your visit...'}
             {phase === 'loading_assets' && 'Loading assets...'}
             {phase === 'generating_frames' && 'Generating NPC profiles...'}
-            {phase === 'ready' && 'Almost there...'}
           </span>
         </div>
       </div>

@@ -38,7 +38,6 @@ import {
 } from '../worldplay/roomTransition';
 import type { NPCRelationship, TimeState } from '../types/worldRuntime';
 import type { CharacterInventory } from '../types/inventory';
-import type { CharacterCard } from '../types/schema';
 import type { AdventureContext } from '../types/adventureLog';
 import type { PlayerProgression } from '../utils/progressionUtils';
 import {
@@ -78,9 +77,6 @@ interface UseRoomTransitionOptions {
   addMessage: WorldPlayMessageAppender;
   activeNpcId: string | undefined;
   activeNpcName: string;
-  setActiveNpcId: (id: string | undefined) => void;
-  setActiveNpcName: (name: string) => void;
-  setActiveNpcCard: (card: CharacterCard | null) => void;
   clearBondedAlly: () => void;
   clearConversationTarget: () => void;
   isInCombat: boolean;
@@ -124,9 +120,6 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
     addMessage,
     activeNpcId,
     activeNpcName,
-    setActiveNpcId,
-    setActiveNpcName,
-    setActiveNpcCard,
     clearBondedAlly,
     clearConversationTarget,
     isInCombat,
@@ -296,7 +289,6 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
     keepActiveNpc: boolean,
     entryDir: ExitDirection | null
   ) => {
-    setTransitionPhase('ready');
     setEntryDirection(entryDir);
 
     setWorldState((previous) => {
@@ -359,14 +351,11 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
     activeNpcId,
     activeNpcName,
     addMessage,
-    setActiveNpcCard,
-    setActiveNpcId,
-    setActiveNpcName,
+    clearBondedAlly,
     setCurrentRoom,
     setPlayerTilePosition,
     setRoomNpcs,
     setShowMap,
-    setTransitionPhase,
     setWorldState,
   ]);
 
@@ -484,7 +473,7 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
   ]);
 
   const handleNavigate = useCallback(async (roomId: string, entryDir: ExitDirection | null = null) => {
-    if (!worldState) {
+    if (!worldState || isTransitioning) {
       return;
     }
 
@@ -508,7 +497,7 @@ export function useRoomTransition(options: UseRoomTransitionOptions): UseRoomTra
 
     const keepAlly = Boolean(activeNpcId && activeNpcName);
     await performRoomTransition(foundRoom, keepAlly, entryDir);
-  }, [activeNpcId, activeNpcName, performRoomTransition, worldState]);
+  }, [activeNpcId, activeNpcName, isTransitioning, performRoomTransition, worldState]);
 
   const handleLocalMapExitClick = useCallback(async (exit: { direction: ExitDirection; targetRoomId: string }) => {
     await handleNavigate(exit.targetRoomId, OPPOSITE_DIRECTIONS[exit.direction]);

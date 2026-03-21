@@ -222,6 +222,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
         currentZoom,
         viewportDebug,
         isPanMode,
+        isPanModeRef,
         setIsPanMode,
         centerViewportOnPlayer,
         handleZoomIn,
@@ -730,7 +731,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
 
     // Handle tile click - uses click-to-move for distant tiles
     const handleTileClick = useCallback((position: TilePosition) => {
-        if (isPanMode) return;
+        if (isPanModeRef.current) return;
 
         const mapState = buildMapState();
         if (!mapState) return;

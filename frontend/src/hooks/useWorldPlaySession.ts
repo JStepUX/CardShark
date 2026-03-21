@@ -1,7 +1,6 @@
 import { useCallback, useReducer, useRef, type MutableRefObject, type SetStateAction } from 'react';
 import type { CharacterInventory } from '../types/inventory';
 import type { RoomInstanceState } from '../types/worldCard';
-import type { CombatDisplayNPC } from '../types/worldGrid';
 import type { NPCRelationship, TimeState } from '../types/worldRuntime';
 import type { PlayerProgression } from '../utils/progressionUtils';
 import type { WorldLoadResult } from './useWorldLoader';
@@ -11,7 +10,7 @@ import {
   type WorldPlaySessionState,
   worldPlaySessionReducer,
 } from '../worldplay/session';
-import { snapshotRoomState } from '../worldplay/roomTransition';
+
 
 interface UseWorldPlaySessionOptions {
   initialPlayerProgression: PlayerProgression;
@@ -36,8 +35,6 @@ interface UseWorldPlaySessionReturn extends WorldPlaySessionState {
   setActiveNpcCard: (card: WorldPlayBondedAllyState['card']) => void;
   clearBondedAlly: () => void;
   resetRuntimeState: (options: { timeState: TimeState; playerInventory: CharacterInventory }) => void;
-  replaceRoomStates: (roomStates: Record<string, RoomInstanceState>) => void;
-  snapshotRoomState: (roomId: string, roomNpcs: CombatDisplayNPC[]) => void;
 }
 
 export function useWorldPlaySession({
@@ -58,9 +55,9 @@ export function useWorldPlaySession({
       type: 'hydrate',
       payload: {
         playerProgression: result.playerProgression,
-        timeState: result.timeState ?? state.timeState,
+        timeState: result.timeState ?? undefined,
         npcRelationships: result.npcRelationships,
-        playerInventory: result.playerInventory ?? state.playerInventory,
+        playerInventory: result.playerInventory ?? undefined,
         bondedAlly: result.bondedAlly
           ? {
             ...result.bondedAlly,
@@ -69,7 +66,7 @@ export function useWorldPlaySession({
           : null,
       },
     });
-  }, [state.playerInventory, state.timeState]);
+  }, []);
 
   const setPlayerProgression = useCallback((value: SetStateAction<PlayerProgression>) => {
     dispatch({
@@ -172,14 +169,6 @@ export function useWorldPlaySession({
     });
   }, []);
 
-  const replaceRoomStates = useCallback((roomStates: Record<string, RoomInstanceState>) => {
-    roomStatesRef.current = roomStates;
-  }, []);
-
-  const snapshotCurrentRoomState = useCallback((roomId: string, roomNpcs: CombatDisplayNPC[]) => {
-    roomStatesRef.current[roomId] = snapshotRoomState(roomNpcs);
-  }, []);
-
   return {
     ...state,
     activeNpcId,
@@ -198,7 +187,5 @@ export function useWorldPlaySession({
     setActiveNpcCard,
     clearBondedAlly,
     resetRuntimeState,
-    replaceRoomStates,
-    snapshotRoomState: snapshotCurrentRoomState,
   };
 }

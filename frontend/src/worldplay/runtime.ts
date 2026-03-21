@@ -43,7 +43,8 @@ export function buildLocalMapCompanion(
   activeNpcName: string,
   activeNpcCard: CharacterCard | null,
   roomNpcs: CombatDisplayNPC[],
-  fallbackImagePath: string | null
+  fallbackImagePath: string | null,
+  playerLevel: number
 ) {
   if (!activeNpcId || !activeNpcCard) {
     return null;
@@ -51,14 +52,15 @@ export function buildLocalMapCompanion(
 
   const companionNpc = roomNpcs.find((npc) => npc.id === activeNpcId);
   const imagePath = companionNpc?.imageUrl || fallbackImagePath;
+  const stats = deriveGridCombatStats(playerLevel);
 
   return {
     id: activeNpcId,
     name: activeNpcName,
-    level: 1,
+    level: playerLevel,
     imagePath,
-    currentHp: 80,
-    maxHp: 80,
+    currentHp: stats.maxHp,
+    maxHp: stats.maxHp,
   };
 }
 

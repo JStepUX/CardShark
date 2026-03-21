@@ -47,10 +47,11 @@ export async function fetchCharacterMetadata(characterId: string): Promise<Chara
 }
 
 export async function raceWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timerId: ReturnType<typeof setTimeout>;
   return Promise.race([
-    promise,
+    promise.finally(() => clearTimeout(timerId)),
     new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error('timeout')), timeoutMs);
+      timerId = setTimeout(() => reject(new Error('timeout')), timeoutMs);
     }),
   ]);
 }

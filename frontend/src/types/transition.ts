@@ -5,7 +5,7 @@ import { WORLD_PLAY_TRANSITION } from '../worldplay/config';
  * @description Types for room transition state management.
  *
  * Transition flow:
- * IDLE -> INITIATING -> SUMMARIZING -> LOADING_ASSETS -> GENERATING_FRAMES -> READY -> IDLE
+ * IDLE -> INITIATING -> SUMMARIZING -> LOADING_ASSETS -> GENERATING_FRAMES -> IDLE
  */
 
 /**
@@ -16,8 +16,7 @@ export type TransitionPhase =
   | 'initiating'
   | 'summarizing'
   | 'loading_assets'
-  | 'generating_frames'
-  | 'ready';
+  | 'generating_frames';
 
 /**
  * Status of a progress item during transition.

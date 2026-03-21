@@ -542,7 +542,7 @@ export function addItemToInventory(
   // Try to stack with existing item of same ID
   if (item.stackCount && item.maxStack) {
     const existingIndex = inventory.items.findIndex(
-      i => i.id === item.id && i.stackCount !== undefined
+      i => i.id === item.id && i.stackCount != null
     );
     if (existingIndex !== -1) {
       const existing = inventory.items[existingIndex];

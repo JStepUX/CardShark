@@ -347,8 +347,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     worldCard, worldState, worldId: worldId || undefined,
     currentRoom, setCurrentRoom, roomNpcs, setRoomNpcs, roomStatesRef,
     messages, setMessages: setWorldPlayMessages, addMessage: appendWorldPlayMessage,
-    activeNpcId, activeNpcName, clearConversationTarget,
-    setActiveNpcId, setActiveNpcName, setActiveNpcCard, clearBondedAlly,
+    activeNpcId, activeNpcName, clearConversationTarget, clearBondedAlly,
     isInCombat, setIsInCombat, gridCombat,
     setLocalMapStateCache, setPlayerTilePosition, setWorldState, setAdventureContext,
     playerProgression, timeState, npcRelationships,
@@ -432,8 +431,8 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
     || (activeNpcId ? `/api/character-image/${activeNpcId}.png` : null);
 
   const companionForLocalMap = useMemo(() => (
-    buildLocalMapCompanion(activeNpcId, activeNpcName, activeNpcCard, roomNpcs, companionImagePath)
-  ), [activeNpcId, activeNpcName, activeNpcCard, roomNpcs, companionImagePath]);
+    buildLocalMapCompanion(activeNpcId, activeNpcName, activeNpcCard, roomNpcs, companionImagePath, playerProgression.level)
+  ), [activeNpcId, activeNpcName, activeNpcCard, roomNpcs, companionImagePath, playerProgression.level]);
 
   // Get room background image
   // Priority: 1) Instance override (image_path), 2) Room card's embedded image

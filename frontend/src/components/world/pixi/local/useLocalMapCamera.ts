@@ -24,6 +24,7 @@ interface UseLocalMapCameraReturn {
   currentZoom: number;
   viewportDebug: LocalMapViewportDebugState;
   isPanMode: boolean;
+  isPanModeRef: React.MutableRefObject<boolean>;
   setIsPanMode: React.Dispatch<React.SetStateAction<boolean>>;
   syncViewportDebug: () => void;
   centerViewportOnPlayer: (options?: { resetZoom?: boolean }) => void;
@@ -361,6 +362,7 @@ export function useLocalMapCamera({
     currentZoom,
     viewportDebug,
     isPanMode,
+    isPanModeRef,
     setIsPanMode,
     syncViewportDebug,
     centerViewportOnPlayer,

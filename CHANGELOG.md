@@ -9,6 +9,28 @@ For earlier history, see `docs/docs/archivedOLD/CHANGELOG.md`.
 
 ## [Unreleased] - 2026-03-21
 
+### Fixed
+- **Combat: weapon null guards** — `getWeaponAPCost`, `doesWeaponEndTurn`, `getWeaponAttackRange` now use `!= null` (was `!== undefined`), fixing silent attack failures when weapon properties were explicitly `null`
+- **Combat: inventory stacking** — `addItemToInventory` `stackCount` guard aligned to `!= null` for consistency
+- **Combat: config constants wired** — `difficultMove` AP cost and `incapacitationChancePercent` in `gridCombatEngine.ts` now read from centralized config instead of hardcoded literals
+- **Camera: pan mode stale closure** — `handleTileClick` in `LocalMapView` now reads `isPanModeRef.current` instead of stale `isPanMode` state, preventing movement during pan mode
+- **Room transition: dep array** — `swapVisibleRoomState` had 3 phantom deps and was missing `clearBondedAlly`; fixed
+- **Room transition: double-click guard** — `handleNavigate` now checks `isTransitioning` to prevent concurrent room transitions
+- **Room transition: dead 'ready' phase** — removed `'ready'` from `TransitionPhase` (was set then immediately overwritten by `finally` block)
+- **Session hydration: stale closure** — `hydrateFromWorldLoadResult` no longer captures mutable reducer state; null-coalescing moved into reducer's `hydrate` case
+- **Inventory modal: missing deps** — `handleInventoryChange` now includes `setPlayerInventory`/`setAllyInventory` in useCallback deps
+- **Timer leak** — `raceWithTimeout` now clears the timeout when the promise resolves first
+- **Hydration: unmemoized callback** — `dismissMissingRoomWarning` wrapped in `useCallback`
+- **DevTools: type narrowing** — `setLocalMapStateCache` param widened from `(state: null)` to `(state: LocalMapState | null)`
+- **Companion stats: hardcoded HP** — `buildLocalMapCompanion` now uses `deriveGridCombatStats(playerLevel)` instead of hardcoded `level: 1, hp: 80`; allies scale with player level
+
+### Removed
+- Dead API surface `replaceRoomStates` and `snapshotRoomState` from `useWorldPlaySession` (exported but never consumed)
+- Unused `setActiveNpcId`/`setActiveNpcName`/`setActiveNpcCard` props from `useRoomTransition` options
+
+### Added
+- Tests for `worldPlaySessionReducer` hydrate case (6 tests), `buildLocalMapCompanion` level scaling (6 tests), `raceWithTimeout` timer cleanup (3 tests)
+
 ### Changed
 - **Migrated frontend test runner from Jest to Vitest** — 21 test files, 469 tests passing
   - `jest.*` → `vi.*` across all test files; `vi.hoisted()` for mock variable scoping

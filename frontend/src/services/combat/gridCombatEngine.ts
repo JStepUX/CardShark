@@ -38,6 +38,7 @@ import {
     HitQuality,
     calculateHitQuality,
     GRID_AP_COSTS,
+    INCAPACITATION_CHANCE_PERCENT,
     MAX_LIGHT_ATTACKS_PER_TURN,
     getAPForLevel,
 } from '../../types/combat';
@@ -83,7 +84,7 @@ function rollDamageVariance(): number {
  */
 export function rollDeathOrIncapacitation(): 'incapacitated' | 'dead' {
     const roll = Math.random() * 100;
-    return roll < 70 ? 'incapacitated' : 'dead';
+    return roll < INCAPACITATION_CHANCE_PERCENT ? 'incapacitated' : 'dead';
 }
 
 // =============================================================================
@@ -172,7 +173,7 @@ function executeGridMove(
     let totalCost = 0;
     for (let i = 1; i < path.length; i++) {
         const tile = grid.tiles[path[i].y]?.[path[i].x];
-        const tileCost = tile?.terrainType === 'difficult' ? 2 : 1;
+        const tileCost = tile?.terrainType === 'difficult' ? GRID_AP_COSTS.difficultMove : GRID_AP_COSTS.move;
         totalCost += tileCost;
     }
 

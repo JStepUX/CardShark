@@ -61,7 +61,10 @@ export function worldPlaySessionReducer(
     case 'hydrate': {
       const nextState: WorldPlaySessionState = {
         ...state,
-        ...action.payload,
+        playerProgression: action.payload.playerProgression ?? state.playerProgression,
+        timeState: action.payload.timeState ?? state.timeState,
+        npcRelationships: action.payload.npcRelationships ?? state.npcRelationships,
+        playerInventory: action.payload.playerInventory ?? state.playerInventory,
       };
 
       if (action.payload.bondedAlly === undefined) {

@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 import { worldApi } from '../api/worldApi';
 import type { RoomInstanceState } from '../types/worldCard';
 import type { CombatDisplayNPC, GridRoom, GridWorldState } from '../types/worldGrid';
+import type { LocalMapState } from '../types/localMap';
 import type { CharacterInventory } from '../types/inventory';
 import { createDefaultInventory } from '../types/inventory';
 import { createDefaultTimeState } from '../utils/timeUtils';
@@ -15,7 +16,7 @@ interface UseWorldPlayDevToolsOptions {
   worldId: string;
   roomStatesRef: MutableRefObject<Record<string, RoomInstanceState>>;
   setRoomNpcs: (npcs: CombatDisplayNPC[]) => void;
-  setLocalMapStateCache: (state: null) => void;
+  setLocalMapStateCache: (state: LocalMapState | null) => void;
   resetRuntimeState: (options: { timeState: ReturnType<typeof createDefaultTimeState>; playerInventory: CharacterInventory }) => void;
   addMessage: WorldPlayMessageAppender;
 }

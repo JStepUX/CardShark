@@ -59,7 +59,7 @@ export function useWorldPlayInventory({
     }
 
     setAllyInventory(inventory);
-  }, [inventoryTarget]);
+  }, [inventoryTarget, setPlayerInventory, setAllyInventory]);
 
   const handleDismissAllyFromInventory = useCallback(() => {
     if (!activeNpcId || !activeNpcName) {
