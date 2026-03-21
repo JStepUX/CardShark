@@ -72,7 +72,7 @@ export function NPCCard({ npc, isActive, onClick, onDismiss, relationship }: NPC
           }}
           title="Dismiss"
           icon={<X className="w-3 h-3" />}
-          className="absolute top-1 left-1 !bg-gray-700 hover:!bg-gray-600"
+          className="absolute top-1 left-1 bg-gray-700! hover:bg-gray-600!"
         />
       )}
 

@@ -126,7 +126,7 @@ export const BottomBanner: React.FC<BottomBannerProps> = ({ className = '', heal
           </Button>
 
           {isDropdownOpen && (
-            <div className="absolute bottom-8 left-0 bg-stone-900 border border-stone-700 rounded shadow-lg py-1 min-w-[200px] z-10">
+            <div className="absolute bottom-8 left-0 bg-stone-900 border border-stone-700 rounded-sm shadow-lg py-1 min-w-[200px] z-10">
               {availableApis.length > 0 ? (availableApis.map(api => (
                 <Button
                   key={api.id}

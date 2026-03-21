@@ -24,10 +24,10 @@ export function JournalModal({ sessionNotes, setSessionNotes, onClose }: Journal
       icon={<BookOpen className="w-5 h-5 text-blue-400" />}
       showHeaderCloseButton={true}
       className="max-w-2xl w-full"
-      backgroundColor="bg-[#1a1a1a]"
+      backgroundColor="bg-background"
       borderColor="border-gray-800"
-      backdropClassName="bg-black/85 backdrop-blur-sm"
-      zIndex="z-[100]"
+      backdropClassName="bg-black/85 backdrop-blur-xs"
+      zIndex="z-100"
     >
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">

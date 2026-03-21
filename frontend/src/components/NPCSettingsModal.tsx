@@ -71,7 +71,7 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
                                 type="checkbox"
                                 checked={hostile}
                                 onChange={(e) => setHostile(e.target.checked)}
-                                className="w-5 h-5 mt-0.5 rounded border-stone-700 bg-stone-900 text-red-600 focus:ring-red-500 focus:ring-offset-0 cursor-pointer"
+                                className="w-5 h-5 mt-0.5 rounded-sm border-stone-700 bg-stone-900 text-red-600 focus:ring-2 focus:ring-red-500 focus:ring-offset-0 cursor-pointer"
                             />
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
@@ -117,7 +117,7 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
                                                 setMonsterLevel(val);
                                             }
                                         }}
-                                        className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-sm text-white text-center focus:outline-none focus:border-red-500"
+                                        className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-sm text-white text-center focus:outline-hidden focus:border-red-500"
                                     />
                                 </div>
                                 <p className="text-xs text-stone-400 mt-2">
@@ -126,7 +126,7 @@ export function NPCSettingsModal({ isOpen, onClose, npc, npcName, onSave }: NPCS
                             </div>
 
                             {/* Level indicator */}
-                            <div className="flex items-start gap-2 text-xs text-stone-400 bg-stone-900/50 rounded p-2">
+                            <div className="flex items-start gap-2 text-xs text-stone-400 bg-stone-900/50 rounded-sm p-2">
                                 <AlertCircle size={14} className="mt-0.5 shrink-0" />
                                 <div>
                                     <span className="font-medium">

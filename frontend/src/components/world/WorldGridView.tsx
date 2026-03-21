@@ -152,11 +152,11 @@ export function WorldGridView({
                                             ? isIsolated
                                                 ? isSelected
                                                     ? 'bg-[#2a2a2a] border-amber-500 shadow-lg shadow-amber-500/20'
-                                                    : 'bg-[#1a1a1a] border-amber-600/60 hover:border-amber-500 cursor-pointer'
+                                                    : 'bg-background border-amber-600/60 hover:border-amber-500 cursor-pointer'
                                                 : isSelected
                                                     ? 'bg-[#2a2a2a] border-blue-500 shadow-lg shadow-blue-500/20'
-                                                    : 'bg-[#1a1a1a] border-[#2a2a2a] hover:border-[#3a3a3a] cursor-pointer'
-                                            : 'bg-transparent border-dashed border-[#2a2a2a] hover:border-[#3a3a3a] hover:bg-[#1a1a1a]/30 cursor-pointer'
+                                                    : 'bg-background border-[#2a2a2a] hover:border-[#3a3a3a] cursor-pointer'
+                                            : 'bg-transparent border-dashed border-[#2a2a2a] hover:border-[#3a3a3a] hover:bg-background/30 cursor-pointer'
                                         }`}
                                         style={{ width: cellSize, height: cellSize }}
                                     >

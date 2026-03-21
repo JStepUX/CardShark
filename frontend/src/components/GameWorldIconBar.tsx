@@ -40,7 +40,7 @@ const GameWorldIconBar: React.FC<GameWorldIconBarProps> = ({
                     size="sm"
                     onClick={onClick}
                     title={label}
-                    className="flex flex-col items-center gap-1 text-stone-400 hover:!text-stone-200"
+                    className="flex flex-col items-center gap-1 text-stone-400 hover:text-stone-200!"
                 >
                     <Icon size={20} />
                     <span className="text-xs">{label}</span>

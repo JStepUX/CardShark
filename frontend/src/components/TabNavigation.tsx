@@ -53,8 +53,8 @@ const TabNavigation: React.FC<TabNavigationProps> = ({ characterData }) => {
             active={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`-mb-px font-medium rounded-none border-x-0 border-t-0 ${activeTab === tab.id
-                ? '!text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:!text-gray-700'
+                ? 'text-blue-600! border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700!'
               }`}
           >
             {tab.label}

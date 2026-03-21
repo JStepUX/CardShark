@@ -103,7 +103,7 @@ const GalleryCard = React.memo<GalleryCardProps>(({
       draggable={organizationMode}
       onDragStart={(e) => onDragStart(e, character)}
       className={`
-        relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-[3/5]
+        relative group cursor-pointer rounded-lg overflow-hidden shadow-lg bg-stone-800 aspect-3/5
         transition-all ${isCardDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
         ${isCardDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
         ${character.is_incomplete ? 'ring-2 ring-amber-500/70' : ''}
@@ -132,12 +132,12 @@ const GalleryCard = React.memo<GalleryCardProps>(({
 
       {/* World/Room badge */}
       {isWorld && !organizationMode && (
-        <div className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-emerald-600/80 text-white rounded-full shadow-lg backdrop-blur-sm border border-emerald-500/30`} title="World Card">
+        <div className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-emerald-600/80 text-white rounded-full shadow-lg backdrop-blur-xs border border-emerald-500/30`} title="World Card">
           <MapIcon size={16} />
         </div>
       )}
       {isRoom && !organizationMode && (
-        <div className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-purple-600/80 text-white rounded-full shadow-lg backdrop-blur-sm border border-purple-500/30`} title="Room Card">
+        <div className={`absolute top-2 ${character.is_incomplete ? 'left-11' : 'left-2'} z-10 p-1.5 bg-purple-600/80 text-white rounded-full shadow-lg backdrop-blur-xs border border-purple-500/30`} title="Room Card">
           <DoorOpen size={16} />
         </div>
       )}
@@ -148,19 +148,19 @@ const GalleryCard = React.memo<GalleryCardProps>(({
           <Button variant="ghost" size="sm" pill
             icon={<Trash2 size={16} />}
             onClick={(e) => onTrashClick(e, character)}
-            className="absolute top-2 right-2 z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-red-600"
+            className="absolute top-2 right-2 z-10 bg-black/50! text-white! opacity-0 group-hover:opacity-100 hover:bg-red-600!"
             aria-label={`Delete ${character.name}`} />
           {isWorld && (
             <Button variant="ghost" size="sm" pill
               icon={<Download size={16} />}
               onClick={(e) => onExportClick(e, character)}
-              className="absolute top-2 right-10 z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-emerald-600"
+              className="absolute top-2 right-10 z-10 bg-black/50! text-white! opacity-0 group-hover:opacity-100 hover:bg-emerald-600!"
               aria-label={`Export ${character.name}`} title="Export as .cardshark.zip" />
           )}
           <Button variant="ghost" size="sm" pill
             icon={<Info size={16} />}
             onClick={(e) => onInfoClick(e, character)}
-            className={`absolute top-2 ${isWorld ? 'right-[4.5rem]' : 'right-10'} z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-blue-600`}
+            className={`absolute top-2 ${isWorld ? 'right-18' : 'right-10'} z-10 bg-black/50! text-white! opacity-0 group-hover:opacity-100 hover:bg-blue-600!`}
             aria-label={`Info for ${character.name}`} title={isWorld ? "World Builder" : isRoom ? "Room Editor" : "Basic Info"} />
         </>
       )}
@@ -173,7 +173,7 @@ const GalleryCard = React.memo<GalleryCardProps>(({
       </div>
 
       {/* Name overlay */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium truncate rounded-b-lg">
+      <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium truncate rounded-b-lg">
         {character.name}
       </div>
     </div>
@@ -827,12 +827,12 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                   <Button variant="outline" size="md"
                     icon={<ImagePlus size={16} />}
                     onClick={() => navigate('/import')}
-                    className="!bg-orange-800 !border-orange-600 !text-orange-100 hover:!text-white hover:!bg-orange-700"
+                    className="bg-orange-800! border-orange-600! text-orange-100! hover:text-white! hover:bg-orange-700!"
                     title="Import Character PNG" />
                   <Button variant="outline" size="md"
                     icon={<MapIcon size={16} />}
                     onClick={handleImportWorld}
-                    className="!bg-emerald-800 !border-emerald-600 !text-emerald-100 hover:!text-white hover:!bg-emerald-700"
+                    className="bg-emerald-800! border-emerald-600! text-emerald-100! hover:text-white! hover:bg-emerald-700!"
                     title="Import World" />
                 </>
               )}
@@ -842,7 +842,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                 <Button variant="destructive" size="md"
                   icon={<Trash2 size={16} />}
                   onClick={handleCleanupOrphanedRooms}
-                  className="!bg-red-900 !border-red-700 border hover:!bg-red-800"
+                  className="bg-red-900! border-red-700! border hover:bg-red-800!"
                   title="Cleanup orphaned rooms" />
               )}
 
@@ -877,7 +877,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
                       {(['name_asc', 'name_desc', 'date_newest', 'date_oldest'] as const).map(opt => (
                         <Button key={opt} variant="ghost" size="md" fullWidth
                           onClick={() => { setSortOption(opt); setIsSortDropdownOpen(false); }}
-                          className={`!justify-start px-4 rounded-none ${sortOption === opt ? '!text-blue-400 !bg-stone-700/50' : '!text-slate-300'} hover:!bg-stone-700`}>
+                          className={`justify-start! px-4 rounded-none ${sortOption === opt ? 'text-blue-400! bg-stone-700/50!' : 'text-slate-300!'} hover:bg-stone-700!`}>
                           {opt === 'name_asc' && <><span className="w-5 mr-2 text-center">A</span> Name (A-Z)</>}
                           {opt === 'name_desc' && <><span className="w-5 mr-2 text-center">Z</span> Name (Z-A)</>}
                           {opt === 'date_newest' && <><Calendar size={14} className="mr-2" /> Newest First</>}
@@ -907,7 +907,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
           {/* Search */}
           <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={galFolders.currentFolder ? `Search in ${galFolders.currentFolder}...` : 'Search all cards...'}
-            className="w-full px-4 py-2 bg-stone-800 border border-stone-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            className="w-full px-4 py-2 bg-stone-800 border border-stone-600 rounded-lg text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
 
@@ -915,13 +915,13 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       {deleteError && (
         <div className="flex-none p-3 m-4 bg-red-900 border border-red-700 text-white rounded-md text-sm flex justify-between items-center shadow-lg">
           <div className="flex items-start">
-            <AlertTriangle className="flex-shrink-0 w-5 h-5 mr-2 mt-0.5" />
-            <span className="break-words"><strong>Deletion Error:</strong> {deleteError}</span>
+            <AlertTriangle className="shrink-0 w-5 h-5 mr-2 mt-0.5" />
+            <span className="wrap-break-word"><strong>Deletion Error:</strong> {deleteError}</span>
           </div>
           <Button variant="ghost" size="sm"
             icon={<X size={16} />}
             onClick={() => setDeleteError(null)}
-            className="ml-4 flex-shrink-0 !bg-red-800 hover:!bg-red-700" />
+            className="ml-4 shrink-0 bg-red-800! hover:bg-red-700!" />
         </div>
       )}
 
@@ -929,7 +929,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
       {!settings.character_directory && !settings.gallery_sync_dismissed && !isSecondarySelector && (
         <div className="flex-none mx-4 mt-3 p-4 bg-stone-800 border border-stone-600 rounded-lg text-sm text-slate-300">
           <div className="flex items-start gap-3">
-            <Info className="flex-shrink-0 w-5 h-5 mt-0.5 text-blue-400" />
+            <Info className="shrink-0 w-5 h-5 mt-0.5 text-blue-400" />
             <div className="flex-1">
               <p>
                 CardShark can sync with your existing character directory if you have one.
@@ -943,7 +943,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
               <label className="flex items-center gap-2 mt-3 cursor-pointer text-slate-400 hover:text-slate-300 select-none">
                 <Button variant="ghost" size="sm"
                   onClick={() => updateSettings({ gallery_sync_dismissed: true })}
-                  className="!w-4 !h-4 !p-0 !rounded border border-stone-500 hover:!border-blue-400"
+                  className="w-4! h-4! p-0! rounded-sm! border border-stone-500 hover:border-blue-400!"
                 />
                 Never show again
               </label>
@@ -951,7 +951,7 @@ const CharacterGallery: React.FC<CharacterGalleryProps> = ({
             <Button variant="ghost" size="sm"
               icon={<X size={16} />}
               onClick={() => updateSettings({ gallery_sync_dismissed: true })}
-              className="flex-shrink-0 !text-slate-500"
+              className="shrink-0 text-slate-500!"
               title="Dismiss" />
           </div>
         </div>

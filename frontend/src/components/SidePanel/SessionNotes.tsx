@@ -61,7 +61,7 @@ export function SessionNotes({ value, onChange, disabled = false }: SessionNotes
           placeholder-gray-600
           resize-none
           overflow-y-auto
-          focus:outline-none
+          focus:outline-hidden
           focus:border-gray-700
           focus:ring-1
           focus:ring-gray-700

@@ -284,7 +284,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
 
   return (
     // Main Modal Container
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
       <div className="relative w-full max-w-2xl max-h-[90vh] bg-stone-900 rounded-lg shadow-xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-stone-800 flex-none">
@@ -307,21 +307,21 @@ const UserSelect: React.FC<UserSelectProps> = ({
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search users..."
             className="w-full px-4 py-2 bg-stone-950 border border-stone-700 rounded-lg text-white placeholder-slate-400
-                     focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                     focus:outline-hidden focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
 
         {/* Error Display Areas */}
         {deleteError && (
             <div className="flex-none p-3 mx-4 mt-4 bg-red-900 border border-red-700 text-white rounded-md text-sm flex justify-between items-center shadow-lg">
-            <span className="break-words mr-2"><strong>Deletion Error:</strong> {deleteError}</span>
-            <Button variant="destructive" size="sm" onClick={() => setDeleteError(null)} aria-label="Dismiss error" className="ml-auto flex-shrink-0">Dismiss</Button>
+            <span className="wrap-break-word mr-2"><strong>Deletion Error:</strong> {deleteError}</span>
+            <Button variant="destructive" size="sm" onClick={() => setDeleteError(null)} aria-label="Dismiss error" className="ml-auto shrink-0">Dismiss</Button>
             </div>
         )}
         {!deleteError && error && (
             <div className="flex-none p-3 mx-4 mt-4 bg-orange-900 border border-orange-700 text-orange-100 rounded-md text-sm flex justify-between items-center shadow-lg">
-            <span className="break-words mr-2"><strong>Notice:</strong> {error}</span>
-            <Button variant="secondary" size="sm" onClick={() => setError(null)} aria-label="Dismiss notice" className="ml-auto flex-shrink-0 !bg-orange-700 hover:!bg-orange-600">Dismiss</Button>
+            <span className="wrap-break-word mr-2"><strong>Notice:</strong> {error}</span>
+            <Button variant="secondary" size="sm" onClick={() => setError(null)} aria-label="Dismiss notice" className="ml-auto shrink-0 bg-orange-700! hover:bg-orange-600!">Dismiss</Button>
             </div>
         )}
 
@@ -344,7 +344,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
                 <div
                   key="new-user-card"
                   className={`
-                    relative aspect-[3/4] sm:aspect-square bg-stone-950 rounded-lg border-2 border-dashed
+                    relative aspect-3/4 sm:aspect-square bg-stone-950 rounded-lg border-2 border-dashed
                     border-stone-800 hover:border-stone-700 transition-all duration-200 ease-in-out
                     flex flex-col items-center justify-center cursor-pointer
                     text-gray-400 hover:text-gray-200 hover:scale-[1.02] group p-2
@@ -369,7 +369,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
                     <div
                       key={user.filename}
                       className={`
-                        relative group aspect-[3/4] sm:aspect-square cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800
+                        relative group aspect-3/4 sm:aspect-square cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800
                         transition-all ${isDeleting ? 'duration-300 ease-out' : 'duration-200 ease-in-out'}
                         ${isDeleting ? 'scale-0 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'}
                         hover:shadow-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-stone-900
@@ -391,11 +391,11 @@ const UserSelect: React.FC<UserSelectProps> = ({
                             tabIndex={-1}
                             aria-label={`Delete ${user.name}`}
                             pill
-                            className="absolute top-1.5 right-1.5 z-10 backdrop-blur-sm
+                            className="absolute top-1.5 right-1.5 z-10 backdrop-blur-xs
                                       bg-black/40 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100
                                       transition-all duration-200 ease-in-out
-                                      hover:!bg-red-700/70 hover:scale-110
-                                      focus:opacity-100 focus:!bg-red-700/70 focus:scale-110 focus:ring-red-500 focus:ring-offset-stone-800"
+                                      hover:bg-red-700/70! hover:scale-110
+                                      focus:opacity-100 focus:bg-red-700/70! focus:scale-110 focus:ring-2 focus:ring-red-500 focus:ring-offset-stone-800"
                           />
                       )}
 
@@ -414,7 +414,7 @@ const UserSelect: React.FC<UserSelectProps> = ({
                         />
                       </div>
                       {/* Name Overlay */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium text-center truncate rounded-b-lg pointer-events-none">
+                      <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium text-center truncate rounded-b-lg pointer-events-none">
                         {user.name}
                       </div>
                     </div> // End Individual Card
@@ -456,11 +456,11 @@ const UserSelect: React.FC<UserSelectProps> = ({
             {/* Form Fields */}
             <div>
                 <label htmlFor="new-user-name" className="block text-sm font-medium text-gray-300 mb-1">Name <span className="text-red-500">*</span></label>
-                <input id="new-user-name" type="text" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none text-white placeholder-slate-500" placeholder="Enter name" required aria-required="true"/>
+                <input id="new-user-name" type="text" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-hidden text-white placeholder-slate-500" placeholder="Enter name" required aria-required="true"/>
             </div>
             <div>
                 <label htmlFor="new-user-desc" className="block text-sm font-medium text-gray-300 mb-1">Description (Optional)</label>
-                <textarea id="new-user-desc" value={newUserDescription} onChange={(e) => { if (e.target.value.length <= 500) setNewUserDescription(e.target.value); }} maxLength={500} className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 h-20 resize-none focus:outline-none text-white placeholder-slate-500" placeholder="Describe your appearance — things a character would notice (height, hair, eyes, build, etc.)"/>
+                <textarea id="new-user-desc" value={newUserDescription} onChange={(e) => { if (e.target.value.length <= 500) setNewUserDescription(e.target.value); }} maxLength={500} className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500 h-20 resize-none focus:outline-hidden text-white placeholder-slate-500" placeholder="Describe your appearance — things a character would notice (height, hair, eyes, build, etc.)"/>
                 <div className={`text-xs mt-1 text-right ${newUserDescription.length > 480 ? 'text-red-400' : newUserDescription.length > 450 ? 'text-yellow-400' : 'text-gray-500'}`}>{newUserDescription.length}/500</div>
             </div>
             {/* Error Message within Dialog */}

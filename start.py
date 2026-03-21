@@ -329,6 +329,7 @@ def main():
     
     # Open browser
     print(f"Opening browser to http://localhost:{FRONTEND_PORT}")
+    print("Note: CardShark requires a modern browser (Chrome 111+, Firefox 128+, Safari 16.4+)")
     webbrowser.open(f'http://localhost:{FRONTEND_PORT}')
     
     # Run frontend (blocking)

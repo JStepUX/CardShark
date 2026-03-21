@@ -71,7 +71,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
   return (
     <div className="w-full space-y-2">
       <div className="text-sm text-slate-400 mb-2">
-        💡 You can use absolute paths (like <code className="bg-stone-800 px-1 rounded">C:\sillytavern\characters</code>) or relative paths (like <code className="bg-stone-800 px-1 rounded">characters</code>) from the application directory.
+        💡 You can use absolute paths (like <code className="bg-stone-800 px-1 rounded-sm">C:\sillytavern\characters</code>) or relative paths (like <code className="bg-stone-800 px-1 rounded-sm">characters</code>) from the application directory.
       </div>
       <form onSubmit={handleSubmit} className="flex space-x-2">
         <input
@@ -82,7 +82,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
             setError(null);
             setValidationMessage(null);
           }}
-          className="flex-grow px-3 py-2 bg-stone-950 border border-stone-700 
+          className="grow px-3 py-2 bg-stone-950 border border-stone-700 
                    rounded-lg focus:ring-1 focus:ring-blue-500"
           placeholder="e.g., C:\sillytavern\characters or just 'characters'"
         />
@@ -92,7 +92,7 @@ const DirectoryPicker: React.FC<DirectoryPickerProps> = ({
           size="md"
           icon={isLoading ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <FolderOpen size={18} />}
           disabled={isLoading || !inputValue.trim()}
-          className="!bg-purple-800 hover:!bg-purple-700"
+          className="bg-purple-800! hover:bg-purple-700!"
         >
           Set
         </Button>

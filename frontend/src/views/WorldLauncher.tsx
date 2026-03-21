@@ -271,7 +271,7 @@ const WorldLauncher: React.FC = () => {
                      icon={saving ? undefined : <Save size={16} />}
                      onClick={handleSave}
                      disabled={saving}
-                     className="!bg-emerald-600 hover:!bg-emerald-500 !text-white text-sm"
+                     className="bg-emerald-600! hover:bg-emerald-500! text-white! text-sm"
                   >
                      {saving ? 'Saving...' : 'Save'}
                   </Button>
@@ -294,8 +294,8 @@ const WorldLauncher: React.FC = () => {
                <div className="flex gap-10 mt-6 mb-10">
 
                   {/* Cover image — delegates upload/crop to ImagePreview */}
-                  <div className="w-72 flex-shrink-0">
-                     <div className="aspect-[3/4] rounded-xl overflow-hidden border border-stone-800">
+                  <div className="w-72 shrink-0">
+                     <div className="aspect-3/4 rounded-xl overflow-hidden border border-stone-800">
                         <ImagePreview
                            imageUrl={resolvedImageUrl || undefined}
                            onImageChange={handleImageChange}
@@ -316,7 +316,7 @@ const WorldLauncher: React.FC = () => {
                               onChange={e => setDraftName(e.target.value)}
                               onBlur={commitName}
                               onKeyDown={handleNameKeyDown}
-                              className="w-full text-4xl bg-transparent border-b-2 border-emerald-500 text-white outline-none pb-1"
+                              className="w-full text-4xl bg-transparent border-b-2 border-emerald-500 text-white outline-hidden pb-1"
                               maxLength={100}
                            />
                         ) : (
@@ -337,7 +337,7 @@ const WorldLauncher: React.FC = () => {
                      <textarea
                         value={draftDesc}
                         onChange={handleDescChange}
-                        className="w-full bg-transparent resize-none text-stone-400 leading-relaxed outline-none placeholder:text-stone-700 flex-1 min-h-[80px]"
+                        className="w-full bg-transparent resize-none text-stone-400 leading-relaxed outline-hidden placeholder:text-stone-700 flex-1 min-h-[80px]"
                         placeholder="Describe your world..."
                         rows={4}
                      />
@@ -371,7 +371,7 @@ const WorldLauncher: React.FC = () => {
                      onClick={() => navigate(`/world/${uuid}/builder`)}
                      className="group relative flex flex-col items-center justify-center py-10 rounded-xl border border-emerald-800/30 bg-stone-900/50 hover:border-emerald-600/50 transition-all cursor-pointer overflow-hidden"
                   >
-                     <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-emerald-500/0 group-hover:from-emerald-500/10 transition-all duration-300 pointer-events-none" />
+                     <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-emerald-500/0 group-hover:from-emerald-500/10 transition-all duration-300 pointer-events-none" />
                      <div className="bg-emerald-900/50 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform relative">
                         <Hammer size={28} className="text-emerald-400" />
                      </div>
@@ -390,7 +390,7 @@ const WorldLauncher: React.FC = () => {
                         }`}
                   >
                      {hasLocations && (
-                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-blue-500/0 group-hover:from-blue-500/10 transition-all duration-300 pointer-events-none" />
+                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-blue-500/0 group-hover:from-blue-500/10 transition-all duration-300 pointer-events-none" />
                      )}
                      <div className={`p-4 rounded-full mb-4 transition-transform relative ${hasLocations ? 'bg-blue-900/50 group-hover:scale-110' : 'bg-stone-800/50'}`}>
                         <Play size={28} className={hasLocations ? 'text-blue-400' : 'text-stone-600'} />

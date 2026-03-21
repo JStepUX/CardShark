@@ -1,16 +1,164 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@theme {
+  --color-background: #1a1a1a;
+  --color-foreground: #ffffff;
+  --color-input: #252525;
+  --color-border: #303030;
+
+  --font-sans: var(--font-app), sans-serif;
+
+  --animate-blink-caret: blink-caret 0.75s step-end infinite;
+  --animate-blink: blink 1s infinite;
+  --animate-scale-in: scale-in 0.3s ease-out forwards;
+  --animate-fade-in: fade-in 0.2s ease-out forwards;
+  --animate-slide-up: slide-up 0.15s ease-out forwards;
+  --animate-pulse-slow: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-melee-attack-up: melee-attack-up 0.6s
+    cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  --animate-melee-attack-down: melee-attack-down 0.6s
+    cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  --animate-take-hit: take-hit 0.4s ease-out forwards;
+
+  --shadow-glow-blue: 0 0 8px rgba(59, 130, 246, 0.6);
+
+  @keyframes blink-caret {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes scale-in {
+    0% {
+      transform: scale(0);
+      opacity: 0;
+    }
+    80% {
+      transform: scale(1.2);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes fade-in {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes slide-up {
+    0% {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  @keyframes melee-attack-up {
+    0% {
+      transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+    }
+    20% {
+      transform: translateY(12px) translateX(0) rotate(8deg) scale(1.08);
+    }
+    50% {
+      transform: translateY(-80px) translateX(0) rotate(-12deg) scale(1.15);
+    }
+    70% {
+      transform: translateY(-70px) translateX(0) rotate(-8deg) scale(1.12);
+    }
+    100% {
+      transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+    }
+  }
+  @keyframes melee-attack-down {
+    0% {
+      transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+    }
+    20% {
+      transform: translateY(-12px) translateX(0) rotate(-8deg) scale(1.08);
+    }
+    50% {
+      transform: translateY(80px) translateX(0) rotate(12deg) scale(1.15);
+    }
+    70% {
+      transform: translateY(70px) translateX(0) rotate(8deg) scale(1.12);
+    }
+    100% {
+      transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+    }
+  }
+  @keyframes take-hit {
+    0% {
+      transform: translateX(0) rotate(0deg);
+      filter: brightness(1);
+    }
+    25% {
+      transform: translateX(-12px) rotate(-5deg);
+      filter: brightness(1.8);
+    }
+    50% {
+      transform: translateX(10px) rotate(4deg);
+      filter: brightness(1.5);
+    }
+    75% {
+      transform: translateX(-6px) rotate(-2deg);
+      filter: brightness(1.2);
+    }
+    100% {
+      transform: translateX(0) rotate(0deg);
+      filter: brightness(1);
+    }
+  }
 }
 
-@layer components {
-  .heading-primary {
-    @apply text-lg font-light text-white;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility heading-primary {
+  @apply text-lg font-light text-white;
+}
+
+@layer utilities {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
   }
 }
 
@@ -74,18 +222,7 @@
   opacity: 1;
 }
 
-@keyframes blink-caret {
-
-  0%,
-  100% {
-    opacity: 0;
-  }
-
-  50% {
-    opacity: 1;
-  }
-}
-
+/* blink-caret keyframes defined in @theme above */
 .animate-blink-caret {
   display: inline-block;
   animation: blink-caret 0.75s step-end infinite;

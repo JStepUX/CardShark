@@ -60,7 +60,7 @@ const BackgroundCropper: React.FC<BackgroundCropperProps> = ({
                 onClick={() => handleRatioSelect(ratio)}
                 className="flex items-center gap-4 p-4"
               >
-                <div className="flex-shrink-0 p-2 bg-blue-900/40 rounded-lg">
+                <div className="shrink-0 p-2 bg-blue-900/40 rounded-lg">
                   <Ratio size={24} />
                 </div>
                 <div className="flex-1 text-left">

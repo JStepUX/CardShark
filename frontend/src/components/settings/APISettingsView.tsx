@@ -333,7 +333,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                       type="checkbox"
                       checked={settings.save_to_character_directory}
                       onChange={(e) => updateSettings({ save_to_character_directory: e.target.checked })}
-                      className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                      className="form-checkbox h-4 w-4 text-blue-600 rounded-sm focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-300">
                       Save characters to this directory
@@ -377,7 +377,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
                     type="checkbox"
                     checked={settings.show_koboldcpp_launcher || false}
                     onChange={(e) => updateSettings({ show_koboldcpp_launcher: e.target.checked })}
-                    className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                    className="form-checkbox h-4 w-4 text-blue-600 rounded-sm focus:ring-2 focus:ring-blue-500"
                   />
                   <span className="text-sm text-gray-300">
                     Show KoboldCPP launcher on startup
@@ -393,7 +393,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
         </SettingsTab>
         
         <SettingsTab id="api">
-          <div className="p-8 pb-16 flex-shrink-0">
+          <div className="p-8 pb-16 shrink-0">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium">
                 API Configuration ({Object.keys(localApis || {}).length} APIs)
@@ -435,7 +435,7 @@ export const APISettingsView: React.FC<APISettingsViewProps> = () => {
             <div ref={containerRef} className="space-y-4">
               {/* Render cards based on localApis state */}
               {Object.entries(localApis || {}).filter(([, api]) => api != null).map(([id, api]: [string, APIConfig]) => (
-                <div key={id} className="bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4">
+                <div key={id} className="bg-linear-to-b from-zinc-900 to-stone-950 rounded-lg p-4">
                   <APICard
                     api={api}
                     apiId={id}

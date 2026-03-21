@@ -18,7 +18,7 @@ function App() {
               <p className="mb-4 text-gray-700">
                 There was a problem connecting to the CardShark services:
               </p>
-              <p className="p-3 mb-4 text-sm font-mono bg-stone-100 rounded border border-gray-300">
+              <p className="p-3 mb-4 text-sm font-mono bg-stone-100 rounded-sm border border-gray-300">
                 {error.message}
               </p>
               <div className="flex justify-center">

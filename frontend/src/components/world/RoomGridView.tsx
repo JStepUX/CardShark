@@ -314,7 +314,7 @@ export function RoomGridView({
                                 className={`
                                     absolute inset-1 rounded-md overflow-hidden z-20
                                     flex items-center justify-center
-                                    bg-gradient-to-br from-gray-800 to-gray-900
+                                    bg-linear-to-br from-gray-800 to-gray-900
                                     border-2 ${isSelectedNpc ? 'border-yellow-400' : 'border-blue-500/50'}
                                     cursor-move shadow-lg
                                 `}
@@ -429,7 +429,7 @@ export function RoomGridView({
             </div>
 
             {/* Tool hint overlay */}
-            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 pointer-events-none">
+            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-xs rounded-lg px-3 py-2 pointer-events-none">
                 <p className="text-xs text-gray-300">
                     {isPanMode
                         ? 'Click and drag to pan the map. Middle-click always pans.'

@@ -81,7 +81,7 @@ export const GalleryFolderTile: React.FC<GalleryFolderTileProps> = React.memo(({
       onDrop={handleDrop}
       className={`
         relative group flex flex-col items-center justify-center gap-3
-        rounded-lg overflow-hidden shadow-lg aspect-[3/5]
+        rounded-lg overflow-hidden shadow-lg aspect-3/5
         border-2 transition-all duration-300
         ${colors.bg} ${colors.border} ${colors.glow}
         hover:scale-[1.05] hover:shadow-xl
@@ -113,7 +113,7 @@ export const GalleryFolderTile: React.FC<GalleryFolderTileProps> = React.memo(({
       </span>
 
       {/* Card Count Badge */}
-      <span className={`absolute bottom-3 right-3 text-[10px] font-bold text-white ${colors.badge} px-2 py-0.5 rounded-full shadow-sm`}>
+      <span className={`absolute bottom-3 right-3 text-[10px] font-bold text-white ${colors.badge} px-2 py-0.5 rounded-full shadow-xs`}>
         {cardCount}
       </span>
 
@@ -137,7 +137,7 @@ export const NewFolderTile: React.FC<NewFolderTileProps> = React.memo(({ onClick
       onClick={onClick}
       className="
         flex flex-col items-center justify-center gap-3
-        rounded-lg overflow-hidden shadow-lg aspect-[3/5]
+        rounded-lg overflow-hidden shadow-lg aspect-3/5
         border-2 border-dashed border-stone-600 bg-stone-800/30
         transition-all duration-300
         hover:scale-[1.05] hover:border-blue-500/50 hover:bg-stone-800/50 hover:shadow-xl
@@ -184,7 +184,7 @@ export const NewCardTile: React.FC<NewCardTileProps> = React.memo(({ label, onCl
       disabled={isCreating}
       className={`
         flex flex-col items-center justify-center gap-3
-        rounded-lg overflow-hidden shadow-lg aspect-[3/5]
+        rounded-lg overflow-hidden shadow-lg aspect-3/5
         border-2 border-dashed transition-all duration-300
         ${colors.border} ${colors.bg}
         ${isCreating ? 'opacity-60 cursor-wait' : `${colors.borderHover} ${colors.bgHover} hover:scale-[1.05] hover:shadow-xl`}

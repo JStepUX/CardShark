@@ -126,14 +126,14 @@ const WorldDeleteConfirmationDialog: React.FC<WorldDeleteConfirmationDialogProps
       <div className="flex flex-col gap-4">
         {/* Header with warning icon */}
         <div className="flex items-start gap-4">
-          <div className="p-2 bg-red-900/30 rounded-full flex-shrink-0">
+          <div className="p-2 bg-red-900/30 rounded-full shrink-0">
             <AlertTriangle className="text-red-500 h-6 w-6" />
           </div>
           <div className="flex-1">
             <p className="text-stone-300 mb-2">
               Are you sure you want to delete this world?
             </p>
-            <div className="p-3 bg-stone-800 rounded mb-4 border border-stone-700 text-stone-300">
+            <div className="p-3 bg-stone-800 rounded-sm mb-4 border border-stone-700 text-stone-300">
               {worldName}
             </div>
           </div>
@@ -148,7 +148,7 @@ const WorldDeleteConfirmationDialog: React.FC<WorldDeleteConfirmationDialogProps
 
         {/* Error state */}
         {previewError && (
-          <div className="p-3 bg-red-900/30 border border-red-700 rounded text-red-400 text-sm">
+          <div className="p-3 bg-red-900/30 border border-red-700 rounded-sm text-red-400 text-sm">
             {previewError}
           </div>
         )}
@@ -166,7 +166,7 @@ const WorldDeleteConfirmationDialog: React.FC<WorldDeleteConfirmationDialogProps
                 <ul className="space-y-1 max-h-32 overflow-y-auto">
                   {preview.rooms_to_delete.map(room => (
                     <li key={room.uuid} className="flex items-center gap-2 text-sm text-stone-300">
-                      <DoorOpen size={14} className="text-red-400 flex-shrink-0" />
+                      <DoorOpen size={14} className="text-red-400 shrink-0" />
                       <span className="truncate">{room.name}</span>
                       <span className="text-stone-500 text-xs">({room.reason})</span>
                     </li>
@@ -185,7 +185,7 @@ const WorldDeleteConfirmationDialog: React.FC<WorldDeleteConfirmationDialogProps
                 <ul className="space-y-1 max-h-32 overflow-y-auto">
                   {preview.rooms_to_keep.map(room => (
                     <li key={room.uuid} className="flex items-center gap-2 text-sm text-stone-400">
-                      <DoorOpen size={14} className="text-stone-500 flex-shrink-0" />
+                      <DoorOpen size={14} className="text-stone-500 shrink-0" />
                       <span className="truncate">{room.name}</span>
                       <span className="text-stone-500 text-xs">({room.reason})</span>
                     </li>

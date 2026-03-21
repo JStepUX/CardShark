@@ -33,7 +33,7 @@ export const ApiSelectDropdown: React.FC = () => {
 
   if (enabledApis.length === 0) {
     return (
-      <div className="px-2 py-1 text-xs text-gray-400 bg-stone-800 rounded">
+      <div className="px-2 py-1 text-xs text-gray-400 bg-stone-800 rounded-sm">
         No enabled APIs.
       </div>
     );
@@ -42,7 +42,7 @@ export const ApiSelectDropdown: React.FC = () => {
   if (enabledApis.length === 1 && activeApiId && enabledApis[0].id === activeApiId) {
      const singleApi = enabledApis[0];
      return (
-        <div className="px-2 py-1 text-xs text-gray-300 bg-stone-800 rounded truncate" title={singleApi.name || singleApi.id}>
+        <div className="px-2 py-1 text-xs text-gray-300 bg-stone-800 rounded-sm truncate" title={singleApi.name || singleApi.id}>
             Active API: {singleApi.name || singleApi.id}
         </div>
      );
@@ -53,7 +53,7 @@ export const ApiSelectDropdown: React.FC = () => {
       <select
         value={activeApiId || ''}
         onChange={handleApiChange}
-        className="w-full appearance-none bg-stone-800 border border-stone-700 text-white text-sm rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 truncate"
+        className="w-full appearance-none bg-stone-800 border border-stone-700 text-white text-sm rounded-md px-3 py-1.5 focus:outline-hidden focus:ring-1 focus:ring-blue-500 focus:border-blue-500 truncate"
         title="Select Active API"
       >
         <option value="" disabled hidden>

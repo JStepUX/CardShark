@@ -66,7 +66,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
           <h3 className="text-sm font-medium flex items-center gap-2">
             {title}
             {isCustomPrompt(promptKey) && (
-              <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">Custom</span>
+              <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded-sm">Custom</span>
             )}
             <Button
               variant="ghost"
@@ -106,7 +106,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
           <h4 className="text-sm font-medium mb-2">Available Variables</h4>
           <div className="flex flex-wrap gap-2">
             {availableVariables.map(variable => (
-              <div key={variable} className="bg-stone-700 px-2 py-1 rounded text-xs">
+              <div key={variable} className="bg-stone-700 px-2 py-1 rounded-sm text-xs">
                 {variable}
               </div>
             ))}

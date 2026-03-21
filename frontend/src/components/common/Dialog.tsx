@@ -70,7 +70,7 @@ export function Dialog({
       aria-labelledby={title ? 'dialog-title' : undefined}
     >
       <div className={`fixed inset-0 ${backdropClassName}`} onClick={onClose} />
-      <div className="min-h-screen px-4 flex items-center justify-center">
+      <div className="relative min-h-screen px-4 flex items-center justify-center">
         {/* The flex container now handles centering */}
         <div
           ref={dialogRef}
@@ -98,7 +98,7 @@ export function Dialog({
             </div>
           )}
           {/* Scrollable Content Area */}
-          <div className="px-6 py-4 flex-grow overflow-y-auto performance-contain">
+          <div className="px-6 py-4 grow overflow-y-auto performance-contain">
             {children}
           </div>
 

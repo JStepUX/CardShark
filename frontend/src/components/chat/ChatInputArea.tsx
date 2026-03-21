@@ -100,7 +100,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
         {!hideUserAvatar && (
           <div
             onClick={disableUserSelect ? undefined : onUserSelect}
-            className={`w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 ${disableUserSelect ? '' : 'cursor-pointer'}`}
+            className={`w-24 h-32 rounded-lg overflow-hidden shrink-0 ${disableUserSelect ? '' : 'cursor-pointer'}`}
           >
             {currentUser && !imageError ? (
               <img
@@ -137,7 +137,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
         </div>
 
         {/* Send Button, Impersonate Button & Mood Indicator */}
-        <div className="flex flex-col items-center justify-end gap-2 flex-shrink-0">
+        <div className="flex flex-col items-center justify-end gap-2 shrink-0">
           <MoodIndicator emotion={emotion} size={20} showLabel={false} />
           <Button
             variant="ghost"

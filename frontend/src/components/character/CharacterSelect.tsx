@@ -84,7 +84,7 @@ const CharacterSelect: React.FC<CharacterSelectProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
             <div className="relative w-full max-w-4xl max-h-[90vh] bg-stone-900 rounded-lg shadow-xl flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-stone-800 flex-none">
@@ -107,15 +107,15 @@ const CharacterSelect: React.FC<CharacterSelectProps> = ({
                         onChange={(e) => setSearchTerm(e.target.value)}
                         placeholder="Search characters..."
                         className="w-full px-4 py-2 bg-stone-950 border border-stone-700 rounded-lg text-white placeholder-slate-400
-                     focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                     focus:outline-hidden focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                 </div>
 
                 {/* Error Display */}
                 {error && (
                     <div className="flex-none p-3 mx-4 mt-4 bg-orange-900 border border-orange-700 text-orange-100 rounded-md text-sm flex justify-between items-center shadow-lg">
-                        <span className="break-words mr-2"><strong>Notice:</strong> {error}</span>
-                        <Button variant="secondary" size="sm" onClick={() => setError(null)} className="ml-auto flex-shrink-0" aria-label="Dismiss notice">Dismiss</Button>
+                        <span className="wrap-break-word mr-2"><strong>Notice:</strong> {error}</span>
+                        <Button variant="secondary" size="sm" onClick={() => setError(null)} className="ml-auto shrink-0" aria-label="Dismiss notice">Dismiss</Button>
                     </div>
                 )}
 
@@ -135,7 +135,7 @@ const CharacterSelect: React.FC<CharacterSelectProps> = ({
                                 {filteredCharacters.map((char) => (
                                     <div
                                         key={char.character_uuid}
-                                        className="relative group aspect-[3/5] cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800
+                                        className="relative group aspect-3/5 cursor-pointer rounded-lg overflow-hidden shadow-md bg-stone-800
                       transition-all duration-200 ease-in-out hover:shadow-lg hover:scale-[1.02]
                       focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-stone-900"
                                         onClick={() => handleSelectCharacter(char)}
@@ -168,7 +168,7 @@ const CharacterSelect: React.FC<CharacterSelectProps> = ({
                                         </div>
 
                                         {/* Name Overlay */}
-                                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium text-center truncate rounded-b-lg pointer-events-none">
+                                        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/60 to-transparent p-2 pt-6 text-white text-sm font-medium text-center truncate rounded-b-lg pointer-events-none">
                                             {char.name}
                                         </div>
                                     </div>

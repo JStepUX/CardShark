@@ -212,10 +212,10 @@ const CharacterDetailView: React.FC = () => {
             disabled={isGeneratingThinFrame}
             className={`ml-auto ${
               isGeneratingThinFrame
-                ? '!bg-green-800 cursor-wait'
+                ? 'bg-green-800! cursor-wait'
                 : hasUnsavedChanges
-                  ? '!bg-green-700 hover:!bg-green-600'
-                  : '!bg-transparent !border !border-orange-700 !text-orange-500 hover:!text-orange-400 hover:!border-orange-600'
+                  ? 'bg-green-700! hover:bg-green-600!'
+                  : 'bg-transparent! border! border-orange-700! text-orange-500! hover:text-orange-400! hover:border-orange-600!'
             }`}
             title={isGeneratingThinFrame ? "Generating character profile..." : "Save character"}
             icon={isGeneratingThinFrame ? <Loader2 className="animate-spin" /> : <Save />}

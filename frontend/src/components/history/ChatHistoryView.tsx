@@ -228,7 +228,7 @@ const ChatHistoryView: React.FC = () => {
                                 className="flex items-center gap-4 p-3 bg-stone-800/50 hover:bg-stone-700/70 rounded-lg cursor-pointer transition-colors group border border-stone-700/50"
                             >
                                 {/* Character Thumbnail */}
-                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-700 flex-shrink-0">
+                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-700 shrink-0">
                                     {item.character_uuid ? (
                                         <img
                                             src={getThumbnailUrl(item)}
@@ -251,7 +251,7 @@ const ChatHistoryView: React.FC = () => {
                                         <span className="text-white font-medium truncate">
                                             {item.title || 'Untitled Chat'}
                                         </span>
-                                        <span className="text-xs text-stone-500 flex-shrink-0">
+                                        <span className="text-xs text-stone-500 shrink-0">
                                             with {item.character_name || 'Unknown Character'}
                                         </span>
                                     </div>

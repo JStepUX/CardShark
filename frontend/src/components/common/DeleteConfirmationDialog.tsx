@@ -70,7 +70,7 @@ const DeleteConfirmationDialog: React.FC<DeleteConfirmationDialogProps> = ({
           <p className="text-stone-300 mb-3">{description}</p>
           
           {itemName && (
-            <div className="p-3 bg-stone-800 rounded mb-4 border border-stone-700 text-stone-300 overflow-hidden text-ellipsis">
+            <div className="p-3 bg-stone-800 rounded-sm mb-4 border border-stone-700 text-stone-300 overflow-hidden text-ellipsis">
               {itemName}
             </div>
           )}

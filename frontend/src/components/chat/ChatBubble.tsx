@@ -373,7 +373,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                     icon={<GitFork size={16} />}
                     onClick={() => setShowForkDropdown(!showForkDropdown)}
                     title="Fork chat from here"
-                    className="hover:!text-purple-400"
+                    className="hover:text-purple-400!"
                   />
                   {showForkDropdown && (
                     <div className="absolute right-0 top-full mt-1 w-36 bg-stone-800 border border-stone-600 rounded-lg shadow-lg py-1 z-50">
@@ -388,7 +388,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                           setShowForkDropdown(false);
                         }}
                         fullWidth
-                        className="!justify-start !rounded-none px-3 py-2 text-left"
+                        className="justify-start! rounded-none! px-3 py-2 text-left"
                       >
                         Bring 5
                       </Button>
@@ -400,7 +400,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                           setShowForkDropdown(false);
                         }}
                         fullWidth
-                        className="!justify-start !rounded-none px-3 py-2 text-left"
+                        className="justify-start! rounded-none! px-3 py-2 text-left"
                       >
                         Bring 10
                       </Button>
@@ -412,7 +412,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                           setShowForkDropdown(false);
                         }}
                         fullWidth
-                        className="!justify-start !rounded-none px-3 py-2 text-left"
+                        className="justify-start! rounded-none! px-3 py-2 text-left"
                       >
                         Bring All
                       </Button>
@@ -434,7 +434,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
       <div className="p-4 pt-2 performance-contain">
         {isGenerating || isRegeneratingGreeting ? (
           /* Show non-editable content with cursor while generating */
-          <div className="streaming-content whitespace-pre-wrap break-words performance-contain performance-transform">
+          <div className="streaming-content whitespace-pre-wrap wrap-break-word performance-contain performance-transform">
             <div
               className="prose prose-invert max-w-none performance-contain"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
@@ -474,7 +474,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
               <img
                 key={`${imagePath}-${idx}`}
                 src={imagePath}
-                className="lore-image rounded max-h-32 object-cover border border-stone-700 hover:border-stone-500 transition-colors"
+                className="lore-image rounded-sm max-h-32 object-cover border border-stone-700 hover:border-stone-500 transition-colors"
                 alt="Triggered lore"
                 title="Lore entry triggered"
               />

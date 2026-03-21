@@ -312,7 +312,7 @@ const LoreView: React.FC = () => {
                     type="number"
                     value={scanDepth}
                     onChange={(e) => handleScanDepthChange(parseInt(e.target.value) || 0)}
-                    className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                    className="w-full bg-zinc-950 text-white rounded-sm px-3 py-2 border border-zinc-800"
                     min="0"
                     placeholder="3"
                   />
@@ -330,7 +330,7 @@ const LoreView: React.FC = () => {
                     type="number"
                     value={tokenBudget}
                     onChange={(e) => handleTokenBudgetChange(parseInt(e.target.value) || 0)}
-                    className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                    className="w-full bg-zinc-950 text-white rounded-sm px-3 py-2 border border-zinc-800"
                     min="0"
                     placeholder="0"
                   />
@@ -341,7 +341,7 @@ const LoreView: React.FC = () => {
               </div>
 
               {/* Info Box */}
-              <div className="p-3 bg-blue-900/20 border border-blue-800/30 rounded text-xs text-gray-300">
+              <div className="p-3 bg-blue-900/20 border border-blue-800/30 rounded-sm text-xs text-gray-300">
                 <strong>Defaults:</strong> Scan Depth = 3 messages, Token Budget = 0 (unlimited)
               </div>
             </div>

@@ -47,7 +47,7 @@ export function DayNightSphere({
 
                 {/* Tooltip on hover */}
                 <div className="absolute top-full right-0 mt-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div className="bg-black/90 text-white text-xs rounded px-2 py-1 whitespace-nowrap border border-gray-700">
+                    <div className="bg-black/90 text-white text-xs rounded-sm px-2 py-1 whitespace-nowrap border border-gray-700">
                         <div className="font-semibold">Day {currentDay}</div>
                         <div className="text-gray-400">{timeDescription}</div>
                         <div className="text-gray-500 text-[10px] mt-1">{progressText}</div>

@@ -171,11 +171,11 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
           className="absolute top-3 right-3"
         />
         <h3 className="text-xl font-semibold mb-4 text-white">Add/Change Lore Image</h3>        {!characterUuid && (
-          <p className="text-yellow-400 bg-yellow-900/30 p-2 rounded mb-3 text-sm">
+          <p className="text-yellow-400 bg-yellow-900/30 p-2 rounded-sm mb-3 text-sm">
             A Character UUID is required to associate images. This is currently missing. Please ensure the character is fully saved to obtain a UUID.
           </p>
         )}
-        {error && <p className="text-red-400 bg-red-900/30 p-2 rounded mb-3 text-sm">{error}</p>}
+        {error && <p className="text-red-400 bg-red-900/30 p-2 rounded-sm mb-3 text-sm">{error}</p>}
 
         <div className="space-y-4">
           {/* File Upload */}
@@ -192,7 +192,7 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
                 <div className="flex text-sm text-gray-500">
                   <label
                     htmlFor="lore-image-upload-input"
-                    className="relative cursor-pointer bg-stone-700 rounded-md font-medium text-indigo-400 hover:text-indigo-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-stone-800 focus-within:ring-indigo-500 px-2 py-1"
+                    className="relative cursor-pointer bg-stone-700 rounded-md font-medium text-indigo-400 hover:text-indigo-300 focus-within:outline-hidden focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-stone-800 focus-within:ring-indigo-500 px-2 py-1"
                   >
                     <span>Upload a file</span>
                     <input
@@ -219,7 +219,7 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
             <label htmlFor="lore-image-url" className="block text-sm font-medium text-gray-300">
               Or import from URL
             </label>
-            <div className="mt-1 relative rounded-md shadow-sm">
+            <div className="mt-1 relative rounded-md shadow-xs">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Link className="h-5 w-5 text-gray-400" aria-hidden="true" />
               </div>
@@ -227,7 +227,7 @@ const LoreImageUploader: React.FC<LoreImageUploaderProps> = (props) => {
                 type="text"
                 name="lore-image-url"
                 id="lore-image-url"
-                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-600 bg-stone-700 text-white rounded-md py-2"
+                className="focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-600 bg-stone-700 text-white rounded-md py-2"
                 placeholder="https://example.com/image.png"
                 value={imageUrl}
                 onChange={handleUrlChange}

@@ -449,7 +449,7 @@ export function UnifiedImageGallery({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search images..."
-                    className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-700 rounded-lg text-white placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-700 rounded-lg text-white placeholder-stone-500 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
               </div>
@@ -494,7 +494,7 @@ export function UnifiedImageGallery({
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                           loading="lazy"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                           <div className="absolute bottom-0 left-0 right-0 p-2">
                             <p className="text-xs text-white truncate">{image.filename}</p>
                           </div>
@@ -526,7 +526,7 @@ export function UnifiedImageGallery({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search your images..."
-                    className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-700 rounded-lg text-white placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-700 rounded-lg text-white placeholder-stone-500 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
               </div>
@@ -557,7 +557,7 @@ export function UnifiedImageGallery({
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-60 p-4">
           <div className="bg-stone-900 rounded-xl w-full max-w-lg border border-stone-700 shadow-2xl">
             <div className="flex items-center justify-between p-4 border-b border-stone-700">
               <h3 className="text-lg font-medium text-white">Upload Image</h3>
@@ -581,7 +581,7 @@ export function UnifiedImageGallery({
 
       {/* Image Editor */}
       {showEditor && tempImageUrl && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-60 p-4">
           <div className="bg-stone-900 rounded-xl w-full max-w-3xl border border-stone-700 shadow-2xl">
             <div className="flex items-center justify-between p-4 border-b border-stone-700">
               <h3 className="text-lg font-medium text-white">Edit Image</h3>

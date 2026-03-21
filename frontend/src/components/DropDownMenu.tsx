@@ -73,7 +73,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
                 item.onClick();
                 setIsOpen(false);
               }}
-              className="px-4 py-2 text-left text-white hover:!bg-stone-600"
+              className="px-4 py-2 text-left text-white hover:bg-stone-600!"
             >
               <item.icon className="w-4 h-4 mr-2" />
               {item.label}

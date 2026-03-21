@@ -219,7 +219,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
               aria-label="Next Image"
               aria-controls="image-preview-content"
             />
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded-sm">
               {currentIndex + 1} / {availableImages.length}
             </div>
           </>)}          {/* Hover overlay with controls */}

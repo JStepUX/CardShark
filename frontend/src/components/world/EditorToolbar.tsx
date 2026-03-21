@@ -135,7 +135,7 @@ export function EditorToolbar({
                             </Button>
 
                             {showZoneDropdown && (
-                                <div className="absolute top-full left-0 mt-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg shadow-xl z-50 min-w-[180px]">
+                                <div className="absolute top-full left-0 mt-1 bg-background border border-[#2a2a2a] rounded-lg shadow-xl z-50 min-w-[180px]">
                                     {ZONE_TYPE_CONFIG.map(zone => {
                                         const Icon = ZONE_ICON_MAP[zone.iconName] || Square;
                                         const isSelected = selectedZoneType === zone.type;
@@ -153,7 +153,7 @@ export function EditorToolbar({
                                                 }}
                                                 title={zone.description}
                                             >
-                                                <div className={`w-3 h-3 rounded ${zone.colorClass}`} />
+                                                <div className={`w-3 h-3 rounded-sm ${zone.colorClass}`} />
                                                 <Icon size={14} />
                                                 <span>{zone.label}</span>
                                             </Button>

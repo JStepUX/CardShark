@@ -680,7 +680,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
             placeholder="Search chats by title or content..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-600 rounded-lg focus:outline-none focus:border-orange-500 text-white placeholder-stone-400"
+            className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-600 rounded-lg focus:outline-hidden focus:border-orange-500 text-white placeholder-stone-400"
           />
         </div>
       </div>
@@ -696,7 +696,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'date' | 'title' | 'messages')}
-                  className="flex-1 px-3 py-2 bg-stone-700 border border-stone-600 rounded focus:outline-none focus:border-orange-500 text-white"
+                  className="flex-1 px-3 py-2 bg-stone-700 border border-stone-600 rounded-sm focus:outline-hidden focus:border-orange-500 text-white"
                 >
                   <option value="date">Last Modified</option>
                   <option value="title">Title</option>
@@ -718,7 +718,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'week' | 'month')}
-                className="w-full px-3 py-2 bg-stone-700 border border-stone-600 rounded focus:outline-none focus:border-orange-500 text-white"
+                className="w-full px-3 py-2 bg-stone-700 border border-stone-600 rounded-sm focus:outline-hidden focus:border-orange-500 text-white"
               >
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
@@ -733,7 +733,7 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
               <select
                 value={messageCountFilter}
                 onChange={(e) => setMessageCountFilter(e.target.value as 'all' | 'short' | 'medium' | 'long')}
-                className="w-full px-3 py-2 bg-stone-700 border border-stone-600 rounded focus:outline-none focus:border-orange-500 text-white"
+                className="w-full px-3 py-2 bg-stone-700 border border-stone-600 rounded-sm focus:outline-hidden focus:border-orange-500 text-white"
               >
                 <option value="all">All Lengths</option>
                 <option value="short">Short (≤10 messages)</option>
@@ -756,9 +756,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       )}
 
       {error && (
-        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded flex items-center justify-between">
+        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded-sm flex items-center justify-between">
           <div className="flex items-center">
-            <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+            <AlertTriangle size={18} className="mr-2 shrink-0" />
             <span>{error}</span>
           </div>
           <Button
@@ -771,9 +771,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       )}
 
       {importError && (
-        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded flex items-center justify-between">
+        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded-sm flex items-center justify-between">
           <div className="flex items-center">
-            <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+            <AlertTriangle size={18} className="mr-2 shrink-0" />
             <span>Import Error: {importError}</span>
           </div>
           <Button
@@ -786,9 +786,9 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
       )}
 
       {deleteError && (
-        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded flex items-center justify-between">
+        <div className="error-message p-3 mb-4 bg-red-900/30 text-red-200 border border-red-800 rounded-sm flex items-center justify-between">
           <div className="flex items-center">
-            <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+            <AlertTriangle size={18} className="mr-2 shrink-0" />
             <span><strong>Delete Error:</strong> {deleteError}</span>
           </div>
           <Button
@@ -837,10 +837,10 @@ const ChatSelector: React.FC<ChatSelectorProps> = ({ onSelect, onClose, currentC
                 onClick={() => !isCurrentChat && handleLoadChat(chat.id)}
               >
                 <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 mt-1">
+                  <div className="shrink-0 mt-1">
                     <MessageSquare size={20} className={isCurrentChat ? "text-orange-400" : "text-orange-500"} />
                   </div>
-                  <div className="flex-grow">
+                  <div className="grow">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{chat.title}</h3>
                       {isCurrentChat && (

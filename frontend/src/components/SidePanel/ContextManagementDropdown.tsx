@@ -84,7 +84,7 @@ export function ContextManagementDropdown({ compressionLevel, onLevelChange, dis
         onClick={() => !disabled && setShowDropdown(!showDropdown)}
         disabled={disabled}
         title="Click to change context management level"
-        className="justify-between px-3 py-2 bg-stone-900/50 hover:bg-stone-800/50 border-gray-700 rounded"
+        className="justify-between px-3 py-2 bg-stone-900/50 hover:bg-stone-800/50 border-gray-700 rounded-sm"
       >
         <div className="flex items-center gap-2">
           <Edit3 className="w-4 h-4 text-gray-400" />
@@ -114,7 +114,7 @@ export function ContextManagementDropdown({ compressionLevel, onLevelChange, dis
                   {option.label}
                 </span>
                 {option.level === compressionLevel && (
-                  <span className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-0.5 rounded">
+                  <span className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-0.5 rounded-sm">
                     Active
                   </span>
                 )}

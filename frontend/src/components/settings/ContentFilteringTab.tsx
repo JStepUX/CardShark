@@ -93,7 +93,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
                 checked={removeIncompleteSentences}
                 onChange={(e) => handleUpdateIncompleteSentences(e.target.checked)}
                 disabled={isSavingIncomplete}
-                className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                className="form-checkbox h-4 w-4 text-blue-600 rounded-sm focus:ring-2 focus:ring-blue-500"
               />
               <span className="text-sm text-gray-300">
                 Remove unfinished sentences from chat responses
@@ -112,7 +112,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
         {/* Content Filtering section */}
         <h3 className="text-md font-medium mb-3">Content Filtering</h3>
 
-        <div className="bg-blue-900/20 border border-blue-700/30 p-3 rounded mb-6">
+        <div className="bg-blue-900/20 border border-blue-700/30 p-3 rounded-sm mb-6">
           <div className="flex items-start">
             <Info size={18} className="text-blue-400 mr-2 mt-0.5" />
             <div className="text-sm text-blue-300">
@@ -150,14 +150,14 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
           ) : (
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {availablePackages.map(pkg => (
-                <div key={pkg.id} className="flex items-center justify-between p-2 bg-zinc-800 rounded">
+                <div key={pkg.id} className="flex items-center justify-between p-2 bg-zinc-800 rounded-sm">
                   <div className="flex-1">
                     <h4 className="font-medium text-sm">{pkg.name}</h4>
                     <p className="text-xs text-gray-400">{pkg.description}</p>
                     <div className="text-xs text-gray-500 flex gap-2 mt-1">
                       <span>{pkg.rules_count} rules</span>
-                      {pkg.is_builtin && <span className="bg-blue-900/50 text-blue-300 px-1 rounded">Built-in</span>}
-                      {pkg.is_active && <span className="bg-green-900/50 text-green-300 px-1 rounded">Active</span>}
+                      {pkg.is_builtin && <span className="bg-blue-900/50 text-blue-300 px-1 rounded-sm">Built-in</span>}
+                      {pkg.is_active && <span className="bg-green-900/50 text-green-300 px-1 rounded-sm">Active</span>}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -185,7 +185,7 @@ export const ContentFilteringTab: React.FC<ContentFilteringTabProps> = ({
                         icon={<Trash2 className="h-5 w-5" />}
                         onClick={() => handleDeletePackage(pkg.id)}
                         title="Delete package"
-                        className="hover:!text-red-400"
+                        className="hover:text-red-400!"
                       />
                     )}
                   </div>

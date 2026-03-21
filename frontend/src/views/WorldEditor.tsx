@@ -505,7 +505,7 @@ export function WorldEditor({ worldId: propWorldId, onBack }: WorldEditorProps) 
           <Button
             variant="primary"
             onClick={handleBack}
-            className="!bg-purple-600 hover:!bg-purple-700"
+            className="bg-purple-600! hover:bg-purple-700!"
           >
             Go Back
           </Button>

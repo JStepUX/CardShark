@@ -177,7 +177,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
 
   return (
     <>
-      <div className={`bg-gradient-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg ${!item.enabled ? 'opacity-60' : ''}`}>
+      <div className={`bg-linear-to-b from-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg ${!item.enabled ? 'opacity-60' : ''}`}>
         {/* Main card layout with optional image on right */}
         <div className="flex gap-4">
           {/* Left side - Main content */}
@@ -197,7 +197,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                 <select
                   value={item.position}
                   onChange={handlePositionChange}
-                  className="bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
+                  className="bg-zinc-950 text-white rounded-sm px-2 py-1 text-sm border border-zinc-800"
                 >
                   <option value="before_char">Before Character</option>
                   <option value="after_char">After Character</option>
@@ -215,7 +215,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                       onChange={(e) => onUpdate(item.id, {
                         extensions: { ...(item.extensions || {}), role: parseInt(e.target.value) }
                       })}
-                      className="bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
+                      className="bg-zinc-950 text-white rounded-sm px-2 py-1 text-sm border border-zinc-800"
                     >
                       <option value={0}>as System</option>
                       <option value={1}>as User</option>
@@ -228,7 +228,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                         extensions: { ...(item.extensions || {}), depth: parseInt(e.target.value) || 0 }
                       })}
                       placeholder="Depth"
-                      className="w-20 bg-zinc-950 text-white rounded px-2 py-1 text-sm border border-zinc-800"
+                      className="w-20 bg-zinc-950 text-white rounded-sm px-2 py-1 text-sm border border-zinc-800"
                       min="0"
                     />
                   </>
@@ -304,7 +304,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                   value={primaryKeys}
                   onChange={(e) => setPrimaryKeys(e.target.value)}
                   onBlur={handlePrimaryKeysBlur}
-                  className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                  className="w-full bg-zinc-950 text-white rounded-sm px-3 py-2 border border-zinc-800"
                   placeholder="Enter comma-separated keywords"
                 />
               </div>
@@ -320,7 +320,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                         onChange={(e) => onUpdate(item.id, {
                           extensions: { ...(item.extensions || {}), selectiveLogic: parseInt(e.target.value) }
                         })}
-                        className="w-full bg-zinc-950 text-white rounded px-2 py-2 border border-zinc-800"
+                        className="w-full bg-zinc-950 text-white rounded-sm px-2 py-2 border border-zinc-800"
                       >
                         <option value={WorldInfoLogic.AND_ANY}>AND ANY</option>
                         <option value={WorldInfoLogic.AND_ALL}>AND ALL</option>
@@ -335,7 +335,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                         value={secondaryKeys}
                         onChange={(e) => setSecondaryKeys(e.target.value)}
                         onBlur={handleSecondaryKeysBlur}
-                        className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800"
+                        className="w-full bg-zinc-950 text-white rounded-sm px-3 py-2 border border-zinc-800"
                         placeholder="Enter comma-separated secondary keywords"
                       />
                     </div>
@@ -350,7 +350,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
               <RichTextEditor
                 content={item.content}
                 onChange={(html) => onUpdate(item.id, { content: htmlToPlainText(html) })}
-                className="w-full bg-zinc-950 text-white rounded border border-zinc-800 h-32" // Apply styles, manage height
+                className="w-full bg-zinc-950 text-white rounded-sm border border-zinc-800 h-32" // Apply styles, manage height
                 placeholder="Enter lore content (supports Markdown)"
                 preserveWhitespace={true} // Preserve formatting
               />
@@ -371,7 +371,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                       onChange={(e) => onUpdate(item.id, {
                         extensions: { ...(item.extensions || {}), case_sensitive: e.target.value === 'default' ? null : e.target.value === 'true' }
                       })}
-                      className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                      className="w-full bg-zinc-950 text-white rounded-sm px-2 py-1 border border-zinc-800"
                     >
                       <option value="default">Use Global Setting</option>
                       <option value="true">Case Sensitive</option>
@@ -386,7 +386,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                       onChange={(e) => onUpdate(item.id, {
                         extensions: { ...(item.extensions || {}), match_whole_words: e.target.value === 'default' ? null : e.target.value === 'true' }
                       })}
-                      className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                      className="w-full bg-zinc-950 text-white rounded-sm px-2 py-1 border border-zinc-800"
                     >
                       <option value="default">Use Global Setting</option>
                       <option value="true">Match Whole Words</option>
@@ -420,7 +420,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                               : Math.min(100, Math.max(0, Number(e.target.value)))
                           }
                         })}
-                        className="w-20 bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                        className="w-20 bg-zinc-950 text-white rounded-sm px-2 py-1 border border-zinc-800"
                         min="0"
                         max="100"
                       />
@@ -439,7 +439,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                       onChange={(e) => onUpdate(item.id, {
                         extensions: { ...(item.extensions || {}), sticky: e.target.value ? parseInt(e.target.value) : null }
                       })}
-                      className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                      className="w-full bg-zinc-950 text-white rounded-sm px-2 py-1 border border-zinc-800"
                       placeholder="2 (default)"
                       min="0"
                     />
@@ -454,7 +454,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                       onChange={(e) => onUpdate(item.id, {
                         extensions: { ...(item.extensions || {}), cooldown: e.target.value ? parseInt(e.target.value) : null }
                       })}
-                      className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                      className="w-full bg-zinc-950 text-white rounded-sm px-2 py-1 border border-zinc-800"
                       placeholder="0 (default)"
                       min="0"
                     />
@@ -469,7 +469,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                       onChange={(e) => onUpdate(item.id, {
                         extensions: { ...(item.extensions || {}), delay: e.target.value ? parseInt(e.target.value) : null }
                       })}
-                      className="w-full bg-zinc-950 text-white rounded px-2 py-1 border border-zinc-800"
+                      className="w-full bg-zinc-950 text-white rounded-sm px-2 py-1 border border-zinc-800"
                       placeholder="0 (default)"
                       min="0"
                     />
@@ -483,7 +483,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                   <textarea
                     value={item.comment || ''}
                     onChange={(e) => onUpdate(item.id, { comment: e.target.value })}
-                    className="w-full bg-zinc-950 text-white rounded px-3 py-2 border border-zinc-800 h-20 resize-y"
+                    className="w-full bg-zinc-950 text-white rounded-sm px-3 py-2 border border-zinc-800 h-20 resize-y"
                     placeholder="Add notes about this entry (not used by AI)"
                   />
                 </div>
@@ -495,7 +495,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
 
           {/* Right side - Large Image Thumbnail */}
           {item.has_image && item.image_uuid && (
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <button
                 onClick={() => setShowImageUploader(true)}
                 className="relative group w-36 h-44 rounded-lg border-2 border-stone-700 hover:border-orange-500 overflow-hidden transition-all shadow-lg"
@@ -517,7 +517,7 @@ export const LoreCard: React.FC<LoreCardProps> = ({
                 </div>
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                  <span className="opacity-0 group-hover:opacity-100 text-white text-xs font-medium bg-black/60 px-2 py-1 rounded transition-opacity">
+                  <span className="opacity-0 group-hover:opacity-100 text-white text-xs font-medium bg-black/60 px-2 py-1 rounded-sm transition-opacity">
                     Change
                   </span>
                 </div>

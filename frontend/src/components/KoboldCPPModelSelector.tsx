@@ -281,7 +281,7 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
           value={modelsDirectory}
           onChange={(e) => setModelsDirectory(e.target.value)}
           placeholder="Path to models directory"
-          className="flex-grow px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+          className="grow px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
           disabled={isScanning || isFetchingDirectory}
         />
         <Button
@@ -400,7 +400,7 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
               id="useGPU"
               checked={useGPU}
               onChange={(e) => setUseGPU(e.target.checked)}
-              className="h-4 w-4 rounded bg-stone-700 border-stone-500 focus:ring-blue-500"
+              className="h-4 w-4 rounded-sm bg-stone-700 border-stone-500 focus:ring-2 focus:ring-blue-500"
             />
             <label htmlFor="useGPU" className="text-sm text-gray-300 cursor-pointer">
               Use GPU Acceleration (recommended for large models)
@@ -417,7 +417,7 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
               : <Rocket className="h-4 w-4" />}
             onClick={launchModel}
             disabled={loading || !selectedModel}
-            className="!bg-purple-600 hover:!bg-purple-700"
+            className="bg-purple-600! hover:bg-purple-700!"
           >
             {loading ? 'Launching...' : 'Launch Model'}
           </Button>
@@ -427,28 +427,28 @@ const KoboldCPPModelSelector: React.FC<KoboldCPPModelSelectorProps> = ({
       {/* Status Messages */}
       {error && (
         <div className="bg-red-900/40 border border-red-700 text-white px-4 py-3 rounded-lg flex items-start gap-2">
-          <div className="flex-shrink-0 mt-0.5">⚠️</div>
-          <div className="flex-grow">{error}</div>
+          <div className="shrink-0 mt-0.5">⚠️</div>
+          <div className="grow">{error}</div>
           <Button
             variant="ghost"
             size="sm"
             icon={<X size={14} />}
             onClick={() => setError(null)}
-            className="ml-auto flex-shrink-0"
+            className="ml-auto shrink-0"
           />
         </div>
       )}
       
       {success && (
         <div className="bg-green-900/40 border border-green-700 text-white px-4 py-3 rounded-lg flex items-start gap-2">
-          <div className="flex-shrink-0 mt-0.5">✓</div>
-          <div className="flex-grow">{success}</div>
+          <div className="shrink-0 mt-0.5">✓</div>
+          <div className="grow">{success}</div>
           <Button
             variant="ghost"
             size="sm"
             icon={<X size={14} />}
             onClick={() => setSuccess(null)}
-            className="ml-auto flex-shrink-0"
+            className="ml-auto shrink-0"
           />
         </div>
       )}

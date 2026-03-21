@@ -57,7 +57,7 @@ class LazyRouteErrorBoundary extends Component<LazyRouteErrorBoundaryProps, Lazy
               There was a problem loading this view. This could be due to a network issue or a problem with the application.
             </p>
             {error && (
-              <div className="bg-stone-900/50 p-3 rounded mb-4 text-left overflow-auto text-xs">
+              <div className="bg-stone-900/50 p-3 rounded-sm mb-4 text-left overflow-auto text-xs">
                 <code className="text-red-400">{error.message}</code>
               </div>
             )}

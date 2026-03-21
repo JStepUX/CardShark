@@ -20,7 +20,7 @@ const ColorInput: React.FC<{
         type="color"
         value={color}
         onChange={(e) => onChange(e.target.value)}
-        className="w-8 h-8 rounded cursor-pointer"
+        className="w-8 h-8 rounded-sm cursor-pointer"
       />
       <span className="text-sm text-gray-400">{color}</span>
     </div>
@@ -74,7 +74,7 @@ const HighlightingSettings: React.FC<HighlightingSettingsProps> = ({
               color={highlightSettings.bold.backgroundColor}
               onChange={(color) => updateSyntaxSetting('bold', 'backgroundColor', color)}
             />
-            <div className="mt-2 p-3 bg-zinc-900 rounded">
+            <div className="mt-2 p-3 bg-zinc-900 rounded-sm">
               <div style={{
                 color: highlightSettings.bold.textColor,
                 backgroundColor: highlightSettings.bold.backgroundColor === 'transparent' ? undefined : highlightSettings.bold.backgroundColor,
@@ -100,7 +100,7 @@ const HighlightingSettings: React.FC<HighlightingSettingsProps> = ({
               color={highlightSettings.italic.backgroundColor}
               onChange={(color) => updateSyntaxSetting('italic', 'backgroundColor', color)}
             />
-            <div className="mt-2 p-3 bg-zinc-900 rounded">
+            <div className="mt-2 p-3 bg-zinc-900 rounded-sm">
               <div style={{
                 color: highlightSettings.italic.textColor,
                 backgroundColor: highlightSettings.italic.backgroundColor === 'transparent' ? undefined : highlightSettings.italic.backgroundColor,
@@ -126,7 +126,7 @@ const HighlightingSettings: React.FC<HighlightingSettingsProps> = ({
               color={highlightSettings.code.backgroundColor}
               onChange={(color) => updateSyntaxSetting('code', 'backgroundColor', color)}
             />
-            <div className="mt-2 p-3 bg-zinc-900 rounded">
+            <div className="mt-2 p-3 bg-zinc-900 rounded-sm">
               <div style={{
                 color: highlightSettings.code.textColor,
                 backgroundColor: highlightSettings.code.backgroundColor === 'transparent' ? undefined : highlightSettings.code.backgroundColor,
@@ -155,7 +155,7 @@ const HighlightingSettings: React.FC<HighlightingSettingsProps> = ({
               color={highlightSettings.quote.backgroundColor}
               onChange={(color) => updateSyntaxSetting('quote', 'backgroundColor', color)}
             />
-            <div className="mt-2 p-3 bg-zinc-900 rounded">
+            <div className="mt-2 p-3 bg-zinc-900 rounded-sm">
               <div style={{
                 color: highlightSettings.quote.textColor,
                 backgroundColor: highlightSettings.quote.backgroundColor === 'transparent' ? undefined : highlightSettings.quote.backgroundColor,
@@ -180,7 +180,7 @@ const HighlightingSettings: React.FC<HighlightingSettingsProps> = ({
               color={highlightSettings.variable.backgroundColor}
               onChange={(color) => updateSyntaxSetting('variable', 'backgroundColor', color)}
             />
-            <div className="mt-2 p-3 bg-zinc-900 rounded">
+            <div className="mt-2 p-3 bg-zinc-900 rounded-sm">
               <div style={{
                 color: highlightSettings.variable.textColor,
                 backgroundColor: highlightSettings.variable.backgroundColor === 'transparent' ? undefined : highlightSettings.variable.backgroundColor,

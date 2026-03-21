@@ -41,8 +41,8 @@ function TextEditorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-4xl bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+      <div className="w-full max-w-4xl bg-background border border-[#2a2a2a] rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-[#2a2a2a] flex items-center justify-between">
           <h3 className="text-lg font-medium text-white">{title}</h3>
           <div className="flex items-center gap-2">
@@ -52,7 +52,7 @@ function TextEditorModal({
                 size="sm"
                 onClick={handleWriteForMe}
                 disabled={isGenerating}
-                className="!text-purple-400 hover:!text-purple-300 hover:!bg-purple-900/30"
+                className="text-purple-400! hover:text-purple-300! hover:bg-purple-900/30!"
                 title={text.trim() ? "Continue writing with AI" : "Generate content with AI"}
                 icon={isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
               />
@@ -69,7 +69,7 @@ function TextEditorModal({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="w-full h-full min-h-[400px] bg-[#141414] border border-[#2a2a2a] rounded-lg p-4 text-white font-mono text-sm focus:outline-none focus:border-purple-500 resize-none"
+            className="w-full h-full min-h-[400px] bg-[#141414] border border-[#2a2a2a] rounded-lg p-4 text-white font-mono text-sm focus:outline-hidden focus:border-purple-500 resize-none"
             placeholder={`Enter ${title.toLowerCase()}...`}
             autoFocus
           />
@@ -84,7 +84,7 @@ function TextEditorModal({
           <Button
             variant="primary"
             onClick={() => { onSave(text); onClose(); }}
-            className="!bg-purple-600 hover:!bg-purple-700"
+            className="bg-purple-600! hover:bg-purple-700!"
           >
             Apply Changes
           </Button>
@@ -374,7 +374,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                   type="text"
                   value={room.name}
                   onChange={(e) => onUpdate({ ...room, name: e.target.value })}
-                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors"
+                  className="w-full bg-background border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-hidden focus:border-[#3a3a3a] transition-colors"
                   placeholder="Enter room name..."
                 />
               </div>
@@ -393,7 +393,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                         value: room.description
                       })}
                       icon={<Maximize2 size={12} />}
-                      className="!text-blue-400 hover:!text-blue-300 text-xs"
+                      className="text-blue-400! hover:text-blue-300! text-xs"
                     >
                       Expand
                     </Button>
@@ -403,7 +403,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                         size="sm"
                         onClick={() => handleInlineWriteForMe('description')}
                         disabled={isGenerating}
-                        className="!text-purple-400 hover:!text-purple-300 hover:!bg-purple-900/30"
+                        className="text-purple-400! hover:text-purple-300! hover:bg-purple-900/30!"
                         title={room.description.trim() ? "Continue writing with AI" : "Generate description with AI"}
                         icon={isGenerating && generatingField === 'description' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                       />
@@ -413,7 +413,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                 <textarea
                   value={room.description}
                   onChange={(e) => onUpdate({ ...room, description: e.target.value })}
-                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors resize-none mb-1"
+                  className="w-full bg-background border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-hidden focus:border-[#3a3a3a] transition-colors resize-none mb-1"
                   rows={5}
                   placeholder="Describe this room..."
                 />
@@ -433,7 +433,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                         value: room.introduction_text
                       })}
                       icon={<Maximize2 size={12} />}
-                      className="!text-blue-400 hover:!text-blue-300 text-xs"
+                      className="text-blue-400! hover:text-blue-300! text-xs"
                     >
                       Expand
                     </Button>
@@ -443,7 +443,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                         size="sm"
                         onClick={() => handleInlineWriteForMe('introduction_text')}
                         disabled={isGenerating}
-                        className="!text-purple-400 hover:!text-purple-300 hover:!bg-purple-900/30"
+                        className="text-purple-400! hover:text-purple-300! hover:bg-purple-900/30!"
                         title={room.introduction_text.trim() ? "Continue writing with AI" : "Generate introduction with AI"}
                         icon={isGenerating && generatingField === 'introduction_text' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                       />
@@ -453,7 +453,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                 <textarea
                   value={room.introduction_text}
                   onChange={(e) => onUpdate({ ...room, introduction_text: e.target.value })}
-                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3a3a3a] transition-colors resize-none"
+                  className="w-full bg-background border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white focus:outline-hidden focus:border-[#3a3a3a] transition-colors resize-none"
                   rows={5}
                   placeholder="Text shown when entering room..."
                 />
@@ -483,7 +483,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                     variant="primary"
                     onClick={() => setShowGalleryModal(true)}
                     disabled={uploading}
-                    className="flex-1 !bg-purple-600 hover:!bg-purple-700 disabled:!bg-purple-800"
+                    className="flex-1 bg-purple-600! hover:bg-purple-700! disabled:bg-purple-800!"
                     icon={<ImageIcon size={16} />}
                   >
                     {uploading ? 'Uploading...' : 'Choose from Gallery'}
@@ -513,13 +513,13 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                     size="sm"
                     onClick={onOpenNPCPicker}
                     icon={<Plus size={14} />}
-                    className="!text-blue-400 hover:!text-blue-300 text-xs"
+                    className="text-blue-400! hover:text-blue-300! text-xs"
                   >
                     Add NPC
                   </Button>
                 </div>
                 {room.npcs.length === 0 ? (
-                  <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-6 text-center text-xs text-gray-500">
+                  <div className="bg-background border border-[#2a2a2a] rounded-lg px-3 py-6 text-center text-xs text-gray-500">
                     No NPCs in this room
                   </div>
                 ) : (
@@ -532,13 +532,13 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                           e.dataTransfer.setData('entityId', npc.character_uuid);
                           e.dataTransfer.effectAllowed = 'move';
                         }}
-                        className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing"
+                        className="bg-background border border-[#2a2a2a] rounded-lg px-3 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing"
                       >
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <Users size={14} className="text-gray-500 shrink-0" />
                           <span className="text-sm text-white truncate">{getNpcName(npc.character_uuid)}</span>
                           {npc.hostile && (
-                            <span className="text-xs bg-red-900/50 text-red-400 px-1.5 py-0.5 rounded shrink-0">
+                            <span className="text-xs bg-red-900/50 text-red-400 px-1.5 py-0.5 rounded-sm shrink-0">
                               Hostile {npc.monster_level ? `Lv.${npc.monster_level}` : ''}
                             </span>
                           )}
@@ -550,7 +550,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                             onClick={() => setEditingNPC(npc)}
                             title="NPC Settings"
                             icon={<Settings size={14} />}
-                            className="hover:!text-blue-400"
+                            className="hover:text-blue-400!"
                           />
                           <Button
                             variant="ghost"
@@ -558,7 +558,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                             onClick={() => handleRemoveNPC(npc.character_uuid)}
                             title="Remove NPC"
                             icon={<X size={14} />}
-                            className="hover:!text-red-400"
+                            className="hover:text-red-400!"
                           />
                         </div>
                       </div>
@@ -570,7 +570,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
               {/* Position Info */}
               <div>
                 <label className="block text-xs text-gray-400 mb-2">Position</label>
-                <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-gray-400">
+                <div className="bg-background border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-gray-400">
                   ({room.position.x}, {room.position.y})
                 </div>
               </div>
@@ -583,7 +583,7 @@ export function RoomPropertiesPanel({ room, worldId, availableCharacters, onUpda
                     fullWidth
                     onClick={onRemoveFromCell}
                     icon={<Trash2 size={16} />}
-                    className="!bg-red-900/30 hover:!bg-red-900/50 !border !border-red-800/50 hover:!border-red-700 !text-red-400 hover:!text-red-300"
+                    className="bg-red-900/30! hover:bg-red-900/50! border! border-red-800/50! hover:border-red-700! text-red-400! hover:text-red-300!"
                   >
                     Remove from Cell
                   </Button>

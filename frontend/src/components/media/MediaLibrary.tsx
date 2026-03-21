@@ -87,7 +87,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                     <span className={`text-sm ${selectedId === null ? 'text-blue-400' : 'text-stone-500'}`}>None</span>
 
                     {selectedId === null && (
-                        <div className="absolute top-2 right-2 p-1 bg-blue-500 rounded-full text-white shadow-sm">
+                        <div className="absolute top-2 right-2 p-1 bg-blue-500 rounded-full text-white shadow-xs">
                             <Check size={12} strokeWidth={3} />
                         </div>
                     )}
@@ -120,18 +120,18 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                         />
 
                         {/* Overlay Gradient */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+                        <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
 
                         {/* Selection Indicator */}
                         {isSelected && (
-                            <div className="absolute top-2 right-2 p-1 bg-blue-500 rounded-full text-white shadow-sm">
+                            <div className="absolute top-2 right-2 p-1 bg-blue-500 rounded-full text-white shadow-xs">
                                 <Check size={12} strokeWidth={3} />
                             </div>
                         )}
 
                         {/* Badges (Animation) */}
                         {item.isAnimated && (
-                            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/50 backdrop-blur-sm rounded text-[10px] uppercase font-bold text-white border border-white/10">
+                            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/50 backdrop-blur-xs rounded-sm text-[10px] uppercase font-bold text-white border border-white/10">
                                 GIF
                             </div>
                         )}

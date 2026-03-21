@@ -217,7 +217,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
             type="checkbox"
             checked={caseSensitive}
             onChange={(e) => setCaseSensitive(e.target.checked)}
-            className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+            className="form-checkbox h-4 w-4 text-blue-600 rounded-sm focus:ring-2 focus:ring-blue-500"
           />
           <span className="text-sm text-gray-300">
             Case sensitive

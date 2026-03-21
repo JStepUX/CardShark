@@ -10,10 +10,10 @@ import type { PlayerProgression } from '../utils/progressionUtils';
 function makeTimeState(overrides: Partial<TimeState> = {}): TimeState {
   return {
     currentDay: 1,
-    currentPeriod: 'morning' as const,
+    messagesInDay: 0,
     totalMessages: 0,
-    periodsPerDay: 4,
-    messagesPerPeriod: 12,
+    timeOfDay: 0.0,
+    lastMessageTimestamp: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -23,7 +23,7 @@ function makeProgression(overrides: Partial<PlayerProgression> = {}): PlayerProg
 }
 
 function makeInventory(overrides: Partial<CharacterInventory> = {}): CharacterInventory {
-  return { items: [], maxSlots: 20, gold: 0, ...overrides };
+  return { equippedWeapon: null, equippedArmor: null, items: [], ...overrides };
 }
 
 function makeState(overrides: Partial<WorldPlaySessionState> = {}): WorldPlaySessionState {
@@ -54,7 +54,7 @@ describe('worldPlaySessionReducer', () => {
     });
 
     it('preserves existing playerInventory when payload.playerInventory is undefined', () => {
-      const existingInv = makeInventory({ gold: 500 });
+      const existingInv = makeInventory();
       const state = makeState({ playerInventory: existingInv });
 
       const result = worldPlaySessionReducer(state, {
@@ -83,7 +83,7 @@ describe('worldPlaySessionReducer', () => {
 
     it('extracts bondedAlly fields and splits inventory', () => {
       const state = makeState();
-      const allyInv = makeInventory({ gold: 50 });
+      const allyInv = makeInventory();
 
       const result = worldPlaySessionReducer(state, {
         type: 'hydrate',

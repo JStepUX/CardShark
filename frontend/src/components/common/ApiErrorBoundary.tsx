@@ -71,7 +71,7 @@ class ApiErrorBoundary extends React.Component<ApiErrorBoundaryProps, ApiErrorBo
 
       // Default fallback UI
       return (
-        <div className="p-4 border border-red-300 rounded bg-red-50 text-red-800">
+        <div className="p-4 border border-red-300 rounded-sm bg-red-50 text-red-800">
           <h3 className="text-lg font-semibold mb-2">Something went wrong with the API</h3>
           <p className="mb-3">{this.state.error?.message || 'Unknown error'}</p>
           <Button

@@ -59,7 +59,7 @@ const ModelDirectorySettings: React.FC<ModelDirectorySettingsProps> = ({
             setSuccessMessage(null);
           }}
           placeholder="Path to AI models directory"
-          className="flex-grow px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
+          className="grow px-3 py-2 bg-stone-950 border border-stone-700 rounded-lg focus:ring-1 focus:ring-blue-500"
           disabled={isLoading}
         />
         <Button
@@ -72,20 +72,20 @@ const ModelDirectorySettings: React.FC<ModelDirectorySettingsProps> = ({
           )}
           onClick={handleSetDirectory}
           disabled={isLoading || !modelsDirectory.trim()}
-          className="!bg-purple-800 hover:!bg-purple-700"
+          className="bg-purple-800! hover:bg-purple-700!"
         >
           Set
         </Button>
       </div>
 
       {successMessage && (
-        <div className="text-sm text-green-500 bg-green-950/50 p-2 rounded">
+        <div className="text-sm text-green-500 bg-green-950/50 p-2 rounded-sm">
           {successMessage}
         </div>
       )}
 
       {errorMessage && (
-        <div className="text-sm text-red-500 bg-red-950/50 p-2 rounded">
+        <div className="text-sm text-red-500 bg-red-950/50 p-2 rounded-sm">
           {errorMessage}
         </div>
       )}

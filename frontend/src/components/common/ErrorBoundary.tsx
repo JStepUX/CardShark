@@ -97,7 +97,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                         </div>
                         <h3 className="text-lg font-medium text-red-400 mb-2">Something went wrong</h3>
                         {error && (
-                            <p className="text-sm text-gray-400 mb-4 break-words">{error.message}</p>
+                            <p className="text-sm text-gray-400 mb-4 wrap-break-word">{error.message}</p>
                         )}
                         <Button
                             variant="destructive"

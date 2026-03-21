@@ -128,7 +128,7 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                         <span className="text-gray-600">→</span>
                         <span className="text-white font-medium">{roomName}</span>
                         {inCombat && (
-                            <span className="ml-2 px-2 py-0.5 text-xs font-bold text-red-400 bg-red-900/30 rounded border border-red-800/50">
+                            <span className="ml-2 px-2 py-0.5 text-xs font-bold text-red-400 bg-red-900/30 rounded-sm border border-red-800/50">
                                 COMBAT
                             </span>
                         )}
@@ -138,10 +138,10 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                     <div className="flex items-center gap-4">
                         {/* Player Progress Display */}
                         {playerProgress && (
-                            <div className="flex items-center gap-3 px-3 py-1 bg-gray-800/50 rounded">
+                            <div className="flex items-center gap-3 px-3 py-1 bg-gray-800/50 rounded-sm">
                                 {/* Level Badge */}
                                 <div className="flex items-center gap-1" title={`Level ${playerProgress.level}`}>
-                                    <span className="text-xs font-bold text-yellow-400 bg-yellow-900/40 px-1.5 py-0.5 rounded">
+                                    <span className="text-xs font-bold text-yellow-400 bg-yellow-900/40 px-1.5 py-0.5 rounded-sm">
                                         Lv.{playerProgress.level}
                                     </span>
                                 </div>
@@ -154,11 +154,11 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                                     <Star className="w-3.5 h-3.5 text-yellow-400" />
                                     <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                                         <div
-                                            className="h-full bg-gradient-to-r from-yellow-500 to-yellow-400 transition-all duration-300"
+                                            className="h-full bg-linear-to-r from-yellow-500 to-yellow-400 transition-all duration-300"
                                             style={{ width: `${xpPercentage}%` }}
                                         />
                                     </div>
-                                    <span className="text-xs text-gray-500 min-w-[3rem]">
+                                    <span className="text-xs text-gray-500 min-w-12">
                                         {playerProgress.xpCurrent}/{playerProgress.xpNeeded}
                                     </span>
                                 </div>
@@ -187,7 +187,7 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                             <div className="flex items-center gap-2 text-sm text-gray-400">
                                 {/* Day/Night Cycle Icon */}
                                 <div
-                                    className="relative w-7 h-7 flex-shrink-0"
+                                    className="relative w-7 h-7 shrink-0"
                                     title={`Time: ${timeDisplay}`}
                                 >
                                     <img
@@ -237,7 +237,7 @@ export const PlayViewLayout: React.FC<PlayViewLayoutProps> = ({
                                                 onClick={onBondNpc}
                                                 title={`Bond with ${conversationState.conversationTargetName} (they will follow you)`}
                                                 icon={<UserPlus className="w-3.5 h-3.5" />}
-                                                className="!text-green-300 !border-green-700/50 !bg-green-900/40 hover:!bg-green-800/60"
+                                                className="text-green-300! border-green-700/50! bg-green-900/40! hover:bg-green-800/60!"
                                             >
                                                 Bond
                                             </Button>

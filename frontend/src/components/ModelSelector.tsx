@@ -132,11 +132,11 @@ const OpenRouterModelSelector: React.FC<OpenRouterModelSelectorProps> = ({
           <LoadingSpinner text="Loading models..." />
         </div>
       ) : error ? (
-        <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
-          <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
+        <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded-sm">
+          <AlertCircleIcon size={16} className="mr-2 shrink-0" /> {error}
         </div>
       ) : !apiKey ? (
-        <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">API Key required to load models.</div>
+        <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded-sm">API Key required to load models.</div>
       ) : models.length === 0 && !isLoading ? (
         <div className="text-gray-400">No models found.</div>
       ) : (
@@ -259,11 +259,11 @@ const FeatherlessModelSelector: React.FC<FeatherlessModelSelectorProps> = ({
           <LoadingSpinner text="Loading models..." />
         </div>
       ) : error ? (
-        <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
-          <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
+        <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded-sm">
+          <AlertCircleIcon size={16} className="mr-2 shrink-0" /> {error}
         </div>
       ) : !apiKey ? (
-        <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">API Key required to load models.</div>
+        <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded-sm">API Key required to load models.</div>
       ) : models.length === 0 && !isLoading ? (
         <div className="text-gray-400">No models found.</div>
       ) : (
@@ -370,8 +370,8 @@ const OllamaModelSelector: React.FC<OllamaModelSelectorProps> = ({
           <LoadingSpinner text="Loading models..." />
         </div>
       ) : error ? (
-        <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
-          <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
+        <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded-sm">
+          <AlertCircleIcon size={16} className="mr-2 shrink-0" /> {error}
         </div>
       ) : models.length === 0 && !isLoading ? (
         <div className="text-gray-400 text-xs p-2">No models found. Make sure Ollama is running and has models pulled.</div>
@@ -557,11 +557,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             <LoadingSpinner text="Loading models..." />
           </div>
         ) : error ? (
-          <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded">
-            <AlertCircleIcon size={16} className="mr-2 flex-shrink-0" /> {error}
+          <div className="text-red-400 flex items-center text-xs p-2 bg-red-950/30 rounded-sm">
+            <AlertCircleIcon size={16} className="mr-2 shrink-0" /> {error}
           </div>
         ) : !modelsDirectory ? (
-          <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded">Model directory not set in General Settings.</div>
+          <div className="text-yellow-400 text-xs p-2 bg-yellow-950/30 rounded-sm">Model directory not set in General Settings.</div>
         ) : models.length === 0 && !isLoading ? (
           <div className="text-gray-400">No models found in directory: {modelsDirectory}</div>
         ) : (
@@ -592,7 +592,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   onClick={handleDisconnectKobold}
                   disabled={isLoading}
                   title="Stop KoboldCPP Server (via backend)"
-                  className="flex-shrink-0"
+                  className="shrink-0"
                 >
                   Stop
                 </Button>
@@ -603,7 +603,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   onClick={handleConnectKobold}
                   disabled={!selectedModel || !modelsDirectory || isLoading}
                   title={!selectedModel || !modelsDirectory ? "Select a model and set model directory first" : "Start KoboldCPP Server with selected model (via backend)"}
-                  className="flex-shrink-0 !bg-green-600 hover:!bg-green-700"
+                  className="shrink-0 bg-green-600! hover:bg-green-700!"
                 >
                   Start
                 </Button>

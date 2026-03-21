@@ -196,7 +196,7 @@ function ItemSlot({
       {/* Stack count badge */}
       {showStackBadge && (
         <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 bg-gray-900/90 border border-amber-600/50
-                        rounded-full text-xs font-bold text-amber-400 min-w-[1.25rem] text-center leading-none">
+                        rounded-full text-xs font-bold text-amber-400 min-w-5 text-center leading-none">
           x{item.stackCount}
         </div>
       )}
@@ -356,7 +356,7 @@ export function InventoryModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center"
+      className="fixed inset-0 z-100 bg-black/90 backdrop-blur-xs flex items-center justify-center"
       onClick={(e) => e.target === e.currentTarget && onClose()}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -382,7 +382,7 @@ export function InventoryModal({
           {/* Character Info Row */}
           <div className="flex gap-4">
             {/* Portrait */}
-            <div className="w-24 h-32 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 flex-shrink-0">
+            <div className="w-24 h-32 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 shrink-0">
               {characterImagePath ? (
                 <img
                   src={characterImagePath}

@@ -690,7 +690,7 @@ export const APICard: React.FC<APICardProps> = ({
             onClick={onSetActive}
             disabled={isLoading || hasChanges}
             title={hasChanges ? "Save changes before setting active" : (editableApi.enabled ? "Set as active API" : "You must connect the API first")}
-            className="!bg-sky-600 hover:!bg-sky-700"
+            className="bg-sky-600! hover:bg-sky-700!"
           >
             Set Active
           </Button>
@@ -701,7 +701,7 @@ export const APICard: React.FC<APICardProps> = ({
             size="lg"
             onClick={handleDisconnect}
             disabled={isLoading}
-            className="!bg-orange-600 hover:!bg-orange-700"
+            className="bg-orange-600! hover:bg-orange-700!"
           >
             Disconnect
           </Button>
@@ -712,7 +712,7 @@ export const APICard: React.FC<APICardProps> = ({
             onClick={handleTest}
             disabled={isLoading || !editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)}
             title={(!editableApi.url || (currentProviderConfig.requiresApiKey && !editableApi.apiKey)) ? "URL and API Key (if required) must be set to test" : "Test Connection"}
-            className="!bg-green-600 hover:!bg-green-700"
+            className="bg-green-600! hover:bg-green-700!"
           >
             {isLoading ? 'Testing...' : 'Test Connection'}
           </Button>

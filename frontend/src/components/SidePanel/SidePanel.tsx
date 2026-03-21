@@ -37,7 +37,7 @@ export function SidePanel({
     const { panelWidth, resizeHandleProps } = usePanelResize();
 
     return (
-        <div className="relative bg-[#1a1a1a] border-l border-gray-800 flex flex-col" style={{ width: panelWidth }}>
+        <div className="relative bg-background border-l border-gray-800 flex flex-col" style={{ width: panelWidth }}>
             {/* Resize Handle */}
             <div
                 {...resizeHandleProps}
@@ -253,7 +253,7 @@ function CharacterModeContent({
         <>
             {/* Character Portrait */}
             <div className="p-4">
-                <div className="relative w-full aspect-[4/5] rounded-xl overflow-hidden border-2 border-white/20 shadow-lg shadow-black/50">
+                <div className="relative w-full aspect-4/5 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg shadow-black/50">
                     {selectedSecondaryImage ? (
                         // Show selected secondary image
                         <div className="relative w-full h-full">
@@ -267,7 +267,7 @@ function CharacterModeContent({
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleBackToMain}
-                                className="absolute top-2 left-2 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 !rounded"
+                                className="absolute top-2 left-2 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded-sm!"
                             >
                                 ← Main
                             </Button>
@@ -302,7 +302,7 @@ function CharacterModeContent({
                                         size="sm"
                                         onClick={() => handleSecondaryImageClick(image)}
                                         className={`
-                                            aspect-[3/4] overflow-hidden border-2 p-0
+                                            aspect-3/4 overflow-hidden border-2 p-0
                                             ${selectedSecondaryImage?.id === image.id
                                                 ? 'border-blue-500 ring-2 ring-blue-500/50'
                                                 : 'border-stone-700 hover:border-stone-500'
@@ -343,7 +343,7 @@ function PlaceholderButton({ icon: Icon, label }: { icon: LucideIcon; label: str
             size="lg"
             disabled
             title="Coming Soon"
-            className="bg-[#0a0a0a] border border-gray-800 px-3 py-3 !flex-col gap-2"
+            className="bg-[#0a0a0a] border border-gray-800 px-3 py-3 flex-col! gap-2"
         >
             <Icon className="w-5 h-5 text-gray-600" />
             <span className="text-xs text-gray-600">{label}</span>

@@ -622,7 +622,7 @@ export function WorldPlayView({ worldId: propWorldId }: WorldPlayViewProps) {
                 variant="destructive"
                 size="sm"
                 title="DEV: Reset all enemies in this room (restore dead, heal incapacitated) — Ctrl+Shift+D to hide"
-                className="absolute top-4 left-4 z-40 font-mono bg-red-900/80 border border-red-600 text-red-300 hover:bg-red-800 hover:text-red-200 backdrop-blur-sm"
+                className="absolute top-4 left-4 z-40 font-mono bg-red-900/80 border border-red-600 text-red-300 hover:bg-red-800 hover:text-red-200 backdrop-blur-xs"
               >
                 DEV: Reset Enemies
               </Button>

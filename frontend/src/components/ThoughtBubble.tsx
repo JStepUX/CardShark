@@ -35,7 +35,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
       {/* Content */}
       <div className="p-4 performance-contain">
         {isGenerating ? (
-          <div className="whitespace-pre-wrap break-words performance-contain performance-transform">
+          <div className="whitespace-pre-wrap wrap-break-word performance-contain performance-transform">
             {message.content}
             <span className="inline-block w-2 h-4 bg-stone-400 ml-1 animate-pulse"></span>
           </div>
@@ -44,7 +44,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
             contentEditable={true}
             suppressContentEditableWarning
             onBlur={(e) => onContentChange(e.currentTarget.textContent || '')}
-            className="whitespace-pre-wrap break-words focus:outline-none cursor-text performance-contain performance-transform"
+            className="whitespace-pre-wrap wrap-break-word focus:outline-hidden cursor-text performance-contain performance-transform"
             dangerouslySetInnerHTML={{ __html: message.content }}
           />
         )}

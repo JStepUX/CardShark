@@ -1075,7 +1075,7 @@ export const LocalMapView: React.FC<LocalMapViewProps> = ({
                     </div>
 
                     {showDebugOverlay && (
-                        <div className="mt-2 rounded border border-amber-500/40 bg-black/70 px-2 py-2 text-[10px] leading-4 text-amber-200 shadow-lg">
+                        <div className="mt-2 rounded-sm border border-amber-500/40 bg-black/70 px-2 py-2 text-[10px] leading-4 text-amber-200 shadow-lg">
                             <div>zoom {currentZoom.toFixed(2)}</div>
                             <div>pan {Math.round(viewportDebug.pan.x)}, {Math.round(viewportDebug.pan.y)}</div>
                             <div>bounds x {Math.round(viewportDebug.bounds.minX)}..{Math.round(viewportDebug.bounds.maxX)}</div>

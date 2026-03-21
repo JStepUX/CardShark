@@ -22,7 +22,7 @@ const CharacterPreview: React.FC<CharacterPreviewProps> = ({ data, imageFile }) 
   const { name, description, personality, scenario } = data.data;
 
   return (
-    <div className="mt-6 p-4 bg-white rounded-lg shadow">
+    <div className="mt-6 p-4 bg-white rounded-lg shadow-sm">
       <h2 className="heading-primary mb-4">Character Preview</h2>
       
       {imageFile && (

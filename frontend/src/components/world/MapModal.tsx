@@ -50,10 +50,10 @@ export function MapModal({ worldData, currentRoomId, onNavigate, onClose }: MapM
       icon={<MapIcon className="w-5 h-5 text-blue-400" />}
       showHeaderCloseButton={true}
       className="max-w-5xl w-full"
-      backgroundColor="bg-[#1a1a1a]"
+      backgroundColor="bg-background"
       borderColor="border-gray-800"
-      backdropClassName="bg-black/85 backdrop-blur-sm"
-      zIndex="z-[100]"
+      backdropClassName="bg-black/85 backdrop-blur-xs"
+      zIndex="z-100"
     >
       {/* Grid */}
       <div className="p-2">
@@ -74,7 +74,7 @@ export function MapModal({ worldData, currentRoomId, onNavigate, onClose }: MapM
                           ? 'bg-blue-600/20 border-blue-500'
                           : isAccessible
                             ? 'bg-[#2a2a2a] hover:bg-[#3a3a3a] hover:scale-105 cursor-pointer hover:border-gray-600'
-                            : 'bg-[#1a1a1a]'
+                            : 'bg-background'
                         : 'bg-[#0a0a0a]'
                         }`}
                       onClick={() => {
@@ -117,7 +117,7 @@ export function MapModal({ worldData, currentRoomId, onNavigate, onClose }: MapM
 
                           {/* Current Room Border Animation */}
                           {isCurrentRoom && (
-                            <div className="absolute inset-0 border-2 border-blue-500 rounded-sm animate-pulse pointer-events-none" />
+                            <div className="absolute inset-0 border-2 border-blue-500 rounded-xs animate-pulse pointer-events-none" />
                           )}
                         </>
                       )}
@@ -132,11 +132,11 @@ export function MapModal({ worldData, currentRoomId, onNavigate, onClose }: MapM
       {/* Legend */}
       <div className="border-t border-gray-800 px-6 py-4 flex flex-wrap gap-x-6 gap-y-2 text-xs mt-2">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-blue-600/20 border border-blue-500 rounded" />
+          <div className="w-4 h-4 bg-blue-600/20 border border-blue-500 rounded-sm" />
           <span className="text-gray-400">Current Room</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-[#2a2a2a] border border-gray-600 rounded" />
+          <div className="w-4 h-4 bg-[#2a2a2a] border border-gray-600 rounded-sm" />
           <span className="text-gray-400">Click to Travel</span>
         </div>
         <div className="flex items-center gap-2">

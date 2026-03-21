@@ -327,7 +327,7 @@ export function PixiMapModal({
     }, [isAnimating, worldData]);
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex flex-col">
+        <div className="fixed inset-0 z-100 bg-black/95 backdrop-blur-xs flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
                 <div className="flex items-center gap-3">
@@ -363,7 +363,7 @@ export function PixiMapModal({
                         onClick={() => setIsPanMode(!isPanMode)}
                         aria-label={isPanMode ? 'Switch to navigate mode' : 'Switch to pan mode'}
                         title={isPanMode ? 'Pan mode (click to switch to navigate)' : 'Navigate mode (click to switch to pan)'}
-                        className="backdrop-blur-sm"
+                        className="backdrop-blur-xs"
                     />
 
                     {/* Divider */}
@@ -376,7 +376,7 @@ export function PixiMapModal({
                         icon={<ZoomIn className="w-5 h-5" />}
                         onClick={() => cameraRef.current?.setZoom((cameraRef.current?.getZoom() || 1) + 0.25)}
                         aria-label="Zoom in"
-                        className="backdrop-blur-sm"
+                        className="backdrop-blur-xs"
                     />
                     <Button
                         variant="ghost"
@@ -384,7 +384,7 @@ export function PixiMapModal({
                         icon={<ZoomOut className="w-5 h-5" />}
                         onClick={() => cameraRef.current?.setZoom((cameraRef.current?.getZoom() || 1) - 0.25)}
                         aria-label="Zoom out"
-                        className="backdrop-blur-sm"
+                        className="backdrop-blur-xs"
                     />
                     <Button
                         variant="ghost"
@@ -392,7 +392,7 @@ export function PixiMapModal({
                         icon={<Home className="w-5 h-5" />}
                         onClick={() => cameraRef.current?.reset()}
                         aria-label="Reset view"
-                        className="backdrop-blur-sm"
+                        className="backdrop-blur-xs"
                     />
                 </div>
             </div>
@@ -400,11 +400,11 @@ export function PixiMapModal({
             {/* Legend (bottom bar) */}
             <div className="border-t border-gray-800 px-6 py-3 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm">
                 <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 bg-blue-600/30 border-2 border-blue-500 rounded" />
+                    <div className="w-5 h-5 bg-blue-600/30 border-2 border-blue-500 rounded-sm" />
                     <span className="text-gray-300">Current Room</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 bg-[#2a2a2a] border border-gray-600 rounded" />
+                    <div className="w-5 h-5 bg-[#2a2a2a] border border-gray-600 rounded-sm" />
                     <span className="text-gray-300">{isPanMode ? 'Drag to Pan' : 'Click to Travel'}</span>
                 </div>
                 <div className="flex items-center gap-2">

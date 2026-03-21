@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "vite --port 6969",
     "build": "tsc && vite build",
@@ -36,6 +39,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.2.22",
@@ -45,12 +49,11 @@
     "@typescript-eslint/parser": "^6.7.2",
     "@vitejs/plugin-react-swc": "^3.3.2",
     "@vitest/coverage-v8": "^4.1.0",
-    "autoprefixer": "^10.4.16",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^15.15.0",
     "postcss": "^8.4.31",
-    "tailwindcss": "^3.3.5",
+    "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.53.1",
     "vite": "^4.4.9",

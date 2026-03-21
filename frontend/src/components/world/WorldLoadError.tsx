@@ -71,7 +71,7 @@ export function WorldLoadError({
                             size="lg"
                             onClick={onRetry}
                             icon={<RefreshCw size={16} />}
-                            className="!bg-purple-600 hover:!bg-purple-700"
+                            className="bg-purple-600! hover:bg-purple-700!"
                         >
                             Retry
                         </Button>

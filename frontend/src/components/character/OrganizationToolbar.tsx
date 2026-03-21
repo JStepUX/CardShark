@@ -133,7 +133,7 @@ const OrganizationToolbar: React.FC<OrganizationToolbarProps> = ({
       </div>
 
       {/* Spacer */}
-      <div className="flex-grow" />
+      <div className="grow" />
 
       {/* Exit org mode */}
       <Button

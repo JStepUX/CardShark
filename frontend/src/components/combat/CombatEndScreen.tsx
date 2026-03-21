@@ -83,7 +83,7 @@ const LevelUpDisplay: React.FC<LevelUpDisplayProps> = ({ levelUpInfo }) => {
     ] as const;
 
     return (
-        <div className="bg-gradient-to-b from-purple-900/40 to-purple-950/40 rounded-lg p-5 border border-purple-500/40 animate-pulse-slow">
+        <div className="bg-linear-to-b from-purple-900/40 to-purple-950/40 rounded-lg p-5 border border-purple-500/40 animate-pulse-slow">
             {/* Level Up Header */}
             <div className="flex items-center justify-center gap-3 mb-4">
                 <TrendingUp className="w-8 h-8 text-purple-400" />
@@ -110,7 +110,7 @@ const LevelUpDisplay: React.FC<LevelUpDisplayProps> = ({ levelUpInfo }) => {
                     return (
                         <div
                             key={key}
-                            className="flex items-center justify-between px-3 py-1.5 bg-black/30 rounded"
+                            className="flex items-center justify-between px-3 py-1.5 bg-black/30 rounded-sm"
                         >
                             <div className="flex items-center gap-2">
                                 <Icon className={`w-4 h-4 ${color}`} />
@@ -224,7 +224,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                             }}
                         >
                             {/* Gradient overlay for text readability */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
+                            <div className="absolute inset-0 bg-linear-to-t from-gray-900 via-gray-900/60 to-transparent" />
                             {/* Victory text positioned at the bottom of the backdrop */}
                             <div className="absolute inset-x-0 bottom-0 pb-3">
                                 <h2 className="text-4xl font-bold text-yellow-400 tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
@@ -247,7 +247,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                     <div className="space-y-4 mb-6">
                         {/* Player Revived by Ally (show first - dramatic moment!) */}
                         {playerWasRevived && (
-                            <div className="bg-gradient-to-b from-teal-900/40 to-teal-950/40 rounded-lg p-4 border border-teal-500/40">
+                            <div className="bg-linear-to-b from-teal-900/40 to-teal-950/40 rounded-lg p-4 border border-teal-500/40">
                                 <div className="flex items-center justify-center gap-2 mb-2">
                                     <Heart className="w-5 h-5 text-teal-400" />
                                     <h3 className="text-lg font-semibold text-teal-300">
@@ -270,7 +270,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                         )}
 
                         {/* Rewards */}
-                        <div className="bg-gradient-to-b from-gray-800/70 to-gray-900/70 rounded-lg p-5 border border-yellow-500/20">
+                        <div className="bg-linear-to-b from-gray-800/70 to-gray-900/70 rounded-lg p-5 border border-yellow-500/20">
                             <h3 className="text-sm font-semibold text-yellow-400/80 uppercase tracking-wider mb-4">
                                 Rewards Earned
                             </h3>
@@ -298,7 +298,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
 
                         {/* Loot Items */}
                         {result.rewards.items && result.rewards.items.length > 0 && (
-                            <div className="bg-gradient-to-b from-amber-900/30 to-amber-950/30 rounded-lg p-4 border border-amber-500/20">
+                            <div className="bg-linear-to-b from-amber-900/30 to-amber-950/30 rounded-lg p-4 border border-amber-500/20">
                                 <h3 className="text-sm font-semibold text-amber-400/80 uppercase tracking-wider mb-3">
                                     Items Found
                                 </h3>
@@ -306,7 +306,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                                     {result.rewards.items.map((item, index) => (
                                         <div
                                             key={`${item.id}-${index}`}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-900/30 rounded border border-amber-700/30"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-900/30 rounded-sm border border-amber-700/30"
                                             title={item.description || item.name}
                                         >
                                             <Package className="w-3.5 h-3.5 text-amber-400" />
@@ -330,7 +330,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                                     {revivedAllyNames.map((name, index) => (
                                         <span
                                             key={index}
-                                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-900/40 rounded text-sm text-blue-300"
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-900/40 rounded-sm text-sm text-blue-300"
                                         >
                                             <Heart className="w-3 h-3" />
                                             {name}
@@ -354,7 +354,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                                     {deadEnemyNames.map((name, index) => (
                                         <span
                                             key={`dead-${index}`}
-                                            className="inline-flex items-center gap-1 px-2 py-1 bg-red-900/30 rounded text-sm text-red-300"
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-red-900/30 rounded-sm text-sm text-red-300"
                                         >
                                             <Skull className="w-3 h-3" />
                                             {name}
@@ -364,7 +364,7 @@ export const CombatEndScreen: React.FC<CombatEndScreenProps> = ({
                                     {incapacitatedEnemyNames.map((name, index) => (
                                         <span
                                             key={`incap-${index}`}
-                                            className="inline-flex items-center gap-1 px-2 py-1 bg-gray-700/50 rounded text-sm text-gray-400"
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-gray-700/50 rounded-sm text-sm text-gray-400"
                                         >
                                             {name}
                                             <span className="text-xs text-gray-500">(KO)</span>

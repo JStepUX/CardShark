@@ -22,7 +22,7 @@ export function NPCShowcase({ npcs, activeNpcId, onSelectNpc, onDismissNpc, rela
   }
 
   return (
-    <div className="border-t border-b border-gray-800 bg-[#1a1a1a] py-4 px-3">
+    <div className="border-t border-b border-gray-800 bg-background py-4 px-3">
       <h3 className="text-xs text-gray-500 uppercase tracking-wide mb-3">Present</h3>
       <div className="grid grid-cols-2 gap-3">
         {npcs.map((npc) => (

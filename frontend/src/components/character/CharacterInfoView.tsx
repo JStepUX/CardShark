@@ -63,14 +63,14 @@ const JsonViewerModal: React.FC<{
       <textarea
         className="w-full flex-1 bg-stone-900 text-white font-mono text-sm
                   rounded-lg p-4 overflow-auto
-                  whitespace-pre-wrap break-words resize-none"
+                  whitespace-pre-wrap wrap-break-word resize-none"
         value={editableJson}
         onChange={handleChange}
       />
       <Button
         variant="primary"
         size="md"
-        className="mt-4 !bg-purple-600 hover:!bg-purple-700"
+        className="mt-4 bg-purple-600! hover:bg-purple-700!"
         onClick={handleSave}
       >
         Save Changes
@@ -736,7 +736,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                 variant="primary"
                 size="lg"
                 icon={<Save />}
-                className="!bg-green-600 hover:!bg-green-700"
+                className="bg-green-600! hover:bg-green-700!"
                 onClick={handleSave}
               >
                 Save

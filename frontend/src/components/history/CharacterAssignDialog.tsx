@@ -184,7 +184,7 @@ const CharacterAssignDialog: React.FC<CharacterAssignDialogProps> = ({
                                         placeholder="Search characters..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full bg-stone-800 border border-stone-700 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-stone-500 focus:outline-none focus:border-stone-600 transition-colors"
+                                        className="w-full bg-stone-800 border border-stone-700 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-stone-500 focus:outline-hidden focus:border-stone-600 transition-colors"
                                     />
                                 </div>
                             </div>

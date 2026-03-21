@@ -354,7 +354,7 @@ const KoboldCPPManager: React.FC = () => {
 
           {/* Path info */}
           {status.exe_path && (
-            <div className="mb-4 p-2 bg-zinc-900 rounded text-gray-300 text-sm overflow-x-auto">
+            <div className="mb-4 p-2 bg-zinc-900 rounded-sm text-gray-300 text-sm overflow-x-auto">
               <code>{status.exe_path}</code>
             </div>
           )}
@@ -406,7 +406,7 @@ const KoboldCPPManager: React.FC = () => {
                 variant="primary"
                 icon={<RefreshCw className="h-4 w-4" />}
                 onClick={launchKoboldCPP}
-                className="!bg-green-600 hover:!bg-green-700"
+                className="bg-green-600! hover:bg-green-700!"
               >
                 Launch KoboldCPP
               </Button>
@@ -473,7 +473,7 @@ const KoboldCPPManager: React.FC = () => {
       {/* Error message */}
       {error && (
         <div className="mt-4 p-3 bg-red-900/40 border border-red-700 rounded-lg flex items-start gap-2 text-red-200">
-          <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
           <div className="text-sm">{error}</div>
           <Button
             variant="ghost"

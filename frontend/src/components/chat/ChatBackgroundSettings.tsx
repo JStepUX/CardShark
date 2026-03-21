@@ -132,7 +132,7 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
         {/* Current background preview */}
         {localSettings.background && (
           <div className="flex items-center gap-3 p-3 bg-stone-800 rounded-lg">
-            <div className="w-20 h-12 bg-stone-700 rounded overflow-hidden flex-shrink-0">
+            <div className="w-20 h-12 bg-stone-700 rounded-sm overflow-hidden shrink-0">
               <img
                 src={localSettings.background.url}
                 alt={localSettings.background.name}
@@ -148,7 +148,7 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
               variant="secondary"
               size="sm"
               onClick={() => updateSettings({ background: null })}
-              className="flex-shrink-0"
+              className="shrink-0"
             >
               Clear
             </Button>
@@ -215,7 +215,7 @@ const ChatBackgroundSettings: React.FC<ChatBackgroundSettingsProps> = ({
               type="checkbox"
               checked={!!localSettings.disableAnimation}
               onChange={(e) => updateSettings({ disableAnimation: e.target.checked })}
-              className="form-checkbox h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+              className="form-checkbox h-4 w-4 text-blue-600 rounded-sm focus:ring-2 focus:ring-blue-500"
             />
             <span className="text-sm">Pause GIF animation</span>
           </label>

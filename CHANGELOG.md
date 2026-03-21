@@ -44,6 +44,20 @@ For earlier history, see `docs/docs/archivedOLD/CHANGELOG.md`.
 - Tests for `worldPlaySessionReducer` hydrate case (6 tests), `buildLocalMapCompanion` level scaling (6 tests), `raceWithTimeout` timer cleanup (3 tests)
 
 ### Changed
+- **Tailwind CSS v3 → v4**: Migrated from Tailwind 3.3.5 to 4.2.2. Automated class renames across 88 component files (`outline-none`→`outline-hidden`, `bg-gradient-to-*`→`bg-linear-to-*`, `flex-grow`→`grow`, `shadow-sm`→`shadow-xs`, `bg-opacity-*`→opacity modifiers). Config moved from `tailwind.config.js` to CSS `@theme` block in `global.css`. PostCSS plugin updated to `@tailwindcss/postcss`; `autoprefixer` removed (now built-in).
+- **Node.js minimum**: Now requires Node.js 20+ (Tailwind v4's Oxide engine dependency). Enforced via `engines` field in `frontend/package.json`.
+- **Browser requirement note**: `start.py` now prints minimum browser versions (Chrome 111+, Firefox 128+, Safari 16.4+) at startup before opening the browser.
+
+### Fixed
+- **Dialog stacking**: Added `relative` to Dialog content wrapper so it renders above the backdrop overlay (Tailwind v4 CSS layer ordering change caused dialogs to appear behind the blackout)
+- **Button `outline` variant**: Restored `'outline'` variant name after upgrade tool incorrectly renamed it to `'outline-solid'` (confused TypeScript string literal with CSS utility class)
+- **Ring width on form controls**: Added explicit `focus:ring-2` to 14 checkbox/input elements across 12 files that relied on Tailwind v3's implicit 3px ring width default (v4 changed default to 1px)
+- **Stale test fixtures**: Updated `session.test.ts` helpers to match current `TimeState` (dropped `currentPeriod`/`periodsPerDay`/`messagesPerPeriod`, added `messagesInDay`/`timeOfDay`/`lastMessageTimestamp`) and `CharacterInventory` (dropped `maxSlots`/`gold`, added `equippedWeapon`/`equippedArmor`) interfaces. Pre-existing type errors, not caused by migration.
+
+### Removed
+- `frontend/tailwind.config.js` — replaced by CSS `@theme` block in `global.css`
+- `autoprefixer` devDependency — now handled internally by `@tailwindcss/postcss`
+
 - **Migrated frontend test runner from Jest to Vitest** — 21 test files, 469 tests passing
   - `jest.*` → `vi.*` across all test files; `vi.hoisted()` for mock variable scoping
   - Deleted `jest.config.cjs`, `tsconfig.test.json`, `jest.setup.ts`; removed 5 Jest devDependencies

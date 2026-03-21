@@ -27,7 +27,7 @@ const MessageCard: React.FC<{
   onGenerate: (id: string) => void;
   isGenerating: boolean;
 }> = React.memo(({ message, onDelete, onUpdate, onSetFirst, onGenerate, isGenerating }) => (
-  <div className="bg-gradient-to-b from-zinc-800 via-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg border border-zinc-700/50">
+  <div className="bg-linear-to-b from-zinc-800 via-zinc-900 to-stone-950 rounded-lg p-4 mb-4 shadow-lg border border-zinc-700/50">
     <div className="flex items-center justify-between mb-3">
       {/* Checkbox to set this message as the primary 'first_mes' */}
       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white">
@@ -35,7 +35,7 @@ const MessageCard: React.FC<{
           type="checkbox"
           checked={message.isFirst}
           onChange={() => onSetFirst(message.id)}
-          className="form-checkbox h-4 w-4 text-blue-500 bg-zinc-700 border-zinc-600 rounded focus:ring-blue-600 focus:ring-offset-zinc-900"
+          className="form-checkbox h-4 w-4 text-blue-500 bg-zinc-700 border-zinc-600 rounded-sm focus:ring-2 focus:ring-blue-600 focus:ring-offset-zinc-900"
         />
         Set as Primary Greeting
       </label>
@@ -68,7 +68,7 @@ const MessageCard: React.FC<{
     <RichTextEditor
       content={message.content}
       onChange={(html) => onUpdate(message.id, { content: htmlToPlainText(html) })} // Convert HTML to plain text before storing
-      className="w-full bg-zinc-950 text-gray-100 rounded min-h-[100px] border border-zinc-700 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500" // Apply styles, use focus-within for border
+      className="w-full bg-zinc-950 text-gray-100 rounded-sm min-h-[100px] border border-zinc-700 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500" // Apply styles, use focus-within for border
       placeholder="Enter message content (supports Markdown)..."
       preserveWhitespace={true} // Preserve formatting
     />

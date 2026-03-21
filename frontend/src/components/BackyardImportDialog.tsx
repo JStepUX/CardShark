@@ -59,8 +59,8 @@ export function BackyardImportDialog({ isOpen, onClose, onImport }: BackyardImpo
       <div className="w-full space-y-4">
         {/* Main input container */}
         <div className="flex items-start w-full gap-2">
-          <Link className="w-5 h-5 mt-1.5 flex-shrink-0" />
-          <div className="flex-grow min-w-0"> {/* Add min-w-0 to prevent flex item from overflowing */}
+          <Link className="w-5 h-5 mt-1.5 shrink-0" />
+          <div className="grow min-w-0"> {/* Add min-w-0 to prevent flex item from overflowing */}
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Backyard.ai Character URL
             </label>

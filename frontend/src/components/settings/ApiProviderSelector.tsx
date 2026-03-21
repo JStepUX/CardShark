@@ -156,7 +156,7 @@ export const ApiProviderSelector: React.FC = () => {
           variant="primary"
           size="sm"
           onClick={handleAddProvider}
-          className="bg-blue-600 hover:bg-blue-700 rounded"
+          className="bg-blue-600 hover:bg-blue-700 rounded-sm"
         >
           Add Provider
         </Button>
@@ -208,7 +208,7 @@ interface ApiProviderFormProps {
 
 const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDelete, onSelect }) => {
   return (
-    <div className="space-y-4 p-4 border rounded dark:border-gray-700">
+    <div className="space-y-4 p-4 border rounded-sm dark:border-gray-700">
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label htmlFor="api-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -222,7 +222,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
                 onUpdate({ provider: e.target.value as APIProvider });
               }
             }}
-            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
+            className="w-full px-3 py-2 border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
           >
             {PROVIDER_TYPES.map(provider => (
               <option key={provider.id} value={provider.id}>
@@ -242,7 +242,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
               type="checkbox"
               checked={api.enabled}
               onChange={(e) => onUpdate({ enabled: e.target.checked })}
-              className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-5 w-5 text-blue-600 focus:ring-2 focus:ring-blue-500 border-gray-300 rounded-sm"
             />
             <label htmlFor="api-enabled" className="text-sm text-gray-700 dark:text-gray-300">
               Enabled
@@ -267,7 +267,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
                   api.provider === APIProvider.GEMINI ? 'https://generativelanguage.googleapis.com/v1beta/models' :
                     api.provider === APIProvider.FEATHERLESS ? 'https://api.featherless.ai/v1' :
                       'https://api.openrouter.ai/api/v1'}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
         />
       </div>
 
@@ -280,7 +280,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           type="password"
           value={api.apiKey || ''}
           onChange={(e) => onUpdate({ apiKey: e.target.value })}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
           placeholder={api.provider === APIProvider.KOBOLD || api.provider === APIProvider.OLLAMA ? '(Optional)' : 'Required for this provider'}
         />
       </div>
@@ -293,7 +293,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           variant="primary"
           size="md"
           onClick={onSelect}
-          className="bg-green-600 hover:bg-green-700 rounded"
+          className="bg-green-600 hover:bg-green-700 rounded-sm"
         >
           Use This Provider
         </Button>
@@ -302,7 +302,7 @@ const ApiProviderForm: React.FC<ApiProviderFormProps> = ({ api, onUpdate, onDele
           variant="destructive"
           size="md"
           onClick={onDelete}
-          className="bg-red-600 hover:bg-red-700 rounded"
+          className="bg-red-600 hover:bg-red-700 rounded-sm"
         >
           Delete Provider
         </Button>
@@ -366,7 +366,7 @@ const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIC
           id="api-model"
           value={api.model || ''}
           onChange={(e) => onUpdate({ model: e.target.value })}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
         >
           {options.map(model => (
             <option key={model.id} value={model.id}>
@@ -380,7 +380,7 @@ const ModelSelector: React.FC<{ api: APIConfig; onUpdate: (updates: Partial<APIC
           type="text"
           value={api.model || ''}
           onChange={(e) => onUpdate({ model: e.target.value })}
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
+          className="w-full px-3 py-2 border rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 dark:bg-stone-800 dark:border-gray-700 dark:text-white"
           placeholder="Enter model name"
         />
       )}

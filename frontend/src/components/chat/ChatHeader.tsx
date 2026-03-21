@@ -93,13 +93,13 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="bg-transparent text-white text-lg font-semibold outline-none border border-transparent focus:border-stone-600 focus:ring-1 focus:ring-stone-600 rounded px-2 py-0.5 truncate min-w-0 flex-1 placeholder:text-stone-500"
+          className="bg-transparent text-white text-lg font-semibold outline-hidden border border-transparent focus:border-stone-600 focus:ring-1 focus:ring-stone-600 rounded-sm px-2 py-0.5 truncate min-w-0 flex-1 placeholder:text-stone-500"
           title="Click to rename this chat"
         />
         {!isFocused && (
           <Pencil
             size={14}
-            className="text-stone-500 flex-shrink-0 cursor-pointer"
+            className="text-stone-500 shrink-0 cursor-pointer"
             onClick={() => inputRef.current?.focus()}
           />
         )}

@@ -86,7 +86,7 @@ export const SubstitutionManager: React.FC<SubstitutionManagerProps> = ({ rules,
           size="sm"
           icon={<Plus size={16} />}
           onClick={handleAddClick}
-          className="!bg-purple-700 hover:!bg-purple-600"
+          className="bg-purple-700! hover:bg-purple-600!"
         >
           Add Rule
         </Button>
@@ -120,7 +120,7 @@ export const SubstitutionManager: React.FC<SubstitutionManagerProps> = ({ rules,
                       icon={rule.enabled ? <Check size={14} /> : <X size={14} />}
                       onClick={() => handleToggleEnabled(index)}
                       title={rule.enabled ? "Disable" : "Enable"}
-                      className={rule.enabled ? "!bg-green-600 !text-white" : "!bg-zinc-600 !text-zinc-400"}
+                      className={rule.enabled ? "bg-green-600! text-white!" : "bg-zinc-600! text-zinc-400!"}
                     />
                   </td>
                   <td className="px-4 py-2 font-mono text-sm">
@@ -287,7 +287,7 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
             type="text"
             value={editedRule.original}
             onChange={(e) => setEditedRule({ ...editedRule, original: e.target.value })}
-            className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2"
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-3 py-2"
             placeholder="Text to match and replace"
           />
         </div>
@@ -300,7 +300,7 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
             <select
               value={editedRule.mode}
               onChange={handleModeChange}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-3 py-2"
             >
               <option value="exact">Exact Match</option>
               <option value="case-insensitive">Case Insensitive</option>
@@ -315,7 +315,7 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
             <select
               value={editedRule.strategy}
               onChange={handleStrategyChange}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-3 py-2"
             >
               <option value="auto">Auto (Use Best Method)</option>
               <option value="api-ban">API-Level Ban</option>
@@ -326,7 +326,7 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
         
         <div>
           {editedRule.strategy === 'api-ban' ? (
-            <div className="flex items-center bg-blue-900/20 border border-blue-700/30 p-3 rounded">
+            <div className="flex items-center bg-blue-900/20 border border-blue-700/30 p-3 rounded-sm">
               <AlertCircle size={16} className="text-blue-400 mr-2" />
               <div className="text-sm text-blue-300">
                 API-ban mode will prevent the model from generating this text.
@@ -349,7 +349,7 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
                     {editedRule.substitutions.map((sub, idx) => (
                       <div 
                         key={idx}
-                        className="bg-zinc-800 px-2 py-1 rounded flex items-center gap-1.5"
+                        className="bg-zinc-800 px-2 py-1 rounded-sm flex items-center gap-1.5"
                       >
                         <span className="text-sm">{sub}</span>
                         <Button
@@ -369,7 +369,7 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
                   type="text"
                   value={substitution}
                   onChange={(e) => setSubstitution(e.target.value)}
-                  className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm"
+                  className="flex-1 bg-zinc-900 border border-zinc-700 rounded-sm px-3 py-2 text-sm"
                   placeholder="Add a substitution..."
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -396,7 +396,7 @@ const RuleEditorDialog: React.FC<RuleEditorDialogProps> = ({
         </div>
         
         {editedRule.mode === 'regex' && (
-          <div className="bg-yellow-900/20 border border-yellow-700/30 p-3 rounded">
+          <div className="bg-yellow-900/20 border border-yellow-700/30 p-3 rounded-sm">
             <p className="text-sm text-yellow-300">
               <strong>Regular Expression Mode:</strong> Use JavaScript-compatible regex patterns.
               Be careful with complex patterns as they may impact performance.

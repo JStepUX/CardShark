@@ -210,7 +210,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
         <div className="flex items-start gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-stone-800">
           {/* Loading state */}
           {isLoading && (
-            <div className="flex-shrink-0 w-[120px] aspect-[3/5] rounded-lg overflow-hidden bg-stone-950 flex items-center justify-center shadow-lg">
+            <div className="shrink-0 w-[120px] aspect-3/5 rounded-lg overflow-hidden bg-stone-950 flex items-center justify-center shadow-lg">
               <Loader2 className="w-5 h-5 text-stone-400 animate-spin" />
             </div>
           )}
@@ -218,7 +218,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
           {/* Current portrait */}
           {!isLoading && stablePortraitUrl && (
             <div
-              className="relative flex-shrink-0 group w-[120px] aspect-[3/5] rounded-lg overflow-hidden shadow-lg cursor-pointer"
+              className="relative shrink-0 group w-[120px] aspect-3/5 rounded-lg overflow-hidden shadow-lg cursor-pointer"
               onClick={() => { if (defaultImageId !== null) handleUnstarPortrait(); }}
             >
               <div className="w-full h-full bg-stone-950">
@@ -242,7 +242,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
             return (
               <div
                 key={image.id}
-                className="relative flex-shrink-0 group w-[120px] aspect-[3/5] rounded-lg overflow-hidden shadow-lg cursor-pointer"
+                className="relative shrink-0 group w-[120px] aspect-3/5 rounded-lg overflow-hidden shadow-lg cursor-pointer"
                 onClick={() => handleImageClick(image)}
               >
                 {/* Image with zoom on hover */}
@@ -264,7 +264,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
                   icon={<X size={16} />}
                   onClick={(e) => handleDeleteClick(image, e)}
                   title="Delete image"
-                  className="absolute top-2 right-2 z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-red-600"
+                  className="absolute top-2 right-2 z-10 bg-black/50! text-white! opacity-0 group-hover:opacity-100 hover:bg-red-600!"
                 />
 
                 {/* Star button -- fades in on hover (bottom-right), stays visible if starred */}
@@ -279,10 +279,10 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
                   onClick={(e) => { e.stopPropagation(); handleSetAsPortrait(image, e); }}
                   disabled={starringImageId === image.id}
                   title="Set as portrait"
-                  className={`absolute bottom-2 right-2 z-10 !text-amber-400 hover:!bg-amber-600 hover:!text-white
+                  className={`absolute bottom-2 right-2 z-10 text-amber-400! hover:bg-amber-600! hover:text-white!
                     ${isStarred
-                      ? '!bg-black/60 opacity-100'
-                      : '!bg-black/50 opacity-0 group-hover:opacity-100'
+                      ? 'bg-black/60! opacity-100'
+                      : 'bg-black/50! opacity-0 group-hover:opacity-100'
                     }`}
                 />
               </div>
@@ -295,7 +295,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
               onClick={handleAddClick}
               disabled={isUploading}
               className={`
-                flex-shrink-0 w-[120px] aspect-[3/5] rounded-lg border-2 border-dashed
+                shrink-0 w-[120px] aspect-3/5 rounded-lg border-2 border-dashed
                 flex items-center justify-center transition-all
                 ${isUploading
                   ? 'border-stone-700 bg-stone-800 cursor-not-allowed'

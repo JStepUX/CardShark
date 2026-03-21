@@ -32,7 +32,7 @@ export function NewCharacterDialog({
           ),
           onClick: onNewCharacter,
           variant: 'primary',
-          className: 'bg-orange-600 hover:bg-orange-700 focus:ring-orange-500'
+          className: 'bg-orange-600 hover:bg-orange-700 focus:ring-2 focus:ring-orange-500'
         }
       ]}
       showCloseButton={false}

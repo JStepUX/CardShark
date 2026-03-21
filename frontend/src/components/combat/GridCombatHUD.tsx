@@ -271,17 +271,17 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
                     {currentCombatant.activeBuffs && (
                         <div className="flex gap-1 mt-1">
                             {currentCombatant.activeBuffs.attackBonus > 0 && (
-                                <span className="text-[10px] px-1 bg-red-900/50 text-red-300 rounded" title={`+${currentCombatant.activeBuffs.attackBonus} attack (${currentCombatant.activeBuffs.attackTurnsLeft} turns)`}>
+                                <span className="text-[10px] px-1 bg-red-900/50 text-red-300 rounded-sm" title={`+${currentCombatant.activeBuffs.attackBonus} attack (${currentCombatant.activeBuffs.attackTurnsLeft} turns)`}>
                                     ATK+{currentCombatant.activeBuffs.attackBonus}
                                 </span>
                             )}
                             {currentCombatant.activeBuffs.damageBonus > 0 && (
-                                <span className="text-[10px] px-1 bg-orange-900/50 text-orange-300 rounded" title={`+${currentCombatant.activeBuffs.damageBonus} damage (${currentCombatant.activeBuffs.damageTurnsLeft} turns)`}>
+                                <span className="text-[10px] px-1 bg-orange-900/50 text-orange-300 rounded-sm" title={`+${currentCombatant.activeBuffs.damageBonus} damage (${currentCombatant.activeBuffs.damageTurnsLeft} turns)`}>
                                     DMG+{currentCombatant.activeBuffs.damageBonus}
                                 </span>
                             )}
                             {currentCombatant.activeBuffs.defenseBonus > 0 && (
-                                <span className="text-[10px] px-1 bg-blue-900/50 text-blue-300 rounded" title={`+${currentCombatant.activeBuffs.defenseBonus} defense (${currentCombatant.activeBuffs.defenseTurnsLeft} turns)`}>
+                                <span className="text-[10px] px-1 bg-blue-900/50 text-blue-300 rounded-sm" title={`+${currentCombatant.activeBuffs.defenseBonus} defense (${currentCombatant.activeBuffs.defenseTurnsLeft} turns)`}>
                                     DEF+{currentCombatant.activeBuffs.defenseBonus}
                                 </span>
                             )}
@@ -403,7 +403,7 @@ export const GridCombatHUD: React.FC<GridCombatHUDProps> = ({
 
                     {/* Targeting mode hint */}
                     {targetingMode !== 'none' && (
-                        <div className="text-center mt-2 text-sm text-yellow-400 bg-gray-900/80 rounded px-3 py-1">
+                        <div className="text-center mt-2 text-sm text-yellow-400 bg-gray-900/80 rounded-sm px-3 py-1">
                             {targetingMode === 'move' && 'Click a tile to move'}
                             {targetingMode === 'attack' && 'Click an enemy to attack'}
                             {targetingMode === 'aoe' && 'Click a tile to target AoE'}

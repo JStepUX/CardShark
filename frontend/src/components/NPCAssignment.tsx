@@ -64,7 +64,7 @@ function NPCPickerDrawer({ isOpen, onClose, onSelect, availableCharacters, exclu
               placeholder="Search characters..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-stone-800 border border-stone-700 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-stone-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-stone-800 border border-stone-700 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-stone-500 focus:outline-hidden focus:border-blue-500 transition-colors"
               autoFocus
             />
           </div>
@@ -88,7 +88,7 @@ function NPCPickerDrawer({ isOpen, onClose, onSelect, availableCharacters, exclu
                     alt={char.name}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end">
+                  <div className="absolute inset-0 bg-linear-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end">
                     <div className="p-3 w-full">
                       <div className="flex items-center justify-center gap-2 text-white">
                         <Plus size={16} />
@@ -229,7 +229,7 @@ export const NPCAssignment: React.FC<NPCAssignmentProps> = ({ npcs, onChange }) 
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Hostile badge */}
                     {npc.hostile && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-900/30 border border-red-800/50 rounded text-xs text-red-300">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-900/30 border border-red-800/50 rounded-sm text-xs text-red-300">
                         <Shield size={12} />
                         Hostile
                         {npc.monster_level && (

@@ -170,7 +170,7 @@ function RoomEditorContent() {
                 type="text"
                 value={roomData.data.name}
                 onChange={(e) => handleFieldChange('name', e.target.value)}
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-2 text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 placeholder="Tavern Common Room"
               />
             </div>
@@ -215,7 +215,7 @@ function RoomEditorContent() {
                 onChange={(e) =>
                   handleFieldChange('tags', e.target.value.split(',').map((t) => t.trim()))
                 }
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-4 py-2 text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 placeholder="tavern, safe, social"
               />
             </div>

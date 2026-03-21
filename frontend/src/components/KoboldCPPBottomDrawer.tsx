@@ -157,7 +157,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 transform transition-transform duration-300 ease-in-out">
-      <div className="bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-t-xl shadow-xl border border-b-0 border-zinc-700 max-h-[40vh] flex flex-col">
+      <div className="bg-linear-to-b from-zinc-800 to-zinc-900 rounded-t-xl shadow-xl border border-b-0 border-zinc-700 max-h-[40vh] flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-zinc-700">
           <h2 className="text-lg font-medium text-white">KoboldCPP Model Launcher</h2>
@@ -170,7 +170,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
           />
         </div>
 
-        <div className="p-4 flex-grow overflow-y-auto">
+        <div className="p-4 grow overflow-y-auto">
           {/* Main content */}
           <div className="space-y-4">
             <p className="text-zinc-300">
@@ -236,7 +236,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
                               className={`
                                 absolute left-0 top-0 bottom-0 w-1
                                 transition-all duration-300 ease-out
-                                ${isSelected ? 'bg-gradient-to-b from-blue-400 to-blue-600' : 'bg-transparent'}
+                                ${isSelected ? 'bg-linear-to-b from-blue-400 to-blue-600' : 'bg-transparent'}
                                 ${isRecentlySelected ? 'w-1.5' : ''}
                               `}
                             />
@@ -244,7 +244,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
                             {/* Content area with enhanced padding for the indicator */}
                             <div className={`flex items-center min-w-0 transition-all ${isSelected ? 'translate-x-1' : 'translate-x-0'}`}>
                               {/* Main content */}
-                              <div className="pl-3 flex-grow min-w-0">
+                              <div className="pl-3 grow min-w-0">
                                 <div className={`font-medium text-white transition-colors duration-300 truncate ${isSelected ? 'text-blue-100' : ''}`}>
                                   {model.name}
                                 </div>
@@ -254,7 +254,7 @@ const KoboldCPPBottomDrawer: React.FC<KoboldCPPBottomDrawerProps> = ({ onDismiss
                               {/* Selected checkmark indicator that fades in - moved to be part of flex layout with added right padding */}
                               {isSelected && (
                                 <div className={`
-                                  flex-shrink-0 ml-2 mr-2 flex items-center justify-center
+                                  shrink-0 ml-2 mr-2 flex items-center justify-center
                                   h-5 w-5 rounded-full bg-blue-500
                                   ${isRecentlySelected ? 'animate-scale-in' : ''}
                                 `}>

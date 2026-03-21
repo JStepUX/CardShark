@@ -273,7 +273,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
                       {field.fieldLabel}
                     </span>
                     {field.status === 'permanent' && (
-                      <span className="text-xs text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded">
+                      <span className="text-xs text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded-sm">
                         permanent
                       </span>
                     )}
@@ -400,7 +400,7 @@ const ContextWindowModal: React.FC<ContextWindowModalProps> = ({
             {contextData.template.format && (
               <div>
                 <div className="text-xs text-gray-400">Format</div>
-                <code className="block mt-1 p-2 bg-stone-950 rounded text-xs overflow-x-auto">
+                <code className="block mt-1 p-2 bg-stone-950 rounded-sm text-xs overflow-x-auto">
                   System: <span className="text-blue-400">{contextData.template.format.system_start || ''}</span>...<span className="text-blue-400">{contextData.template.format.system_end || ''}</span><br />
                   User: <span className="text-green-400">{contextData.template.format.user_start || ''}</span>...<span className="text-green-400">{contextData.template.format.user_end || ''}</span><br />
                   Assistant: <span className="text-purple-400">{contextData.template.format.assistant_start || ''}</span>...<span className="text-purple-400">{contextData.template.format.assistant_end || ''}</span>

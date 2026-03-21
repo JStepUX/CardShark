@@ -104,7 +104,7 @@ const MacroSlider: React.FC<{
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-gray-300">{label}</span>
         {isCustom && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-700 text-gray-400">Custom</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-stone-700 text-gray-400">Custom</span>
         )}
       </div>
       <input
@@ -375,12 +375,12 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium text-white truncate">Generation Settings</h3>
           <div className="text-xs text-gray-500 truncate">{apiConfig.name || 'Unnamed API'} &middot; {apiConfig.model || 'No model'}</div>
         </div>
-        <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={onClose} className="ml-2 flex-shrink-0" />
+        <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={onClose} className="ml-2 shrink-0" />
       </div>
 
       {/* Scrollable content */}
@@ -459,7 +459,7 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
                 }
                 handleBulkSettingChange(updates);
               }}
-              className="mr-2 h-4 w-4 rounded bg-stone-700 border-stone-500 focus:ring-blue-500"
+              className="mr-2 h-4 w-4 rounded-sm bg-stone-700 border-stone-500 focus:ring-2 focus:ring-blue-500"
             />
             <label htmlFor="sampler-reasoning-model" className="text-xs text-gray-300">
               Reasoning Model
@@ -581,7 +581,7 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
                     Reset to Recommended
                   </Button>
                 </div>
-                <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-800/40 rounded px-3 py-2">
+                <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-800/40 rounded-sm px-3 py-2">
                   Non-default order. Recommended: Rep Pen, Top K, Top A, TFS, Typical, Top P, Temperature
                 </div>
               </>
@@ -618,7 +618,7 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
                 id="sampler-dynatemp-enabled"
                 checked={settings.dynatemp_enabled}
                 onChange={(e) => handleSettingChange('dynatemp_enabled', e.target.checked)}
-                className="mr-2 h-4 w-4 rounded bg-stone-700 border-stone-500 focus:ring-blue-500"
+                className="mr-2 h-4 w-4 rounded-sm bg-stone-700 border-stone-500 focus:ring-2 focus:ring-blue-500"
               />
               <label htmlFor="sampler-dynatemp-enabled" className="text-xs text-gray-300">
                 Enable Dynamic Temperature

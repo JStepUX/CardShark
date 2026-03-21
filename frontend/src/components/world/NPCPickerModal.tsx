@@ -78,7 +78,7 @@ export function NPCPickerModal({
               placeholder="Search characters..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#3a3a3a] transition-colors"
+              className="w-full bg-background border border-[#2a2a2a] rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-hidden focus:border-[#3a3a3a] transition-colors"
             />
           </div>
         </div>
@@ -99,7 +99,7 @@ export function NPCPickerModal({
                       : 'hover:ring-2 hover:ring-gray-600'
                   }`}
                 >
-                  <div className="aspect-square bg-[#1a1a1a] relative">
+                  <div className="aspect-square bg-background relative">
                     <img
                       src={char.imageUrl}
                       alt={char.name}
@@ -113,7 +113,7 @@ export function NPCPickerModal({
                       </div>
                     )}
                   </div>
-                  <div className="p-2 bg-[#1a1a1a] border-t border-[#2a2a2a]">
+                  <div className="p-2 bg-background border-t border-[#2a2a2a]">
                     <p className="text-xs truncate">{char.name}</p>
                   </div>
                 </button>

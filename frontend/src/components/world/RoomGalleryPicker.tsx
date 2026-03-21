@@ -97,7 +97,7 @@ export const RoomGalleryPicker: React.FC<RoomGalleryPickerProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search rooms..."
-              className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-700 rounded-lg text-white placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full pl-10 pr-4 py-2 bg-stone-800 border border-stone-700 rounded-lg text-white placeholder-stone-500 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
             />
           </div>
         </div>
@@ -115,7 +115,7 @@ export const RoomGalleryPicker: React.FC<RoomGalleryPickerProps> = ({
                 variant="primary"
                 size="md"
                 onClick={loadRooms}
-                className="mt-4 !bg-purple-600 hover:!bg-purple-700"
+                className="mt-4 bg-purple-600! hover:bg-purple-700!"
               >
                 Retry
               </Button>

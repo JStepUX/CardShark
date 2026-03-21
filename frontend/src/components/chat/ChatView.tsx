@@ -550,7 +550,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
                 onClick={() => scrollToBottomUnified()}
                 className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 group
                            bg-stone-950/80 hover:bg-purple-500 text-white
-                           px-4 py-1.5 backdrop-blur-sm shadow-lg border border-purple-400/30
+                           px-4 py-1.5 backdrop-blur-xs shadow-lg border border-purple-400/30
                            animate-in fade-in zoom-in-95"
                 title="Scroll to bottom"
               >
