@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # trace-imports.sh — Reverse dependency search (who imports X?)
-# Usage: bash agent/trace-imports.sh <file-or-symbol>
+# Usage: bash scripts/agent/trace-imports.sh <file-or-symbol>
 # If arg looks like a file path: search for imports from that file
 # If arg looks like a symbol: search for imports containing that symbol
 

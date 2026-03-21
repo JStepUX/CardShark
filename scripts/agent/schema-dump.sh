@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # schema-dump.sh — DB schema + API route map for FastAPI + SQLAlchemy
-# Usage: bash agent/schema-dump.sh
+# Usage: bash scripts/agent/schema-dump.sh
 
 source "$(dirname "$0")/_common.sh"
 cd "$PROJECT_ROOT"

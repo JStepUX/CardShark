@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # related-files.sh — Search for a term, show context per matching file
-# Usage: bash agent/related-files.sh <search-term> [directory]
+# Usage: bash scripts/agent/related-files.sh <search-term> [directory]
 
 source "$(dirname "$0")/_common.sh"
 cd "$PROJECT_ROOT"

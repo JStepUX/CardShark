@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # file-context.sh — File + imported signatures (the centerpiece utility)
-# Usage: bash agent/file-context.sh <file-path> [--no-imports]
+# Usage: bash scripts/agent/file-context.sh <file-path> [--no-imports]
 # Shows the file content, extracts imports, resolves them, and shows exported signatures.
 
 source "$(dirname "$0")/_common.sh"

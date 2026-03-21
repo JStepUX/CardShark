@@ -44,7 +44,7 @@ CardShark offers **4 powerful options** for managing conversation context:
 - **Rich Media Support**: Background images, character portraits, and visual elements
 - **Room Management**: Create and manage different conversation spaces and contexts
 
-For complete feature details, see [Product Overview](../.kiro/steering/product.md).
+For complete feature details, see [Product Overview](.kiro/steering/product.md).
 
 ## Quick Start
 

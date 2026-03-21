@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # codebase-snapshot.sh — Project orientation in one call
-# Usage: bash agent/codebase-snapshot.sh
+# Usage: bash scripts/agent/codebase-snapshot.sh
 
 source "$(dirname "$0")/_common.sh"
 cd "$PROJECT_ROOT"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # git-context.sh — Pre-commit/PR context bundle
-# Usage: bash agent/git-context.sh [base-branch]
+# Usage: bash scripts/agent/git-context.sh [base-branch]
 
 source "$(dirname "$0")/_common.sh"
 cd "$PROJECT_ROOT"

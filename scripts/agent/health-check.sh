@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # health-check.sh — tsc + jest + pytest + git status + TODO counts
-# Usage: bash agent/health-check.sh
+# Usage: bash scripts/agent/health-check.sh
 
 source "$(dirname "$0")/_common.sh"
 cd "$PROJECT_ROOT"
