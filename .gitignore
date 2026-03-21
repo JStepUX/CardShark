@@ -68,9 +68,9 @@ world_assets/
 uploads/
 beekeeper_studio_data/
 gallery_images/
-
 *.spec
 crawlsite.py
+docs/ignored
 
 # Claude Code local settings (machine-specific permissions)
 .claude/settings.local.json
