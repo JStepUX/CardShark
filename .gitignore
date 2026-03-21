@@ -3,29 +3,33 @@ node_modules/
 
 # Build outputs
 dist/
+dist-ssr/
 build/
 character_images/
+*.spec
 
 # Testing
 coverage/
 .nyc_output/
 *.test.tsx
 testHelpers/
-cardshark.sqlite
-
 
 # Environment files
 .env
 .env.local
-.env.*.local
+*.local
 
-
-# IDE files
+# IDE / editor files
 .idea/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
 !.vscode/tasks.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # Logs
 logs/
@@ -33,14 +37,19 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # System files
 .DS_Store
 Thumbs.db
+
+# Databases
 *.sqlite
-Beekeeper*.*
-defaults/
-backend/assets/
+
+# Python
+__pycache__/
+.mypy_cache/
 
 # Temporary files
 *.tmp
@@ -48,33 +57,44 @@ backend/assets/
 .temp/
 nul
 
+# Frontend-specific
+frontend/context/
+frontend/**/*.js
+
+# Project data / runtime artifacts
 cards/
-__pycache__/
-v2_schema.json
-worldInfo.md
-v2.json
-legacy/
-settings.json
-active_filters.json
 users/
+chats/
 context/
 backgrounds/
 Characters/
-site-Home/
-koboldcpp/
 worlds/
-docs/docs/archivedOLD
 world_assets/
 uploads/
-beekeeper_studio_data/
 gallery_images/
-*.spec
+koboldcpp/
+content_filters/active_filters.json
+settings.json
+active_filters.json
+
+# Legacy / one-off
+Beekeeper*.*
+beekeeper_studio_data/
+defaults/
+backend/assets/
+legacy/
+site-Home/
+v2_schema.json
+v2.json
+worldInfo.md
 crawlsite.py
+
+# Docs
+docs/docs/archivedOLD
 docs/ignored
 
 # Claude Code local settings (machine-specific permissions)
 .claude/settings.local.json
 
-# windsurf rules
+# Windsurf rules
 .windsurfrules
-content_filters/active_filters.json
