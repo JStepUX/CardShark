@@ -1,3 +1,1 @@
 The role of this file is to describe common mistakes and confusion points that agents might encounter as they work in this project. If you ever encounter something in the project that surprises you, please alert the developer working with you and indicate that this is the case in the AgentMD file to help prevent future agents from having the same issue.
-
-Surprise noted: `backend/database_migrations.py` still deletes and rebuilds the entire SQLite database on any schema version mismatch, but `backend/sql_models.py` now stores non-rebuildable data there as well (for example chat history, world progress, and adventure log entries). Agents should treat schema-version bumps as potentially destructive changes, not routine cache resets.
