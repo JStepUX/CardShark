@@ -1,16 +1,17 @@
-import { 
-  transformKoboldPayload, 
-  getKoboldStreamEndpoint, 
+import { vi, Mock } from 'vitest';
+import {
+  transformKoboldPayload,
+  getKoboldStreamEndpoint,
   isKoboldResponse,
   wakeKoboldServer
 } from './koboldTransformer';
 
 // Mock fetch for wakeKoboldServer tests
-global.fetch = jest.fn();
+vi.stubGlobal('fetch', vi.fn());
 
 describe('koboldTransformer', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
   
   describe('transformKoboldPayload', () => {
@@ -98,7 +99,7 @@ describe('koboldTransformer', () => {
       // Arrange
       const mockResponse = {
         headers: {
-          get: jest.fn((header) => {
+          get: vi.fn((header) => {
             if (header === 'server') return 'KoboldCPP/1.0';
             return null;
           })
@@ -116,7 +117,7 @@ describe('koboldTransformer', () => {
       // Arrange
       const mockResponse = {
         headers: {
-          get: jest.fn((header) => {
+          get: vi.fn((header) => {
             if (header === 'x-koboldcpp-version') return '1.0';
             return null;
           })
@@ -134,7 +135,7 @@ describe('koboldTransformer', () => {
       // Arrange
       const mockResponse = {
         headers: {
-          get: jest.fn(() => null)
+          get: vi.fn(() => null)
         }
       } as unknown as Response;
       
@@ -149,7 +150,7 @@ describe('koboldTransformer', () => {
   describe('wakeKoboldServer', () => {
     it('should return true when server is responsive', async () => {
       // Arrange
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      (fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ model: 'test-model' })
       });
@@ -167,7 +168,7 @@ describe('koboldTransformer', () => {
     
     it('should return false when server returns non-ok response', async () => {
       // Arrange
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      (fetch as Mock).mockResolvedValueOnce({
         ok: false
       });
       
@@ -180,7 +181,7 @@ describe('koboldTransformer', () => {
     
     it('should return false when fetch throws an error', async () => {
       // Arrange
-      (fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+      (fetch as Mock).mockRejectedValueOnce(new Error('Network error'));
       
       // Act
       const result = await wakeKoboldServer('http://localhost:5001');

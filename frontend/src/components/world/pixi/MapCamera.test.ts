@@ -12,13 +12,14 @@
  * - Cleanup (destroy)
  */
 
+import { vi, Mock } from 'vitest';
 import { MapCamera } from './MapCamera';
 
 // Mock PIXI types
 interface MockObservablePoint {
     x: number;
     y: number;
-    set: jest.Mock;
+    set: Mock;
 }
 
 interface MockContainer {
@@ -26,8 +27,8 @@ interface MockContainer {
     y: number;
     scale: MockObservablePoint;
     eventMode: string;
-    on: jest.Mock;
-    off: jest.Mock;
+    on: Mock;
+    off: Mock;
 }
 
 interface MockPointerEvent {
@@ -45,14 +46,14 @@ function createMockContainer(): MockContainer {
         scale: {
             x: 1,
             y: 1,
-            set: jest.fn(function (this: MockObservablePoint, x: number, _y?: number) {
+            set: vi.fn(function (this: MockObservablePoint, x: number, _y?: number) {
                 this.x = x;
                 this.y = _y ?? x;
             }),
         },
         eventMode: 'passive',
-        on: jest.fn(),
-        off: jest.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
     };
 }
 
@@ -460,7 +461,7 @@ describe('MapCamera', () => {
                 cancelable: true,
             });
 
-            const preventDefaultSpy = jest.spyOn(wheelEvent, 'preventDefault');
+            const preventDefaultSpy = vi.spyOn(wheelEvent, 'preventDefault');
 
             mockCanvas.dispatchEvent(wheelEvent);
 
@@ -479,7 +480,7 @@ describe('MapCamera', () => {
         });
 
         it('should remove wheel event listener from canvas', () => {
-            const removeEventListenerSpy = jest.spyOn(mockCanvas, 'removeEventListener');
+            const removeEventListenerSpy = vi.spyOn(mockCanvas, 'removeEventListener');
 
             camera.destroy();
 

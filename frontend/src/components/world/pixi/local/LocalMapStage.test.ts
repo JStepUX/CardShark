@@ -12,12 +12,13 @@
  * - Viewport zoom/pan operations
  */
 
+import { vi } from 'vitest';
 import { LocalMapState, LocalMapEntity, LocalMapTileData, TilePosition, ExitTile, LocalMapConfig, LOCAL_MAP_ZOOM } from '../../../../types/localMap';
 
 // Mock dependencies before importing LocalMapStage
-jest.mock('../../../combat/pixi/TextureCache', () => ({
+vi.mock('../../../combat/pixi/TextureCache', () => ({
     TextureCache: {
-        get: jest.fn(() => ({
+        get: vi.fn(() => ({
             width: 100,
             height: 140,
             source: { label: 'mock-texture' },
@@ -25,13 +26,17 @@ jest.mock('../../../combat/pixi/TextureCache', () => ({
     },
 }));
 
-// Track created tiles and entities for verification
-const createdTiles: unknown[] = [];
-const createdEntityCards: Map<string, unknown> = new Map();
+// Track created tiles and entities for verification — must use vi.hoisted() so
+// these variables are available inside the vi.mock() factory functions below.
+const { createdTiles, createdEntityCards } = vi.hoisted(() => {
+    const createdTiles: unknown[] = [];
+    const createdEntityCards: Map<string, unknown> = new Map();
+    return { createdTiles, createdEntityCards };
+});
 
 // Mock LocalMapTile
-jest.mock('./LocalMapTile', () => ({
-    LocalMapTile: jest.fn().mockImplementation((position, size) => {
+vi.mock('./LocalMapTile', () => ({
+    LocalMapTile: vi.fn().mockImplementation(function (position: TilePosition, size: number) {
         const tile = {
             x: 0,
             y: 0,
@@ -43,19 +48,19 @@ jest.mock('./LocalMapTile', () => ({
             traversable: true,
             zoneType: null,
             gridLineAlpha: 1,
-            on: jest.fn(),
-            setHighlight: jest.fn(function (this: { highlight: string }, h: string) {
+            on: vi.fn(),
+            setHighlight: vi.fn(function (this: { highlight: string }, h: string) {
                 this.highlight = h;
             }),
-            clearExit: jest.fn(function (this: { isExit: boolean; exitDirection: string | null }) {
+            clearExit: vi.fn(function (this: { isExit: boolean; exitDirection: string | null }) {
                 this.isExit = false;
                 this.exitDirection = null;
             }),
-            setExit: jest.fn(function (this: { isExit: boolean; exitDirection: string }, dir: string) {
+            setExit: vi.fn(function (this: { isExit: boolean; exitDirection: string }, dir: string) {
                 this.isExit = true;
                 this.exitDirection = dir;
             }),
-            setTraversable: jest.fn(function (
+            setTraversable: vi.fn(function (
                 this: { traversable: boolean; zoneType: string | null },
                 t: boolean,
                 z?: string
@@ -63,17 +68,17 @@ jest.mock('./LocalMapTile', () => ({
                 this.traversable = t;
                 this.zoneType = z ?? null;
             }),
-            setGridLineAlpha: jest.fn(function (this: { gridLineAlpha: number }, a: number) {
+            setGridLineAlpha: vi.fn(function (this: { gridLineAlpha: number }, a: number) {
                 this.gridLineAlpha = a;
             }),
-            getIsExit: jest.fn(function (this: { isExit: boolean }) {
+            getIsExit: vi.fn(function (this: { isExit: boolean }) {
                 return this.isExit;
             }),
-            getPosition: jest.fn(function (this: { position: TilePosition }) {
+            getPosition: vi.fn(function (this: { position: TilePosition }) {
                 return this.position;
             }),
-            updatePulse: jest.fn(),
-            destroy: jest.fn(),
+            updatePulse: vi.fn(),
+            destroy: vi.fn(),
         };
         createdTiles.push(tile);
         return tile;
@@ -81,8 +86,8 @@ jest.mock('./LocalMapTile', () => ({
 }));
 
 // Mock EntityCardSprite
-jest.mock('./EntityCardSprite', () => ({
-    EntityCardSprite: jest.fn().mockImplementation((entity) => {
+vi.mock('./EntityCardSprite', () => ({
+    EntityCardSprite: vi.fn().mockImplementation(function (entity: LocalMapEntity) {
         const card = {
             x: 0,
             y: 0,
@@ -94,29 +99,29 @@ jest.mock('./EntityCardSprite', () => ({
             scale: {
                 x: 1,
                 y: 1,
-                set: jest.fn(function (this: { x: number; y: number }, x: number, y?: number) {
+                set: vi.fn(function (this: { x: number; y: number }, x: number, y?: number) {
                     this.x = x;
                     this.y = y ?? x;
                 }),
             },
-            on: jest.fn(),
-            updateFromEntity: jest.fn(function (this: { entity: LocalMapEntity }, e: LocalMapEntity) {
+            on: vi.fn(),
+            updateFromEntity: vi.fn(function (this: { entity: LocalMapEntity }, e: LocalMapEntity) {
                 this.entity = e;
             }),
-            setShowHpBar: jest.fn(function (this: { showHpBar: boolean }, show: boolean) {
+            setShowHpBar: vi.fn(function (this: { showHpBar: boolean }, show: boolean) {
                 this.showHpBar = show;
             }),
-            setHighlight: jest.fn(function (this: { highlighted: boolean }, h: boolean) {
+            setHighlight: vi.fn(function (this: { highlighted: boolean }, h: boolean) {
                 this.highlighted = h;
             }),
-            animateMoveTo: jest.fn(),
-            animateAttack: jest.fn(),
-            playDamageFlash: jest.fn(),
-            isAnimating: jest.fn(function (this: { isAnimatingFlag: boolean }) {
+            animateMoveTo: vi.fn(),
+            animateAttack: vi.fn(),
+            playDamageFlash: vi.fn(),
+            isAnimating: vi.fn(function (this: { isAnimatingFlag: boolean }) {
                 return this.isAnimatingFlag;
             }),
-            updateBob: jest.fn(),
-            destroy: jest.fn(),
+            updateBob: vi.fn(),
+            destroy: vi.fn(),
         };
         createdEntityCards.set(entity.id, card);
         return card;
@@ -124,14 +129,16 @@ jest.mock('./EntityCardSprite', () => ({
 }));
 
 // Mock CombatParticleSystem
-jest.mock('./CombatParticleSystem', () => ({
-    CombatParticleSystem: jest.fn().mockImplementation(() => ({
-        playImpact: jest.fn(),
-        playProjectile: jest.fn().mockResolvedValue(undefined),
-        playWhiff: jest.fn(),
-        emitDirectional: jest.fn(),
-        destroy: jest.fn(),
-    })),
+vi.mock('./CombatParticleSystem', () => ({
+    CombatParticleSystem: vi.fn().mockImplementation(function () {
+        return {
+            playImpact: vi.fn(),
+            playProjectile: vi.fn().mockResolvedValue(undefined),
+            playWhiff: vi.fn(),
+            emitDirectional: vi.fn(),
+            destroy: vi.fn(),
+        };
+    }),
     EFFECT_COLORS: {
         physical: 0xFFFFFF,
         blood: 0xFF0000,
@@ -142,14 +149,14 @@ jest.mock('./CombatParticleSystem', () => ({
 }));
 
 // Mock PIXI
-jest.mock('pixi.js', () => ({
+vi.mock('pixi.js', () => ({
     Container: class MockContainer {
         x = 0;
         y = 0;
         scale = {
             x: 1,
             y: 1,
-            set: jest.fn(function (this: { x: number; y: number }, x: number, y?: number) {
+            set: vi.fn(function (this: { x: number; y: number }, x: number, y?: number) {
                 this.x = x;
                 this.y = y ?? x;
             }),
@@ -179,44 +186,50 @@ jest.mock('pixi.js', () => ({
             this.children = [];
         }
 
-        on = jest.fn();
-        off = jest.fn();
-        emit = jest.fn();
-        destroy = jest.fn();
+        on = vi.fn();
+        off = vi.fn();
+        emit = vi.fn();
+        destroy = vi.fn();
     },
-    Graphics: jest.fn(() => ({
-        x: 0,
-        y: 0,
-        rect: jest.fn().mockReturnThis(),
-        roundRect: jest.fn().mockReturnThis(),
-        fill: jest.fn().mockReturnThis(),
-        destroy: jest.fn(),
-    })),
-    Sprite: jest.fn(() => ({
-        x: 0,
-        y: 0,
-        scale: { set: jest.fn() },
-        destroy: jest.fn(),
-    })),
-    Text: jest.fn(() => ({
-        x: 0,
-        y: 0,
-        anchor: { set: jest.fn() },
-        alpha: 1,
-        scale: { set: jest.fn() },
-        eventMode: 'passive',
-        destroy: jest.fn(),
-    })),
+    Graphics: vi.fn(function () {
+        return {
+            x: 0,
+            y: 0,
+            rect: vi.fn().mockReturnThis(),
+            roundRect: vi.fn().mockReturnThis(),
+            fill: vi.fn().mockReturnThis(),
+            destroy: vi.fn(),
+        };
+    }),
+    Sprite: vi.fn(function () {
+        return {
+            x: 0,
+            y: 0,
+            scale: { set: vi.fn() },
+            destroy: vi.fn(),
+        };
+    }),
+    Text: vi.fn(function () {
+        return {
+            x: 0,
+            y: 0,
+            anchor: { set: vi.fn() },
+            alpha: 1,
+            scale: { set: vi.fn() },
+            eventMode: 'passive',
+            destroy: vi.fn(),
+        };
+    }),
     Assets: {
-        load: jest.fn().mockResolvedValue({
+        load: vi.fn().mockResolvedValue({
             width: 400,
             height: 300,
         }),
     },
-    Application: jest.fn(),
-    ColorMatrixFilter: jest.fn(() => ({
-        desaturate: jest.fn(),
-    })),
+    Application: vi.fn(function () { return {}; }),
+    ColorMatrixFilter: vi.fn(function () {
+        return { desaturate: vi.fn() };
+    }),
 }));
 
 // Import after mocking
@@ -286,7 +299,7 @@ describe('LocalMapStage', () => {
     beforeEach(() => {
         createdTiles.length = 0;
         createdEntityCards.clear();
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('constructor', () => {
@@ -359,7 +372,7 @@ describe('LocalMapStage', () => {
             // Verify tiles were updated
             const tile00 = createdTiles.find(
                 (t: unknown) => (t as { position: TilePosition }).position.x === 0 && (t as { position: TilePosition }).position.y === 0
-            ) as { setTraversable: jest.Mock };
+            ) as { setTraversable: ReturnType<typeof vi.fn> };
             expect(tile00.setTraversable).toHaveBeenCalledWith(false, undefined);
 
             stage.destroy();
@@ -391,7 +404,7 @@ describe('LocalMapStage', () => {
             stage.updateFromState(createMockState({ entities: [] }));
 
             // Entity card should be destroyed (checked via mock)
-            const card = createdEntityCards.get('temp-entity') as { destroy: jest.Mock };
+            const card = createdEntityCards.get('temp-entity') as { destroy: ReturnType<typeof vi.fn> };
             expect(card.destroy).toHaveBeenCalled();
 
             stage.destroy();
@@ -407,7 +420,7 @@ describe('LocalMapStage', () => {
             const updatedEntity = { ...entity, currentHp: 50 };
             stage.updateFromState(createMockState({ entities: [updatedEntity] }));
 
-            const card = createdEntityCards.get('update-entity') as { updateFromEntity: jest.Mock };
+            const card = createdEntityCards.get('update-entity') as { updateFromEntity: ReturnType<typeof vi.fn> };
             expect(card.updateFromEntity).toHaveBeenCalledWith(expect.objectContaining({ currentHp: 50 }));
 
             stage.destroy();
@@ -426,7 +439,7 @@ describe('LocalMapStage', () => {
             // Verify exit tiles were set
             const topTile = createdTiles.find(
                 (t: unknown) => (t as { position: TilePosition }).position.x === 2 && (t as { position: TilePosition }).position.y === 0
-            ) as { setExit: jest.Mock };
+            ) as { setExit: ReturnType<typeof vi.fn> };
             expect(topTile.setExit).toHaveBeenCalledWith('north', 'North Room');
 
             stage.destroy();
@@ -446,7 +459,7 @@ describe('LocalMapStage', () => {
             // Verify threat zone highlights
             const tile11 = createdTiles.find(
                 (t: unknown) => (t as { position: TilePosition }).position.x === 1 && (t as { position: TilePosition }).position.y === 1
-            ) as { setHighlight: jest.Mock };
+            ) as { setHighlight: ReturnType<typeof vi.fn> };
             expect(tile11.setHighlight).toHaveBeenCalledWith('threat_zone');
 
             stage.destroy();
@@ -462,7 +475,7 @@ describe('LocalMapStage', () => {
             // In combat mode, threat zones should not be highlighted
             const tile11 = createdTiles.find(
                 (t: unknown) => (t as { position: TilePosition }).position.x === 1 && (t as { position: TilePosition }).position.y === 1
-            ) as { setHighlight: jest.Mock };
+            ) as { setHighlight: ReturnType<typeof vi.fn> };
 
             // Last highlight should be 'none' (cleared)
             const lastCall = tile11.setHighlight.mock.calls[tile11.setHighlight.mock.calls.length - 1];
@@ -480,7 +493,7 @@ describe('LocalMapStage', () => {
             stage.updateFromState(createMockState({ entities: [entity] }));
             stage.setCombatMode(true);
 
-            const card = createdEntityCards.get('combat-entity') as { setShowHpBar: jest.Mock };
+            const card = createdEntityCards.get('combat-entity') as { setShowHpBar: ReturnType<typeof vi.fn> };
             expect(card.setShowHpBar).toHaveBeenCalledWith(true);
 
             stage.destroy();
@@ -494,7 +507,7 @@ describe('LocalMapStage', () => {
             stage.setCombatMode(true);
             stage.setCombatMode(false);
 
-            const card = createdEntityCards.get('combat-entity') as { setShowHpBar: jest.Mock };
+            const card = createdEntityCards.get('combat-entity') as { setShowHpBar: ReturnType<typeof vi.fn> };
             // Last call should be with false
             const lastCall = card.setShowHpBar.mock.calls[card.setShowHpBar.mock.calls.length - 1];
             expect(lastCall[0]).toBe(false);
@@ -519,7 +532,7 @@ describe('LocalMapStage', () => {
             validMoves.forEach((pos) => {
                 const tile = createdTiles.find(
                     (t: unknown) => (t as { position: TilePosition }).position.x === pos.x && (t as { position: TilePosition }).position.y === pos.y
-                ) as { setHighlight: jest.Mock };
+                ) as { setHighlight: ReturnType<typeof vi.fn> };
                 expect(tile.setHighlight).toHaveBeenCalledWith('valid_movement');
             });
 
@@ -540,7 +553,7 @@ describe('LocalMapStage', () => {
             attackRange.forEach((pos) => {
                 const tile = createdTiles.find(
                     (t: unknown) => (t as { position: TilePosition }).position.x === pos.x && (t as { position: TilePosition }).position.y === pos.y
-                ) as { setHighlight: jest.Mock };
+                ) as { setHighlight: ReturnType<typeof vi.fn> };
                 expect(tile.setHighlight).toHaveBeenCalledWith('attack_range');
             });
 
@@ -569,7 +582,7 @@ describe('LocalMapStage', () => {
             stage.updateFromState(createMockState({ entities: [entity] }));
             stage.highlightEntity('target-entity', true);
 
-            const card = createdEntityCards.get('target-entity') as { setHighlight: jest.Mock };
+            const card = createdEntityCards.get('target-entity') as { setHighlight: ReturnType<typeof vi.fn> };
             expect(card.setHighlight).toHaveBeenCalledWith(true);
 
             stage.destroy();
@@ -583,7 +596,7 @@ describe('LocalMapStage', () => {
             stage.highlightEntity('target-entity', true);
             stage.highlightEntity('target-entity', false);
 
-            const card = createdEntityCards.get('target-entity') as { setHighlight: jest.Mock };
+            const card = createdEntityCards.get('target-entity') as { setHighlight: ReturnType<typeof vi.fn> };
             expect(card.setHighlight).toHaveBeenLastCalledWith(false);
 
             stage.destroy();
@@ -771,7 +784,7 @@ describe('LocalMapStage', () => {
             stage.updateFromState(createMockState({ entities: [entity] }));
             stage.animateEntityMove('mover', { x: 3, y: 4 });
 
-            const card = createdEntityCards.get('mover') as { animateMoveTo: jest.Mock };
+            const card = createdEntityCards.get('mover') as { animateMoveTo: ReturnType<typeof vi.fn> };
             expect(card.animateMoveTo).toHaveBeenCalled();
 
             stage.destroy();
@@ -795,7 +808,7 @@ describe('LocalMapStage', () => {
             stage.updateFromState(createMockState({ entities: [attacker, target] }));
             stage.animateAttack('attacker', 'target', 10);
 
-            const attackerCard = createdEntityCards.get('attacker') as { animateAttack: jest.Mock };
+            const attackerCard = createdEntityCards.get('attacker') as { animateAttack: ReturnType<typeof vi.fn> };
             expect(attackerCard.animateAttack).toHaveBeenCalled();
 
             stage.destroy();
@@ -805,7 +818,7 @@ describe('LocalMapStage', () => {
             const stage = new LocalMapStage();
             stage.updateFromState(createMockState());
 
-            const onComplete = jest.fn();
+            const onComplete = vi.fn();
             stage.animateAttack('ghost', 'phantom', 0, onComplete);
 
             expect(onComplete).toHaveBeenCalled();

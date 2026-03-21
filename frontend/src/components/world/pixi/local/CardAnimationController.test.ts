@@ -17,29 +17,33 @@
  * orchestration more thoroughly.
  */
 
+import { vi, Mock } from 'vitest';
+
 // Mock PIXI before importing
-jest.mock('pixi.js', () => ({
+vi.mock('pixi.js', () => ({
     Container: class MockContainer {
         x = 0;
         y = 0;
-        scale = { set: jest.fn(), x: 1, y: 1 };
+        scale = { set: vi.fn(), x: 1, y: 1 };
         rotation = 0;
         alpha = 1;
         children: unknown[] = [];
-        addChild = jest.fn();
-        removeChild = jest.fn();
-        destroy = jest.fn();
+        addChild = vi.fn();
+        removeChild = vi.fn();
+        destroy = vi.fn();
     },
-    Graphics: jest.fn(() => ({
-        x: 0,
-        y: 0,
-        alpha: 1,
-        circle: jest.fn().mockReturnThis(),
-        fill: jest.fn().mockReturnThis(),
-        scale: { set: jest.fn() },
-        destroy: jest.fn(),
-    })),
-    ObservablePoint: jest.fn(),
+    Graphics: vi.fn(function () {
+        return {
+            x: 0,
+            y: 0,
+            alpha: 1,
+            circle: vi.fn().mockReturnThis(),
+            fill: vi.fn().mockReturnThis(),
+            scale: { set: vi.fn() },
+            destroy: vi.fn(),
+        };
+    }),
+    ObservablePoint: vi.fn(function () { return {}; }),
     EventMode: {},
 }));
 
@@ -62,7 +66,7 @@ function createMockSprite(): CardSpriteInterface & {
         scale: {
             x: 1,
             y: 1,
-            set: jest.fn(function (this: { x: number; y: number }, x: number, y?: number) {
+            set: vi.fn(function (this: { x: number; y: number }, x: number, y?: number) {
                 this.x = x;
                 this.y = y ?? x;
             }),
@@ -70,7 +74,7 @@ function createMockSprite(): CardSpriteInterface & {
         pivot: {
             x: 0,
             y: 100, // PIVOT_Y_OFFSET default
-            set: jest.fn(function (this: { x: number; y: number }, x: number, y: number) {
+            set: vi.fn(function (this: { x: number; y: number }, x: number, y: number) {
                 this.x = x;
                 this.y = y;
             }),
@@ -89,7 +93,7 @@ function createMockSprite(): CardSpriteInterface & {
         removeChild(child: PIXI.Container) {
             removedChildren.push(child);
         },
-        getBorder: jest.fn(() => ({
+        getBorder: vi.fn(() => ({
             tint: 0xFFFFFF,
         })) as unknown as () => PIXI.Graphics,
     };
@@ -100,14 +104,14 @@ describe('CardAnimationController', () => {
     let controller: CardAnimationController;
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        vi.useFakeTimers();
         mockSprite = createMockSprite();
         controller = new CardAnimationController(mockSprite);
     });
 
     afterEach(() => {
         controller.destroy();
-        jest.useRealTimers();
+        vi.useRealTimers();
     });
 
     describe('initial state', () => {
@@ -139,11 +143,11 @@ describe('CardAnimationController', () => {
 
         it('should not update pivot when bob is disabled', () => {
             controller.setBobEnabled(false);
-            (mockSprite.pivot.set as jest.Mock).mockClear();
+            (mockSprite.pivot.set as Mock).mockClear();
 
             controller.updateBob(0.016);
 
-            expect(mockSprite.pivot.set).not.toHaveBeenCalled();
+            expect(mockSprite.pivot.set as Mock).not.toHaveBeenCalled();
         });
     });
 
@@ -180,13 +184,20 @@ describe('CardAnimationController', () => {
             expect(controller.isAnimating()).toBe(true);
         });
 
-        it('should accept duration parameter', () => {
-            expect(() => controller.playMoveTo(100, 100, 500)).not.toThrow();
+        it('should still be animating when called with custom duration', () => {
+            controller.playMoveTo(100, 100, 500);
+
+            expect(controller.isAnimating()).toBe(true);
+            expect(controller.getState()).toBe('moving');
         });
 
-        it('should accept onComplete callback', () => {
-            const onComplete = jest.fn();
-            expect(() => controller.playMoveTo(100, 100, 250, onComplete)).not.toThrow();
+        it('should transition to moving state with onComplete callback', () => {
+            const onComplete = vi.fn();
+            controller.playMoveTo(100, 100, 250, onComplete);
+
+            expect(controller.getState()).toBe('moving');
+            // Callback is not invoked immediately — it fires after animation completes
+            expect(onComplete).not.toHaveBeenCalled();
         });
     });
 
@@ -197,21 +208,27 @@ describe('CardAnimationController', () => {
             expect(controller.getState()).toBe('attacking');
         });
 
-        it('should accept onHit callback', () => {
-            const onHit = jest.fn();
-            expect(() => controller.playAttack(100, 100, onHit)).not.toThrow();
+        it('should transition to attacking state with onHit callback', () => {
+            const onHit = vi.fn();
+            controller.playAttack(100, 100, onHit);
+
+            expect(controller.getState()).toBe('attacking');
+            expect(onHit).not.toHaveBeenCalled();
         });
 
-        it('should accept onComplete callback', () => {
-            const onComplete = jest.fn();
-            expect(() => controller.playAttack(100, 100, undefined, onComplete)).not.toThrow();
+        it('should transition to attacking state with onComplete callback', () => {
+            const onComplete = vi.fn();
+            controller.playAttack(100, 100, undefined, onComplete);
+
+            expect(controller.getState()).toBe('attacking');
+            expect(onComplete).not.toHaveBeenCalled();
         });
     });
 
     describe('damage flash', () => {
         it('should change border tint to red', () => {
             const mockBorder = { tint: 0xFFFFFF };
-            (mockSprite.getBorder as jest.Mock).mockReturnValue(mockBorder);
+            (mockSprite.getBorder as Mock).mockReturnValue(mockBorder);
 
             controller.playDamageFlash();
 
@@ -220,25 +237,25 @@ describe('CardAnimationController', () => {
 
         it('should restore original tint after delay', () => {
             const mockBorder = { tint: 0xFFFFFF };
-            (mockSprite.getBorder as jest.Mock).mockReturnValue(mockBorder);
+            (mockSprite.getBorder as Mock).mockReturnValue(mockBorder);
 
             controller.playDamageFlash();
 
             expect(mockBorder.tint).toBe(0xFF4444);
 
-            jest.advanceTimersByTime(200);
+            vi.advanceTimersByTime(200);
 
             expect(mockBorder.tint).toBe(0xFFFFFF);
         });
 
         it('should not restore tint if destroyed', () => {
             const mockBorder = { tint: 0xFFFFFF };
-            (mockSprite.getBorder as jest.Mock).mockReturnValue(mockBorder);
+            (mockSprite.getBorder as Mock).mockReturnValue(mockBorder);
 
             controller.playDamageFlash();
             controller.destroy();
 
-            jest.advanceTimersByTime(200);
+            vi.advanceTimersByTime(200);
 
             // Tint should still be red because restore was cancelled
             expect(mockBorder.tint).toBe(0xFF4444);
@@ -260,7 +277,7 @@ describe('CardAnimationController', () => {
         });
 
         it('should accept onComplete callback', () => {
-            const onComplete = jest.fn();
+            const onComplete = vi.fn();
             expect(() => controller.playDeath(onComplete)).not.toThrow();
         });
     });
@@ -279,7 +296,7 @@ describe('CardAnimationController', () => {
         });
 
         it('should accept onComplete callback', () => {
-            const onComplete = jest.fn();
+            const onComplete = vi.fn();
             expect(() => controller.playIncapacitation(onComplete)).not.toThrow();
         });
     });
@@ -304,12 +321,12 @@ describe('CardAnimationController', () => {
         });
 
         it('should accept onComplete callback', () => {
-            const onComplete = jest.fn();
+            const onComplete = vi.fn();
             expect(() => controller.playRevival(onComplete)).not.toThrow();
         });
 
         it('should call onComplete immediately if not incapacitated', () => {
-            const onComplete = jest.fn();
+            const onComplete = vi.fn();
             controller.playRevival(onComplete);
 
             // Should be called immediately since sprite is not incapacitated
@@ -390,7 +407,7 @@ describe('CardAnimationController', () => {
 
     describe('destroy', () => {
         it('should clear pending timeouts', () => {
-            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+            const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
             controller.playDamageFlash();
             controller.destroy();
@@ -414,13 +431,13 @@ describe('CardAnimationController', () => {
 
         it('should prevent damage flash restore after destroy', () => {
             const mockBorder = { tint: 0xFFFFFF };
-            (mockSprite.getBorder as jest.Mock).mockReturnValue(mockBorder);
+            (mockSprite.getBorder as Mock).mockReturnValue(mockBorder);
 
             controller.playDamageFlash();
             expect(mockBorder.tint).toBe(0xFF4444);
 
             controller.destroy();
-            jest.advanceTimersByTime(200);
+            vi.advanceTimersByTime(200);
 
             // Should still be red - restore callback should have been cancelled
             expect(mockBorder.tint).toBe(0xFF4444);

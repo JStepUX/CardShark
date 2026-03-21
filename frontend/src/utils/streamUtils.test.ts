@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { createKoboldStreamWrapper, detectCompletionSignal } from './streamUtils';
 
 describe('streamUtils', () => {
@@ -44,39 +45,65 @@ describe('streamUtils', () => {
   });
   
   describe('createKoboldStreamWrapper', () => {
-    it('creates a ReadableStream that processes the original stream', async () => {
-      // Create a more robust mock that properly triggers the internal code
+    it('should pass through chunk data and append DONE sentinel', async () => {
+      const inputBytes = new Uint8Array([104, 101, 108, 108, 111]); // "hello"
       const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({ done: false, value: new Uint8Array([104, 101, 108, 108, 111]) }) // "hello"
+        read: vi.fn()
+          .mockResolvedValueOnce({ done: false, value: inputBytes })
           .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn()
+        releaseLock: vi.fn()
       };
-      
+
       const mockOriginalBody = {
-        getReader: jest.fn().mockReturnValue(mockReader)
+        getReader: vi.fn().mockReturnValue(mockReader)
       } as unknown as ReadableStream<Uint8Array>;
-      
-      // Create an abort controller for testing
+
       const abortController = new AbortController();
-      
-      // Call the function with the signal
-      const result = createKoboldStreamWrapper(mockOriginalBody, abortController.signal);
-      
-      // Get a reader and read from it to trigger the stream processing
-      const reader = result.getReader();
-      
-      // Use value in an assertion to avoid unused variable warning
-      await reader.read().then(({ value }) => {
-        // Verify we got some data (even if undefined in our mock)
-        expect(value || new Uint8Array()).toBeDefined();
-      });
-      
-      // Now the original reader should have been called
-      expect(mockOriginalBody.getReader).toHaveBeenCalled();
-      expect(mockReader.read).toHaveBeenCalled();
-      
-      // Clean up
+      const wrapped = createKoboldStreamWrapper(mockOriginalBody, abortController.signal);
+      const reader = wrapped.getReader();
+
+      // First read: the original chunk is passed through
+      const first = await reader.read();
+      expect(first.done).toBe(false);
+      expect(first.value).toBeInstanceOf(Uint8Array);
+      expect(first.value).toEqual(inputBytes);
+
+      // Second read: the wrapper appends a DONE sentinel
+      const second = await reader.read();
+      expect(second.done).toBe(false);
+      const decoded = new TextDecoder().decode(second.value);
+      expect(decoded).toContain('[DONE]');
+
+      // Third read: stream is closed
+      const third = await reader.read();
+      expect(third.done).toBe(true);
+
+      reader.releaseLock();
+    });
+
+    it('should emit DONE sentinel even when source stream is immediately done', async () => {
+      const mockReader = {
+        read: vi.fn().mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: vi.fn()
+      };
+
+      const mockOriginalBody = {
+        getReader: vi.fn().mockReturnValue(mockReader)
+      } as unknown as ReadableStream<Uint8Array>;
+
+      const abortController = new AbortController();
+      const wrapped = createKoboldStreamWrapper(mockOriginalBody, abortController.signal);
+      const reader = wrapped.getReader();
+
+      // Even with empty source, wrapper emits DONE sentinel before closing
+      const first = await reader.read();
+      expect(first.done).toBe(false);
+      const decoded = new TextDecoder().decode(first.value);
+      expect(decoded).toContain('[DONE]');
+
+      const second = await reader.read();
+      expect(second.done).toBe(true);
+
       reader.releaseLock();
     });
   });

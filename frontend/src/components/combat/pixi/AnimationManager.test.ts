@@ -11,55 +11,63 @@
  * - destroy cleanup
  */
 
+import { vi } from 'vitest';
+
 // Mock PIXI before importing AnimationManager
-jest.mock('pixi.js', () => ({
+vi.mock('pixi.js', () => ({
     Container: class MockContainer {
         x = 0;
         y = 0;
-        scale = { set: jest.fn(), x: 1, y: 1 };
+        scale = { set: vi.fn(), x: 1, y: 1 };
         rotation = 0;
         alpha = 1;
         filters = null;
         children: unknown[] = [];
-        addChild = jest.fn();
-        removeChild = jest.fn();
-        destroy = jest.fn();
+        addChild = vi.fn();
+        removeChild = vi.fn();
+        destroy = vi.fn();
     },
-    Sprite: jest.fn(() => ({
-        x: 0,
-        y: 0,
-        anchor: { set: jest.fn() },
-        rotation: 0,
-        visible: true,
-        destroy: jest.fn(),
-    })),
-    Graphics: jest.fn(() => ({
-        roundRect: jest.fn().mockReturnThis(),
-        fill: jest.fn().mockReturnThis(),
-        destroy: jest.fn(),
-        tint: 0xFFFFFF,
-    })),
-    Text: jest.fn(() => ({
-        x: 0,
-        y: 0,
-        alpha: 1,
-        scale: { set: jest.fn() },
-        parent: { removeChild: jest.fn() },
-        destroy: jest.fn(),
-    })),
-    ColorMatrixFilter: jest.fn(() => ({
-        desaturate: jest.fn(),
-    })),
-    Application: jest.fn(),
-    Ticker: jest.fn(),
+    Sprite: vi.fn(function () {
+        return {
+            x: 0,
+            y: 0,
+            anchor: { set: vi.fn() },
+            rotation: 0,
+            visible: true,
+            destroy: vi.fn(),
+        };
+    }),
+    Graphics: vi.fn(function () {
+        return {
+            roundRect: vi.fn().mockReturnThis(),
+            fill: vi.fn().mockReturnThis(),
+            destroy: vi.fn(),
+            tint: 0xFFFFFF,
+        };
+    }),
+    Text: vi.fn(function () {
+        return {
+            x: 0,
+            y: 0,
+            alpha: 1,
+            scale: { set: vi.fn() },
+            parent: { removeChild: vi.fn() },
+            destroy: vi.fn(),
+        };
+    }),
+    ColorMatrixFilter: vi.fn(function () {
+        return { desaturate: vi.fn() };
+    }),
+    Application: vi.fn(function () { return {}; }),
+    Ticker: vi.fn(function () { return {}; }),
 }));
 
 import { AnimationManager, Animation } from './AnimationManager';
 
 // Mock PIXI.Application and PIXI.Ticker
 interface MockTicker {
-    add: jest.Mock;
-    remove: jest.Mock;
+    add: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
     deltaMS: number;
     callbacks: Set<(ticker: MockTicker) => void>;
     tick: (deltaMS: number) => void;
@@ -77,10 +85,10 @@ function createMockApp(): MockApp {
     const ticker: MockTicker = {
         deltaMS: 16.67, // ~60fps
         callbacks,
-        add: jest.fn((callback: (ticker: MockTicker) => void) => {
+        add: vi.fn((callback: (ticker: MockTicker) => void) => {
             callbacks.add(callback);
         }),
-        remove: jest.fn((callback: (ticker: MockTicker) => void) => {
+        remove: vi.fn((callback: (ticker: MockTicker) => void) => {
             callbacks.delete(callback);
         }),
         tick(deltaMS: number) {
@@ -442,7 +450,7 @@ describe('AnimationManager', () => {
 
             // Suppress console.error for this test
             const originalError = console.error;
-            console.error = jest.fn();
+            console.error = vi.fn() as typeof console.error;
 
             mockApp.ticker.tick(16.67);
 
@@ -455,7 +463,7 @@ describe('AnimationManager', () => {
             const errorAnimation = createErrorAnimation(1);
             const playPromise = manager.play(errorAnimation);
 
-            console.error = jest.fn();
+            console.error = vi.fn() as typeof console.error;
 
             mockApp.ticker.tick(16.67);
 
@@ -472,7 +480,7 @@ describe('AnimationManager', () => {
             const errorPromise = manager.play(errorAnimation);
             const goodPromise = manager.play(goodAnimation);
 
-            console.error = jest.fn();
+            console.error = vi.fn() as typeof console.error;
 
             // First tick - error animation throws
             mockApp.ticker.tick(16.67);
@@ -497,7 +505,7 @@ describe('AnimationManager', () => {
             };
 
             const originalError = console.error;
-            console.error = jest.fn();
+            console.error = vi.fn() as typeof console.error;
 
             const playPromise = manager.play(animation);
             mockApp.ticker.tick(16.67);

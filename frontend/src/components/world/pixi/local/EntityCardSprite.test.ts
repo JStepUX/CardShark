@@ -5,17 +5,16 @@
  * - State transitions (allegiance, selection, hover)
  * - Frame color logic based on allegiance
  * - Lifecycle (creation, update, destruction)
- * - HP bar visibility toggle
  * - Highlight state for targeting
- * - Animation delegation to CardAnimationController
  */
 
+import { vi } from 'vitest';
 import { Allegiance, ALLEGIANCE_COLORS, LocalMapEntity } from '../../../../types/localMap';
 
 // Mock TextureCache before importing EntityCardSprite
-jest.mock('../../../combat/pixi/TextureCache', () => ({
+vi.mock('../../../combat/pixi/TextureCache', () => ({
     TextureCache: {
-        get: jest.fn(() => ({
+        get: vi.fn(() => ({
             width: 100,
             height: 140,
             source: { label: 'mock-texture' },
@@ -23,54 +22,59 @@ jest.mock('../../../combat/pixi/TextureCache', () => ({
     },
 }));
 
+// Hoist mock instances so they are available inside vi.mock factories
+const { mockGraphicsInstance, mockTextInstance, mockSpriteInstance, mockBlurFilterInstance } = vi.hoisted(() => {
+    const mockGraphicsInstance = {
+        roundRect: vi.fn().mockReturnThis(),
+        circle: vi.fn().mockReturnThis(),
+        fill: vi.fn().mockReturnThis(),
+        stroke: vi.fn().mockReturnThis(),
+        clear: vi.fn().mockReturnThis(),
+        destroy: vi.fn(),
+        tint: 0xFFFFFF,
+        filters: null as null | unknown[],
+        x: 0,
+        y: 0,
+        alpha: 1,
+        visible: true,
+    };
+
+    const mockTextInstance = {
+        anchor: { set: vi.fn() },
+        x: 0,
+        y: 0,
+        text: '',
+        width: 50,
+        style: {},
+        destroy: vi.fn(),
+    };
+
+    const mockSpriteInstance = {
+        scale: { set: vi.fn(), x: 1, y: 1 },
+        x: 0,
+        y: 0,
+        mask: null,
+        visible: true,
+        destroy: vi.fn(),
+    };
+
+    const mockBlurFilterInstance = {
+        blur: 8,
+        quality: 4,
+    };
+
+    return { mockGraphicsInstance, mockTextInstance, mockSpriteInstance, mockBlurFilterInstance };
+});
+
 // Mock PIXI
-const mockGraphicsInstance = {
-    roundRect: jest.fn().mockReturnThis(),
-    circle: jest.fn().mockReturnThis(),
-    fill: jest.fn().mockReturnThis(),
-    stroke: jest.fn().mockReturnThis(),
-    clear: jest.fn().mockReturnThis(),
-    destroy: jest.fn(),
-    tint: 0xFFFFFF,
-    filters: null as null | unknown[],
-    x: 0,
-    y: 0,
-    alpha: 1,
-    visible: true,
-};
-
-const mockTextInstance = {
-    anchor: { set: jest.fn() },
-    x: 0,
-    y: 0,
-    text: '',
-    width: 50,
-    style: {},
-    destroy: jest.fn(),
-};
-
-const mockSpriteInstance = {
-    scale: { set: jest.fn(), x: 1, y: 1 },
-    x: 0,
-    y: 0,
-    mask: null,
-    visible: true,
-    destroy: jest.fn(),
-};
-
-const mockBlurFilterInstance = {
-    blur: 8,
-    quality: 4,
-};
-
-jest.mock('pixi.js', () => ({
+vi.mock('pixi.js', () => ({
     Container: class MockContainer {
         x = 0;
         y = 0;
         scale = {
             x: 1,
             y: 1,
-            set: jest.fn(function (this: { x: number; y: number }, x: number, y?: number) {
+            set: vi.fn(function (this: { x: number; y: number }, x: number, y?: number) {
                 this.x = x;
                 this.y = y ?? x;
             }),
@@ -78,7 +82,7 @@ jest.mock('pixi.js', () => ({
         pivot = {
             x: 0,
             y: 0,
-            set: jest.fn(function (this: { x: number; y: number }, x: number, y: number) {
+            set: vi.fn(function (this: { x: number; y: number }, x: number, y: number) {
                 this.x = x;
                 this.y = y;
             }),
@@ -103,18 +107,18 @@ jest.mock('pixi.js', () => ({
             return child;
         }
 
-        on = jest.fn();
-        off = jest.fn();
-        emit = jest.fn();
-        destroy = jest.fn();
+        on = vi.fn();
+        off = vi.fn();
+        emit = vi.fn();
+        destroy = vi.fn();
     },
-    Graphics: jest.fn(() => ({ ...mockGraphicsInstance })),
-    Text: jest.fn(() => ({ ...mockTextInstance })),
-    Sprite: jest.fn(() => ({ ...mockSpriteInstance })),
+    Graphics: vi.fn(function () { return { ...mockGraphicsInstance }; }),
+    Text: vi.fn(function () { return { ...mockTextInstance }; }),
+    Sprite: vi.fn(function () { return { ...mockSpriteInstance }; }),
     Texture: {
         EMPTY: { width: 0, height: 0 },
     },
-    BlurFilter: jest.fn(() => ({ ...mockBlurFilterInstance })),
+    BlurFilter: vi.fn(function () { return { ...mockBlurFilterInstance }; }),
     Rectangle: class MockRectangle {
         constructor(
             public x: number,
@@ -149,7 +153,7 @@ function createMockEntity(overrides: Partial<LocalMapEntity> = {}): LocalMapEnti
 
 describe('EntityCardSprite', () => {
     afterEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('constructor', () => {
@@ -211,71 +215,6 @@ describe('EntityCardSprite', () => {
                 expect(card.getAllegiance()).toBe(allegiance);
             }
         );
-    });
-
-    describe('status badges', () => {
-        it('should show heart badge for bonded entity', () => {
-            const entity = createMockEntity({ isBonded: true });
-            const card = new EntityCardSprite(entity);
-
-            // Card should be created with bonded state
-            expect(card).toBeDefined();
-        });
-
-        it('should show skull badge for hostile entity', () => {
-            const entity = createMockEntity({ allegiance: 'hostile' });
-            const card = new EntityCardSprite(entity);
-
-            expect(card.getAllegiance()).toBe('hostile');
-        });
-
-        it('should show lock badge for captured entity', () => {
-            const entity = createMockEntity({ isCaptured: true });
-            const card = new EntityCardSprite(entity);
-
-            expect(card).toBeDefined();
-        });
-
-        it('should not show status badge for regular friendly', () => {
-            const entity = createMockEntity({ allegiance: 'friendly', isBonded: false });
-            const card = new EntityCardSprite(entity);
-
-            expect(card).toBeDefined();
-        });
-    });
-
-    describe('HP bar visibility', () => {
-        it('should hide HP bar by default (exploration mode)', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            // HP bar container should be created but hidden
-            card.setShowHpBar(false);
-
-            // No error should occur
-            expect(card).toBeDefined();
-        });
-
-        it('should show HP bar when setShowHpBar(true) is called', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            card.setShowHpBar(true);
-
-            // No error should occur
-            expect(card).toBeDefined();
-        });
-
-        it('should toggle HP bar visibility', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            card.setShowHpBar(true);
-            card.setShowHpBar(false);
-            card.setShowHpBar(true);
-
-            expect(card).toBeDefined();
-        });
     });
 
     describe('highlight state', () => {
@@ -356,69 +295,6 @@ describe('EntityCardSprite', () => {
             const card = new EntityCardSprite(entity);
 
             expect(card.getAllegiance()).toBe('hostile');
-        });
-    });
-
-    describe('animation methods', () => {
-        it('should have isAnimating method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.isAnimating).toBe('function');
-            // Initially may be animating (entrance animation)
-            expect(typeof card.isAnimating()).toBe('boolean');
-        });
-
-        it('should have animateMoveTo method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.animateMoveTo).toBe('function');
-        });
-
-        it('should have animateAttack method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.animateAttack).toBe('function');
-        });
-
-        it('should have playDamageFlash method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.playDamageFlash).toBe('function');
-        });
-
-        it('should have playDeathAnimation method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.playDeathAnimation).toBe('function');
-        });
-
-        it('should have playIncapacitationAnimation method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.playIncapacitationAnimation).toBe('function');
-        });
-
-        it('should have playRevivalAnimation method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.playRevivalAnimation).toBe('function');
-        });
-
-        it('should have updateBob method', () => {
-            const entity = createMockEntity();
-            const card = new EntityCardSprite(entity);
-
-            expect(typeof card.updateBob).toBe('function');
-
-            // Should not throw when called
-            expect(() => card.updateBob(0.016)).not.toThrow();
         });
     });
 

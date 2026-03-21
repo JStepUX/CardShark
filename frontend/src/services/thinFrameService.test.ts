@@ -9,6 +9,7 @@
  * - mergeThinFrameIntoCard() immutable merge
  */
 
+import { vi } from 'vitest';
 import {
   generateThinFrame,
   createFallbackThinFrame,
@@ -21,11 +22,11 @@ import {
 import { CharacterCard, NPCThinFrame, THIN_FRAME_VERSION } from '../types/schema';
 
 // Mock fetch
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
 
 // Mock getApiBaseUrl
-jest.mock('../utils/apiConfig', () => ({
+vi.mock('../utils/apiConfig', () => ({
   getApiBaseUrl: () => 'http://localhost:9696',
 }));
 
@@ -92,12 +93,12 @@ function createMockThinFrame(overrides: Partial<NPCThinFrame> = {}): NPCThinFram
 
 describe('thinFrameService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('createFallbackThinFrame', () => {
@@ -407,7 +408,7 @@ describe('thinFrameService', () => {
       const resultPromise = generateThinFrame(card, apiConfig);
 
       // Fast-forward timers to complete the request
-      jest.runAllTimers();
+      vi.runAllTimers();
 
       const result = await resultPromise;
 
@@ -431,7 +432,7 @@ describe('thinFrameService', () => {
       const apiConfig = { api_key: 'test' };
 
       const resultPromise = generateThinFrame(card, apiConfig);
-      jest.runAllTimers();
+      vi.runAllTimers();
       const result = await resultPromise;
 
       // Should return a fallback frame
@@ -449,7 +450,7 @@ describe('thinFrameService', () => {
       const apiConfig = { api_key: 'test' };
 
       const resultPromise = generateThinFrame(card, apiConfig);
-      jest.runAllTimers();
+      vi.runAllTimers();
       const result = await resultPromise;
 
       // Should return fallback frame on abort
@@ -470,7 +471,7 @@ describe('thinFrameService', () => {
       const apiConfig = { api_key: 'test' };
 
       const resultPromise = generateThinFrame(card, apiConfig);
-      jest.runAllTimers();
+      vi.runAllTimers();
       const result = await resultPromise;
 
       expect(result.version).toBe(THIN_FRAME_VERSION);
@@ -498,7 +499,7 @@ describe('thinFrameService', () => {
       ];
 
       const resultsPromise = generateThinFramesBatch(npcs);
-      jest.runAllTimers();
+      vi.runAllTimers();
       const results = await resultsPromise;
 
       expect(results).toHaveLength(2);
@@ -522,7 +523,7 @@ describe('thinFrameService', () => {
       ];
 
       const resultsPromise = generateThinFramesBatch(npcs);
-      jest.runAllTimers();
+      vi.runAllTimers();
       const results = await resultsPromise;
 
       expect(results).toHaveLength(2);
@@ -545,7 +546,7 @@ describe('thinFrameService', () => {
       ];
 
       const resultsPromise = generateThinFramesBatch(npcs);
-      jest.runAllTimers();
+      vi.runAllTimers();
       const results = await resultsPromise;
 
       expect(results[0].characterUuid).toBe('uuid-abc');

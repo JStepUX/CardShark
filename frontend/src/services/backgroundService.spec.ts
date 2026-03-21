@@ -1,11 +1,13 @@
+import { vi } from 'vitest';
 import { BackgroundService } from './backgroundService';
 
 // Mock global fetch
-global.fetch = jest.fn();
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
 
 describe('BackgroundService', () => {
     beforeEach(() => {
-        (global.fetch as jest.Mock).mockClear();
+        mockFetch.mockClear();
     });
 
     describe('getBackgrounds', () => {
@@ -20,7 +22,7 @@ describe('BackgroundService', () => {
                 timestamp: '2023-01-01T00:00:00Z'
             };
 
-            (global.fetch as jest.Mock).mockResolvedValue({
+            mockFetch.mockResolvedValue({
                 ok: true,
                 json: async () => mockResponse
             });
@@ -36,7 +38,7 @@ describe('BackgroundService', () => {
         });
 
         it('should handle API failure gracefully', async () => {
-            (global.fetch as jest.Mock).mockResolvedValue({
+            mockFetch.mockResolvedValue({
                 ok: false,
                 status: 404,
                 text: async () => 'Not Found'
@@ -49,7 +51,7 @@ describe('BackgroundService', () => {
 
         it('should handle malformed responses', async () => {
             // Mock response that doesn't follow standard format
-            (global.fetch as jest.Mock).mockResolvedValue({
+            mockFetch.mockResolvedValue({
                 ok: true,
                 json: async () => ({ success: true, something_else: [] })
             });
@@ -72,7 +74,7 @@ describe('BackgroundService', () => {
                 }
             };
 
-            (global.fetch as jest.Mock).mockResolvedValue({
+            mockFetch.mockResolvedValue({
                 ok: true,
                 json: async () => mockResponse
             });

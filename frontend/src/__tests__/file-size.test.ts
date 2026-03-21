@@ -139,7 +139,7 @@ describe('file size limits', () => {
     violations.sort()
 
     if (violations.length > 0) {
-      fail(
+      throw new Error(
         `${violations.length} file(s) exceed ${MAX_LINES} lines:\n${violations.join('\n')}\n\nIf this is a pre-existing file, add it to the ALLOWLIST in file-size.test.ts.`,
       )
     }
@@ -157,7 +157,7 @@ describe('file size limits', () => {
     }
 
     if (stale.length > 0) {
-      fail(
+      throw new Error(
         `These allowlisted files no longer exist — remove them from ALLOWLIST:\n${stale.join('\n')}`,
       )
     }
@@ -177,7 +177,7 @@ describe('file size limits', () => {
     }
 
     if (graduated.length > 0) {
-      fail(
+      throw new Error(
         `These files are now under the limit — remove them from ALLOWLIST:\n${graduated.join('\n')}`,
       )
     }
