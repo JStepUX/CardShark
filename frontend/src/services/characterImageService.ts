@@ -7,6 +7,7 @@ export interface CharacterImage {
   id: number;
   filename: string;
   display_order: number;
+  is_default: boolean;
   created_at: string;
   file_size: number;
   file_path: string;
@@ -123,6 +124,57 @@ export class CharacterImageService {
       return data.success === true;
     } catch (error) {
       console.error('Error reordering character images:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Set an image as the default (starred) image for a character
+   * @param characterUuid The character UUID
+   * @param filename The filename of the image to set as default
+   * @returns True if successful
+   */
+  static async setDefaultImage(characterUuid: string, filename: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/character/${encodeURIComponent(characterUuid)}/images/${encodeURIComponent(filename)}/set-default`, {
+        method: 'PUT',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to set default image:', response.status, errorText);
+        return false;
+      }
+
+      const data = await response.json();
+      return data.success === true;
+    } catch (error) {
+      console.error('Error setting default image:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear the default image for a character (revert to main portrait)
+   * @param characterUuid The character UUID
+   * @returns True if successful
+   */
+  static async clearDefaultImage(characterUuid: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/character/${encodeURIComponent(characterUuid)}/images/default`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to clear default image:', response.status, errorText);
+        return false;
+      }
+
+      const data = await response.json();
+      return data.success === true;
+    } catch (error) {
+      console.error('Error clearing default image:', error);
       return false;
     }
   }

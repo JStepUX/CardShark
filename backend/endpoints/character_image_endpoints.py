@@ -207,6 +207,66 @@ async def reorder_character_images(
         logger.log_error(traceback.format_exc())
         raise handle_generic_error(e, f"reordering images for character {character_uuid}")
 
+@router.put("/character/{character_uuid}/images/{filename}/set-default", response_model=DataResponse[dict])
+async def set_default_character_image(
+    character_uuid: str,
+    filename: str,
+    db: Session = Depends(get_db),
+    handler: CharacterImageHandler = Depends(get_character_image_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Set a secondary image as the default (starred) image for a character.
+
+    Clears is_default on all other images for the character, then sets
+    the specified image as default.
+
+    Args:
+        character_uuid: UUID of the character
+        filename: Filename of the image to set as default
+
+    Returns:
+        DataResponse with confirmation
+
+    Raises:
+        NotFoundException: If image not found
+    """
+    try:
+        success = handler.set_default_image(db, character_uuid, filename)
+
+        if not success:
+            raise NotFoundException(f"Image not found: {filename}")
+
+        return create_data_response({"default": filename, "character_uuid": character_uuid})
+    except NotFoundException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Error setting default image {filename} for character {character_uuid}: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise handle_generic_error(e, f"setting default image {filename}")
+
+@router.delete("/character/{character_uuid}/images/default", response_model=DataResponse[dict])
+async def clear_default_character_image(
+    character_uuid: str,
+    db: Session = Depends(get_db),
+    handler: CharacterImageHandler = Depends(get_character_image_handler),
+    logger: LogManager = Depends(get_logger_dependency)
+):
+    """Clear the default image for a character (revert to main portrait).
+
+    Args:
+        character_uuid: UUID of the character
+
+    Returns:
+        DataResponse with confirmation
+    """
+    try:
+        handler.clear_default_image(db, character_uuid)
+        return create_data_response({"cleared": True, "character_uuid": character_uuid})
+    except Exception as e:
+        logger.log_error(f"Error clearing default image for character {character_uuid}: {str(e)}")
+        logger.log_error(traceback.format_exc())
+        raise handle_generic_error(e, f"clearing default image for character {character_uuid}")
+
 @router.get("/character-images/{character_uuid}/{filename}")
 async def get_character_image(
     character_uuid: str,

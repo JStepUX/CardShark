@@ -106,7 +106,7 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
     : primaryContext;
 
   // Always get imageUrl and hasUnsavedChanges from primary context (not used in secondary/compare mode)
-  const { imageUrl, setImageUrl, hasUnsavedChanges, setHasUnsavedChanges } = primaryContext;
+  const { imageUrl, hasUnsavedChanges, setHasUnsavedChanges } = primaryContext;
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [showJsonModal, setShowJsonModal] = useState(false);
   // Smart change tracking state - removed local hasUnsavedChanges, now using context
@@ -581,10 +581,6 @@ const CharacterInfoView: React.FC<CharacterInfoViewProps> = ({ isSecondary = fal
                   portraitUrl={imageUrl}
                   onImageSelect={(image) => {
                     console.log('Selected secondary image:', image.filename);
-                  }}
-                  onSetAsPortrait={(newImageUrl) => {
-                    setImageUrl(newImageUrl);
-                    setHasUnsavedChanges(true);
                   }}
                 />
               </div>

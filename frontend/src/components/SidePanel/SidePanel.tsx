@@ -10,6 +10,7 @@ import { SamplerSettingsPanel } from './SamplerSettingsPanel';
 import { usePanelResize } from '../../hooks/usePanelResize';
 import { useChat } from '../../contexts/ChatContext';
 import { useCharacter } from '../../contexts/CharacterContext';
+import { useCharacterImages } from '../../contexts/CharacterImageContext';
 import ImagePreview from '../ImagePreview';
 import { CharacterImageService, CharacterImage } from '../../services/characterImageService';
 
@@ -217,34 +218,15 @@ function CharacterModeContent({
     const { imageUrl, characterData } = useCharacter();
     const characterUuid = characterData?.data?.character_uuid;
 
-    // Secondary images state
-    const [secondaryImages, setSecondaryImages] = useState<CharacterImage[]>([]);
+    // Shared image state from context -- stays in sync with CharacterImageGallery
+    const { images: secondaryImages, isLoading: isLoadingImages, defaultImageId } = useCharacterImages();
+
     const [selectedSecondaryImage, setSelectedSecondaryImage] = useState<CharacterImage | null>(null);
-    const [isLoadingImages, setIsLoadingImages] = useState(false);
 
-    // Load secondary images when character changes
+    // Reset preview when switching characters (prevents stale URL for old character)
     useEffect(() => {
-        if (characterUuid) {
-            loadSecondaryImages();
-        } else {
-            setSecondaryImages([]);
-            setSelectedSecondaryImage(null);
-        }
+        setSelectedSecondaryImage(null);
     }, [characterUuid]);
-
-    const loadSecondaryImages = async () => {
-        if (!characterUuid) return;
-
-        setIsLoadingImages(true);
-        try {
-            const images = await CharacterImageService.listImages(characterUuid);
-            setSecondaryImages(images);
-        } catch (error) {
-            console.error('Error loading secondary images:', error);
-        } finally {
-            setIsLoadingImages(false);
-        }
-    };
 
     const handleSecondaryImageClick = (image: CharacterImage) => {
         setSelectedSecondaryImage(image);
@@ -254,10 +236,18 @@ function CharacterModeContent({
         setSelectedSecondaryImage(null);
     };
 
-    // Determine which image to show in the main preview
+    // Determine which image to show in the main preview:
+    // 1. Explicitly selected secondary image (click preview) takes priority
+    // 2. Starred (default) secondary image
+    // 3. Card PNG portrait
+    const defaultImage = defaultImageId !== null
+        ? secondaryImages.find(img => img.id === defaultImageId)
+        : null;
     const displayImageUrl = selectedSecondaryImage && characterUuid
         ? CharacterImageService.getImageUrl(characterUuid, selectedSecondaryImage.filename)
-        : imageUrl;
+        : defaultImage && characterUuid
+            ? CharacterImageService.getImageUrl(characterUuid, defaultImage.filename)
+            : imageUrl;
 
     return (
         <>

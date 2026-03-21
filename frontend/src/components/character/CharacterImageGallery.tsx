@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, Loader2, Star } from 'lucide-react';
 import { CharacterImageService, CharacterImage } from '../../services/characterImageService';
+import { useCharacterImages } from '../../contexts/CharacterImageContext';
 import ImageCropperModal from '../ImageCropperModal';
 import DeleteConfirmationDialog from '../common/DeleteConfirmationDialog';
 import Button from '../common/Button';
@@ -9,19 +10,25 @@ interface CharacterImageGalleryProps {
   characterUuid: string | undefined;
   portraitUrl?: string;
   onImageSelect?: (image: CharacterImage) => void;
-  onSetAsPortrait?: (imageUrl: string) => void;
 }
 
 const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
   characterUuid,
   portraitUrl,
   onImageSelect,
-  onSetAsPortrait
 }) => {
-  const [images, setImages] = useState<CharacterImage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Shared image state from context
+  const {
+    images,
+    isLoading,
+    defaultImageId,
+    onImageUploaded,
+    onImageDeleted,
+    setDefaultImage,
+    clearDefaultImage,
+  } = useCharacterImages();
+
   const [selectedImage, setSelectedImage] = useState<CharacterImage | null>(null);
-  const [starredImageId, setStarredImageId] = useState<number | null>(null);
   const [starringImageId, setStarringImageId] = useState<number | null>(null);
 
   // Upload state
@@ -53,29 +60,6 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
       setStablePortraitUrl(portraitUrl);
     }
   }, [portraitUrl, characterUuid]);
-
-  // Load images when character changes
-  useEffect(() => {
-    if (characterUuid) {
-      loadImages();
-    } else {
-      setImages([]);
-    }
-  }, [characterUuid]);
-
-  const loadImages = async () => {
-    if (!characterUuid) return;
-
-    setIsLoading(true);
-    try {
-      const fetchedImages = await CharacterImageService.listImages(characterUuid);
-      setImages(fetchedImages);
-    } catch (error) {
-      console.error('Error loading character images:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleAddClick = () => {
     fileInputRef.current?.click();
@@ -115,13 +99,8 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
       const uploadedImage = await CharacterImageService.uploadImage(characterUuid, croppedFile);
 
       if (uploadedImage) {
-        // Auto-star if this is the first image in the gallery
-        if (images.length === 0 && onSetAsPortrait) {
-          onSetAsPortrait(URL.createObjectURL(blob));
-          setStarredImageId(uploadedImage.id);
-        }
-        // Refresh the image list
-        await loadImages();
+        // Refresh the shared image list
+        await onImageUploaded();
       } else {
         alert('Failed to upload image');
       }
@@ -159,20 +138,24 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
 
   const handleSetAsPortrait = async (image: CharacterImage, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!characterUuid || !onSetAsPortrait) return;
+    if (!characterUuid) return;
 
     setStarringImageId(image.id);
     try {
-      const url = CharacterImageService.getImageUrl(characterUuid, image.filename);
-      const response = await fetch(url);
-      const blob = await response.blob();
-      onSetAsPortrait(URL.createObjectURL(blob));
-      setStarredImageId(image.id);
+      // DB-only: set is_default flag. Does NOT overwrite the card PNG,
+      // so unstarring can revert to the original portrait.
+      await setDefaultImage(image);
     } catch (error) {
       console.error('Error setting portrait:', error);
     } finally {
       setStarringImageId(null);
     }
+  };
+
+  const handleUnstarPortrait = async () => {
+    if (!characterUuid) return;
+    // Clear the default -- revert star to the main portrait tile
+    await clearDefaultImage();
   };
 
   const confirmDelete = async () => {
@@ -183,8 +166,8 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
       const success = await CharacterImageService.deleteImage(characterUuid, deleteTarget.filename);
 
       if (success) {
-        // Remove from local state
-        setImages(prev => prev.filter(img => img.id !== deleteTarget.id));
+        // Update shared context
+        onImageDeleted(deleteTarget.id);
 
         // Clear selection if deleted image was selected
         if (selectedImage?.id === deleteTarget.id) {
@@ -234,7 +217,10 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
 
           {/* Current portrait */}
           {!isLoading && stablePortraitUrl && (
-            <div className="relative flex-shrink-0 group w-[120px] aspect-[3/5] rounded-lg overflow-hidden shadow-lg">
+            <div
+              className="relative flex-shrink-0 group w-[120px] aspect-[3/5] rounded-lg overflow-hidden shadow-lg cursor-pointer"
+              onClick={() => { if (defaultImageId !== null) handleUnstarPortrait(); }}
+            >
               <div className="w-full h-full bg-stone-950">
                 <img
                   src={stablePortraitUrl}
@@ -242,7 +228,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
               </div>
-              {starredImageId === null && (
+              {defaultImageId === null && (
                 <div className="absolute bottom-2 right-2 z-10 p-1.5 bg-black/60 rounded-full">
                   <Star size={16} className="text-amber-400" fill="currentColor" />
                 </div>
@@ -252,7 +238,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
 
           {/* Secondary images */}
           {!isLoading && images.map((image) => {
-            const isStarred = starredImageId === image.id;
+            const isStarred = defaultImageId === image.id;
             return (
               <div
                 key={image.id}
@@ -270,7 +256,7 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
                   />
                 </div>
 
-                {/* Delete button — fades in on hover (top-right) */}
+                {/* Delete button -- fades in on hover (top-right) */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -281,26 +267,24 @@ const CharacterImageGallery: React.FC<CharacterImageGalleryProps> = ({
                   className="absolute top-2 right-2 z-10 !bg-black/50 !text-white opacity-0 group-hover:opacity-100 hover:!bg-red-600"
                 />
 
-                {/* Star button — fades in on hover (bottom-right), stays visible if starred */}
-                {onSetAsPortrait && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    pill
-                    icon={starringImageId === image.id
-                      ? <Loader2 size={16} className="animate-spin" />
-                      : <Star size={16} fill={isStarred ? 'currentColor' : 'none'} />
-                    }
-                    onClick={(e) => { e.stopPropagation(); handleSetAsPortrait(image, e); }}
-                    disabled={starringImageId === image.id}
-                    title="Set as portrait"
-                    className={`absolute bottom-2 right-2 z-10 !text-amber-400 hover:!bg-amber-600 hover:!text-white
-                      ${isStarred
-                        ? '!bg-black/60 opacity-100'
-                        : '!bg-black/50 opacity-0 group-hover:opacity-100'
-                      }`}
-                  />
-                )}
+                {/* Star button -- fades in on hover (bottom-right), stays visible if starred */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  pill
+                  icon={starringImageId === image.id
+                    ? <Loader2 size={16} className="animate-spin" />
+                    : <Star size={16} fill={isStarred ? 'currentColor' : 'none'} />
+                  }
+                  onClick={(e) => { e.stopPropagation(); handleSetAsPortrait(image, e); }}
+                  disabled={starringImageId === image.id}
+                  title="Set as portrait"
+                  className={`absolute bottom-2 right-2 z-10 !text-amber-400 hover:!bg-amber-600 hover:!text-white
+                    ${isStarred
+                      ? '!bg-black/60 opacity-100'
+                      : '!bg-black/50 opacity-0 group-hover:opacity-100'
+                    }`}
+                />
               </div>
             );
           })}

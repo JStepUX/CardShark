@@ -117,6 +117,7 @@ class CharacterImageHandler:
                         'character_uuid': img.character_uuid,
                         'filename': img.filename,
                         'display_order': img.display_order,
+                        'is_default': img.is_default,
                         'created_at': img.created_at.isoformat() if img.created_at else None,
                         'file_size': file_path.stat().st_size,
                         'file_path': str(file_path)
@@ -379,6 +380,136 @@ class CharacterImageHandler:
             self.logger.log_step(f"Synced {created} secondary image(s) from disk")
 
         return created
+
+    def set_default_image(
+        self,
+        db: Session,
+        character_uuid: str,
+        filename: str
+    ) -> bool:
+        """
+        Set an image as the default for a character.
+        Clears is_default on all other images for that character first.
+
+        Args:
+            db: Database session
+            character_uuid: UUID of the character
+            filename: Filename of the image to set as default
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.logger.log_step(f"Setting default image: {filename} for character: {character_uuid}")
+
+            # Verify the target image exists
+            target = (
+                db.query(CharacterImage)
+                .filter(
+                    CharacterImage.character_uuid == character_uuid,
+                    CharacterImage.filename == filename
+                )
+                .first()
+            )
+
+            if not target:
+                self.logger.log_warning(f"Image record not found: {filename}")
+                return False
+
+            # Clear is_default on all images for this character
+            db.query(CharacterImage).filter(
+                CharacterImage.character_uuid == character_uuid
+            ).update({CharacterImage.is_default: False})
+
+            # Set the target as default
+            target.is_default = True
+            db.commit()
+
+            self.logger.log_step(f"Successfully set default image: {filename}")
+            return True
+
+        except Exception as e:
+            db.rollback()
+            self.logger.log_error(f"Error setting default image: {str(e)}")
+            return False
+
+    def clear_default_image(
+        self,
+        db: Session,
+        character_uuid: str
+    ) -> bool:
+        """
+        Clear the default image for a character (revert to main portrait).
+
+        Args:
+            db: Database session
+            character_uuid: UUID of the character
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.logger.log_step(f"Clearing default image for character: {character_uuid}")
+
+            db.query(CharacterImage).filter(
+                CharacterImage.character_uuid == character_uuid
+            ).update({CharacterImage.is_default: False})
+
+            db.commit()
+            self.logger.log_step(f"Successfully cleared default image for character: {character_uuid}")
+            return True
+
+        except Exception as e:
+            db.rollback()
+            self.logger.log_error(f"Error clearing default image: {str(e)}")
+            return False
+
+    def get_default_image(
+        self,
+        db: Session,
+        character_uuid: str
+    ) -> Optional[Dict]:
+        """
+        Get the default image for a character.
+
+        Args:
+            db: Database session
+            character_uuid: UUID of the character
+
+        Returns:
+            Image metadata dict if a default is set, None otherwise
+        """
+        try:
+            img = (
+                db.query(CharacterImage)
+                .filter(
+                    CharacterImage.character_uuid == character_uuid,
+                    CharacterImage.is_default == True
+                )
+                .first()
+            )
+
+            if not img:
+                return None
+
+            file_path = self._get_character_dir(character_uuid) / img.filename
+            if not file_path.exists():
+                return None
+
+            return {
+                'id': img.id,
+                'character_uuid': img.character_uuid,
+                'filename': img.filename,
+                'display_order': img.display_order,
+                'is_default': img.is_default,
+                'created_at': img.created_at.isoformat() if img.created_at else None,
+                'file_size': file_path.stat().st_size,
+                'file_path': str(file_path)
+            }
+
+        except Exception as e:
+            self.logger.log_error(f"Error getting default image: {str(e)}")
+            return None
 
     def get_image_path(self, character_uuid: str, filename: str) -> Optional[Path]:
         """

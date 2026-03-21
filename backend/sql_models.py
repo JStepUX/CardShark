@@ -277,6 +277,7 @@ class CharacterImage(Base):
     character_uuid = Column(String, nullable=False, index=True)
     filename = Column(String, nullable=False)
     display_order = Column(Integer, default=0, nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

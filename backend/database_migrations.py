@@ -174,7 +174,33 @@ def init_db_with_migrations():
             logger.info("Database rebuilt successfully. Character and user data will be indexed from files.")
         else:
             logger.info(f"Database is up to date (version {CURRENT_SCHEMA_VERSION})")
-            
+
+        # --- In-place migrations (non-destructive) ---
+        _migrate_add_is_default_column()
+
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise
+
+
+def _migrate_add_is_default_column():
+    """Add is_default column to character_images if it doesn't exist yet."""
+    try:
+        from backend.database import engine
+
+        with engine.connect() as conn:
+            # Check if column already exists
+            result = conn.execute(text("PRAGMA table_info(character_images)"))
+            columns = [row[1] for row in result.fetchall()]
+
+            if 'is_default' not in columns:
+                conn.execute(text(
+                    "ALTER TABLE character_images ADD COLUMN is_default BOOLEAN NOT NULL DEFAULT 0"
+                ))
+                conn.commit()
+                logger.info("Migration: added is_default column to character_images")
+            else:
+                logger.debug("Migration: is_default column already exists")
+    except Exception as e:
+        # Table may not exist yet (fresh install) -- create_all handles it
+        logger.debug(f"is_default migration skipped (table may not exist yet): {e}")

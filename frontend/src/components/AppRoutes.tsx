@@ -10,6 +10,7 @@ import { SettingsProvider } from '../contexts/SettingsContext';
 import { APIConfigProvider } from '../contexts/APIConfigContext';
 import { TemplateProvider } from '../contexts/TemplateContext';
 import { CharacterProvider } from '../contexts/CharacterContext';
+import { CharacterImageProvider } from '../contexts/CharacterImageContext';
 import { ChatProvider } from '../contexts/ChatContext';
 import { KoboldCPPProvider } from '../hooks/useKoboldCPP';
 import HighlightStylesUpdater from './tiptap/HighlightStylesUpdater';
@@ -44,6 +45,7 @@ const AppRoutes: React.FC = () => (
       <APIConfigProvider>
         <TemplateProvider>
           <CharacterProvider>
+            <CharacterImageProvider>
               <KoboldCPPProvider pollInterval={120000}>
                 <Routes>
                 <Route path="/" element={<Layout />}>
@@ -126,6 +128,7 @@ const AppRoutes: React.FC = () => (
                 </Route>
               </Routes>
               </KoboldCPPProvider>
+            </CharacterImageProvider>
           </CharacterProvider>
         </TemplateProvider>
       </APIConfigProvider>

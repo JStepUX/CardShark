@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend import sql_models, schemas as pydantic_models # Use schemas for Pydantic models
 import uuid
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def create_chat_session(db: Session, chat_session: pydantic_models.ChatSessionCreate) -> sql_models.ChatSession:
     # Generate UUID for session
@@ -504,12 +504,16 @@ def get_recent_chat_sessions(db: Session, limit: int = 50) -> List[dict]:
     Also prunes single-message sessions (just the greeting) to keep the database clean.
     """
     # PRUNE: Delete chat sessions with only 1 message (just first_mes greeting)
-    # These are not meaningful conversations and waste database space over time
+    # that are older than 1 hour. The age threshold prevents deleting sessions
+    # that are still being set up (race condition: user creates session then
+    # navigates to History before first_mes is saved).
     try:
+        age_cutoff = datetime.utcnow() - timedelta(hours=1)
         single_message_sessions = db.query(sql_models.ChatSession).filter(
-            sql_models.ChatSession.message_count <= 1
+            sql_models.ChatSession.message_count <= 1,
+            sql_models.ChatSession.start_time < age_cutoff
         ).all()
-        
+
         if single_message_sessions:
             for session in single_message_sessions:
                 db.delete(session)
