@@ -243,6 +243,17 @@ method: POST
 path: /api/characters/extract-metadata
 request: PNG file
 response: v2 character data
+
+set_default_image:
+method: PUT
+path: /api/character/{uuid}/images/{filename}/set-default
+side_effect: clears is_default on all images, sets target
+note: DB flag only — does NOT overwrite card PNG
+
+clear_default_image:
+method: DELETE
+path: /api/character/{uuid}/images/default
+side_effect: clears is_default on all images for character
 ```
 
 ### world_endpoints

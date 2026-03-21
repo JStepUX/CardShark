@@ -9,7 +9,19 @@ For earlier history, see `docs/docs/archivedOLD/CHANGELOG.md`.
 
 ## [Unreleased] - 2026-03-21
 
+### Added
+- **Character Images: `is_default` column** — `character_images` table now tracks which secondary image is starred via `is_default` boolean; added in-place ALTER TABLE migration (no DB rebuild)
+- **Character Images: set/clear default endpoints** — `PUT /api/character/{uuid}/images/{filename}/set-default` and `DELETE /api/character/{uuid}/images/default`
+- **Character Images: shared context** — `CharacterImageContext` provides shared image state between SidePanel and CharacterImageGallery, eliminating drift between independent image lists
+- **Tests** — `test_character_image_handler.py` (set/clear default, list includes is_default), `test_database_migrations.py` (ALTER TABLE idempotency), `test_chat_session_pruning.py` (age threshold prevents premature deletion)
+
 ### Fixed
+- **Image Gallery: star no longer overwrites card PNG** — starring a secondary image sets a DB flag only; unstarring fully reverts to the original portrait. Previously, starring called `handleImageChange()` which permanently overwrote the card PNG, making unstar irreversible
+- **Image Gallery: SidePanel stays in sync** — SidePanel and Info tab gallery now consume the same `CharacterImageContext`; uploads/deletes in either propagate to both immediately
+- **Image Gallery: SidePanel resolves effective portrait** — when a secondary image is starred, SidePanel shows it as the main preview; when cleared, reverts to card PNG
+- **Image Gallery: preview clears on character switch** — `selectedSecondaryImage` resets when `characterUuid` changes, preventing stale secondary-image URLs from one character leaking into another
+- **Chat sessions: pruning age threshold** — `get_recent_chat_sessions` now only prunes sessions older than 1 hour with ≤1 message; previously pruned all such sessions regardless of age, causing a race condition that deleted brand-new sessions before the first message was saved
+- **Database: non-destructive migration** — `is_default` column added via ALTER TABLE instead of schema version bump that would have deleted the entire database (including non-rebuildable chat history and world progress)
 - **Combat: weapon null guards** — `getWeaponAPCost`, `doesWeaponEndTurn`, `getWeaponAttackRange` now use `!= null` (was `!== undefined`), fixing silent attack failures when weapon properties were explicitly `null`
 - **Combat: inventory stacking** — `addItemToInventory` `stackCount` guard aligned to `!= null` for consistency
 - **Combat: config constants wired** — `difficultMove` AP cost and `incapacitationChancePercent` in `gridCombatEngine.ts` now read from centralized config instead of hardcoded literals

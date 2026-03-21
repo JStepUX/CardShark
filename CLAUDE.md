@@ -40,6 +40,12 @@ bash scripts/agent/read-docs.sh --index     # list all vendored docs
 
 Docs live in `docs/vendor/` (migration) and `docs/vendor/reference/` (durable API reference). For packages not vendored, use Context7 MCP (`resolve-library-id` → `query-docs`). The cutoff registry in `read-docs.sh` defines what's known vs. unknown — update it when the agent's training data advances.
 
+## Database Migrations — DO NOT BUMP SCHEMA VERSION
+
+`database_migrations.py` deletes and rebuilds the entire SQLite database when `CURRENT_SCHEMA_VERSION` changes. The file's header says "no backwards compatibility concerns" but this is **no longer true** — the DB now stores non-rebuildable data: `chat_sessions`, `chat_messages`, `world_user_progress`, `adventure_log_entries`. Bumping the schema version will destroy user chat history and world progress.
+
+**For new columns:** Use in-place `ALTER TABLE` migrations (see `_migrate_add_is_default_column()` as a pattern). Add them to the `init_db_with_migrations()` call chain. Do not change `CURRENT_SCHEMA_VERSION`.
+
 ## Test Runners
 
 - **Frontend:** Vitest (`npm test` from `frontend/`). Config in `frontend/vitest.config.ts`. Uses Vite's SWC pipeline + `jsdom`.
