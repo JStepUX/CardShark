@@ -9,6 +9,7 @@
       "systemFormat": "<|im_start|>system\n\n{{content}}<|im_end|>\n\n",
       "userFormat": "<|im_start|>user\n\n{{content}}<|im_end|>\n\n",
       "assistantFormat": "<|im_start|>assistant\n\n{{char}}: {{content}}<|im_end|>\n\n",
+      "outputSequence": "<|im_start|>assistant\n\n",
       "memoryFormat": "<|im_start|>system\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>\n\n",
       "detectionPatterns": ["<|im_start|>", "<|im_end|>"],
       "stopSequences": [
@@ -29,6 +30,7 @@
       "systemFormat": "<|im_start|>system<|im_sep|>{{content}}<|im_end|>",
       "userFormat": "<|im_start|>user<|im_sep|>{{content}}<|im_end|>",
       "assistantFormat": "<|im_start|>assistant<|im_sep|>{{char}}: {{content}}<|im_end|>",
+      "outputSequence": "<|im_start|>assistant<|im_sep|>",
       "memoryFormat": "<|im_start|>system<|im_sep|>{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>",
       "detectionPatterns": ["<|im_start|>", "<|im_end|>", "<|im_sep|>"],
       "stopSequences": [
@@ -49,6 +51,7 @@
       "systemFormat": "<|im_start|>system\n\n{{content}}<|im_end|>\n\n",
       "userFormat": "<|im_start|>user\n\n{{content}}<|im_end|>\n\n",
       "assistantFormat": "<|im_start|>assistant\n\n{{char}}: {{content}}<|im_end|>\n\n",
+      "outputSequence": "<|im_start|>assistant\n\n",
       "memoryFormat": "<|im_start|>system\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>\n\n",
       "tools_start": "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n\n<tools>\n",
       "tools_end": "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n",
@@ -71,6 +74,7 @@
       "systemFormat": "<|im_start|>system\n\n{{content}}<|im_end|>\n\n",
       "userFormat": "<|im_start|>user\n\n{{content}}<|im_end|>\n\n",
       "assistantFormat": "<|im_start|>assistant\n\n{{char}}: {{content}}<|im_end|>\n\n",
+      "outputSequence": "<|im_start|>assistant\n\n",
       "memoryFormat": "<|im_start|>system\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|im_end|>\n\n",
       "detectionPatterns": ["<|im_start|>", "<|im_end|>"],
       "stopSequences": [
@@ -89,8 +93,10 @@
       "isBuiltIn": true,
       "isEditable": false,
       "systemFormat": null,
+      "systemSameAsUser": true,
       "userFormat": "<start_of_turn>user\n{{content}}<end_of_turn>\n",
       "assistantFormat": "<start_of_turn>model\n{{char}}: {{content}}<end_of_turn>\n",
+      "outputSequence": "<start_of_turn>model\n",
       "memoryFormat": "Persona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}",
       "detectionPatterns": ["<start_of_turn>", "<end_of_turn>"],
       "stopSequences": [
@@ -98,6 +104,25 @@
         "<end_of_turn>",
         "User:",
         "Assistant:",
+        "{{user}}:"
+      ]
+    },
+    {
+      "search": ["<|turn>"],
+      "name": "Google Gemma 4",
+      "id": "gemma4",
+      "description": "Format for Google Gemma 4 models (new turn/channel token format)",
+      "isBuiltIn": true,
+      "isEditable": false,
+      "systemFormat": "<|turn>system\n{{content}}<turn|>\n",
+      "userFormat": "<|turn>user\n{{content}}<turn|>\n",
+      "assistantFormat": "<|turn>model\n{{char}}: {{content}}<turn|>\n",
+      "outputSequence": "<|turn>model\n",
+      "memoryFormat": "<|turn>system\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<turn|>\n",
+      "detectionPatterns": ["<|turn>", "<turn|>"],
+      "stopSequences": [
+        "<|turn>",
+        "<turn|>",
         "{{user}}:"
       ]
     },
@@ -111,6 +136,7 @@
       "systemFormat": "<|start_header_id|>system<|end_header_id|>\n\n{{content}}<|eot_id|>\n\n",
       "userFormat": "<|start_header_id|>user<|end_header_id|>\n\n{{content}}<|eot_id|>\n\n",
       "assistantFormat": "<|start_header_id|>assistant<|end_header_id|>\n\n{{char}}: {{content}}<|eot_id|>\n\n",
+      "outputSequence": "<|start_header_id|>assistant<|end_header_id|>\n\n",
       "memoryFormat": "<|start_header_id|>system<|end_header_id|>\n\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|eot_id|>\n\n",
       "detectionPatterns": ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"],
       "stopSequences": [
@@ -130,6 +156,7 @@
       "systemFormat": "[SYSTEM_PROMPT] {{content}} [/SYSTEM_PROMPT]",
       "userFormat": "[INST] {{content}} [/INST]",
       "assistantFormat": " {{char}}: {{content}}</s>",
+      "outputSequence": "",
       "memoryFormat": "[SYSTEM_PROMPT] {{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}} [/SYSTEM_PROMPT]",
       "detectionPatterns": ["[/INST]", "[SYSTEM_PROMPT]"],
       "stopSequences": [
@@ -149,6 +176,7 @@
       "systemFormat": "[INST] {{content}} [/INST] ",
       "userFormat": "[INST] {{content}} [/INST] ",
       "assistantFormat": "{{char}}: {{content}}</s>",
+      "outputSequence": "",
       "memoryFormat": "[INST] {{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}} [/INST] ",
       "detectionPatterns": ["[/INST]"],
       "stopSequences": [
@@ -168,6 +196,7 @@
       "systemFormat": "[INST]{{content}}[/INST]\n",
       "userFormat": "[INST]{{content}}[/INST]\n",
       "assistantFormat": "{{char}}: {{content}}</s>",
+      "outputSequence": "",
       "memoryFormat": "[INST]{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}[/INST]\n",
       "detectionPatterns": ["[/INST]"],
       "stopSequences": [
@@ -187,6 +216,7 @@
       "systemFormat": "<|system|>\n{{content}}<|end|>\n",
       "userFormat": "<|user|>\n{{content}}<|end|>\n",
       "assistantFormat": "<|assistant|>\n{{char}}: {{content}}<|end|>\n",
+      "outputSequence": "<|assistant|>\n",
       "memoryFormat": "<|system|>\n{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|end|>\n",
       "detectionPatterns": ["<|system|>", "<|user|>"],
       "stopSequences": [
@@ -206,6 +236,7 @@
       "systemFormat": "<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{content}}<|END_OF_TURN_TOKEN|>",
       "userFormat": "<|START_OF_TURN_TOKEN|><|USER_TOKEN|>{{content}}<|END_OF_TURN_TOKEN|>",
       "assistantFormat": "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{{char}}: {{content}}<|END_OF_TURN_TOKEN|>",
+      "outputSequence": "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>",
       "memoryFormat": "<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{system}}\n\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<|END_OF_TURN_TOKEN|>",
       "detectionPatterns": ["<|START_OF_TURN_TOKEN|>"],
       "stopSequences": [
@@ -225,6 +256,7 @@
       "systemFormat": "",
       "userFormat": "<｜User｜>{{content}}",
       "assistantFormat": "<｜Assistant｜>{{char}}: {{content}}<｜end▁of▁sentence｜>",
+      "outputSequence": "<｜Assistant｜>",
       "memoryFormat": "Persona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}",
       "detectionPatterns": ["<｜User｜>"],
       "stopSequences": [
@@ -244,6 +276,7 @@
       "systemFormat": "### Input: {{content}}\n\n",
       "userFormat": "### Instruction: {{content}}\n\n",
       "assistantFormat": "### Response: {{content}}\n\n",
+      "outputSequence": "### Response: ",
       "memoryFormat": "",
       "detectionPatterns": ["### Instruction:", "### Response:", "### Input:"],
       "stopSequences": [
@@ -260,6 +293,7 @@
       "systemFormat": "<|system|> {{content}}",
       "userFormat": "<|user|> {{content}}",
       "assistantFormat": "<|model|> {{content}}",
+      "outputSequence": "<|model|> ",
       "memoryFormat": "",
       "detectionPatterns": ["<|user|>", "<|model|>", "<|system|>"],
       "stopSequences": [

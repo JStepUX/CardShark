@@ -433,6 +433,8 @@ export async function generateChatResponse(options: GenerateChatOptions): Promis
       userFormat: template.userFormat,
       assistantFormat: template.assistantFormat,
       ...(template.systemFormat ? { systemFormat: template.systemFormat } : {}),
+      ...(template.systemSameAsUser ? { systemSameAsUser: true } : {}),
+      ...(template.outputSequence !== undefined ? { outputSequence: template.outputSequence } : {}),
       ...(template.memoryFormat ? { memoryFormat: template.memoryFormat } : {}),
       ...(template.stopSequences && template.stopSequences.length > 0
         ? { stopSequences: template.stopSequences }

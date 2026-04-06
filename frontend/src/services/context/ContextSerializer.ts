@@ -373,8 +373,12 @@ export function formatMessage(
   try {
     if (message.role === 'assistant') {
       return replaceVariables(template.assistantFormat, variables);
-    } else if (message.role === 'system' && template.systemFormat) {
-      return replaceVariables(template.systemFormat, variables);
+    } else if (message.role === 'system') {
+      if (template.systemFormat) {
+        return replaceVariables(template.systemFormat, variables);
+      }
+      // No system format: use user format (systemSameAsUser or fallback)
+      return replaceVariables(template.userFormat, variables);
     }
     return replaceVariables(template.userFormat, variables);
   } catch {

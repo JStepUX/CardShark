@@ -12,8 +12,10 @@ export const TemplateSchema = z.object({
   isBuiltIn: z.boolean().default(false),
   isEditable: z.boolean().default(true),
   systemFormat: z.string().nullable().optional(),
+  systemSameAsUser: z.boolean().optional().default(false),
   userFormat: z.string(),
   assistantFormat: z.string(),
+  outputSequence: z.string().optional(),
   memoryFormat: z.string().optional(),
   detectionPatterns: z.array(z.string()).optional(),
   stopSequences: z.array(z.string()).optional(),
@@ -34,8 +36,10 @@ export interface ITemplate {
   
   // Template formatting fields
   systemFormat?: string | null | undefined;   // Format for system messages
+  systemSameAsUser?: boolean; // When true, system content wraps in userFormat (for models without a system role)
   userFormat: string;      // Format for user messages
   assistantFormat: string; // Format for assistant messages
+  outputSequence?: string; // Open assistant turn prefix appended at end of prompt for generation
   memoryFormat?: string;   // Format for memory/context section
   
   // Detection patterns for auto-detection
