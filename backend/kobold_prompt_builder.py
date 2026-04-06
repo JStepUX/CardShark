@@ -210,63 +210,6 @@ def build_room_content_prompt(field_type: str, existing_text: str = '') -> str:
     return f"Write the {field_type}:\n\n"
 
 
-def clean_memory(memory: str) -> str:
-    """Strip instruct tokens and empty labeled lines from memory text.
-
-    The frontend template system applies memoryFormat from templates.json before
-    sending to the backend. For non-KoboldCPP providers this is correct — they
-    need instruct framing. But KoboldCPP's raw completion endpoint expects plain
-    story text. This function strips all instruct tokens so the model sees clean
-    context instead of mixed signals.
-
-    Why each token family is stripped (source: frontend/src/config/templates.json):
-
-        Format          Tokens stripped                          Templates using it
-        ──────────────  ──────────────────────────────────────  ──────────────────────
-        Mistral         [INST] [/INST] [SYSTEM_PROMPT]          Mistral V1, V2, Tekken
-        Llama 2         <<SYS>> <</SYS>>                        Llama 2 Chat
-        ChatML          <|im_start|> <|im_end|> <|im_sep|>      ChatML, Gemma2, Hermes
-        Llama 3         <|start_header_id|> <|end_header_id|>   Llama 3 Instruct
-                        <|eot_id|> <|begin_of_text|>
-        Alpaca          ### Instruction: ### Response:           Alpaca
-
-    Also removes empty labeled lines (e.g., 'Personality: ' when field is empty)
-    left over after lore integration fills some fields but not others.
-    """
-    if not memory:
-        return ''
-
-    # Strip instruct format tokens that the frontend template may have injected
-    # Mistral/Llama instruct
-    memory = memory.replace('[INST]', '').replace('[/INST]', '')
-    memory = memory.replace('[SYSTEM_PROMPT]', '').replace('[/SYSTEM_PROMPT]', '')
-    # Llama 2
-    memory = memory.replace('<<SYS>>', '').replace('<</SYS>>', '')
-    # ChatML / Gemma2
-    memory = re.sub(r'<\|im_start\|>\s*(?:system|user|assistant)\s*\n?', '', memory)
-    memory = memory.replace('<|im_end|>', '')
-    memory = memory.replace('<|im_sep|>', '')
-    # Alpaca/generic instruct
-    memory = re.sub(r'^### (?:Instruction|Response|Input):\s*$', '', memory, flags=re.MULTILINE)
-    # Llama 3
-    memory = re.sub(r'<\|(?:begin|end)_of_text\|>', '', memory)
-    memory = re.sub(r'<\|start_header_id\|>.*?<\|end_header_id\|>\s*\n?', '', memory)
-    memory = memory.replace('<|eot_id|>', '')
-
-    lines = memory.split('\n')
-    cleaned: List[str] = []
-
-    for line in lines:
-        # Match patterns like "Label: " with nothing after the colon+space
-        if re.match(r'^(Persona|Personality|Scenario|Description):\s*$', line, re.IGNORECASE):
-            continue
-        cleaned.append(line)
-
-    result = '\n'.join(cleaned)
-    # Collapse excessive blank lines left by removal
-    result = re.sub(r'\n{3,}', '\n\n', result)
-    return result.strip()
-
 
 def fold_system_instruction(system_instruction: str, memory: str) -> str:
     """Fold a system instruction into memory as narrative framing.

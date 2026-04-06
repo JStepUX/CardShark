@@ -10,18 +10,25 @@ from typing import Dict, Optional, Tuple, Generator
 
 
 class ThinkingTagFilter:
-    """Streaming state machine that strips <think>...</think> and <thinking>...</thinking> tags.
+    """Streaming state machine that strips thinking/reasoning tags from model output.
+
+    Handles three tag families:
+      - XML:    <think>...</think>, <thinking>...</thinking>
+      - Gemma4: <|channel>thought...<channel|>
 
     Two states: NORMAL and INSIDE_THINKING.
     Buffers partial tag prefixes to avoid false positives on characters like '<'.
     """
 
-    OPEN_TAGS = ['<think>', '<thinking>']
-    CLOSE_TAGS = ['</think>', '</thinking>']
+    OPEN_TAGS = ['<think>', '<thinking>', '<|channel>thought']
+    CLOSE_TAGS = ['</think>', '</thinking>', '<channel|>']
     ALL_TAGS = OPEN_TAGS + CLOSE_TAGS
-    MAX_TAG_LEN = max(len(t) for t in ALL_TAGS)  # 12 for '</thinking>'
+    MAX_TAG_LEN = max(len(t) for t in ALL_TAGS)  # 16 for '<|channel>thought'
 
-    _STRIP_RE = re.compile(r'<think(?:ing)?>[\s\S]*?</think(?:ing)?>', re.DOTALL)
+    _STRIP_RE = re.compile(
+        r'<think(?:ing)?>[\s\S]*?</think(?:ing)?>|<\|channel>thought[\s\S]*?<channel\|>',
+        re.DOTALL,
+    )
 
     def __init__(self):
         self._state = 'NORMAL'  # 'NORMAL' or 'INSIDE_THINKING'
@@ -935,8 +942,8 @@ class ApiHandler:
                     else:
                         memory = system_instruction
 
-                # KoboldCPP story-mode rebuild: fold system instruction,
-                # rebuild prompt from raw chat_history, set clean stop sequences
+                # KoboldCPP rebuild: apply instruct template if available,
+                # otherwise fall back to plain story-mode transcript
                 if is_kobold:
                     from backend.kobold_prompt_builder import (
                         fold_system_instruction, build_story_prompt,
@@ -946,16 +953,8 @@ class ApiHandler:
                     char_data = character_data.get('data', {}) if character_data else {}
                     char_name = char_data.get('name', 'Character')
 
-                    # build_memory() already resolved {{user}}/{{char}} and skips empty fields,
-                    # so clean_memory() and token resolution are no longer needed here.
-
-                    # Fold system_instruction into memory as narrative framing
-                    if system_instruction:
-                        memory = fold_system_instruction(system_instruction, memory)
-
-                    # Append *** separator between memory and prompt
-                    if memory and not memory.rstrip().endswith('***'):
-                        memory = memory.rstrip() + '\n***'
+                    # Template format from api_config (frontend sends active template fields)
+                    template_format = api_config.get('template_format')
 
                     # Rebuild prompt from chat_history (main chat flow)
                     raw_history = generation_params.get('chat_history', [])
@@ -977,40 +976,94 @@ class ApiHandler:
                             post_history_parts.append(session_notes.strip())
                         post_history = '\n'.join(post_history_parts)
 
-                        prompt = ''
-                        if compressed:
-                            prompt += compressed + '\n\n'
-                        prompt += build_story_prompt(raw_history, char_name, user_name, continuation_text, post_history)
+                        if template_format:
+                            # Template-aware path: use PromptAssemblyService helpers
+                            from backend.services.prompt_assembly_service import (
+                                PromptAssemblyService, replace_variables
+                            )
+                            _asm = PromptAssemblyService(self.logger)
 
-                    # Set clean stop sequences
-                    stop_sequence = build_story_stop_sequences(char_name, user_name)
+                            # Wrap memory in template tokens
+                            memory = _asm._wrap_memory_for_kobold(
+                                memory, template_format, system_instruction or '',
+                                char_name, user_name,
+                            )
+
+                            # Format chat history using template
+                            formatted_history = _asm._format_chat_history(
+                                raw_history, char_name, user_name, template_format,
+                            )
+
+                            prompt = ''
+                            if compressed:
+                                prompt += compressed + '\n\n'
+                            prompt += formatted_history
+
+                            # Post-history wrapped in template user format
+                            if post_history:
+                                user_fmt = template_format.get('userFormat', '{{content}}')
+                                wrapped_post = replace_variables(user_fmt, {
+                                    'content': post_history,
+                                    'char': char_name,
+                                    'user': user_name,
+                                })
+                                prompt += f"\n{wrapped_post}"
+
+                            # Open assistant turn
+                            output_seq = _asm._get_output_sequence(template_format, char_name)
+                            if continuation_text:
+                                prompt += f"\n{output_seq}{continuation_text}"
+                            elif output_seq:
+                                prompt += f"\n{output_seq}"
+                            else:
+                                prompt += f"\n{char_name}:"
+
+                            # Stop sequences from template
+                            stop_sequence = _asm._get_stop_sequences(
+                                template_format, char_name, user_name,
+                            )
+                        else:
+                            # Story-mode fallback (no template selected)
+                            if system_instruction:
+                                memory = fold_system_instruction(system_instruction, memory)
+
+                            if memory and not memory.rstrip().endswith('***'):
+                                memory = memory.rstrip() + '\n***'
+
+                            prompt = ''
+                            if compressed:
+                                prompt += compressed + '\n\n'
+                            prompt += build_story_prompt(raw_history, char_name, user_name, continuation_text, post_history)
+
+                            stop_sequence = build_story_stop_sequences(char_name, user_name)
+                    else:
+                        # No chat history
+                        if not template_format:
+                            if system_instruction:
+                                memory = fold_system_instruction(system_instruction, memory)
+                            if memory and not memory.rstrip().endswith('***'):
+                                memory = memory.rstrip() + '\n***'
 
                     # ── Context Budget Debugger ──────────────────────────────────
-                    # Estimate tokens (~4 chars per token) and log per-field breakdown
                     def _est_tokens(text: str) -> int:
                         return len(text) // 4 if text else 0
 
                     ctx_max = original_generation_settings.get('max_context_length', 8192)
                     ctx_memory_tok = _est_tokens(memory)
-                    ctx_compressed_tok = _est_tokens(compressed) if raw_history and compressed else 0
-                    ctx_notes_tok = _est_tokens(session_notes) if raw_history and session_notes else 0
-                    ctx_history_tok = _est_tokens(build_story_prompt(raw_history, char_name, user_name)) if raw_history else _est_tokens(prompt)
-                    ctx_total_tok = ctx_memory_tok + ctx_compressed_tok + ctx_notes_tok + ctx_history_tok
+                    ctx_prompt_tok = _est_tokens(prompt)
+                    ctx_total_tok = ctx_memory_tok + ctx_prompt_tok
 
+                    mode_label = "instruct" if template_format else "story-mode"
                     self.logger.log_step(
-                        f"KoboldCPP Context Budget (est. tokens, ~4 chars/token):\n"
-                        f"  Memory (card+lore+sys): {ctx_memory_tok:>6} tokens  ({len(memory or ''):>8} chars)\n"
-                        f"  Compressed summary:     {ctx_compressed_tok:>6} tokens\n"
-                        f"  Session notes:          {ctx_notes_tok:>6} tokens\n"
-                        f"  Chat history:           {ctx_history_tok:>6} tokens  ({len(raw_history) if raw_history else 0} messages)\n"
-                        f"  ─────────────────────────────────\n"
-                        f"  TOTAL:                  {ctx_total_tok:>6} tokens  /  {ctx_max} limit  "
-                        f"({ctx_total_tok * 100 // ctx_max}% used)"
+                        f"KoboldCPP {mode_label} rebuild complete:\n"
+                        f"  Memory:  {ctx_memory_tok:>6} tokens  ({len(memory or ''):>8} chars)\n"
+                        f"  Prompt:  {ctx_prompt_tok:>6} tokens  ({len(prompt or ''):>8} chars)\n"
+                        f"  TOTAL:   {ctx_total_tok:>6} tokens  /  {ctx_max} limit  "
+                        f"({ctx_total_tok * 100 // ctx_max if ctx_max else 0}% used)"
                     )
                     if ctx_total_tok > ctx_max:
                         self.logger.log_warning(
-                            f"CONTEXT OVERFLOW: Sending ~{ctx_total_tok} tokens but limit is {ctx_max}. "
-                            f"KoboldCPP will silently truncate from the front, losing character card and system context. "
+                            f"CONTEXT OVERFLOW: ~{ctx_total_tok} tokens but limit is {ctx_max}. "
                             f"Overflow: ~{ctx_total_tok - ctx_max} tokens over budget."
                         )
                     elif ctx_total_tok > ctx_max * 0.85:
@@ -1020,7 +1073,6 @@ class ApiHandler:
                         )
                     # ── End Context Budget Debugger ──────────────────────────────
 
-                    self.logger.log_step(f"KoboldCPP story-mode rebuild complete. Memory: {len(memory)} chars, Prompt: {len(prompt) if prompt else 0} chars")
                     self.logger.log_step(f"KoboldCPP stop_sequence: {stop_sequence}")
 
                 # Add </s> to stop sequences if not already present (skip for KoboldCPP)

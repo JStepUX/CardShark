@@ -112,6 +112,7 @@ async def generate_greeting(request: Request):
             generation_instruction=generation_instruction,
             partial_message=partial_message,
             is_kobold=is_kobold,
+            template_format=api_config.get('template_format'),
         )
 
         stream_request_data = {
@@ -205,6 +206,7 @@ async def generate_impersonate(request: Request):
             user_name=user_name,
             user_persona=user_persona,
             is_kobold=is_kobold,
+            template_format=api_config.get('template_format'),
         )
 
         stream_request_data = {
@@ -273,6 +275,7 @@ async def generate_room_content(request: Request):
             existing_text=existing_text,
             user_prompt=user_prompt,
             is_kobold=is_kobold,
+            template_format=api_config.get('template_format'),
         )
 
         stream_request_data = {
@@ -432,6 +435,7 @@ async def generate_thin_frame(request: Request):
         result = assembler.assemble_thin_frame(
             character_data=character_data,
             is_kobold=is_kobold,
+            template_format=api_config.get('template_format'),
         )
 
         stream_request_data = {
