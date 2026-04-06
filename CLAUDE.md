@@ -50,6 +50,15 @@ Docs live in `docs/vendor/` (migration) and `docs/vendor/reference/` (durable AP
 
 **For new columns:** Use in-place `ALTER TABLE` migrations (see `_migrate_add_is_default_column()` as a pattern). Add them to the `init_db_with_migrations()` call chain. Do not change `CURRENT_SCHEMA_VERSION`.
 
+## KoboldCPP Template System — Dual-Path Assembly
+
+`PromptAssemblyService._assemble_kobold()` dispatches to **two sub-methods** based on whether `template_format` is present:
+
+- **`_assemble_kobold_instruct()`** — when a template is selected: wraps memory in template tokens, formats chat history with instruct tokens, uses template-derived stop sequences. The KoboldCPP `memory`/`prompt` split is preserved for truncation protection.
+- **`_assemble_kobold_story()`** — when no template is selected: plain `Name: message` transcript, `***` separator, hardcoded story-mode stops. This is the legacy behavior.
+
+**The template is not applied by KoboldCPP** — CardShark bakes all instruct tokens into the prompt string before sending to the native `/api/extra/generate/stream` endpoint. The `outputSequence` field in `templates.json` defines the open assistant turn (e.g., `<start_of_turn>model\n`). Empty `outputSequence` means "derive from `assistantFormat`," not "no prefix."
+
 ## Test Runners
 
 - **Frontend:** Vitest (`npm test` from `frontend/`). Config in `frontend/vitest.config.ts`. Uses Vite's SWC pipeline + `jsdom`.

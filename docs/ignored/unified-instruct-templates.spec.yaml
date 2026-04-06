@@ -1,0 +1,869 @@
+# ============================================================================
+# SPEC: Unified Instruct Templates for All Providers
+# ============================================================================
+# Machine-legible specification. All status fields are authoritative.
+#
+# STATUS VALUES: not_started | in_progress | completed | blocked | deferred
+# PRIORITY VALUES: critical | high | medium | low
+# ============================================================================
+
+meta:
+  id: unified-instruct-templates
+  title: "Unified Instruct Templates for All Providers (Including KoboldCPP)"
+  created: "2026-04-06"
+  updated: "2026-04-06"
+  status: completed
+  authors:
+    - James
+  reviewers: []
+
+# ============================================================================
+# PROBLEM STATEMENT
+# ============================================================================
+
+problem:
+  summary: >
+    KoboldCPP prompt assembly bypasses the template system entirely, sending
+    plain "Name: message" transcript to the model. Modern instruct-tuned models
+    (Gemma 4, Llama 3/4, Mistral V7, Qwen) perform poorly without their
+    expected chat template tokens.
+  root_cause: >
+    _assemble_kobold() in prompt_assembly_service.py ignores template_format
+    and delegates to kobold_prompt_builder.build_story_prompt(), which produces
+    raw story-mode text. This was correct for completion-era models but is wrong
+    for instruct-tuned models.
+  evidence:
+    - file: backend/services/prompt_assembly_service.py
+      line: 226
+      detail: "_assemble_kobold() is called without template_format"
+    - file: backend/services/prompt_assembly_service.py
+      line: 453
+      detail: "_assemble_kobold() signature does not accept template_format"
+    - file: backend/kobold_prompt_builder.py
+      line: 78
+      detail: "build_story_prompt() formats as 'User: msg\\nChar: msg' with no instruct tokens"
+  reference_implementation:
+    project: SillyTavern
+    approach: >
+      Client-side template application. The same native KoboldCPP endpoint
+      receives a fully template-wrapped prompt string. use_story=false,
+      use_memory=false. Template is baked into the prompt before sending.
+    key_file: "public/scripts/instruct-mode.js"
+
+# ============================================================================
+# DESIGN DECISIONS
+# ============================================================================
+
+decisions:
+  keep_kobold_adapter:
+    decision: true
+    rationale:
+      - "memory/prompt split provides truncation protection (character card survives long conversations)"
+      - "Native sampling params (Mirostat, DRY, XTC, dynatemp, sampler_order) only available on native endpoint"
+      - "LogitShaper banned_tokens is KoboldCPP-exclusive"
+      - "Native endpoint is template-neutral — no risk of double-applying templates"
+      - "SSE wire format differs from OpenAI-compatible endpoints"
+
+  unify_prompt_formatting:
+    decision: true
+    rationale:
+      - "Native endpoint does raw text continuation — it doesn't care what's in the text"
+      - "SillyTavern proves template-wrapped prompts work on the same native endpoint"
+      - "Instruct-tuned models need their template tokens to perform well"
+
+  preserve_story_mode_fallback:
+    decision: true
+    rationale:
+      - "Backward compatibility for users who haven't selected a template"
+      - "Some completion-era models may still perform better in story mode"
+      - "When template_format is None, behavior is identical to current production"
+
+  architecture_summary: >
+    Template application becomes universal. Only the transport layer (how the
+    formatted prompt gets packaged for the wire) stays provider-specific.
+    KoboldCPP: template-wrapped content -> memory + prompt fields.
+    Others: template-wrapped content -> messages array.
+
+# ============================================================================
+# PHASES
+# ============================================================================
+
+phases:
+
+  # --------------------------------------------------------------------------
+  # PHASE 1: Extend Template Schema
+  # --------------------------------------------------------------------------
+  - id: phase-1
+    title: "Extend Template Schema"
+    priority: critical
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: []
+    notes: ""
+    description: >
+      Add new fields to the template type system and JSON definitions.
+      Purely additive — no behavioral change.
+
+    tasks:
+
+      - id: phase-1.1
+        title: "Add systemSameAsUser and outputSequence to TemplateSchema"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: frontend/src/types/templateTypes.ts
+        changes:
+          - location: "TemplateSchema z.object (line 7)"
+            action: add_fields
+            fields:
+              - name: systemSameAsUser
+                type: "z.boolean().optional().default(false)"
+                purpose: >
+                  When true, system content wraps in userFormat instead of
+                  systemFormat. Required for models without a native system
+                  role (Gemma, older Mistral).
+              - name: outputSequence
+                type: "z.string().optional()"
+                purpose: >
+                  The open assistant turn prefix appended at the end of the
+                  prompt. If absent, derived by splitting assistantFormat on
+                  {{content}} and taking the prefix.
+          - location: "ITemplate interface (line 28)"
+            action: add_fields
+            fields:
+              - name: "systemSameAsUser?"
+                type: boolean
+              - name: "outputSequence?"
+                type: string
+        acceptance:
+          - "TemplateSchema.parse() accepts objects with systemSameAsUser and outputSequence"
+          - "TemplateSchema.parse() accepts objects without these fields (backward compat)"
+          - "Existing template objects pass validation unchanged"
+
+      - id: phase-1.2
+        title: "Add Gemma 3/4 template to templates.json"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: frontend/src/config/templates.json
+        changes:
+          - location: "after gemma2 entry (line 103)"
+            action: insert_template
+            template:
+              id: gemma4
+              name: "Google Gemma 3/4"
+              description: "Format for Google Gemma 3 and Gemma 4 models (no system role)"
+              isBuiltIn: true
+              isEditable: false
+              systemFormat: null
+              systemSameAsUser: true
+              userFormat: "<start_of_turn>user\n{{content}}<end_of_turn>\n"
+              assistantFormat: "<start_of_turn>model\n{{char}}: {{content}}<end_of_turn>\n"
+              outputSequence: "<start_of_turn>model\n"
+              memoryFormat: "<start_of_turn>user\nPersona: {{description}}\nPersonality: {{personality}}\nScenario: {{scenario}}\n\n{{examples}}<end_of_turn>\n"
+              detectionPatterns: ["<start_of_turn>", "<end_of_turn>"]
+              stopSequences: ["<start_of_turn>", "<end_of_turn>", "{{user}}:"]
+              search: ["<start_of_turn>"]
+        acceptance:
+          - "Template loads via templateService.getTemplateById('gemma4')"
+          - "Template is visible in APICard template selector dropdown"
+
+      - id: phase-1.3
+        title: "Backfill outputSequence on existing templates"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: frontend/src/config/templates.json
+        changes:
+          - action: add_field_to_all_templates
+            field: outputSequence
+            values:
+              openai: "<|im_start|>assistant\n\n"
+              chatml-phi4: "<|im_start|>assistant<|im_sep|>"
+              chatml-qwen: "<|im_start|>assistant\n\n"
+              chatml: "<|im_start|>assistant\n\n"
+              gemma2: "<start_of_turn>model\n"
+              llama3: "<|start_header_id|>assistant<|end_header_id|>\n\n"
+              mistral-v7: ""
+              mistral-v3: ""
+              mistral: ""
+              phi-3.5: "<|assistant|>\n"
+              cohere: "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>"
+              deepseek: "<|Assistant|>"
+              alpaca: "### Response: "
+              metharme: "<|model|> "
+          - action: add_field_where_applicable
+            field: systemSameAsUser
+            value: true
+            templates: [gemma2]
+        acceptance:
+          - "Every built-in template has an explicit outputSequence"
+          - "gemma2 template has systemSameAsUser: true"
+
+      - id: phase-1.4
+        title: "Propagate new fields through generationService payload"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: frontend/src/services/generation/generationService.ts
+        changes:
+          - location: "templateFormat construction (~line 432)"
+            action: modify
+            detail: >
+              Include systemSameAsUser and outputSequence in the
+              template_format object sent to the backend.
+        acceptance:
+          - "POST /api/generate payload.api_config.template_format includes systemSameAsUser when true"
+          - "POST /api/generate payload.api_config.template_format includes outputSequence when present"
+
+  # --------------------------------------------------------------------------
+  # PHASE 2: Backend Template Helpers
+  # --------------------------------------------------------------------------
+  - id: phase-2
+    title: "Backend Template Helpers"
+    priority: critical
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: [phase-1]
+    notes: ""
+    description: >
+      Add helper methods to PromptAssemblyService for deriving the output
+      sequence and wrapping memory in template tokens. Teach _format_chat_history
+      about systemSameAsUser.
+
+    tasks:
+
+      - id: phase-2.1
+        title: "Add _get_output_sequence helper"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - action: add_method
+            class: PromptAssemblyService
+            method: "_get_output_sequence(self, template_format, char_name) -> str"
+            logic: >
+              If template_format has outputSequence, resolve variables and return.
+              Otherwise split assistantFormat on {{content}}, take the prefix,
+              resolve {{char}} -> char_name. Fallback: return '{char_name}:'.
+        acceptance:
+          - "Returns '<start_of_turn>model\\n' for gemma4 template"
+          - "Returns '<|im_start|>assistant\\n\\n' for openai template"
+          - "Returns 'CharName:' when no template provided"
+
+      - id: phase-2.2
+        title: "Add _wrap_memory_for_kobold helper"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - action: add_method
+            class: PromptAssemblyService
+            method: "_wrap_memory_for_kobold(self, memory, template_format, system_instruction, char_name, user_name) -> str"
+            logic: >
+              1. Prepend system_instruction to memory content if present.
+              2. If systemFormat is non-null, wrap in systemFormat.
+              3. Elif systemSameAsUser is true, wrap in userFormat.
+              4. Else wrap content bare.
+              5. Resolve {{content}}, {{char}}, {{user}} variables.
+        acceptance:
+          - "Gemma template wraps memory in <start_of_turn>user\\n...content...<end_of_turn>\\n"
+          - "ChatML template wraps memory in <|im_start|>system\\n\\n...content...<|im_end|>\\n\\n"
+          - "system_instruction appears before character card content inside the wrapper"
+
+      - id: phase-2.3
+        title: "Add systemSameAsUser handling to _format_chat_history"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "_format_chat_history (line 510)"
+            action: modify
+            detail: >
+              Read systemSameAsUser from template_format. When a message has
+              role=='system': if systemFormat exists, use it; elif
+              systemSameAsUser is true, use userFormat; else use userFormat
+              as fallback.
+        acceptance:
+          - "System messages use userFormat when systemSameAsUser=true and systemFormat is null"
+          - "System messages use systemFormat when it exists, regardless of systemSameAsUser"
+          - "No behavioral change for templates where systemSameAsUser is absent/false"
+
+  # --------------------------------------------------------------------------
+  # PHASE 3: Unify _assemble_kobold
+  # --------------------------------------------------------------------------
+  - id: phase-3
+    title: "Unify _assemble_kobold to Use Templates"
+    priority: critical
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: [phase-2]
+    notes: ""
+    description: >
+      The core change. Make _assemble_kobold accept template_format and apply
+      instruct formatting when a template is available. Preserve memory/prompt
+      split and story-mode fallback.
+
+    tasks:
+
+      - id: phase-3.1
+        title: "Pass template_format into _assemble_kobold from assemble()"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "assemble() method, is_kobold branch (~line 226)"
+            action: modify
+            detail: "Add template_format=template_format to _assemble_kobold() call"
+        acceptance:
+          - "_assemble_kobold receives the template_format dict from the payload"
+
+      - id: phase-3.2
+        title: "Rewrite _assemble_kobold to support templates"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "_assemble_kobold (line 453)"
+            action: modify
+            detail: >
+              Add template_format parameter to signature. When template_format
+              is provided:
+              1. Memory: call _wrap_memory_for_kobold() instead of raw prepend
+              2. Chat history: call _format_chat_history() instead of build_story_prompt()
+              3. Post-history: wrap in template user format
+              4. Generation stub: use _get_output_sequence() instead of 'CharName:'
+              5. Stop sequences: call _get_stop_sequences() instead of build_story_stop_sequences()
+              6. Do NOT append '\n***' (template tokens replace this delimiter)
+              7. Do NOT append '</s>' to stop sequences (KoboldCPP handles EOS natively)
+              When template_format is None: preserve current behavior exactly.
+        acceptance:
+          - "With gemma4 template: memory contains <start_of_turn>user\\n...card...<end_of_turn>"
+          - "With gemma4 template: prompt contains <start_of_turn>user\\n...msg...<end_of_turn>"
+          - "With gemma4 template: prompt ends with <start_of_turn>model\\n (open turn)"
+          - "With gemma4 template: stop_sequences include <start_of_turn> and <end_of_turn>"
+          - "With template_format=None: output identical to current production behavior"
+          - "memory/prompt split is preserved in all cases"
+          - "continuation_text appended after outputSequence when present"
+
+  # --------------------------------------------------------------------------
+  # PHASE 4: Update _assemble_instruct
+  # --------------------------------------------------------------------------
+  - id: phase-4
+    title: "Use outputSequence in _assemble_instruct"
+    priority: high
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: [phase-2]
+    notes: ""
+    description: >
+      Small improvement. Use the template outputSequence for the generation
+      stub instead of hardcoded '{char_name}:'.
+
+    tasks:
+
+      - id: phase-4.1
+        title: "Replace hardcoded generation stub with outputSequence"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "_assemble_instruct (~line 437)"
+            action: modify
+            detail: >
+              Use _get_output_sequence(template_format, char_name) instead of
+              f'{char_name}:' for the prompt suffix.
+        acceptance:
+          - "With ChatML template: prompt ends with '<|im_start|>assistant\\n\\n' not 'CharName:'"
+          - "With no template: falls back to 'CharName:'"
+          - "continuation_text appended correctly after outputSequence"
+
+  # --------------------------------------------------------------------------
+  # PHASE 5: Legacy api_handler.py Alignment
+  # --------------------------------------------------------------------------
+  - id: phase-5
+    title: "Legacy api_handler.py KoboldCPP Path"
+    priority: medium
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: [phase-3]
+    notes: ""
+    description: >
+      The non-backend_assembly KoboldCPP path in api_handler.py also needs
+      template awareness for users on older frontends.
+
+    tasks:
+
+      - id: phase-5.1
+        title: "Apply template formatting in legacy KoboldCPP rebuild block"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/api_handler.py
+        changes:
+          - location: "is_kobold block (~lines 940-1024)"
+            action: modify
+            detail: >
+              When template_format is available (read from api_config at line
+              857), use template-aware formatting instead of build_story_prompt()
+              and build_story_stop_sequences(). When template_format is absent,
+              preserve current behavior.
+          - location: "default stop sequences (~lines 609-621)"
+            action: modify
+            detail: >
+              When template_format is available, derive defaults from template
+              stopSequences instead of hardcoding.
+        acceptance:
+          - "Legacy path with template produces template-wrapped prompt"
+          - "Legacy path without template produces identical output to current production"
+
+  # --------------------------------------------------------------------------
+  # PHASE 6: Frontend Context Window Modal
+  # --------------------------------------------------------------------------
+  - id: phase-6
+    title: "Frontend ContextSerializer Alignment"
+    priority: medium
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: [phase-1]
+    notes: ""
+    description: >
+      Update the Context Window Modal preview to accurately reflect what
+      KoboldCPP will receive when templates are applied.
+
+    tasks:
+
+      - id: phase-6.1
+        title: "Handle systemSameAsUser in formatMessage"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: frontend/src/services/context/ContextSerializer.ts
+        changes:
+          - location: "formatMessage (line ~350)"
+            action: modify
+            detail: >
+              When message.role is 'system' and template.systemFormat is null
+              and template.systemSameAsUser is true, use template.userFormat
+              to wrap the message.
+        acceptance:
+          - "Context Window Modal shows Gemma-formatted system content wrapped in user tokens"
+          - "No change for templates where systemFormat is non-null"
+
+  # --------------------------------------------------------------------------
+  # PHASE 7: Dead Code Cleanup
+  # --------------------------------------------------------------------------
+  - id: phase-7
+    title: "Dead Code Cleanup"
+    priority: low
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: [phase-3, phase-5]
+    notes: ""
+    description: >
+      Remove dead code from kobold_prompt_builder.py and resolve duplication.
+      Only safe after phases 3 and 5 confirm template-aware paths work.
+
+    tasks:
+
+      - id: phase-7.1
+        title: "Remove clean_memory()"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/kobold_prompt_builder.py
+        changes:
+          - location: "clean_memory (line 213)"
+            action: delete_function
+            detail: >
+              Backend assembly bypasses this entirely. Confirmed unused in
+              active code paths.
+        acceptance:
+          - "Function removed"
+          - "No references remain (grep confirms)"
+          - "All tests pass"
+
+      - id: phase-7.2
+        title: "Deduplicate _strip_html"
+        status: deferred
+        completed_at: null
+        notes: "Implementations differ in behavior (kobold version handles br->newline, p->newline, blank line collapsing). Not a safe dedup without changing semantics."
+        file: backend/kobold_prompt_builder.py
+        changes:
+          - location: "_strip_html (line 60)"
+            action: replace_with_import
+            detail: >
+              Import strip_html_tags from prompt_assembly_service.py. Replace
+              internal calls to _strip_html with the shared utility. Delete
+              _strip_html.
+        acceptance:
+          - "Local _strip_html removed"
+          - "kobold_prompt_builder imports and uses shared strip_html_tags"
+          - "build_story_prompt and build_impersonate_prompt still produce identical output"
+
+      - id: phase-7.3
+        title: "Remove extract_block()"
+        status: deferred
+        completed_at: null
+        notes: "Still called by legacy path in api_handler.py lines 956-957. Defer until legacy non-backend_assembly path is retired."
+        file: backend/kobold_prompt_builder.py
+        changes:
+          - location: "extract_block (line 290)"
+            action: delete_function
+            precondition: "All callers migrated away (api_handler.py lines 964-965)"
+        acceptance:
+          - "Function removed"
+          - "No references remain"
+
+  # --------------------------------------------------------------------------
+  # PHASE 8: Legacy Endpoint Template Unification (Stretch)
+  # --------------------------------------------------------------------------
+  - id: phase-8
+    title: "Legacy Endpoint Template Unification"
+    priority: low
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: [phase-3]
+    notes: "All four methods now accept template_format. Callers in generation_endpoints.py thread api_config.get('template_format')."
+    description: >
+      The four legacy assembly methods each have is_kobold branches that bypass
+      templates. Update them to accept template_format and use unified logic.
+
+    tasks:
+
+      - id: phase-8.1
+        title: "Template-aware assemble_greeting"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "assemble_greeting (line 651)"
+            action: modify
+            detail: "Accept template_format. When provided and is_kobold, use template formatting."
+
+      - id: phase-8.2
+        title: "Template-aware assemble_impersonate"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "assemble_impersonate (line 721)"
+            action: modify
+            detail: "Accept template_format. When provided and is_kobold, use template formatting."
+
+      - id: phase-8.3
+        title: "Template-aware assemble_room_content"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "assemble_room_content (line 817)"
+            action: modify
+            detail: "Accept template_format. When provided and is_kobold, use template formatting."
+
+      - id: phase-8.4
+        title: "Template-aware assemble_thin_frame"
+        status: completed
+        completed_at: "2026-04-06"
+        notes: ""
+        file: backend/services/prompt_assembly_service.py
+        changes:
+          - location: "assemble_thin_frame (line 938)"
+            action: modify
+            detail: "Accept template_format. When provided and is_kobold, use template formatting."
+
+# ============================================================================
+# RISKS
+# ============================================================================
+
+risks:
+
+  - id: risk-1
+    title: "Existing KoboldCPP users get garbled output"
+    impact: high
+    probability: low
+    mitigation: >
+      When template_format is None, fall back to current plain-text story mode.
+      Users who never selected a template see no change.
+    phase: phase-3
+
+  - id: risk-2
+    title: "Template tokens increase memory field size"
+    impact: medium
+    probability: medium
+    mitigation: >
+      Template tokens add ~30-80 chars overhead. KoboldCPP max_context_length
+      handles this naturally. Log a warning if context budget is tight.
+    phase: phase-3
+
+  - id: risk-3
+    title: "Stop sequence mismatch causes runaway or premature cutoff"
+    impact: high
+    probability: medium
+    mitigation: >
+      Template-derived stop sequences replace hardcoded ones. Must test each
+      template family. Add all turn-boundary tokens as stops (matching
+      SillyTavern's sequences_as_stop_strings pattern).
+    phase: phase-3
+
+  - id: risk-4
+    title: "outputSequence derivation fails for edge-case custom templates"
+    impact: medium
+    probability: low
+    mitigation: >
+      Provide explicit outputSequence for all built-in templates. Derivation
+      from assistantFormat is only a fallback for custom templates.
+    phase: phase-1
+
+  - id: risk-5
+    title: "Gemma treats user-wrapped system content unexpectedly"
+    impact: medium
+    probability: low
+    mitigation: >
+      SillyTavern uses this exact approach (system_same_as_user) successfully
+      with Gemma 2/3. Test with actual Gemma 4 model.
+    phase: phase-3
+
+  - id: risk-6
+    title: "Legacy codepath divergence"
+    impact: medium
+    probability: medium
+    mitigation: >
+      Short-term: keep both paths working. Long-term: migrate all users to
+      backend_assembly=true and retire the legacy path.
+    phase: phase-5
+
+# ============================================================================
+# TESTING
+# ============================================================================
+
+testing:
+
+  unit_tests:
+
+    - id: test-1
+      title: "_format_chat_history with systemSameAsUser=true"
+      covers: [phase-2.3]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "System messages wrapped in userFormat when systemSameAsUser=true and systemFormat=null"
+        - "System messages wrapped in systemFormat when systemFormat exists"
+        - "User and assistant messages unaffected by systemSameAsUser"
+
+    - id: test-2
+      title: "_get_output_sequence derivation"
+      covers: [phase-2.1]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "Returns explicit outputSequence when present in template"
+        - "Derives prefix from assistantFormat when outputSequence absent"
+        - "Resolves {{char}} to character name"
+        - "Falls back to 'CharName:' when no template"
+
+    - id: test-3
+      title: "_wrap_memory_for_kobold with each template family"
+      covers: [phase-2.2]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "ChatML: wraps in <|im_start|>system ... <|im_end|>"
+        - "Gemma: wraps in <start_of_turn>user ... <end_of_turn>"
+        - "Llama 3: wraps in <|start_header_id|>system ... <|eot_id|>"
+        - "system_instruction prepended inside wrapper"
+
+    - id: test-4
+      title: "_assemble_kobold with template produces correct memory/prompt/stops"
+      covers: [phase-3.2]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "memory contains template-wrapped system block"
+        - "prompt contains template-wrapped chat history"
+        - "prompt ends with open assistant turn (outputSequence)"
+        - "stop_sequences derived from template stopSequences"
+        - "No *** separator when template is active"
+        - "continuation_text appended after outputSequence"
+
+    - id: test-5
+      title: "_assemble_kobold with template_format=None regression"
+      covers: [phase-3.2]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "Output identical to current production (plain transcript)"
+        - "*** separator present"
+        - "Stop sequences are ['User:', '\\nUser ']"
+
+  integration_tests:
+
+    - id: test-6
+      title: "Full flow: Gemma 4 template through KoboldCPP"
+      covers: [phase-1, phase-2, phase-3]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "Frontend sends template_format with systemSameAsUser=true and outputSequence"
+        - "Backend memory field: <start_of_turn>user\\n{card}<end_of_turn>\\n"
+        - "Backend prompt field: history with <start_of_turn>/<end_of_turn> tokens"
+        - "Backend prompt ends with: <start_of_turn>model\\n"
+        - "Stop sequences include <start_of_turn> and <end_of_turn>"
+        - "HTTP payload to KoboldCPP has correct memory and prompt"
+
+    - id: test-7
+      title: "Regression: non-KoboldCPP providers unchanged"
+      covers: [phase-4]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "OpenAI, Ollama, OpenRouter, Featherless, Claude, Gemini produce identical output"
+        - "outputSequence used for generation stub when available"
+
+    - id: test-8
+      title: "Regression: KoboldCPP with no template selected"
+      covers: [phase-3]
+      status: not_started
+      completed_at: null
+      assertions:
+        - "Behavior identical to current production"
+        - "No template tokens in memory or prompt"
+        - "Story-mode transcript format preserved"
+
+  manual_tests:
+
+    - id: test-9
+      title: "Live test with Gemma 4 model on KoboldCPP"
+      covers: [phase-1, phase-2, phase-3]
+      status: not_started
+      completed_at: null
+      steps:
+        - "Load Gemma 4 GGUF in KoboldCPP"
+        - "Select gemma4 template in CardShark API settings"
+        - "Start a chat with a character"
+        - "Verify coherent, in-character responses"
+        - "Compare quality against story-mode (no template)"
+      result: null
+
+    - id: test-10
+      title: "Live test with ChatML model (e.g., Qwen) on KoboldCPP"
+      covers: [phase-3]
+      status: not_started
+      completed_at: null
+      steps:
+        - "Load a ChatML model in KoboldCPP"
+        - "Select chatml template in CardShark API settings"
+        - "Verify coherent responses"
+        - "Check Context Window Modal shows correct formatting"
+      result: null
+
+    - id: test-11
+      title: "LogitShaper still functions with template-wrapped prompts"
+      covers: [phase-3]
+      status: not_started
+      completed_at: null
+      steps:
+        - "Enable a template for KoboldCPP"
+        - "Chat until word repetition triggers LogitShaper"
+        - "Verify banned_tokens populated in payload"
+        - "Verify repeated words are suppressed"
+      result: null
+
+# ============================================================================
+# FILES INVENTORY
+# ============================================================================
+
+files:
+
+  modify:
+    - path: frontend/src/types/templateTypes.ts
+      phases: [phase-1]
+      reason: "Add systemSameAsUser and outputSequence to schema and interface"
+
+    - path: frontend/src/config/templates.json
+      phases: [phase-1]
+      reason: "Add Gemma 3/4 template; backfill outputSequence on all templates"
+
+    - path: frontend/src/services/generation/generationService.ts
+      phases: [phase-1]
+      reason: "Propagate new template fields through payload"
+
+    - path: frontend/src/services/context/ContextSerializer.ts
+      phases: [phase-6]
+      reason: "Handle systemSameAsUser in Context Window Modal preview"
+
+    - path: backend/services/prompt_assembly_service.py
+      phases: [phase-2, phase-3, phase-4, phase-8]
+      reason: "Add helpers; unify _assemble_kobold; update _assemble_instruct"
+
+    - path: backend/api_handler.py
+      phases: [phase-5]
+      reason: "Template awareness in legacy KoboldCPP path"
+
+  cleanup:
+    - path: backend/kobold_prompt_builder.py
+      phases: [phase-7]
+      functions_to_remove: [clean_memory, _strip_html, extract_block]
+      functions_to_keep: [is_kobold_provider, build_story_memory, build_story_prompt, build_story_stop_sequences, build_greeting_prompt, build_impersonate_prompt, build_room_content_prompt, fold_system_instruction]
+
+  no_change:
+    - path: backend/api_provider_adapters.py
+      reason: "KoboldCppAdapter transport layer unchanged — still sends memory + prompt to native endpoint"
+    - path: backend/logit_shaper.py
+      reason: "Operates on generation_settings, not prompt structure"
+    - path: backend/koboldcpp_handler.py
+      reason: "Process lifecycle management, unrelated to prompt formatting"
+    - path: backend/koboldcpp_manager.py
+      reason: "Download/update management, unrelated to prompt formatting"
+
+# ============================================================================
+# FOLLOW-UP: Gemma 4 Thinking Channel Filter
+# ============================================================================
+
+follow_up:
+
+  - id: followup-1
+    title: "ThinkingTagFilter: Support Gemma 4 channel format"
+    priority: high
+    status: completed
+    started_at: "2026-04-06"
+    completed_at: "2026-04-06"
+    blocked_by: []
+    notes: ""
+    description: >
+      Gemma 4 uses <|channel>thought ... <channel|> for chain-of-thought
+      reasoning instead of <think>/<thinking> XML tags. The existing
+      ThinkingTagFilter in api_handler.py only handles the XML format.
+      Gemma 4 thinking blocks will leak through to the chat UI.
+    file: backend/api_handler.py
+    changes:
+      - location: "ThinkingTagFilter class (line 12)"
+        action: modify
+        detail: >
+          Add '<|channel>thought' to OPEN_TAGS and '<channel|>' to CLOSE_TAGS.
+          Update _STRIP_RE to also match the channel format. Update
+          MAX_TAG_LEN accordingly. The state machine logic (NORMAL vs
+          INSIDE_THINKING) should work unchanged — only the tag lists and
+          regex need updating.
+    acceptance:
+      - "Streaming output strips <|channel>thought...<channel|> blocks"
+      - "Non-streaming strip_thinking_tags() also handles channel format"
+      - "Existing <think>/<thinking> handling unaffected"
+      - "Partial channel tag prefixes buffered correctly (no false positives)"

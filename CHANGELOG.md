@@ -7,7 +7,25 @@ For earlier history, see `docs/docs/archivedOLD/CHANGELOG.md`.
 
 ---
 
-## [Unreleased] - 2026-03-21
+## [Unreleased] - 2026-04-06
+
+### Added
+- **Unified instruct templates for KoboldCPP** — KoboldCPP now applies the selected instruct template (ChatML, Llama 3, Gemma, Mistral, etc.) to prompts, matching what all other providers already did. Template tokens are baked into the prompt string before sending to KoboldCPP's native endpoint, while preserving the memory/prompt split for truncation protection. When no template is selected, falls back to the original plain story-mode transcript for backward compatibility.
+- **Google Gemma 4 template** — new template (`gemma4`) with `<|turn>system`/`<|turn>user`/`<|turn>model` tokens and dedicated system role support
+- **Template schema: `systemSameAsUser` and `outputSequence` fields** — `systemSameAsUser` wraps system content in user tokens for models without a native system role (Gemma 2); `outputSequence` explicitly defines the open assistant turn prefix appended at the end of prompts
+- **ThinkingTagFilter: Gemma 4 channel format** — streaming filter now strips `<|channel>thought...<channel|>` blocks in addition to `<think>`/`<thinking>` XML tags
+- **Tests** — `test_unified_instruct_templates.py` (34 tests covering output sequence derivation, memory wrapping, systemSameAsUser, template-aware KoboldCPP assembly, legacy endpoint template threading, Gemma 4 thinking filter)
+
+### Changed
+- **Template system: all providers use the same formatting pipeline** — `_assemble_kobold()` now dispatches to `_assemble_kobold_instruct()` (template-aware) or `_assemble_kobold_story()` (fallback), eliminating the hard fork between KoboldCPP and instruct providers
+- **Legacy endpoints template-aware** — `assemble_greeting`, `assemble_impersonate`, `assemble_room_content`, `assemble_thin_frame` now accept `template_format` and apply it for KoboldCPP when available
+- **`_assemble_instruct` uses `outputSequence`** — generation stub now uses the template's output sequence instead of hardcoded `{char_name}:`, improving prompt format consistency for all providers
+- **`outputSequence` backfilled** — all 14 built-in templates now have explicit `outputSequence` values
+
+### Removed
+- **`clean_memory()` in `kobold_prompt_builder.py`** — dead code; backend assembly bypasses it entirely
+
+## [Previous] - 2026-03-21
 
 ### Added
 - **Character Images: `is_default` column** — `character_images` table now tracks which secondary image is starred via `is_default` boolean; added in-place ALTER TABLE migration (no DB rebuild)
