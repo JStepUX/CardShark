@@ -269,7 +269,8 @@ class CompressionService:
                 result.get('response', '')
                 or result.get('results', [{}])[0].get('text', '')
             )
-        elif provider in ('OpenAI', 'OpenRouter', 'Featherless', 'Ollama'):
+        elif (provider in ('OpenAI', 'OpenRouter', 'Featherless', 'Ollama')
+              or api_config.get('useOpenAICompat')):
             content = (
                 result.get('choices', [{}])[0]
                 .get('message', {})

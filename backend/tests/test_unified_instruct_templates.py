@@ -448,6 +448,39 @@ class TestUseOpenAICompat:
         assert data['rep_pen_range'] == 512
         assert data['sampler_order'] == [0, 1, 2]
 
+    def test_openai_adapter_no_native_fields_leak(self):
+        """Compat adapter must not send native-only fields like memory or prompt."""
+        from backend.api_provider_adapters import KoboldCppOpenAIAdapter
+        adapter = KoboldCppOpenAIAdapter(FakeLogger())
+        data = adapter.prepare_request_data(
+            prompt='Hello', memory='sys', stop_sequence=[],
+            generation_settings={},
+        )
+        # These are native KoboldCPP fields that the OpenAI endpoint doesn't use
+        assert 'replace_instruct_placeholders' not in data
+        assert 'use_default_badwordsids' not in data
+        assert 'genkey' not in data
+        assert 'render_special' not in data
+
+    def test_test_connection_payload_accepts_compat_flag(self):
+        """TestConnectionPayload should accept useOpenAICompat field."""
+        from backend.endpoints.settings_endpoints import TestConnectionPayload
+        payload = TestConnectionPayload(
+            url='http://localhost:5001',
+            provider='KoboldCPP',
+            useOpenAICompat=True,
+        )
+        assert payload.useOpenAICompat is True
+
+    def test_test_connection_payload_defaults_none(self):
+        """TestConnectionPayload should default useOpenAICompat to None."""
+        from backend.endpoints.settings_endpoints import TestConnectionPayload
+        payload = TestConnectionPayload(
+            url='http://localhost:5001',
+            provider='KoboldCPP',
+        )
+        assert payload.useOpenAICompat is None
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ThinkingTagFilter: Gemma 4 channel format

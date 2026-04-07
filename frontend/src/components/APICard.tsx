@@ -155,7 +155,8 @@ export const APICard: React.FC<APICardProps> = ({
             apiKey: configToPersist.apiKey,
             provider: configToPersist.provider,
             model: configToPersist.model,
-            templateId: configToPersist.templateId
+            templateId: configToPersist.templateId,
+            ...(configToPersist.useOpenAICompat ? { useOpenAICompat: true } : {}),
           })
         });
         const data = await response.json();
@@ -221,7 +222,8 @@ export const APICard: React.FC<APICardProps> = ({
           apiKey: editableApi.apiKey,
           provider: editableApi.provider,
           model: editableApi.model || undefined,
-          templateId: editableApi.templateId || undefined
+          templateId: editableApi.templateId || undefined,
+          ...(editableApi.useOpenAICompat ? { useOpenAICompat: true } : {}),
         })
       });
 

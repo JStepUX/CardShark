@@ -469,68 +469,67 @@ class ApiHandler:
                 
             # Use requests directly for non-streaming request
             adapter = get_provider_adapter(provider, self.logger, api_config)
-            # Construct the non-streaming endpoint directly for KoboldCPP
-            # Assuming '/api/extra/generate' is the correct non-streaming endpoint
-            # The adapter might incorrectly return the streaming URL here.
-            # Use the standard KoboldCPP non-streaming endpoint
-            endpoint = url.rstrip('/') + '/api/generate'
             headers = adapter.prepare_headers(api_key)
-            # --- Construct payload specifically for non-streaming ---
-            if provider == 'KoboldCPP':
-                 # For KoboldCPP non-streaming, build a specific payload.
-                 # Filter generation_settings to known valid non-streaming params.
-                 self.logger.log_step("Constructing specific payload for KoboldCPP non-streaming")
+
+            # Determine if this is native KoboldCPP (not OpenAI-compat mode)
+            from backend.kobold_prompt_builder import is_kobold_provider
+            is_native_kobold = is_kobold_provider(api_config)
+
+            # --- Construct endpoint and payload ---
+            if is_native_kobold:
+                 # Native KoboldCPP non-streaming: /api/generate with native payload
+                 endpoint = url.rstrip('/') + '/api/generate'
+                 self.logger.log_step("Constructing payload for KoboldCPP native non-streaming")
                  known_params = [
                      'n', 'max_context_length', 'max_length', 'rep_pen', 'temperature',
                      'top_p', 'top_k', 'top_a', 'typical', 'tfs', 'rep_pen_range',
                      'rep_pen_slope', 'sampler_order', 'min_p', 'dynatemp_range',
                      'dynatemp_exponent', 'smoothing_factor', 'presence_penalty', 'frequency_penalty', 'logit_bias',
-                     'use_default_badwordsids', 'mirostat', 'mirostat_tau', 'mirostat_eta' # Add other known params
+                     'use_default_badwordsids', 'mirostat', 'mirostat_tau', 'mirostat_eta',
                  ]
                  relevant_settings = {k: v for k, v in generation_settings.items() if k in known_params}
 
                  data = {
                      **relevant_settings,
-                     "prompt": prompt, # Prompt already contains memory context
+                     "prompt": prompt,
                      "stop_sequence": stop_sequence,
-                     "stream": False, # Explicitly false
+                     "stream": False,
                      "quiet": True,
-                     "trim_stop": True
-                     # DO NOT include the explicit "memory" field here for non-streaming
+                     "trim_stop": True,
                  }
                  self.logger.log_step(f"KoboldCPP non-streaming payload keys: {list(data.keys())}")
             else:
-                 # For other providers, use the adapter's preparation but ensure stream=False
+                 # All other providers (including KoboldCPP in OpenAI-compat mode):
+                 # use the adapter's preparation and derive endpoint from adapter
+                 endpoint = adapter.get_endpoint_url(url)
                  data = adapter.prepare_request_data(prompt, memory, stop_sequence, generation_settings)
-                 data['stream'] = False # Ensure stream is explicitly false
+                 data['stream'] = False
 
             # --- End payload construction ---
             self.logger.log_step(f"Making non-streaming request to {endpoint}")
-            
+
             async with httpx.AsyncClient(verify=certifi.where()) as client:
                 response = await client.post(endpoint, headers=headers, json=data, timeout=30)
-            
+
             if response.status_code != 200:
                 raise ValueError(f"API returned error {response.status_code}: {response.text}")
-                
+
             # Log the raw response text for debugging
             raw_response_text = response.text
-            self.logger.log_step(f"Raw response text from non-streaming endpoint: {raw_response_text[:500]}...") # Log first 500 chars
-            
+            self.logger.log_step(f"Raw response text from non-streaming endpoint: {raw_response_text[:500]}...")
+
             result = response.json()
-            
-            # Extract content based on provider
+
+            # Extract content based on provider/adapter type
             content = ""
-            if provider == 'KoboldCPP':
-                # Correctly extract text from KoboldCPP non-streaming response
-                # Extract text from the 'response' key for KoboldCPP /api/generate
+            if is_native_kobold:
                 content = result.get('response', '')
-            elif provider in ['OpenAI', 'OpenRouter', 'Ollama']:
+            elif provider in ['OpenAI', 'OpenRouter', 'Ollama'] or api_config.get('useOpenAICompat'):
+                # OpenAI-format response (including KoboldCPP in compat mode)
                 content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
             elif provider == 'Claude':
                 content = result.get('content', [{}])[0].get('text', '')
             else:
-                # Generic fallback
                 content = str(result)
 
             # Strip thinking tags from non-streaming responses

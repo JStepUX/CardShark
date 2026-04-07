@@ -57,6 +57,7 @@ class TestConnectionPayload(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     templateId: Optional[str] = None
+    useOpenAICompat: Optional[bool] = None
 
 class FeatherlessModelsPayload(BaseModel):
     url: str
@@ -234,7 +235,16 @@ async def test_api_connection(
         logger.log_step(f"Provider: {provider}")
         logger.log_step(f"Model: {model}")
 
-        adapter = get_provider_adapter(provider, logger)
+        # Build api_config for adapter factory (needed for useOpenAICompat routing)
+        test_api_config = {
+            'provider': provider,
+            'url': url,
+            'apiKey': api_key,
+        }
+        if payload.useOpenAICompat:
+            test_api_config['useOpenAICompat'] = True
+
+        adapter = get_provider_adapter(provider, logger, test_api_config)
 
         if provider == 'Featherless':
             logger.log_step(f"Testing Featherless AI chat completion (streamed) from: {url}")
