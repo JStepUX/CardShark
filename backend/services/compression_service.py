@@ -218,7 +218,7 @@ class CompressionService:
         generation_settings = api_config.get('generation_settings', {})
         is_kobold = is_kobold_provider(api_config)
 
-        adapter = get_provider_adapter(provider, self.logger)
+        adapter = get_provider_adapter(provider, self.logger, api_config)
         headers = adapter.prepare_headers(api_key)
 
         if is_kobold:

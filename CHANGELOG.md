@@ -14,7 +14,8 @@ For earlier history, see `docs/docs/archivedOLD/CHANGELOG.md`.
 - **Google Gemma 4 template** — new template (`gemma4`) with `<|turn>system`/`<|turn>user`/`<|turn>model` tokens and dedicated system role support
 - **Template schema: `systemSameAsUser` and `outputSequence` fields** — `systemSameAsUser` wraps system content in user tokens for models without a native system role (Gemma 2); `outputSequence` explicitly defines the open assistant turn prefix appended at the end of prompts
 - **ThinkingTagFilter: Gemma 4 channel format** — streaming filter now strips `<|channel>thought...<channel|>` blocks in addition to `<think>`/`<thinking>` XML tags
-- **Tests** — `test_unified_instruct_templates.py` (34 tests covering output sequence derivation, memory wrapping, systemSameAsUser, template-aware KoboldCPP assembly, legacy endpoint template threading, Gemma 4 thinking filter)
+- **KoboldCPP: OpenAI-compatible mode toggle** — per-API-config `useOpenAICompat` flag switches KoboldCPP from the native `/api/generate` endpoint to `/v1/chat/completions`, where KoboldCPP applies the model's chat template server-side. Required for models like Gemma 4 whose special tokens must be tokenizer-resolved. Preserves the full KoboldCPP sampling parameter surface (top_a, typical, tfs, mirostat, DRY, etc.) via pass-through. Disables memory/prompt truncation protection.
+- **Tests** — `test_unified_instruct_templates.py` (42 tests covering output sequence derivation, memory wrapping, systemSameAsUser, template-aware KoboldCPP assembly, legacy endpoint template threading, Gemma 4 thinking filter, OpenAI-compat toggle and adapter)
 
 ### Changed
 - **Template system: all providers use the same formatting pipeline** — `_assemble_kobold()` now dispatches to `_assemble_kobold_instruct()` (template-aware) or `_assemble_kobold_story()` (fallback), eliminating the hard fork between KoboldCPP and instruct providers

@@ -10,8 +10,15 @@ from typing import Dict, List, Optional
 
 
 def is_kobold_provider(api_config: dict) -> bool:
-    """Returns True if the configured provider is KoboldCPP."""
-    return api_config.get('provider', '') == 'KoboldCPP'
+    """Returns True if the provider is KoboldCPP using the native endpoint.
+
+    Returns False when useOpenAICompat is enabled, since that routes through
+    the OpenAI-compatible /v1/chat/completions endpoint and should use the
+    instruct assembly path instead of story-mode.
+    """
+    if api_config.get('provider', '') != 'KoboldCPP':
+        return False
+    return not api_config.get('useOpenAICompat', False)
 
 
 def build_story_memory(character_data: dict, system_instruction: Optional[str] = None) -> str:

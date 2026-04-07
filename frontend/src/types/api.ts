@@ -197,6 +197,7 @@ export const APIConfigSchema = z.object({
   model: z.string().optional(),
   templateId: z.string().optional(),
   generation_settings: z.record(z.string(), z.any()).optional(),
+  useOpenAICompat: z.boolean().optional(),
   enabled: z.boolean().default(false),
   lastConnectionStatus: z.object({
     connected: z.boolean(),

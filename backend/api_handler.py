@@ -468,7 +468,7 @@ class ApiHandler:
                 raise ValueError("Prompt is missing in generation_params")
                 
             # Use requests directly for non-streaming request
-            adapter = get_provider_adapter(provider, self.logger)
+            adapter = get_provider_adapter(provider, self.logger, api_config)
             # Construct the non-streaming endpoint directly for KoboldCPP
             # Assuming '/api/extra/generate' is the correct non-streaming endpoint
             # The adapter might incorrectly return the streaming URL here.
@@ -1119,7 +1119,7 @@ class ApiHandler:
                 raise ValueError("Prompt is missing in generation_params")
 
             # Get the appropriate adapter for this provider
-            adapter = get_provider_adapter(provider, self.logger)
+            adapter = get_provider_adapter(provider, self.logger, api_config)
             self.logger.log_step(f"Using adapter for provider: {provider}")
 
             # Use the adapter to stream the response

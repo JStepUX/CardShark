@@ -372,6 +372,84 @@ class TestLegacyEndpointTemplateThreading:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# useOpenAICompat toggle
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestUseOpenAICompat:
+
+    def test_is_kobold_false_when_compat_enabled(self):
+        from backend.kobold_prompt_builder import is_kobold_provider
+        config = {'provider': 'KoboldCPP', 'useOpenAICompat': True}
+        assert is_kobold_provider(config) is False
+
+    def test_is_kobold_true_when_compat_disabled(self):
+        from backend.kobold_prompt_builder import is_kobold_provider
+        config = {'provider': 'KoboldCPP', 'useOpenAICompat': False}
+        assert is_kobold_provider(config) is True
+
+    def test_is_kobold_true_when_compat_absent(self):
+        from backend.kobold_prompt_builder import is_kobold_provider
+        config = {'provider': 'KoboldCPP'}
+        assert is_kobold_provider(config) is True
+
+    def test_adapter_factory_returns_openai_adapter_when_compat(self):
+        from backend.api_provider_adapters import (
+            get_provider_adapter, KoboldCppOpenAIAdapter,
+        )
+        config = {'provider': 'KoboldCPP', 'useOpenAICompat': True}
+        adapter = get_provider_adapter('KoboldCPP', FakeLogger(), config)
+        assert isinstance(adapter, KoboldCppOpenAIAdapter)
+
+    def test_adapter_factory_returns_native_adapter_normally(self):
+        from backend.api_provider_adapters import (
+            get_provider_adapter, KoboldCppAdapter,
+        )
+        config = {'provider': 'KoboldCPP'}
+        adapter = get_provider_adapter('KoboldCPP', FakeLogger(), config)
+        assert isinstance(adapter, KoboldCppAdapter)
+
+    def test_openai_adapter_endpoint_url(self):
+        from backend.api_provider_adapters import KoboldCppOpenAIAdapter
+        adapter = KoboldCppOpenAIAdapter(FakeLogger())
+        url = adapter.get_endpoint_url('http://localhost:5001')
+        assert url == 'http://localhost:5001/v1/chat/completions'
+
+    def test_openai_adapter_sends_messages_array(self):
+        from backend.api_provider_adapters import KoboldCppOpenAIAdapter
+        adapter = KoboldCppOpenAIAdapter(FakeLogger())
+        data = adapter.prepare_request_data(
+            prompt='Hello', memory='System prompt',
+            stop_sequence=['</s>'],
+            generation_settings={'max_length': 100, 'temperature': 0.8},
+        )
+        assert 'messages' in data
+        assert data['messages'][0] == {'role': 'system', 'content': 'System prompt'}
+        assert data['messages'][1] == {'role': 'user', 'content': 'Hello'}
+        assert 'memory' not in data  # no native kobold fields
+        assert 'prompt' not in data
+
+    def test_openai_adapter_preserves_kobold_sampling_params(self):
+        from backend.api_provider_adapters import KoboldCppOpenAIAdapter
+        adapter = KoboldCppOpenAIAdapter(FakeLogger())
+        data = adapter.prepare_request_data(
+            prompt='Hello', memory=None, stop_sequence=[],
+            generation_settings={
+                'top_k': 40, 'top_a': 0.5, 'typical': 0.9,
+                'tfs': 0.95, 'min_p': 0.1, 'rep_pen': 1.15,
+                'rep_pen_range': 512, 'sampler_order': [0, 1, 2],
+            },
+        )
+        assert data['top_k'] == 40
+        assert data['top_a'] == 0.5
+        assert data['typical'] == 0.9
+        assert data['tfs'] == 0.95
+        assert data['min_p'] == 0.1
+        assert data['rep_pen'] == 1.15
+        assert data['rep_pen_range'] == 512
+        assert data['sampler_order'] == [0, 1, 2]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # ThinkingTagFilter: Gemma 4 channel format
 # ══════════════════════════════════════════════════════════════════════════════
 

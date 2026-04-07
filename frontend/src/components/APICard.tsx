@@ -576,6 +576,29 @@ export const APICard: React.FC<APICardProps> = ({
         </div>
       )}
 
+      {/* KoboldCPP OpenAI-Compatible Mode Toggle */}
+      {editableApi.provider === APIProvider.KOBOLD && (
+        <div className="p-3 bg-stone-900/50 rounded-lg">
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <div className="text-sm font-medium text-gray-300">Use Chat Completions API</div>
+              <div className="text-xs text-gray-500">
+                Send structured messages to /v1/chat/completions instead of the native endpoint.
+                Required for some models (e.g., Gemma 4). Disables memory/prompt truncation protection.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={editableApi.useOpenAICompat || false}
+              onChange={(e) => {
+                handleLocalUpdate({ useOpenAICompat: e.target.checked });
+              }}
+              className="w-4 h-4 rounded border-gray-600 bg-stone-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-stone-900"
+            />
+          </label>
+        </div>
+      )}
+
       {/* API Key Field */}
       {currentProviderConfig.requiresApiKey && (
         <div>

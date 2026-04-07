@@ -1398,8 +1398,126 @@ class FeatherlessAdapter(ApiProviderAdapter):
             return {"success": False, "error": error_msg}
 
 
-def get_provider_adapter(provider: str, logger) -> ApiProviderAdapter:
-    """Factory function to get the appropriate adapter for a provider"""
+class KoboldCppOpenAIAdapter(ApiProviderAdapter):
+    """Adapter for KoboldCPP using the OpenAI-compatible /v1/chat/completions endpoint.
+
+    Used when useOpenAICompat is enabled. Sends structured messages (system/user/
+    assistant roles) and lets KoboldCPP apply the model's chat template server-side.
+    Preserves KoboldCPP's full native sampling parameter surface.
+    """
+
+    def get_endpoint_url(self, base_url: str) -> str:
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = f'http://{base_url}'
+        return base_url.rstrip('/') + '/v1/chat/completions'
+
+    def prepare_headers(self, api_key: Optional[str]) -> Dict[str, str]:
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+        }
+        if api_key:
+            headers['Authorization'] = f'Bearer {api_key}'
+        return headers
+
+    def prepare_request_data(self,
+                             prompt: str,
+                             memory: Optional[str],
+                             stop_sequence: List[str],
+                             generation_settings: Dict[str, Any]) -> Dict[str, Any]:
+        """Build an OpenAI chat-completions payload with KoboldCPP sampling params."""
+
+        # Build messages array: system message (memory) + user message (prompt)
+        messages = []
+        if memory:
+            messages.append({"role": "system", "content": memory})
+        messages.append({"role": "user", "content": prompt})
+
+        # Standard OpenAI fields
+        data: Dict[str, Any] = {
+            "messages": messages,
+            "max_tokens": generation_settings.get('max_length', 220),
+            "temperature": generation_settings.get('temperature', 0.85),
+            "top_p": generation_settings.get('top_p', 0.9),
+            "presence_penalty": generation_settings.get('presence_penalty', 0),
+            "frequency_penalty": generation_settings.get('frequency_penalty', 0),
+            "stop": stop_sequence,
+            "stream": True,
+        }
+
+        model = generation_settings.get('model', '')
+        if model:
+            data["model"] = model
+
+        # KoboldCPP-native sampling params — passed through by KoboldCPP's
+        # OpenAI-compatible endpoint even though they're not standard OpenAI
+        data["top_k"] = generation_settings.get('top_k', 80)
+        data["top_a"] = generation_settings.get('top_a', 0)
+        data["typical"] = generation_settings.get('typical', 1.0)
+        data["tfs"] = generation_settings.get('tfs', 1)
+        data["min_p"] = generation_settings.get('min_p', 0.05)
+        data["rep_pen"] = generation_settings.get('rep_pen', 1.08)
+        data["rep_pen_range"] = generation_settings.get('rep_pen_range', 256)
+        data["rep_pen_slope"] = generation_settings.get('rep_pen_slope', 0.7)
+        data["sampler_order"] = generation_settings.get('sampler_order', [6, 0, 1, 3, 4, 2, 5])
+        data["smoothing_factor"] = generation_settings.get('smoothing_factor', 0)
+
+        # DynaTemp
+        dynatemp_enabled = generation_settings.get('dynatemp_enabled', False)
+        if dynatemp_enabled:
+            dynatemp_min = generation_settings.get('dynatemp_min', 0.0)
+            dynatemp_max = generation_settings.get('dynatemp_max', 2.0)
+            data["dynatemp_range"] = max(0, dynatemp_max - dynatemp_min)
+        else:
+            data["dynatemp_range"] = 0
+        data["dynatemp_exponent"] = generation_settings.get('dynatemp_exponent', 1)
+
+        nsigma = generation_settings.get('nsigma', 0)
+        if nsigma:
+            data["nsigma"] = nsigma
+
+        banned_tokens = generation_settings.get('banned_tokens', [])
+        if banned_tokens:
+            data["banned_tokens"] = banned_tokens
+
+        self.logger.log_step(f"KoboldCPP OpenAI-compat payload: {len(messages)} messages, {len(data)} params")
+        return data
+
+    def parse_streaming_response(self, line: bytes) -> Optional[Dict[str, Any]]:
+        """Parse OpenAI-format SSE response from KoboldCPP."""
+        try:
+            line_text = line.decode('utf-8')
+            if line_text.startswith('data: '):
+                data_portion = line_text[6:]
+                if data_portion.strip() == "[DONE]":
+                    return None
+                try:
+                    content = json.loads(data_portion)
+                    if 'choices' in content and len(content['choices']) > 0:
+                        choice = content['choices'][0]
+                        if 'delta' in choice and 'content' in choice['delta']:
+                            return {'content': choice['delta']['content']}
+                    return None
+                except json.JSONDecodeError:
+                    self.logger.log_error(f"Invalid JSON in KoboldCPP OpenAI response: {data_portion}")
+                    return None
+            return None
+        except Exception as e:
+            self.logger.log_error(f"Error parsing KoboldCPP OpenAI response: {e}")
+            return None
+
+
+def get_provider_adapter(provider: str, logger, api_config: Optional[Dict] = None) -> ApiProviderAdapter:
+    """Factory function to get the appropriate adapter for a provider.
+
+    When provider is KoboldCPP and api_config has useOpenAICompat=true,
+    returns KoboldCppOpenAIAdapter instead of the native KoboldCppAdapter.
+    """
+    # KoboldCPP OpenAI-compatible mode check
+    if provider == 'KoboldCPP' and api_config and api_config.get('useOpenAICompat'):
+        logger.log_step("KoboldCPP: using OpenAI-compatible /v1/chat/completions endpoint")
+        return KoboldCppOpenAIAdapter(logger)
+
     adapters = {
         'KoboldCPP': KoboldCppAdapter,
         'Ollama': OllamaAdapter,
@@ -1408,10 +1526,10 @@ def get_provider_adapter(provider: str, logger) -> ApiProviderAdapter:
         'OpenRouter': OpenRouterAdapter,
         'Featherless': FeatherlessAdapter,
     }
-    
+
     adapter_class = adapters.get(provider)
     if not adapter_class:
         logger.log_warning(f"Unsupported provider: {provider}, falling back to KoboldCPP")
         adapter_class = KoboldCppAdapter
-        
+
     return adapter_class(logger)
