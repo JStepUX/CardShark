@@ -59,9 +59,13 @@ Docs live in `docs/vendor/` (migration) and `docs/vendor/reference/` (durable AP
 
 **The template is not applied by KoboldCPP** — CardShark bakes all instruct tokens into the prompt string before sending to the native `/api/extra/generate/stream` endpoint. The `outputSequence` field in `templates.json` defines the open assistant turn (e.g., `<start_of_turn>model\n`). Empty `outputSequence` means "derive from `assistantFormat`," not "no prefix."
 
+## Settings Persistence — `undefined` vs `null`
+
+The backend `deep_merge()` in `settings_manager.py` treats `null` as a **delete signal** (`destination.pop(key, None)`). `JSON.stringify` drops `undefined` values entirely, so an absent key is **never touched** by the merge — the old value survives. When clearing an optional field (like `templateId`), send `null` on the wire for persistence, not `undefined`. Use `undefined` for the in-memory React state to satisfy TypeScript types.
+
 ## Test Runners
 
-- **Frontend:** Vitest (`npm test` from `frontend/`). Config in `frontend/vitest.config.ts`. Uses Vite's SWC pipeline + `jsdom`.
+- **Frontend:** Vitest (`npm test` from `frontend/`). Config in `frontend/vitest.config.ts`. Uses Vite's SWC pipeline + `jsdom`. **Mock stability warning:** When mocking React context hooks (e.g. `useAPIConfig`, `useSettings`) for components that use `useEffect`, the mock must return **stable object references** (define the mock data in module scope, not inline). React 18 concurrent mode will infinite-loop on fresh object refs from hook mocks, causing vitest to hang silently at "RUN" with no output.
 - **Backend:** pytest (`pytest` from `backend/`). Python + FastAPI. Smoke tests in `backend/tests/smoke/` use in-memory SQLite with patched side effects.
 - **Build:** `python build.py` generates `CardShark.spec` — never edit the spec directly.
 - **Monolith gate:** `file-size.test.ts` fails if any source file exceeds 1000 lines (allowlist in the test file).

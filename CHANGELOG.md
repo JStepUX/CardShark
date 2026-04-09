@@ -7,9 +7,10 @@ For earlier history, see `docs/docs/archivedOLD/CHANGELOG.md`.
 
 ---
 
-## [Unreleased] - 2026-04-06
+## [Unreleased] - 2026-04-09
 
 ### Added
+- **Chat template switcher in Generation Settings** — dropdown above Quick Tune in the chat side panel lets you change the active instruct template without leaving the chat. Reads from the same template list managed in Settings/Templates. Clearing the selection sends `null` on the wire (not `undefined`) so the backend's `deep_merge` correctly deletes the key.
 - **Unified instruct templates for KoboldCPP** — KoboldCPP now applies the selected instruct template (ChatML, Llama 3, Gemma, Mistral, etc.) to prompts, matching what all other providers already did. Template tokens are baked into the prompt string before sending to KoboldCPP's native endpoint, while preserving the memory/prompt split for truncation protection. When no template is selected, falls back to the original plain story-mode transcript for backward compatibility.
 - **Google Gemma 4 template** — new template (`gemma4`) with `<|turn>system`/`<|turn>user`/`<|turn>model` tokens and dedicated system role support
 - **Template schema: `systemSameAsUser` and `outputSequence` fields** — `systemSameAsUser` wraps system content in user tokens for models without a native system role (Gemma 2); `outputSequence` explicitly defines the open assistant turn prefix appended at the end of prompts

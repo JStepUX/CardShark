@@ -4,6 +4,8 @@ import { useAPIConfig } from '../../contexts/APIConfigContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { DEFAULT_GENERATION_SETTINGS } from '../../types/api';
 import { debounce } from '../../utils/performance';
+import { templateService } from '../../services/templateService';
+import { Template } from '../../types/templateTypes';
 import Button from '../common/Button';
 
 interface SamplerSettingsPanelProps {
@@ -250,6 +252,22 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
   // Flag to distinguish local user changes from external context syncs
   const isLocalChangeRef = useRef(false);
 
+  // Template selection
+  const [templates, setTemplates] = useState<Template[]>([]);
+  useEffect(() => {
+    setTemplates(templateService.getAllTemplates());
+  }, []);
+
+  const handleTemplateChange = useCallback((newTemplateId: string) => {
+    if (!apiConfig || !activeApiId) return;
+    const updated = { ...apiConfig, templateId: newTemplateId || undefined };
+    setAPIConfig(updated);
+    // Use null on the wire so backend deep_merge deletes the key;
+    // JSON.stringify drops undefined but preserves null.
+    const forPersist = { ...apiConfig, templateId: newTemplateId || null };
+    debouncedPersistRef.current(activeApiId, forPersist);
+  }, [apiConfig, activeApiId, setAPIConfig]);
+
   const buildSettings = (gen?: Record<string, unknown>) => ({
     max_length: (gen?.max_length as number) ?? d.max_length!,
     max_context_length: (gen?.max_context_length as number) ?? d.max_context_length!,
@@ -385,6 +403,25 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        {/* Template Selection */}
+        <div>
+          <label htmlFor="sampler-template-select" className="text-xs text-gray-400 uppercase tracking-wide block mb-1.5">
+            Chat Template
+          </label>
+          <select
+            id="sampler-template-select"
+            value={apiConfig.templateId || ''}
+            onChange={(e) => handleTemplateChange(e.target.value)}
+            className="w-full px-2 py-1.5 bg-stone-950 border border-stone-700 rounded-lg
+                      focus:ring-1 focus:ring-blue-500 text-sm text-gray-200"
+          >
+            <option value="">-- No Template --</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Quick Tune */}
         <details open>
           <summary className="text-xs text-gray-400 uppercase tracking-wide cursor-pointer select-none mb-3 hover:text-gray-300">
