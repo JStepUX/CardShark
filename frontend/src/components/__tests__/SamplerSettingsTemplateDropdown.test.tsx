@@ -96,7 +96,7 @@ describe('SamplerSettingsPanel — Template dropdown', () => {
     unmount();
   });
 
-  it('sends null (not undefined) in persistence payload when clearing template', () => {
+  it('sends same config object for state and persistence when clearing template', () => {
     const { unmount } = render(<SamplerSettingsPanel onClose={vi.fn()} />);
 
     const select = screen.getByLabelText('Chat Template');
@@ -106,10 +106,10 @@ describe('SamplerSettingsPanel — Template dropdown', () => {
     const inMemoryConfig = mockSetAPIConfig.mock.calls[0][0];
     expect(inMemoryConfig.templateId).toBeUndefined();
 
-    // Persistence payload uses null (so JSON.stringify keeps the key
-    // and backend deep_merge deletes it)
+    // Persistence payload matches — undefinedToNull in updateSettings
+    // converts to null on the wire, so the component doesn't need to
     const [, persistedConfig] = capturedPersistArgs as [string, Record<string, unknown>];
-    expect(persistedConfig.templateId).toBeNull();
+    expect(persistedConfig.templateId).toBeUndefined();
     unmount();
   });
 

@@ -23,6 +23,25 @@ const defaultContext: SettingsContextType = {
 
 const SettingsContext = createContext<SettingsContextType>(defaultContext);
 
+/**
+ * Recursively converts undefined values to null so JSON.stringify
+ * preserves them as deletion signals for the backend's deep_merge
+ * (which treats null as "delete this key").
+ */
+export function undefinedToNull(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      result[key] = null;
+    } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      result[key] = undefinedToNull(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -104,7 +123,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const response = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates), // Send only the updates
+        body: JSON.stringify(undefinedToNull(updates as Record<string, unknown>)),
       });
 
       if (!response.ok) {

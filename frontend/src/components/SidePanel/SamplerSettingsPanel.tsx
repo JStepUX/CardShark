@@ -262,10 +262,7 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
     if (!apiConfig || !activeApiId) return;
     const updated = { ...apiConfig, templateId: newTemplateId || undefined };
     setAPIConfig(updated);
-    // Use null on the wire so backend deep_merge deletes the key;
-    // JSON.stringify drops undefined but preserves null.
-    const forPersist = { ...apiConfig, templateId: newTemplateId || null };
-    debouncedPersistRef.current(activeApiId, forPersist);
+    debouncedPersistRef.current(activeApiId, updated);
   }, [apiConfig, activeApiId, setAPIConfig]);
 
   const buildSettings = (gen?: Record<string, unknown>) => ({
@@ -288,7 +285,8 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
     dynatemp_min: (gen?.dynatemp_min as number) ?? 0.0,
     dynatemp_max: (gen?.dynatemp_max as number) ?? 2.0,
     dynatemp_exponent: (gen?.dynatemp_exponent as number) ?? d.dynatemp_exponent!,
-    reasoning_model: (gen?.reasoning_model as boolean) ?? false
+    reasoning_model: (gen?.reasoning_model as boolean) ?? false,
+    logit_shaper: (gen?.logit_shaper as boolean) ?? false
   });
 
   const [settings, setSettings] = useState(() =>
@@ -597,6 +595,20 @@ export function SamplerSettingsPanel({ onClose }: SamplerSettingsPanelProps) {
               min={-2} max={2}
               tooltip="Penalizes tokens proportionally to how often they appeared (OpenAI-style)"
             />
+          </div>
+          <div className="flex items-center mt-3">
+            <input
+              type="checkbox"
+              id="sampler-logit-shaper"
+              checked={settings.logit_shaper ?? false}
+              onChange={(e) => handleSettingChange('logit_shaper', e.target.checked)}
+              className="mr-2 h-4 w-4 rounded-sm bg-stone-700 border-stone-500 focus:ring-2 focus:ring-blue-500"
+            />
+            <label htmlFor="sampler-logit-shaper" className="text-xs text-gray-300">
+              Logit Shaper
+            </label>
+            <span className="ml-1 text-xs text-gray-600">(KoboldCPP only)</span>
+            <span className="ml-1 text-xs text-gray-500 cursor-help" title="Tracks repeated descriptive words across the last 3 responses and temporarily blocks them for 3 turns. Only works with KoboldCPP in native mode (not OpenAI-compatible).">(?)</span>
           </div>
         </details>
 
