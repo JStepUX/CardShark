@@ -1,25 +1,91 @@
 # backend/database_migrations.py
 """
-Database initialization and migration handling.
+Database initialization and incremental migration handling.
 
 Design Philosophy:
 - Files (PNG, JSON) are the source of truth for portable data
-- Database is an index/cache that can be deleted and rebuilt
-- On schema version mismatch, delete old database and rebuild fresh
-- No backwards compatibility concerns - fresh rebuild is acceptable
+- Database stores both rebuildable indexes AND non-rebuildable user data
+  (chat_sessions, chat_messages, world_user_progress, adventure_log_entries)
+- Schema changes use incremental migrations, never nuke-and-rebuild
+- Fresh installs use Base.metadata.create_all() and skip migrations
+- All migration functions are idempotent (safe to re-run)
+
+Adding a migration:
+1. Write an idempotent function that takes a SQLAlchemy Engine
+2. Append a Migration entry to MIGRATIONS with the next version number
+3. CURRENT_SCHEMA_VERSION updates automatically
 """
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
+
 from sqlalchemy import Column, String, DateTime, text, Table, MetaData
+from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
-# Current schema version - increment when making schema changes
-# When this changes, the old database will be deleted and rebuilt fresh
-CURRENT_SCHEMA_VERSION = "2.7.0"  # Added adventure_log_entries table for room visit summaries
 
+# ---------------------------------------------------------------------------
+# Migration functions — define before MIGRATIONS so the list can reference them
+# ---------------------------------------------------------------------------
+
+def _migrate_add_is_default_column(engine: Engine) -> None:
+    """Add is_default column to character_images if it doesn't exist yet."""
+    with engine.connect() as conn:
+        result = conn.execute(text("PRAGMA table_info(character_images)"))
+        columns = [row[1] for row in result.fetchall()]
+
+        if not columns:
+            # Table doesn't exist yet — create_all() runs after migrations
+            logger.debug("Migration: character_images table absent, skipping (create_all will handle)")
+            return
+
+        if "is_default" not in columns:
+            conn.execute(text(
+                "ALTER TABLE character_images ADD COLUMN is_default BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
+            logger.info("Migration: added is_default column to character_images")
+        else:
+            logger.debug("Migration: is_default column already exists (idempotent skip)")
+
+
+# ---------------------------------------------------------------------------
+# Migration registry
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Migration:
+    """A single schema migration step."""
+    version: str
+    description: str
+    fn: Callable[[Engine], None]
+
+
+# Ordered list — each entry brings the DB forward one step.
+# Every fn receives a SQLAlchemy Engine and must be idempotent.
+MIGRATIONS: list[Migration] = [
+    Migration("2.7.1", "Add is_default column to character_images", _migrate_add_is_default_column),
+]
+
+# Derived from the registry so the two can never drift apart.
+CURRENT_SCHEMA_VERSION = MIGRATIONS[-1].version if MIGRATIONS else "2.7.0"
+
+# The schema that create_all() produced before incremental migrations existed.
+# Databases at or below this version run all migrations from the start.
+_BASE_VERSION = "2.7.0"
+
+
+# ---------------------------------------------------------------------------
+# Version helpers
+# ---------------------------------------------------------------------------
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    """Convert '2.7.1' to (2, 7, 1) for ordered comparison."""
+    return tuple(int(x) for x in v.split("."))
 
 
 def get_database_path() -> Path:
@@ -37,52 +103,45 @@ def get_database_version() -> str:
     """Get the current database schema version."""
     try:
         from backend.database import engine, SessionLocal
-        
-        # Check if version table exists
+
         metadata = MetaData()
         metadata.reflect(bind=engine)
-        
-        if 'database_version' not in metadata.tables:
-            # No version table exists, this is a fresh database
+
+        if "database_version" not in metadata.tables:
             return "0.0.0"
-        
+
         with SessionLocal() as db:
             result = db.execute(text("SELECT version FROM database_version LIMIT 1"))
             row = result.fetchone()
-            if row:
-                return row[0]
-            else:
-                return "0.0.0"
+            return row[0] if row else "0.0.0"
     except Exception as e:
         logger.warning(f"Could not read database version: {e}")
         return "0.0.0"
 
 
 def set_database_version(version: str, description: str = None):
-    """Set the database schema version."""
+    """Set the database schema version (single-row upsert)."""
     try:
         from backend.database import engine, SessionLocal
-        
-        # Create version table if it doesn't exist
+
         metadata = MetaData()
-        version_table = Table(
-            'database_version', metadata,
-            Column('version', String, primary_key=True),
-            Column('applied_at', DateTime, default=lambda: datetime.now(timezone.utc)),
-            Column('description', String, nullable=True)
+        Table(
+            "database_version", metadata,
+            Column("version", String, primary_key=True),
+            Column("applied_at", DateTime, default=lambda: datetime.now(timezone.utc)),
+            Column("description", String, nullable=True),
         )
         metadata.create_all(engine)
-        
+
         with SessionLocal() as db:
-            # Remove existing version record
             db.execute(text("DELETE FROM database_version"))
-            # Add new version record
             db.execute(text(
-                "INSERT INTO database_version (version, applied_at, description) VALUES (:version, :applied_at, :description)"
+                "INSERT INTO database_version (version, applied_at, description) "
+                "VALUES (:version, :applied_at, :description)"
             ), {
                 "version": version,
                 "applied_at": datetime.now(timezone.utc),
-                "description": description
+                "description": description,
             })
             db.commit()
             logger.info(f"Database version set to {version}")
@@ -91,21 +150,21 @@ def set_database_version(version: str, description: str = None):
         raise
 
 
+# ---------------------------------------------------------------------------
+# Database lifecycle
+# ---------------------------------------------------------------------------
+
 def delete_database():
     """Delete the existing database file."""
     from backend.database import engine
-    
+
     db_path = get_database_path()
-    
     if not db_path.exists():
         logger.info("No existing database to delete")
         return
-    
+
     try:
-        # Dispose of the engine to release any connections
         engine.dispose()
-        
-        # Delete the database file
         os.remove(db_path)
         logger.info(f"Deleted old database: {db_path}")
     except Exception as e:
@@ -113,94 +172,56 @@ def delete_database():
         raise
 
 
-def needs_rebuild() -> bool:
-    """
-    Check if the database needs to be rebuilt.
-    Returns True if:
-    - Database doesn't exist (fresh install)
-    - Schema version doesn't match current version
-    """
-    if not database_exists():
-        logger.info("Database does not exist - fresh install")
-        return True
-    
-    current_version = get_database_version()
-    
-    if current_version != CURRENT_SCHEMA_VERSION:
-        logger.info(f"Schema version mismatch: {current_version} != {CURRENT_SCHEMA_VERSION}")
-        return True
-    
-    return False
-
-
 def create_fresh_database():
-    """Create a fresh database with all tables."""
+    """Create a fresh database with all tables at the latest schema version."""
     from backend.database import Base, engine
-    
+
     logger.info("Creating fresh database with all tables...")
-    
-    # Create all tables defined in sql_models
     Base.metadata.create_all(bind=engine)
-    
-    # Set the schema version
     set_database_version(CURRENT_SCHEMA_VERSION, "Fresh database creation")
-    
-    logger.info(f"Fresh database created with schema version {CURRENT_SCHEMA_VERSION}")
+    logger.info(f"Fresh database created at version {CURRENT_SCHEMA_VERSION}")
 
 
 def init_db_with_migrations():
     """
-    Initialize the database.
-    
-    Strategy:
-    1. If database doesn't exist or schema version mismatches -> delete and rebuild
-    2. After rebuild, character and user indexing services will populate data from files
+    Initialize the database with incremental migrations.
+
+    - No DB file        → create everything from models, stamp latest version
+    - DB at "0.0.0"     → rebuild (predates non-rebuildable data)
+    - DB at known version → run only pending migrations, then create_all()
+                           for any new model-defined tables
     """
     try:
-        if needs_rebuild():
-            if database_exists():
-                logger.info("Schema version changed - rebuilding database from scratch")
-                delete_database()
-            
-            # Need to recreate engine after deleting database
-            from backend.database import engine, Base
-            
-            # Re-create engine connection (the engine will auto-connect to new file)
-            Base.metadata.create_all(bind=engine)
-            
-            # Set version
-            set_database_version(CURRENT_SCHEMA_VERSION, "Fresh database creation")
-            
-            logger.info("Database rebuilt successfully. Character and user data will be indexed from files.")
-        else:
-            logger.info(f"Database is up to date (version {CURRENT_SCHEMA_VERSION})")
+        if not database_exists():
+            logger.info("No database found — creating fresh")
+            create_fresh_database()
+            return
 
-        # --- In-place migrations (non-destructive) ---
-        _migrate_add_is_default_column()
+        db_version = get_database_version()
+
+        if db_version == "0.0.0":
+            logger.warning("Database exists but has no version — rebuilding")
+            delete_database()
+            create_fresh_database()
+            return
+
+        # Run pending migrations in order
+        from backend.database import engine, Base
+        db_ver = _version_tuple(db_version)
+        pending = [m for m in MIGRATIONS if _version_tuple(m.version) > db_ver]
+
+        if pending:
+            for migration in pending:
+                logger.info(f"Migrating to {migration.version}: {migration.description}")
+                migration.fn(engine)
+                set_database_version(migration.version, migration.description)
+                logger.info(f"Migration to {migration.version} complete")
+        else:
+            logger.info(f"Database is up to date (version {db_version})")
+
+        # Add any new model-defined tables (additive only, won't alter existing)
+        Base.metadata.create_all(bind=engine)
 
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise
-
-
-def _migrate_add_is_default_column():
-    """Add is_default column to character_images if it doesn't exist yet."""
-    try:
-        from backend.database import engine
-
-        with engine.connect() as conn:
-            # Check if column already exists
-            result = conn.execute(text("PRAGMA table_info(character_images)"))
-            columns = [row[1] for row in result.fetchall()]
-
-            if 'is_default' not in columns:
-                conn.execute(text(
-                    "ALTER TABLE character_images ADD COLUMN is_default BOOLEAN NOT NULL DEFAULT 0"
-                ))
-                conn.commit()
-                logger.info("Migration: added is_default column to character_images")
-            else:
-                logger.debug("Migration: is_default column already exists")
-    except Exception as e:
-        # Table may not exist yet (fresh install) -- create_all handles it
-        logger.debug(f"is_default migration skipped (table may not exist yet): {e}")
