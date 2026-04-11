@@ -1146,7 +1146,8 @@ class ApiHandler:
             # ── LogitShaper: inject word-level bans for KoboldCPP ────────
             logit_shaper = None
             chat_session_uuid = generation_params.get('chat_session_uuid')
-            if is_kobold and chat_session_uuid:
+            logit_shaper_enabled = current_generation_settings.get('logit_shaper', False)
+            if is_kobold and chat_session_uuid and logit_shaper_enabled:
                 try:
                     from backend.logit_shaper import get_or_create_shaper
                     logit_shaper = get_or_create_shaper(chat_session_uuid)

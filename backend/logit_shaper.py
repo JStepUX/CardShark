@@ -7,7 +7,7 @@
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 # ── Word extraction ──────────────────────────────────────────────────────────
 
@@ -15,6 +15,31 @@ _WORD_RE = re.compile(r"[a-zA-Z']+")
 
 # Words with 4 or fewer characters are protected from banning
 _MIN_WORD_LENGTH = 5
+
+# ── Protected words whitelist ────────────────────────────────────────────────
+# Common English structural words (5+ chars) that lack clean single-word
+# synonyms. Banning these causes cross-lingual substitution artifacts.
+
+_PROTECTED_WORDS: frozenset[str] = frozenset({
+    "about", "above", "across", "after", "again", "against", "along",
+    "already", "also", "always", "among", "another", "around", "asked",
+    "away", "back", "because", "been", "before", "began", "behind",
+    "being", "below", "between", "both", "bring", "called", "came",
+    "could", "didn", "does", "doing", "down", "during", "each",
+    "either", "else", "enough", "even", "every", "felt", "first",
+    "found", "from", "going", "gotten", "hadn", "hasn", "have",
+    "having", "here", "into", "itself", "just", "knew", "know",
+    "least", "like", "long", "made", "make", "many", "might", "more",
+    "most", "much", "must", "near", "never", "next", "none", "nothing",
+    "now", "once", "only", "other", "over", "own", "part", "perhaps",
+    "quite", "really", "right", "same", "should", "since", "some",
+    "something", "still", "such", "than", "that", "their", "them",
+    "then", "there", "these", "they", "thing", "think", "this",
+    "those", "though", "through", "toward", "towards", "under",
+    "until", "upon", "very", "want", "wasn", "well", "were", "what",
+    "when", "where", "whether", "which", "while", "who", "whom",
+    "whose", "will", "with", "within", "without", "would", "yet",
+})
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -46,9 +71,15 @@ def _is_protected(word: str, text: str) -> bool:
 
     Protected words:
     - Length <= 4 (common articles, prepositions, pronouns)
+    - In the permanent whitelist (docs/protected_words.json)
+    - Contractions containing apostrophes
     - Non-sentence-start capitalized words (proper nouns like character names)
     """
     if len(word) <= _MIN_WORD_LENGTH - 1:
+        return True
+
+    # Permanent whitelist — structural words without clean synonyms
+    if word in _PROTECTED_WORDS:
         return True
 
     # Contractions (don't, won't, can't, etc.) — always protected

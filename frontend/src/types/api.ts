@@ -22,6 +22,7 @@ export interface GenerationSettings {
   presence_penalty?: number;
   frequency_penalty?: number;
   reasoning_model?: boolean;
+  logit_shaper?: boolean;
 }
 
 // Single source of truth for generation setting defaults.
@@ -46,7 +47,8 @@ export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
   dynatemp_exponent: 1,
   smoothing_factor: 0,
   presence_penalty: 0.10,
-  frequency_penalty: 0.05
+  frequency_penalty: 0.05,
+  logit_shaper: false
 };
 
 export enum APIProvider {
