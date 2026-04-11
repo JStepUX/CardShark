@@ -11,6 +11,7 @@ The role of this file is to describe common mistakes and confusion points that a
 4. Half-measures are confusing to future agents — commit fully.
 5. The agent doesn't know what it doesn't know. Build the check, don't trust the self-report.
 6. Let friction drive the architecture, not speculation.
+7. Ship what you'd sign.
 
 ## Agent Utility Scripts (`scripts/agent/`) — CHECK THESE BEFORE MULTI-STEP TOOL CALLS
 
@@ -44,12 +45,6 @@ bash scripts/agent/read-docs.sh --index     # list all vendored docs
 
 Docs live in `docs/vendor/` (migration) and `docs/vendor/reference/` (durable API reference). For packages not vendored, use Context7 MCP (`resolve-library-id` → `query-docs`). The cutoff registry in `read-docs.sh` defines what's known vs. unknown — update it when the agent's training data advances.
 
-## Database Migrations — DO NOT BUMP SCHEMA VERSION
-
-`database_migrations.py` deletes and rebuilds the entire SQLite database when `CURRENT_SCHEMA_VERSION` changes. The file's header says "no backwards compatibility concerns" but this is **no longer true** — the DB now stores non-rebuildable data: `chat_sessions`, `chat_messages`, `world_user_progress`, `adventure_log_entries`. Bumping the schema version will destroy user chat history and world progress.
-
-**For new columns:** Use in-place `ALTER TABLE` migrations (see `_migrate_add_is_default_column()` as a pattern). Add them to the `init_db_with_migrations()` call chain. Do not change `CURRENT_SCHEMA_VERSION`.
-
 ## KoboldCPP Template System — Dual-Path Assembly
 
 `PromptAssemblyService._assemble_kobold()` dispatches to **two sub-methods** based on whether `template_format` is present:
@@ -59,13 +54,9 @@ Docs live in `docs/vendor/` (migration) and `docs/vendor/reference/` (durable AP
 
 **The template is not applied by KoboldCPP** — CardShark bakes all instruct tokens into the prompt string before sending to the native `/api/extra/generate/stream` endpoint. The `outputSequence` field in `templates.json` defines the open assistant turn (e.g., `<start_of_turn>model\n`). Empty `outputSequence` means "derive from `assistantFormat`," not "no prefix."
 
-## Settings Persistence — `undefined` vs `null`
-
-The backend `deep_merge()` in `settings_manager.py` treats `null` as a **delete signal** (`destination.pop(key, None)`). `JSON.stringify` drops `undefined` values entirely, so an absent key is **never touched** by the merge — the old value survives. When clearing an optional field (like `templateId`), send `null` on the wire for persistence, not `undefined`. Use `undefined` for the in-memory React state to satisfy TypeScript types.
-
 ## Test Runners
 
 - **Frontend:** Vitest (`npm test` from `frontend/`). Config in `frontend/vitest.config.ts`. Uses Vite's SWC pipeline + `jsdom`. **Mock stability warning:** When mocking React context hooks (e.g. `useAPIConfig`, `useSettings`) for components that use `useEffect`, the mock must return **stable object references** (define the mock data in module scope, not inline). React 18 concurrent mode will infinite-loop on fresh object refs from hook mocks, causing vitest to hang silently at "RUN" with no output.
 - **Backend:** pytest (`pytest` from `backend/`). Python + FastAPI. Smoke tests in `backend/tests/smoke/` use in-memory SQLite with patched side effects.
-- **Build:** `python build.py` generates `CardShark.spec` — never edit the spec directly.
+- **Build:** `python build.py` generates `CardShark.spec` fresh each run.
 - **Monolith gate:** `file-size.test.ts` fails if any source file exceeds 1000 lines (allowlist in the test file).
