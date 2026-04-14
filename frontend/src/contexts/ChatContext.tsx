@@ -61,6 +61,7 @@ interface ChatContextType {
   cycleVariation: (messageId: string, direction: 'next' | 'prev') => void;
   generateResponse: (prompt: string, retryCount?: number) => Promise<void>;
   regenerateMessage: (message: Message, retryCount?: number) => Promise<void>;
+  hardRegenerateMessage: (message: Message, retryCount?: number) => Promise<void>;
   regenerateGreeting: () => Promise<void>;
   impersonateUser: (partialMessage?: string, onChunk?: (chunk: string) => void) => Promise<{ success: boolean; response?: string; error?: string }>;
   continueResponse: (message: Message) => Promise<void>;
@@ -646,6 +647,7 @@ const ChatContextBridge: React.FC<{
     currentPreviewImageIndex: generation.currentPreviewImageIndex,
     generateResponse: generation.generateResponse,
     regenerateMessage: generation.regenerateMessage,
+    hardRegenerateMessage: generation.hardRegenerateMessage,
     regenerateGreeting: generation.regenerateGreeting,
     impersonateUser: generation.impersonateUser,
     continueResponse: generation.continueResponse,

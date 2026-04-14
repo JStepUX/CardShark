@@ -9,6 +9,7 @@ import {
   Sparkles,
   Copy,
   GitFork,
+  Unlock,
 } from 'lucide-react';
 import { Message, UserProfile } from '../../types/messages';
 import RichTextEditor from '../RichTextEditor';
@@ -25,6 +26,7 @@ interface ChatBubbleProps {
   onDelete: () => void;
   onStop?: () => void;
   onTryAgain?: () => void;
+  onHardRegenerate?: () => void;
   onContinue?: () => void;
   onNextVariation: () => void;
   onPrevVariation: () => void;
@@ -44,6 +46,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
   onDelete,
   onStop,
   onTryAgain,
+  onHardRegenerate,
   onContinue,
   onNextVariation,
   onPrevVariation,
@@ -304,6 +307,17 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(({
                     icon={<RotateCw size={16} />}
                     onClick={onTryAgain}
                     title="Regenerate response"
+                  />
+                )}
+
+                {/* Hard Regenerate — break model lock-in by perturbing sampling */}
+                {!isFirstMessage && onHardRegenerate && !isGenerating && (
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    icon={<Unlock size={16} />}
+                    onClick={onHardRegenerate}
+                    title="Hard regenerate (break lock-in)"
                   />
                 )}
 

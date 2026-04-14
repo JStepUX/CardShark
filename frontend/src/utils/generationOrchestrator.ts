@@ -24,10 +24,128 @@ import { CharacterCard } from '../types/schema';
  * Type of generation being performed
  */
 export type GenerationType =
-    | 'generate'      // New response to user message
-    | 'regenerate'    // Regenerate assistant response (new variation)
-    | 'continue'      // Continue incomplete assistant response
-    | 'greeting';     // Generate/regenerate greeting message
+    | 'generate'       // New response to user message
+    | 'regenerate'     // Regenerate assistant response (new variation)
+    | 'hard_regenerate'// Regenerate with sampler perturbation to break lock-in
+    | 'continue'       // Continue incomplete assistant response
+    | 'greeting';      // Generate/regenerate greeting message
+
+/**
+ * Frontend mirror of backend `_PROTECTED_WORDS` frozenset in
+ * `backend/logit_shaper.py`. Common English structural words that should
+ * never be placed in `banned_tokens` because they lack clean synonyms and
+ * banning them causes cross-lingual substitution artifacts.
+ *
+ * Keep in sync with backend. This is intentionally duplicated (not fetched)
+ * to keep Hard Regenerate a pure client-side perturbation with no extra
+ * network round-trip.
+ */
+export const HARD_REGEN_PROTECTED_WORDS: ReadonlySet<string> = new Set([
+    'about', 'above', 'across', 'after', 'again', 'against', 'along',
+    'already', 'also', 'always', 'among', 'another', 'around', 'asked',
+    'away', 'back', 'because', 'been', 'before', 'began', 'behind',
+    'being', 'below', 'between', 'both', 'bring', 'called', 'came',
+    'could', 'didn', 'does', 'doing', 'down', 'during', 'each',
+    'either', 'else', 'enough', 'even', 'every', 'felt', 'first',
+    'found', 'from', 'going', 'gotten', 'hadn', 'hasn', 'have',
+    'having', 'here', 'into', 'itself', 'just', 'knew', 'know',
+    'least', 'like', 'long', 'made', 'make', 'many', 'might', 'more',
+    'most', 'much', 'must', 'near', 'never', 'next', 'none', 'nothing',
+    'now', 'once', 'only', 'other', 'over', 'own', 'part', 'perhaps',
+    'quite', 'really', 'right', 'same', 'should', 'since', 'some',
+    'something', 'still', 'such', 'than', 'that', 'their', 'them',
+    'then', 'there', 'these', 'they', 'thing', 'think', 'this',
+    'those', 'though', 'through', 'toward', 'towards', 'under',
+    'until', 'upon', 'very', 'want', 'wasn', 'well', 'were', 'what',
+    'when', 'where', 'whether', 'which', 'while', 'who', 'whom',
+    'whose', 'will', 'with', 'within', 'without', 'would', 'yet',
+]);
+
+/**
+ * Extract up to `max` candidate ban words from the first N tokens of a
+ * message. Tokenizes on whitespace + punctuation, lowercases, drops short
+ * and protected words.
+ */
+export function extractHardRegenBanWords(
+    messageContent: string,
+    windowTokens: number = 20,
+    maxBans: number = 3
+): string[] {
+    if (!messageContent) return [];
+    // Split into raw tokens on whitespace + punctuation, keep word-like only
+    const rawTokens = messageContent
+        .toLowerCase()
+        .split(/[\s\p{P}]+/u)
+        .filter(Boolean);
+    const first = rawTokens.slice(0, windowTokens);
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    for (const tok of first) {
+        if (tok.length < 5) continue;
+        if (HARD_REGEN_PROTECTED_WORDS.has(tok)) continue;
+        if (seen.has(tok)) continue;
+        seen.add(tok);
+        candidates.push(tok);
+        if (candidates.length >= maxBans) break;
+    }
+    return candidates;
+}
+
+/**
+ * Hard Regenerate break-strategy perturbation. Produces a NEW generation
+ * settings object for a single request — never mutates the input.
+ *
+ * Strategy rotation by attempt counter:
+ *   0: ban top words from current message
+ *   1: dynatemp bump (range=3, exponent=1) — temperature unchanged
+ *   2: sampler widening (top_p=1, min_p=0, top_k=0)
+ *   3+: all three combined
+ */
+export function applyHardRegenStrategy(
+    baseSettings: Record<string, any> | undefined | null,
+    attempt: number,
+    targetMessageContent: string
+): Record<string, any> {
+    // Deep-ish clone: generation_settings is a flat primitive/array bag
+    const next: Record<string, any> = baseSettings
+        ? JSON.parse(JSON.stringify(baseSettings))
+        : {};
+
+    const applyBan = () => {
+        const words = extractHardRegenBanWords(targetMessageContent);
+        if (words.length === 0) return;
+        const existing: string[] = Array.isArray(next.banned_tokens)
+            ? [...next.banned_tokens]
+            : [];
+        // Merge + dedupe
+        const merged = Array.from(new Set([...existing, ...words]));
+        next.banned_tokens = merged;
+    };
+    const applyDynatemp = () => {
+        next.dynatemp_range = 3.0;
+        next.dynatemp_exponent = 1.0;
+    };
+    const applyWidening = () => {
+        next.top_p = 1.0;
+        next.min_p = 0;
+        next.top_k = 0;
+    };
+
+    const a = Math.max(0, Math.floor(attempt));
+    if (a === 0) {
+        applyBan();
+    } else if (a === 1) {
+        applyDynatemp();
+    } else if (a === 2) {
+        applyWidening();
+    } else {
+        // 3+ : nuclear option
+        applyBan();
+        applyDynatemp();
+        applyWidening();
+    }
+    return next;
+}
 
 /**
  * Configuration for a generation request
@@ -56,6 +174,19 @@ export interface GenerationConfig {
 
     /** Callback with payload before sending to API */
     onPayloadReady?: (payload: any) => void;
+
+    /**
+     * For 'hard_regenerate': which break strategy to apply. Cycles 0→1→2→3+.
+     * See `applyHardRegenStrategy` for the rotation.
+     */
+    hardRegenAttempt?: number;
+
+    /**
+     * For 'hard_regenerate': content of the message being regenerated.
+     * Needed so the token-ban strategy can derive ban words from what the
+     * model just produced.
+     */
+    targetMessageContent?: string;
 }
 
 /**
@@ -124,8 +255,12 @@ export function buildGenerationContext(
             break;
         }
 
-        case 'regenerate': {
-            // Regenerate: include messages up to (but not including) the target message
+        case 'regenerate':
+        case 'hard_regenerate': {
+            // Regenerate (and hard_regenerate): include messages up to
+            // (but not including) the target message. The perturbation for
+            // hard_regenerate is applied in executeGeneration, not here —
+            // context building is identical.
             if (!targetMessage) {
                 throw new Error('targetMessage required for regenerate');
             }
@@ -215,8 +350,26 @@ export async function executeGeneration(
             : context.additionalInstructions;
     }
 
-    // Thread generation type to backend for LogitShaper (regenerate/continue = non-advancing)
-    const enrichedApiConfig = { ...apiConfig, _generation_type: config.type };
+    // Thread generation type to backend for LogitShaper
+    // (regenerate/hard_regenerate/continue = non-advancing)
+    let enrichedApiConfig: any = { ...apiConfig, _generation_type: config.type };
+
+    // For hard_regenerate, apply the break-strategy perturbation to a CLONED
+    // generation_settings so the user's saved sampler settings are untouched
+    // and the perturbed values are visible in the Raw Payload tab.
+    if (config.type === 'hard_regenerate') {
+        const attempt = config.hardRegenAttempt ?? 0;
+        const targetContent = config.targetMessageContent ?? '';
+        const perturbed = applyHardRegenStrategy(
+            apiConfig?.generation_settings,
+            attempt,
+            targetContent
+        );
+        enrichedApiConfig = {
+            ...enrichedApiConfig,
+            generation_settings: perturbed,
+        };
+    }
 
     const response = await generateChatResponse({
         chatSessionUuid,

@@ -128,6 +128,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
     generatingId,
     generateResponse,
     regenerateMessage,
+    hardRegenerateMessage,
     cycleVariation,
     stopGeneration,
     deleteMessage,
@@ -519,6 +520,7 @@ const ChatView: React.FC<ChatViewProps> = ({ disableSidePanel = false, hideHeade
                       currentUser={currentUser || undefined}
                       isGenerating={isGenerating && generatingId === message.id}
                       onTryAgain={() => regenerateMessage(message)}
+                      onHardRegenerate={() => hardRegenerateMessage(message)}
                       onContinue={() => handleContinueResponse(message)}
                       onDelete={() => deleteMessage(message.id)}
                       onContentChange={(newContent) => updateMessage(message.id, newContent)}

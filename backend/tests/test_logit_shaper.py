@@ -105,3 +105,102 @@ class TestBanLifecycle:
             "A plain turn with nothing special.",
         ])
         assert "glistening" not in shaper.get_banned_tokens()
+
+
+class TestHardRegenerate:
+    """
+    Hard Regenerate should be treated by LogitShaper as a regeneration —
+    it replaces the current turn rather than advancing the turn counter.
+    This mirrors the check in api_handler.stream_generate() at the post-gen
+    analyze step, which evaluates:
+        is_regen = gen_type in REGENERATION_GEN_TYPES
+    """
+
+    @pytest.mark.parametrize(
+        "gen_type,expected_is_regen",
+        [
+            ("hard_regenerate", True),
+            ("regenerate", True),
+            ("continue", True),
+            ("generate", False),
+            ("", False),
+            ("greeting", False),
+        ],
+    )
+    def test_gen_type_classification_matches_production_constant(
+        self, gen_type, expected_is_regen
+    ):
+        """
+        Couples the test to the *live* production tuple in api_handler.py.
+
+        If someone removes 'hard_regenerate' from REGENERATION_GEN_TYPES (or
+        from the membership check at the call site), the hard_regenerate row
+        of this parametrize flips and the test fails. This is the same
+        boolean expression executed inside stream_generate()'s post-gen
+        analyze block.
+        """
+        from backend.api_handler import REGENERATION_GEN_TYPES
+
+        # Guard: the constant must exist and be a tuple of strings.
+        assert isinstance(REGENERATION_GEN_TYPES, tuple)
+        assert all(isinstance(x, str) for x in REGENERATION_GEN_TYPES)
+
+        # This is the exact expression evaluated at the api_handler call site.
+        is_regen = gen_type in REGENERATION_GEN_TYPES
+        assert is_regen is expected_is_regen, (
+            f"gen_type={gen_type!r} classified as is_regen={is_regen} "
+            f"but expected {expected_is_regen}. "
+            f"REGENERATION_GEN_TYPES={REGENERATION_GEN_TYPES!r}. "
+            f"If 'hard_regenerate' was removed from the production tuple, "
+            f"the Hard Regenerate chat-bubble action will silently advance "
+            f"the LogitShaper turn counter on every click."
+        )
+
+    def test_hard_regenerate_is_member_of_production_constant(self):
+        """
+        Explicit single-value guard: Hard Regenerate must be in the
+        production tuple. Redundant with the parametrize above but named
+        so a CI failure report names the feature directly.
+        """
+        from backend.api_handler import REGENERATION_GEN_TYPES
+
+        assert "hard_regenerate" in REGENERATION_GEN_TYPES, (
+            "'hard_regenerate' is missing from api_handler.REGENERATION_GEN_TYPES. "
+            "Hard Regenerate clicks will advance the LogitShaper turn counter "
+            "instead of replacing the current turn, breaking the feature."
+        )
+
+    def test_call_site_uses_production_constant(self):
+        """
+        Guards against someone reintroducing an inline literal tuple at the
+        call site (which would make REGENERATION_GEN_TYPES dead code and
+        re-enable the original tautology risk). Reads the source of
+        stream_generate and asserts it references the constant by name.
+        """
+        import inspect
+        from backend.api_handler import ApiHandler
+
+        src = inspect.getsource(ApiHandler.stream_generate)
+        assert "REGENERATION_GEN_TYPES" in src, (
+            "stream_generate() no longer references REGENERATION_GEN_TYPES — "
+            "the call site has drifted from the exported constant, so this "
+            "test file is no longer guarding the live code path."
+        )
+
+    def test_hard_regenerate_does_not_advance_turn_counter(self):
+        shaper = LogitShaper()
+        # Seed one full turn to advance the counter to 1
+        shaper.analyze_output("The warrior drew his sword.", is_regeneration=False)
+        turn_after_first = shaper.current_turn_number
+        assert turn_after_first == 1
+
+        # Simulate multiple Hard Regens of that same turn —
+        # counter must stay at 1 (turn is replaced, not appended).
+        shaper.analyze_output("The warrior raised his blade.", is_regeneration=True)
+        shaper.analyze_output("The warrior unsheathed his weapon.", is_regeneration=True)
+        shaper.analyze_output("The warrior gripped his hilt.", is_regeneration=True)
+
+        assert shaper.current_turn_number == turn_after_first, (
+            "Hard Regenerate must not advance the LogitShaper turn counter — "
+            "each click replaces the current turn rather than appending a new one."
+        )

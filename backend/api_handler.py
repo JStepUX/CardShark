@@ -9,6 +9,19 @@ import certifi # For SSL certificate bundle
 from typing import Dict, Optional, Tuple, Generator
 
 
+# Generation types that LogitShaper should treat as a regeneration of the
+# *current* turn rather than a new turn. Hard Regenerate (chat-bubble action
+# that perturbs sampling to escape model lock-in) must be included here so the
+# turn counter is not advanced on each click. Exported as a module-level
+# constant so tests can verify the production check stays in sync with the
+# feature set. See stream_generate() post-gen analyze block.
+REGENERATION_GEN_TYPES: Tuple[str, ...] = (
+    'regenerate',
+    'continue',
+    'hard_regenerate',
+)
+
+
 class ThinkingTagFilter:
     """Streaming state machine that strips thinking/reasoning tags from model output.
 
@@ -1229,7 +1242,7 @@ class ApiHandler:
                 try:
                     full_response = ''.join(response_text_parts)
                     gen_type = generation_params.get('generation_type', 'generate')
-                    is_regen = gen_type in ('regenerate', 'continue')
+                    is_regen = gen_type in REGENERATION_GEN_TYPES
                     logit_shaper.analyze_output(full_response, is_regeneration=is_regen)
                     active_bans = logit_shaper.get_banned_tokens()
                     self.logger.log_step(

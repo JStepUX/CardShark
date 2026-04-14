@@ -18,6 +18,13 @@ export interface IMessage {
   parentMessageId?: string;
   status?: 'streaming' | 'complete' | 'aborted' | 'error' | 'generating_variation'; // Added status field
   metadata?: MessageMetadata; // Optional metadata for special message types (e.g., combat events, speaker attribution)
+  /**
+   * Hard Regenerate attempt counter — cycles break strategies when the user
+   * clicks Hard Regenerate. Increments per Hard Regen click, resets to 0 when
+   * the message is replaced by a normal regenerate or fresh generation.
+   * See generationOrchestrator.applyHardRegenStrategy.
+   */
+  hardRegenAttempt?: number;
 }
 
 /**

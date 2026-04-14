@@ -48,6 +48,7 @@ interface ChatGenerationContextType {
   currentGenerationRef: React.MutableRefObject<AbortController | null>;
   generateResponse: (prompt: string, retryCount?: number) => Promise<void>;
   regenerateMessage: (message: Message, retryCount?: number) => Promise<void>;
+  hardRegenerateMessage: (message: Message, retryCount?: number) => Promise<void>;
   regenerateGreeting: () => Promise<void>;
   impersonateUser: (partialMessage?: string, onChunk?: (chunk: string) => void) => Promise<{ success: boolean; response?: string; error?: string }>;
   continueResponse: (message: Message) => Promise<void>;
@@ -160,7 +161,9 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
     const origVariations = message.variations ? [...message.variations] : [origContent];
     const origVarIdx = message.currentVariation ?? origVariations.length - 1;
 
-    messageStore.setMessages((prev: Message[]) => prev.map(m => m.id === message.id ? { ...m, content: '...', role: 'assistant' } : m));
+    // Normal regenerate resets the Hard Regen break counter — a fresh
+    // variation is a new semantic starting point.
+    messageStore.setMessages((prev: Message[]) => prev.map(m => m.id === message.id ? { ...m, content: '...', role: 'assistant', hardRegenAttempt: 0 } : m));
     setIsGenerating(true); setGeneratingId(message.id); messageStore.setError(null);
 
     const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl;
@@ -243,7 +246,9 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
           const newVars = [...origVariations, finalFiltContent];
           return {
             ...msg, content: finalFiltContent, variations: newVars,
-            currentVariation: newVars.length - 1, role: 'assistant' as const, status: 'complete' as const
+            currentVariation: newVars.length - 1, role: 'assistant' as const, status: 'complete' as const,
+            // Normal regenerate clears the Hard Regen break counter
+            hardRegenAttempt: 0
           };
         } return msg;
       });
@@ -273,6 +278,168 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
       currentGenerationRef.current = null;
     }
   }, [characterData, session, messageStore, compression, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError]);
+
+  /**
+   * Hard Regenerate — mirrors regenerateMessage but applies a sampler
+   * perturbation per attempt to break model lock-in. Each click cycles to
+   * the next break strategy (token ban → dynatemp → widening → all three).
+   * The counter is stored on the Message itself (`hardRegenAttempt`) and is
+   * reset when a normal regenerate replaces the message.
+   */
+  const hardRegenerateMessage = useCallback(async (message: Message, retryCount: number = 0) => {
+    if (!characterData || message.role !== 'assistant') return;
+
+    let effectiveChatId = session.currentChatId;
+    if (!effectiveChatId) {
+      if (session.createNewChatRef.current) {
+        effectiveChatId = await session.createNewChatRef.current();
+        if (!effectiveChatId) {
+          messageStore.setError("Failed to establish chat. Try creating a new chat.");
+          return;
+        }
+      } else {
+        messageStore.setError("Chat creation function not available.");
+        return;
+      }
+    }
+
+    const msgIdx = messageStore.messagesRef.current.findIndex(m => m.id === message.id);
+    if (msgIdx <= 0) return;
+    const lastUserMsg = messageStore.messagesRef.current[msgIdx - 1];
+    if (!lastUserMsg || lastUserMsg.role !== 'user') return;
+
+    const origContent = message.content;
+    const origVariations = message.variations ? [...message.variations] : [origContent];
+    const origVarIdx = message.currentVariation ?? origVariations.length - 1;
+    const origHardRegenAttempt = message.hardRegenAttempt ?? 0;
+
+    // Strategy to apply THIS click — before incrementing for next click
+    const attempt = origHardRegenAttempt;
+    const nextAttempt = attempt + 1;
+
+    // Placeholder + increment the break counter so the next click rolls the
+    // next strategy. The perturbation is computed from `attempt` (this click).
+    messageStore.setMessages((prev: Message[]) => prev.map(m => m.id === message.id ? { ...m, content: '...', role: 'assistant', hardRegenAttempt: nextAttempt } : m));
+    setIsGenerating(true); setGeneratingId(message.id); messageStore.setError(null);
+
+    const abortCtrl = new AbortController(); currentGenerationRef.current = abortCtrl;
+
+    try {
+      const { buildGenerationContext, executeGeneration } = await import('../utils/generationOrchestrator');
+      const effectiveCharData = session.characterDataOverride || characterData;
+
+      const genConfig = {
+        type: 'hard_regenerate' as const,
+        chatSessionUuid: effectiveChatId,
+        characterData: effectiveCharData,
+        apiConfig: prepareAPIConfig(apiConfig),
+        signal: abortCtrl.signal,
+        sessionNotes: session.sessionNotes,
+        compressionLevel: compression.compressionLevel,
+        hardRegenAttempt: attempt,
+        targetMessageContent: origContent,
+        onPayloadReady: (payload: Record<string, unknown>) => {
+          session.setLastContextWindow({
+            type: 'hard_regeneration',
+            timestamp: new Date().toISOString(),
+            characterName: characterData?.data?.name || 'Unknown',
+            messageId: message.id,
+            hardRegenAttempt: attempt,
+            ...payload
+          });
+        }
+      };
+
+      const context = buildGenerationContext(genConfig, {
+        existingMessages: messageStore.messagesRef.current,
+        targetMessage: message,
+        excludeMessageId: message.id
+      });
+
+      const response = await executeGeneration(genConfig, context);
+
+      let fullContent = ''; let buffer = ''; const bufferInt = 50;
+      let bufTimer: NodeJS.Timeout | null = null;
+      const updateRegenMsgContent = (chunk: string) => {
+        buffer += chunk;
+        if (bufTimer) clearTimeout(bufTimer);
+        bufTimer = setTimeout(() => {
+          const curBuf = buffer; buffer = ''; fullContent += curBuf;
+          const filtContent = shouldUseClientFiltering ? filterText(fullContent) : fullContent;
+          messageStore.setMessages((prevMsgs: Message[]) => prevMsgs.map(msg => {
+            if (msg.id === message.id) {
+              const newVars = [...origVariations, filtContent];
+              return {
+                ...msg, content: filtContent, variations: newVars,
+                currentVariation: newVars.length - 1, role: 'assistant' as const,
+                status: 'streaming' as const
+              };
+            } return msg;
+          }));
+        }, bufferInt);
+      };
+
+      const charName = (session.characterDataOverride || characterData)?.data?.name || '';
+
+      for await (const chunk of streamResponse(response, charName)) {
+        if (abortCtrl.signal.aborted) {
+          if (bufTimer) clearTimeout(bufTimer);
+          bufTimer = null;
+          if (buffer.length > 0) { fullContent += buffer; buffer = ''; }
+          break;
+        }
+        updateRegenMsgContent(chunk);
+      }
+
+      if (!abortCtrl.signal.aborted) {
+        if (bufTimer) { clearTimeout(bufTimer); bufTimer = null; }
+        if (buffer.length > 0) { fullContent += buffer; buffer = ''; }
+      }
+
+      const strippedContent = stripCharacterPrefix(fullContent, charName);
+      const cleanedContent = session.settingsRef.current?.remove_incomplete_sentences !== false
+        ? removeIncompleteSentences(strippedContent) : strippedContent;
+      const finalMsgs = messageStore.messagesRef.current.map(msg => {
+        if (msg.id === message.id) {
+          const finalFiltContent = shouldUseClientFiltering ? filterText(cleanedContent) : cleanedContent;
+          const newVars = [...origVariations, finalFiltContent];
+          return {
+            ...msg, content: finalFiltContent, variations: newVars,
+            currentVariation: newVars.length - 1, role: 'assistant' as const, status: 'complete' as const,
+            // Preserve the incremented break counter so the next click rolls
+            // the next strategy (do NOT reset here — only normal regen resets).
+            hardRegenAttempt: nextAttempt
+          };
+        } return msg;
+      });
+      messageStore.setMessages(finalMsgs);
+      messageStore.saveChat(finalMsgs);
+
+      if (!abortCtrl.signal.aborted && fullContent.trim().length === 0) {
+        if (retryCount < 2) {
+          if (retryCount > 0) await new Promise(resolve => setTimeout(resolve, 500));
+          // Empty-response fallback uses NORMAL regenerate, not hard regenerate —
+          // we don't want empty-response recovery to burn through break strategies.
+          const msgToRegen = finalMsgs.find(m => m.id === message.id) || message;
+          await regenerateMessage(msgToRegen, retryCount + 1);
+          return;
+        } else {
+          messageStore.setError("Received empty response from the model. Please try again.");
+        }
+      }
+
+      session.setLastContextWindow((prev: Record<string, unknown>) => ({ ...prev, type: 'message_hard_regenerated', regeneratedMessageId: message.id, hardRegenAttempt: attempt }));
+    } catch (err) {
+      if (!abortCtrl.signal.aborted) handleGenerationError(err, message.id);
+      else {
+        messageStore.setMessages(prevMsgs => prevMsgs.map(m => m.id === message.id ? { ...m, content: origContent, variations: origVariations, currentVariation: origVarIdx, role: 'assistant', hardRegenAttempt: origHardRegenAttempt } : m));
+        messageStore.saveChat(messageStore.messagesRef.current);
+      }
+    } finally {
+      if (!abortCtrl.signal.aborted) { setIsGenerating(false); setGeneratingId(null); }
+      currentGenerationRef.current = null;
+    }
+  }, [characterData, session, messageStore, compression, apiConfig, prepareAPIConfig, shouldUseClientFiltering, filterText, handleGenerationError, regenerateMessage]);
 
   const generateResponse = useCallback(async (prompt: string, retryCount: number = 0) => {
     if (!characterData) { messageStore.setError('No character data for response.'); return; }
@@ -677,6 +844,7 @@ export const ChatGenerationProvider: React.FC<{ children: React.ReactNode }> = (
     currentGenerationRef,
     generateResponse,
     regenerateMessage,
+    hardRegenerateMessage,
     regenerateGreeting,
     impersonateUser,
     continueResponse,
